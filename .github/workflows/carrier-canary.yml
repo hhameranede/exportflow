@@ -1,0 +1,55 @@
+name: Live carrier canary
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "functions/api/track.js"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/carrier-canary.mjs"
+      - "scripts/carrier-catalog-test.mjs"
+      - "scripts/result-contract-test.mjs"
+      - ".github/workflows/carrier-canary.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exportflow-live-carrier-canary
+  cancel-in-progress: false
+
+jobs:
+  direct-carrier-canary:
+    name: Check public samples against direct carrier adapters
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Test one public sample per benchmark carrier
+        run: npm run test:carriers:live
+        env:
+          EXPORTFLOW_CANARY_BUDGET_MS: "18000"
+          EXPORTFLOW_CANARY_CONCURRENCY: "2"
+          EXPORTFLOW_CANARY_REPORT: "carrier-canary-report.json"
+
+      - name: Upload sanitized carrier report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exportflow-carrier-canary-report
+          path: carrier-canary-report.json
+          if-no-files-found: ignore
+          retention-days: 30
