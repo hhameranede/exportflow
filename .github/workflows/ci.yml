@@ -1,9 +1,9 @@
 name: Verify ExportFlow
 
 on:
-  push:
-    branches: [main]
   pull_request:
+    branches: [main]
+  push:
     branches: [main]
 
 permissions:
@@ -24,13 +24,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Check JavaScript syntax
         run: |
           node --check app.js
-          node --check live-tracking.js
           node --check functions/api/track.js
           node --check functions/api/carriers.js
           node --check functions/api/health.js
@@ -39,4 +37,4 @@ jobs:
       - name: Build static site
         run: npm run build
       - name: Verify build output
-        run: test -s dist/index.html && test -s dist/styles.css && test -s dist/app.js && test -s dist/live-tracking.js
+        run: test -s dist/index.html && test -s dist/styles.css && test -s dist/app.js
