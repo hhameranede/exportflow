@@ -1,6 +1,8 @@
 name: Public Carrier Live Benchmark
 
 on:
+  push:
+    branches: [test/carrier-catalog-coverage]
   workflow_dispatch:
 
 permissions:
