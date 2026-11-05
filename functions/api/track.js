@@ -111,7 +111,7 @@ function safeStage(value) {
   return typeof value === "string" && /^[a-z_]{2,40}$/.test(value) ? value : "unknown";
 }
 
-function projectResult(response) {
+export function projectResult(response) {
   const result = response?.result ?? {};
   const events = Array.isArray(result.events) ? result.events.slice(0, 60).map(event => ({
     time: safeText(event?.time, 80),
