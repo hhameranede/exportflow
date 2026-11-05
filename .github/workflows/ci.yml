@@ -38,3 +38,43 @@ jobs:
         run: npm run build
       - name: Verify build output
         run: test -s dist/index.html && test -s dist/styles.css && test -s dist/app.js
+      - name: Verify deployed Pages API
+        if: github.event_name == 'pull_request'
+        env:
+          EXPORTFLOW_PREVIEW_URL: https://ff81c6c4.exportflow-aja.pages.dev
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+
+          const base = process.env.EXPORTFLOW_PREVIEW_URL;
+          assert.ok(base, 'Preview URL must be configured');
+
+          const healthResponse = await fetch(`${base}/api/health`);
+          assert.equal(healthResponse.status, 200, 'GET /api/health must return HTTP 200');
+          const health = await healthResponse.json();
+          assert.equal(health.ok, true);
+          assert.equal(health.service, 'exportflow-tracking-api');
+          assert.equal(health.engine, 'universal-parcel-scraper');
+
+          const carriersResponse = await fetch(`${base}/api/carriers`);
+          assert.equal(carriersResponse.status, 200, 'GET /api/carriers must return HTTP 200');
+          const catalog = await carriersResponse.json();
+          assert.ok(Array.isArray(catalog.carriers), 'Carrier catalog must be an array');
+          assert.equal(catalog.catalogEntries, catalog.carriers.length);
+          assert.ok(catalog.catalogEntries > 0, 'Carrier catalog must not be empty');
+
+          const invalidTrackResponse = await fetch(`${base}/api/track`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ number: 'x' })
+          });
+          assert.equal(invalidTrackResponse.status, 400, 'Invalid tracking numbers must be rejected with HTTP 400');
+          const invalidTrack = await invalidTrackResponse.json();
+          assert.equal(invalidTrack.error, 'invalid_tracking_number');
+
+          console.log(JSON.stringify({
+            health: 'ok',
+            carriers: catalog.catalogEntries,
+            invalidTrackingValidation: 'ok'
+          }, null, 2));
+          NODE
