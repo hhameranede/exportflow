@@ -1,0 +1,14 @@
+{
+  "name": "exportflow",
+  "version": "0.1.2",
+  "private": true,
+  "description": "A responsive bilingual parcel-tracking frontend for everyday online shoppers.",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "python3 -m http.server 4173",
+    "start": "python3 -m http.server 4173",
+    "check": "node scripts/smoke-test.mjs",
+    "test": "npm run check",
+    "build": "node scripts/build.mjs"
+  }
+}
