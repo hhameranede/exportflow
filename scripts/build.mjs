@@ -19,9 +19,6 @@ async function patchWorkerIncompatibleEngineFiles(directory) {
     if (!entry.isFile() || !/\.(?:js|mjs)$/.test(entry.name)) continue;
 
     const original = await readFile(path, "utf8");
-    // The Pages build image still invokes an older esbuild parser which does not
-    // understand the newer JSON import-attributes syntax. JSON files are still
-    // resolved by their .json extension once the attribute is removed.
     const compatible = original.replace(
       /\s+with\s*\{\s*type\s*:\s*(["'])json\1\s*\}/g,
       () => {
@@ -35,6 +32,86 @@ async function patchWorkerIncompatibleEngineFiles(directory) {
   return jsonImports;
 }
 
+async function patchWorkerPlaceAssets() {
+  const placesFile = resolve(engineDist, "places/index.js");
+  let source = await readFile(placesFile, "utf8");
+
+  // Workers' bundled module URL is not a Node file URL. Keep these URLs valid
+  // at module initialization; file reads below are guarded and fall back to
+  // empty place datasets when the Worker has no filesystem-backed package data.
+  let urlCount = 0;
+  source = source.replace(
+    /const (DATA|PINCODES|ZIPCODES) = new URL\((["'])\.\/(places\.tsv\.br|pincodes\.json|zipcodes\.json)\2, import\.meta\.url\);/g,
+    (_match, name, quote, filename) => {
+      urlCount += 1;
+      return "const " + name + " = new URL(" + quote + "./" + filename + quote +
+        ', "file:///exportflow/node_modules/universal-parcel-scraper/dist/places/index.js");';
+    }
+  );
+  if (urlCount !== 3) {
+    throw new Error("Expected to normalize all three place-data module URLs; found " + urlCount);
+  }
+
+  const lines = source.split(/\r?\n/);
+  const replaceOne = (pattern, replacement, description) => {
+    const matches = [];
+    for (let index = 0; index < lines.length; index += 1) {
+      if (pattern.test(lines[index])) matches.push(index);
+    }
+    if (matches.length !== 1) {
+      throw new Error("Expected one " + description + " line; found " + matches.length);
+    }
+    lines.splice(matches[0], 1, ...replacement);
+  };
+
+  replaceOne(
+    /^\s*const bytes = .*brotliDecompressSync\(readFileSync\(DATA\)\)/,
+    [
+      "  let bytes;",
+      "  try {",
+      "    bytes = brotliDecompressSync(readFileSync(DATA));",
+      "  } catch {",
+      "    // Place enrichment is optional on Workers where package files are not mounted.",
+      "    loaded = {",
+      "      names: [], codes: [],",
+      "      country: new Uint16Array(0), admin1: new Uint16Array(0), admin2: new Uint16Array(0),",
+      "      latitude: new Float32Array(0), longitude: new Float32Array(0), population: new Uint32Array(0),",
+      "      keys: new Map(), postcodes: new Map(), countries: new Map(), regions: new Map(),",
+      "      regionNames: new Map(), airports: new Map(), byCountry: new Map(), airportNames: new Map(),",
+      "    };",
+      "    return loaded;",
+      "  }",
+    ],
+    "gazetteer data read"
+  );
+
+  replaceOne(
+    /^\s*zipPrefixes \?\?=.*readFileSync\(ZIPCODES/,
+    [
+      "  try {",
+      "    zipPrefixes ??= JSON.parse(readFileSync(ZIPCODES, 'utf8')).prefixes;",
+      "  } catch {",
+      "    zipPrefixes ??= {};",
+      "  }",
+    ],
+    "ZIP-code data read"
+  );
+
+  replaceOne(
+    /^\s*pincodes \?\?=.*readFileSync\(PINCODES/,
+    [
+      "  try {",
+      "    pincodes ??= JSON.parse(readFileSync(PINCODES, 'utf8'));",
+      "  } catch {",
+      "    pincodes ??= { towns: [], ranges: [] };",
+      "  }",
+    ],
+    "PIN-code data read"
+  );
+
+  await writeFile(placesFile, lines.join("\n"));
+}
+
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 
@@ -44,32 +121,30 @@ for (const file of files) {
 
 try {
   const jsonImports = await patchWorkerIncompatibleEngineFiles(engineDist);
+  await patchWorkerPlaceAssets();
 
   // JCEX's origin-pinning recovery path requires a custom Node undici Agent.
-  // Keep its ordinary fetch/retry route, but disable only the Node socket fallback.
   const jcexOrigin = resolve(engineDist, "carriers/jcex/origin.js");
-  await writeFile(jcexOrigin, `// Cloudflare Workers cannot pin a Node HTTPS socket to a custom origin.
-export async function withJcexOrigin() {
-  throw new Error("JCEX origin pinning is unavailable in this runtime");
-}
-`);
+  await writeFile(jcexOrigin,
+    "// Cloudflare Workers cannot pin a Node HTTPS socket to a custom origin.\n" +
+    "export async function withJcexOrigin() {\n" +
+    "  throw new Error(\"JCEX origin pinning is unavailable in this runtime\");\n" +
+    "}\n"
+  );
 
-  // Cloudflare Workers cannot run local Playwright/Chromium or native Sharp.
-  // Browser-only and image-challenge routes remain unavailable unless a remote
-  // TRAWL browser is configured; normal HTTP carrier adapters remain enabled.
+  // Disable local browser and native image routes; normal HTTP carrier adapters remain enabled.
   const optionalTransport = resolve(engineDist, "core/transport/optional.js");
-  await writeFile(optionalTransport, `import { TransportError } from '../errors/index.js';
-export async function loadChromium(provider) {
-  throw new TransportError(provider, 'Local browser automation is unavailable in Cloudflare Workers; configure the remote TRAWL service.');
-}
-export async function loadSharp(provider) {
-  throw new TransportError(provider, 'Image challenge decoding is unavailable in Cloudflare Workers.');
-}
-`);
+  await writeFile(optionalTransport,
+    "import { TransportError } from '../errors/index.js';\n" +
+    "export async function loadChromium(provider) {\n" +
+    "  throw new TransportError(provider, 'Local browser automation is unavailable in Cloudflare Workers; configure the remote TRAWL service.');\n" +
+    "}\n" +
+    "export async function loadSharp(provider) {\n" +
+    "  throw new TransportError(provider, 'Image challenge decoding is unavailable in Cloudflare Workers.');\n" +
+    "}\n"
+  );
 
-  // Deppon's adapter imports Sharp directly for its slider puzzle. Replace only
-  // that solver entry so the adapter can report an unsupported challenge
-  // instead of making the entire Pages Worker bundle depend on native Sharp.
+  // Replace Deppon's direct Sharp solver so its adapter can fail gracefully without native Sharp.
   const depponAdapter = resolve(engineDist, "carriers/deppon/adapter.js");
   const depponSource = await readFile(depponAdapter, "utf8");
   const depponCompatible = depponSource.replace(
@@ -81,7 +156,10 @@ export async function loadSharp(provider) {
   }
   await writeFile(depponAdapter, depponCompatible);
 
-  console.log(`Prepared upstream engine for Pages: normalized ${jsonImports} JSON imports; disabled Node-only JCEX, local-browser, and native-image challenge fallbacks.`);
+  console.log(
+    "Prepared upstream engine for Pages: normalized " + jsonImports +
+    " JSON imports; guarded place-data filesystem reads; disabled Node-only JCEX, local-browser, and native-image challenge fallbacks."
+  );
 } catch (error) {
   console.error("Could not prepare universal-parcel-scraper for Cloudflare Pages:", error);
   process.exitCode = 1;
