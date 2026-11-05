@@ -25,6 +25,14 @@ These figures describe catalog and adapter coverage, not a guarantee that every 
 
 The only universal fallback enabled by default is UPU. Other optional third-party fallback providers are intentionally not enabled because they receive the user's tracking number too. Some carrier adapters need a browser service (TRAWL/Chromium); those adapters can remain unavailable until a separate browser service is configured.
 
+## Carrier verification
+
+The default `npm test` suite checks the shape and definitions of every carrier ID in the pinned upstream catalog (currently more than 1,000 entries), plus the tracking API's output contract using synthetic status fixtures. These checks make no network requests.
+
+Run `npm run test:carriers:live` for a separate live canary. It checks one publicly re-checkable benchmark number for each supported carrier in the upstream's 100-carrier benchmark dataset. The canary uses the dedicated carrier adapters only: universal third-party fallback providers are disabled. It reports carrier, status, event count, and duration, but never writes tracking numbers, event descriptions, or recipient/location details to its report.
+
+Live numbers can age out, and a negative result can mean that a carrier no longer retains that shipment's history. The canary does **not** prove that every one of the 1,339 catalog entries can return live tracking data. It is deliberately separate from `npm test` because it contacts carrier websites.
+
 ## Local development
 
 Requirements: Node.js 24+ and Python 3.
