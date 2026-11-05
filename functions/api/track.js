@@ -1,7 +1,7 @@
 import { createTracker, TrackingError } from "universal-parcel-scraper/node";
 
 const MAX_BODY_CHARS = 4_096;
-const MAX_NUMBER_LENGTH = 60;
+const MAX_NUMBER_LENGTH = 40;
 const REQUESTS_PER_MINUTE = 12;
 const MAX_CONCURRENT_LOOKUPS = 6;
 const LOOKUP_BUDGET_MS = 25_000;
@@ -22,6 +22,36 @@ function json(body, status = 200, extraHeaders = {}) {
       ...extraHeaders
     }
   });
+}
+
+async function readBoundedBody(request, limit) {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks = [];
+  let length = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.byteLength;
+      if (length > limit) {
+        await reader.cancel().catch(() => {});
+        const error = new Error("Request body is too large");
+        error.code = "BODY_TOO_LARGE";
+        throw error;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 function getTracker(env) {
@@ -145,12 +175,11 @@ export async function onRequestPost({ request, env }) {
 
   let raw;
   try {
-    raw = await request.text();
-  } catch {
-    return json({ error: "invalid_request_body" }, 400);
-  }
-  if (raw.length > MAX_BODY_CHARS) {
-    return json({ error: "request_too_large" }, 413);
+    raw = await readBoundedBody(request, MAX_BODY_CHARS);
+  } catch (error) {
+    return error?.code === "BODY_TOO_LARGE"
+      ? json({ error: "request_too_large" }, 413)
+      : json({ error: "invalid_request_body" }, 400);
   }
 
   let input;
