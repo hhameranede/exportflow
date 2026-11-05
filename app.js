@@ -70,7 +70,7 @@ function setTrackingBusy(busy) {
 }
 
 function humanize(value) {
-  return String(value || "unknown").replace(/[_-]+/g, " ").replace(/\\b\\w/g, c => c.toUpperCase());
+  return String(value || "unknown").replace(/[_-]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function stageLabel(stage) {
