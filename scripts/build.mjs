@@ -44,18 +44,44 @@ for (const file of files) {
 
 try {
   const jsonImports = await patchWorkerIncompatibleEngineFiles(engineDist);
+
   // JCEX's origin-pinning recovery path requires a custom Node undici Agent.
-  // Cloudflare Workers uses the platform fetch transport and cannot open that
-  // Node socket; retain the ordinary JCEX request/retry path and disable only
-  // this optional recovery step. This also keeps undici's node:sqlite cache
-  // implementation out of the Worker dependency graph.
+  // Keep its ordinary fetch/retry route, but disable only the Node socket fallback.
   const jcexOrigin = resolve(engineDist, "carriers/jcex/origin.js");
   await writeFile(jcexOrigin, `// Cloudflare Workers cannot pin a Node HTTPS socket to a custom origin.
 export async function withJcexOrigin() {
   throw new Error("JCEX origin pinning is unavailable in this runtime");
 }
 `);
-  console.log(`Prepared upstream engine for Pages: normalized ${jsonImports} JSON import attributes; disabled the Node-only JCEX origin fallback.`);
+
+  // Cloudflare Workers cannot run local Playwright/Chromium or native Sharp.
+  // Browser-only and image-challenge routes remain unavailable unless a remote
+  // TRAWL browser is configured; normal HTTP carrier adapters remain enabled.
+  const optionalTransport = resolve(engineDist, "core/transport/optional.js");
+  await writeFile(optionalTransport, `import { TransportError } from '../errors/index.js';
+export async function loadChromium(provider) {
+  throw new TransportError(provider, 'Local browser automation is unavailable in Cloudflare Workers; configure the remote TRAWL service.');
+}
+export async function loadSharp(provider) {
+  throw new TransportError(provider, 'Image challenge decoding is unavailable in Cloudflare Workers.');
+}
+`);
+
+  // Deppon's adapter imports Sharp directly for its slider puzzle. Replace only
+  // that solver entry so the adapter can report an unsupported challenge
+  // instead of making the entire Pages Worker bundle depend on native Sharp.
+  const depponAdapter = resolve(engineDist, "carriers/deppon/adapter.js");
+  const depponSource = await readFile(depponAdapter, "utf8");
+  const depponCompatible = depponSource.replace(
+    /const sharp = \\(await import\\((["'])sharp\\1\\)\\)\\.default;/,
+    "const sharp = () => { throw new ChallengeError(PROVIDER, 'Deppon image challenge decoding is unavailable in Cloudflare Workers'); };"
+  );
+  if (depponCompatible === depponSource) {
+    throw new Error("Could not locate Deppon's native Sharp import for the Pages compatibility patch");
+  }
+  await writeFile(depponAdapter, depponCompatible);
+
+  console.log(`Prepared upstream engine for Pages: normalized ${jsonImports} JSON imports; disabled Node-only JCEX, local-browser, and native-image challenge fallbacks.`);
 } catch (error) {
   console.error("Could not prepare universal-parcel-scraper for Cloudflare Pages:", error);
   process.exitCode = 1;
