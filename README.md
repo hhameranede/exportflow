@@ -1,54 +1,70 @@
 # ExportFlow
 
-A clean, mobile-first parcel-tracking experience for everyday online shoppers. ExportFlow aims to bring updates from multiple delivery carriers into one clear timeline.
+A mobile-first parcel tracker in English and Arabic. Live tracking runs server-side through the open-source Universal Parcel Scraper engine.
 
-> **Current status:** frontend MVP prototype. The sample tracking number is simulated. Live carrier adapters, a tracking API, user accounts, saved parcels, and notifications are not connected yet.
+## Live tracking engine
 
-## Run locally
+ExportFlow integrates [Universal Parcel Scraper](https://github.com/plhery/universal-parcel-scraper) at the pinned upstream commit `e64a466772ef25ce68e02d9c7c9f1613eec1208b`.
 
-Requirements: Node.js 22+ and Python 3.
+The upstream currently documents:
+- 3,500+ carriers in its catalog
+- 732 dedicated carrier adapters
+- 5 universal fallback providers
+- 1,339 catalog entries across 156 countries
+
+These figures describe catalog and adapter coverage, not a guarantee that every shipment number will return a live scan. The project benchmarks a selected sample, and carriers may rate-limit or block automated requests.
+
+### What works in this integration
+
+- Automatic carrier detection and direct carrier adapters.
+- A server-side `POST /api/track` endpoint. Tracking numbers are never sent to browser-side third-party APIs.
+- A server-side `GET /api/carriers` endpoint exposing the engine catalog.
+- A health endpoint at `GET /api/health`.
+- Bounded request size, per-isolate rate limits, concurrency limits, a lookup deadline, no-store responses, and privacy-conscious error output.
+- English and Arabic status/timeline UI.
+
+The only universal fallback enabled by default is UPU. Other optional third-party fallback providers are intentionally not enabled because they receive the user's tracking number too. Some carrier adapters need a browser service (TRAWL/Chromium); those adapters can remain unavailable until a separate browser service is configured.
+
+## Local development
+
+Requirements: Node.js 24+ and Python 3.
 
 ```bash
+npm install
 npm test
 npm run build
 npm run dev
 ```
 
-Open http://localhost:4173.
+Open http://localhost:4173. Static preview is for layout only; live API routes require Cloudflare Pages Functions runtime.
 
 ## Project structure
 
-- index.html — bilingual landing page and tracking interface
-- styles.css — responsive design, Arabic RTL and small-screen layouts
-- app.js — language switcher, input validation, and clearly labelled demo result
-- scripts/ — smoke tests and static build script
-- .github/workflows/ci.yml — GitHub Actions checks on pushes and pull requests
-- .github/copilot-instructions.md — product-specific guidance for Copilot
-- .devcontainer/devcontainer.json — ready-to-use Codespaces environment
-- _headers — baseline security headers and caching policy for Cloudflare Pages
+- `index.html`, `styles.css`, `app.js` — bilingual frontend
+- `functions/api/track.js` — server-side live tracking
+- `functions/api/carriers.js` — upstream carrier catalog
+- `functions/api/health.js` — API health check
+- `scripts/` — build and smoke tests
+- `.github/workflows/ci.yml` — CI on pushes and PRs
 
 ## Cloudflare Pages
 
-- Git repository: hhameranede/exportflow
-- Production branch: main
-- Build command: npm run build
-- Build output directory: dist
-- Root directory: /
+- Repository: `hhameranede/exportflow`
+- Production branch: `main`
+- Build command: `npm run build`
+- Build output: `dist`
+- Root: `/`
 
-Cloudflare Pages Git integration will deploy commits to main and provide preview deployments for branches or pull requests according to the Pages settings.
+Cloudflare Pages Functions are deployed from the root `functions/` directory. Node.js 24 is required by the upstream package.
 
-## Privacy and security
+## Licensing
 
-- Never place carrier API credentials in browser JavaScript.
-- Route real carrier requests through a server-side endpoint.
-- Avoid storing or logging full tracking numbers unless a clearly disclosed feature requires it.
-- Private tracking results must not be indexed by search engines.
+The upstream core is Apache-2.0. Its optional TRAWL derivative is AGPL-3.0; it is not bundled or enabled in this integration. Keep the upstream `LICENSE`, `NOTICE`, and relevant third-party notices with any redistribution. See upstream `NOTICE` for bundled model and data attributions.
 
-## Next milestones
+## Privacy
 
-1. Verify the parcel connector engine and its licenses.
-2. Build a server-side tracking endpoint and carrier auto-detection.
-3. Test real shipments across countries and delivery handoffs.
-4. Normalize carrier events into a consistent status timeline.
-5. Add saved parcels and notifications only after live tracking quality is proven.
-6. Publish carrier-specific SEO pages only when they contain accurate, genuinely useful information.
+- Never put carrier or provider credentials in browser JavaScript.
+- Never log full tracking numbers or postcodes.
+- The selected carrier receives the tracking number; UPU may receive it for eligible postal numbers.
+- Additional universal fallback providers must remain opt-in and disclosed because they also receive the tracking number.
+- Tracking responses use `Cache-Control: no-store`; do not index private tracking results.
