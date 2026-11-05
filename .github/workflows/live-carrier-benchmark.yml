@@ -1,0 +1,140 @@
+name: Public Carrier Live Benchmark
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exportflow-public-carrier-benchmark
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    name: One public sample per benchmark carrier
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Check out pinned upstream tracking engine and public benchmark data
+        uses: actions/checkout@v4
+        with:
+          repository: plhery/universal-parcel-scraper
+          ref: e64a466772ef25ce68e02d9c7c9f1613eec1208b
+          path: engine
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: engine/package-lock.json
+
+      - name: Install upstream engine dependencies
+        working-directory: engine
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Build tracking engine
+        working-directory: engine
+        run: npm run build
+
+      - name: Install Chromium for browser-backed carrier adapters
+        working-directory: engine
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Prepare one public benchmark reference per carrier
+        working-directory: engine
+        env:
+          COVERAGE_PROBE_CASES: ${{ runner.temp }}/exportflow-benchmark-cases.json
+        run: |
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from 'node:fs';
+          import { loadBenchmark } from './scripts/benchmark-data.mjs';
+
+          const entries = loadBenchmark(process.cwd());
+          const cases = entries.map((entry) => {
+            const sample = entry.numbers[0];
+            return {
+              carrier: entry.carrier,
+              adapter: entry.tracker,
+              number: sample.number,
+              postcode: sample.postcode ?? null,
+              reference: 0,
+              // These references are public, but the result artifact does not
+              // need to retain the identifiers themselves.
+              public: false,
+              sources: ['direct']
+            };
+          });
+          if (cases.length !== 100) {
+            throw new Error('Expected 100 benchmark carriers, found ' + cases.length);
+          }
+          writeFileSync(process.env.COVERAGE_PROBE_CASES, JSON.stringify(cases));
+          console.log('Prepared ' + cases.length + ' direct-carrier checks. Raw IDs stay in the runner temporary directory.');
+          NODE
+
+      - name: Run the live direct-adapter benchmark
+        working-directory: engine
+        env:
+          COVERAGE_PROBE_CASES: ${{ runner.temp }}/exportflow-benchmark-cases.json
+          COVERAGE_PROBE_OUT: ${{ runner.temp }}/exportflow-benchmark-results.jsonl
+          COVERAGE_PROBE_SOURCES: direct
+        run: |
+          TRACKING_CHROMIUM_PATH="$(node -e "import('playwright-core').then(({ chromium }) => console.log(chromium.executablePath()))")"
+          export TRACKING_CHROMIUM_PATH
+          npx vitest run --config scripts/coverage-probe.config.ts
+
+      - name: Create privacy-minimized carrier report
+        working-directory: engine
+        env:
+          COVERAGE_PROBE_OUT: ${{ runner.temp }}/exportflow-benchmark-results.jsonl
+          REPORT_PATH: ${{ runner.temp }}/exportflow-carrier-report.md
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+
+          const records = readFileSync(process.env.COVERAGE_PROBE_OUT, 'utf8')
+            .split('\n').filter(Boolean).map((line) => JSON.parse(line));
+          if (records.length !== 100) {
+            throw new Error('Expected 100 carrier results, found ' + records.length);
+          }
+
+          const outcomes = ['history', 'summary_only', 'no_history', 'postcode_prompt', 'refused', 'blocked', 'error', 'no_adapter', 'undated'];
+          const counts = Object.fromEntries(outcomes.map((outcome) => [
+            outcome, records.filter((record) => record.outcome === outcome).length
+          ]));
+          const rows = records.map((record) =>
+            '| ' + record.carrier + ' | ' + record.outcome + ' | ' + (record.rows ?? 0) + ' | ' + (record.ms ?? 0) + ' ms | ' + String(record.error ?? '').replaceAll('|', '/') + ' |'
+          );
+          const report = [
+            '# ExportFlow live carrier benchmark',
+            '',
+            '- Source: upstream public benchmark corpus, pinned to e64a466772ef25ce68e02d9c7c9f1613eec1208b.',
+            '- Scope: one published reference per benchmark carrier; direct carrier adapter only.',
+            '- Fallback aggregators were not called. Tracking numbers and event text are not included in this report.',
+            '- no_history means the carrier returned no usable history for this reference; it is not proof the adapter is broken.',
+            '',
+            '## Outcome counts',
+            '',
+            ...Object.entries(counts).map(([name, count]) => '- ' + name + ': ' + count),
+            '',
+            '## Per-carrier results',
+            '',
+            '| Carrier | Outcome | Scans | Duration | Diagnostic |',
+            '| --- | --- | ---: | ---: | --- |',
+            ...rows,
+            ''
+          ].join('\n');
+
+          writeFileSync(process.env.REPORT_PATH, report);
+          if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, report);
+          console.log(JSON.stringify({ total: records.length, counts }, null, 2));
+          NODE
+
+      - name: Upload privacy-minimized benchmark report
+        uses: actions/upload-artifact@v4
+        with:
+          name: exportflow-live-carrier-benchmark
+          path: ${{ runner.temp }}/exportflow-carrier-report.md
+          if-no-files-found: error
+          retention-days: 30
