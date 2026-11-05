@@ -14,7 +14,7 @@ for (const id of ["trackingForm", "trackingNumber", "postcodeInput", "languageTo
 }
 assert.match(js, /EXF-DEMO-001/, "Demo-only sample flow must stay explicit");
 assert.match(js, /fetch\("\/api\/track"/, "Tracking form must call the server-side tracking API");
-assert.match(js, /postcode: postcodeInput\.value/, "Optional postcode should be submitted to the API");
+assert.match(js, /postcode: postcodeInput\.value\.trim\(\)/, "Optional postcode should be submitted to the API");
 assert.match(js, /renderTimeline/, "Live scan history should be rendered into the timeline");
 assert.match(js, /state: "complete"/, "Demo timeline events should use renderable event objects");
 assert.match(api, /createTracker/, "Tracking API must use the upstream parcel engine");
