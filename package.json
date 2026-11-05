@@ -10,8 +10,9 @@
     "dev": "python3 -m http.server 4173",
     "start": "python3 -m http.server 4173",
     "check": "node scripts/smoke-test.mjs",
-    "test": "node scripts/engine-smoke-test.mjs && npm run check",
-    "build": "node scripts/build.mjs"
+    "test": "node scripts/engine-smoke-test.mjs && node scripts/carrier-catalog-test.mjs && node scripts/result-contract-test.mjs && npm run check",
+    "build": "node scripts/build.mjs",
+    "test:carriers:live": "node scripts/carrier-canary.mjs"
   },
   "dependencies": {
     "universal-parcel-scraper": "github:plhery/universal-parcel-scraper#e64a466772ef25ce68e02d9c7c9f1613eec1208b"
