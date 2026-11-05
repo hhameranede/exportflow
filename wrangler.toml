@@ -1,3 +1,4 @@
+# Required by Pages Functions and the universal parcel engine's Node.js built-ins.
 name = "exportflow"
 pages_build_output_dir = "./dist"
 compatibility_date = "2026-11-05"
