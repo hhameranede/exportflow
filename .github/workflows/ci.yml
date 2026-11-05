@@ -32,7 +32,8 @@ jobs:
           node --check functions/api/track.js
           node --check functions/api/carriers.js
           node --check functions/api/health.js
-      - name: Run smoke tests
+          node --check scripts/carrier-catalog-test.mjs
+      - name: Run smoke tests and full carrier catalog audit
         run: npm test
       - name: Build static site
         run: npm run build
@@ -61,20 +62,43 @@ jobs:
           const catalog = await carriersResponse.json();
           assert.ok(Array.isArray(catalog.carriers), 'Carrier catalog must be an array');
           assert.equal(catalog.catalogEntries, catalog.carriers.length);
-          assert.ok(catalog.catalogEntries > 0, 'Carrier catalog must not be empty');
+          assert.ok(catalog.catalogEntries >= 1300, 'Carrier catalog appears incomplete');
+          assert.equal(new Set(catalog.carriers).size, catalog.carriers.length, 'Carrier IDs must be unique');
+          assert.ok(
+            catalog.carriers.every(id => typeof id === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id)),
+            'Every carrier ID must use the expected normalized format'
+          );
 
-          const invalidTrackResponse = await fetch(`${base}/api/track`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify({ number: 'x' })
-          });
-          assert.equal(invalidTrackResponse.status, 400, 'Invalid tracking numbers must be rejected with HTTP 400');
-          const invalidTrack = await invalidTrackResponse.json();
-          assert.equal(invalidTrack.error, 'invalid_tracking_number');
+          async function postTrack(body, contentType = 'application/json') {
+            return fetch(`${base}/api/track`, {
+              method: 'POST',
+              headers: { 'Content-Type': contentType, 'Accept': 'application/json' },
+              body: typeof body === 'string' ? body : JSON.stringify(body)
+            });
+          }
+
+          const cases = [
+            { label: 'invalid number', body: { number: 'x' }, status: 400, error: 'invalid_tracking_number' },
+            { label: 'invalid carrier', body: { number: 'TESTTRACK123', carrier: 'bad carrier!' }, status: 400, error: 'invalid_carrier' },
+            { label: 'invalid postcode', body: { number: 'TESTTRACK123', postcode: '<bad>' }, status: 400, error: 'invalid_postcode' },
+            { label: 'invalid language', body: { number: 'TESTTRACK123', language: 'zz-ZZ' }, status: 400, error: 'invalid_language' },
+            { label: 'unknown field', body: { number: 'TESTTRACK123', extra: true }, status: 400, error: 'unknown_request_field' },
+            { label: 'wrong content type', body: '{"number":"TESTTRACK123"}', contentType: 'text/plain', status: 415, error: 'content_type_must_be_json' }
+          ];
+
+          const validation = {};
+          for (const testCase of cases) {
+            const response = await postTrack(testCase.body, testCase.contentType);
+            assert.equal(response.status, testCase.status, `${testCase.label} must return HTTP ${testCase.status}`);
+            const payload = await response.json();
+            assert.equal(payload.error, testCase.error, `${testCase.label} must return ${testCase.error}`);
+            validation[testCase.label] = 'ok';
+          }
 
           console.log(JSON.stringify({
             health: 'ok',
             carriers: catalog.catalogEntries,
-            invalidTrackingValidation: 'ok'
+            carrierIdsUnique: true,
+            validation
           }, null, 2));
           NODE
