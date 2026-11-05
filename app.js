@@ -57,21 +57,164 @@ function openSampleResult(value) {
     formError.hidden = false;
     return;
   }
-  document.getElementById("resultTrackingCode").textContent = code;
+  renderDemoResult(code);
+}
+
+function setTrackingBusy(busy) {
+  const button = trackingForm.querySelector('button[type="submit"]');
+  button.disabled = busy;
+  button.setAttribute("aria-busy", String(busy));
+  button.querySelector("[data-i18n='trackNow']").textContent = busy
+    ? (html.lang === "ar" ? "جارٍ البحث..." : "Finding your parcel...")
+    : translations[html.lang].trackNow;
+}
+
+function humanize(value) {
+  return String(value || "unknown").replace(/[_-]+/g, " ").replace(/\\b\\w/g, c => c.toUpperCase());
+}
+
+function stageLabel(stage) {
+  const labels = {
+    delivered: html.lang === "ar" ? "تم التسليم" : "Delivered",
+    out_for_delivery: html.lang === "ar" ? "خرج للتوصيل" : "Out for delivery",
+    in_transit: html.lang === "ar" ? "في الطريق" : "In transit",
+    available_for_pickup: html.lang === "ar" ? "جاهز للاستلام" : "Ready for pickup",
+    exception: html.lang === "ar" ? "مشكلة في الشحنة" : "Delivery exception",
+    failed_attempt: html.lang === "ar" ? "تعذّر التسليم" : "Delivery attempt failed",
+    returned: html.lang === "ar" ? "تم إرجاع الشحنة" : "Returned",
+    information_received: html.lang === "ar" ? "تم تسجيل معلومات الشحنة" : "Shipment information received",
+    unknown: html.lang === "ar" ? "حالة غير معروفة" : "Status unavailable"
+  };
+  return labels[stage] || humanize(stage);
+}
+
+function openResultPanel() {
   resultPanel.hidden = false;
   resultBackdrop.hidden = false;
   document.body.style.overflow = "hidden";
   document.getElementById("closeResult").focus();
 }
 
+function renderDemoResult(code) {
+  const pack = translations[html.lang];
+  document.querySelector(".section-eyebrow[data-i18n='sampleResult']").textContent = pack.sampleResult;
+  document.querySelector(".sample-warning span:last-child").textContent = pack.sampleWarning;
+  document.querySelector(".result-carrier").textContent = pack.sampleCarrier;
+  document.querySelector(".result-main strong").textContent = pack.inTransit;
+  document.querySelector(".status-pill span:last-child").textContent = pack.movingStatus;
+  document.getElementById("resultTrackingCode").textContent = code;
+  const labels = [
+    [pack.eventOne, pack.eventOneMeta, "complete"],
+    [pack.eventTwo, pack.eventTwoMeta, "complete"],
+    [pack.eventThree, pack.eventThreeMeta, "active"],
+    [pack.eventFour, pack.eventFourMeta, "upcoming"],
+    [pack.eventFive, pack.eventFiveMeta, "upcoming"]
+  ];
+  renderTimeline(labels);
+  openResultPanel();
+}
+
+function renderTimeline(events) {
+  const timeline = document.querySelector(".timeline");
+  timeline.replaceChildren();
+  for (const event of events) {
+    const item = document.createElement("div");
+    item.className = "timeline-item " + (event.state || "upcoming");
+    const node = document.createElement("span");
+    node.className = "timeline-node";
+    node.textContent = event.state === "complete" ? "✓" : event.state === "active" ? "•" : "";
+    const body = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = event.title || (html.lang === "ar" ? "تحديث الشحنة" : "Shipment update");
+    const meta = document.createElement("small");
+    meta.textContent = event.meta || "";
+    body.append(title, meta);
+    item.append(node, body);
+    timeline.append(item);
+  }
+}
+
+async function trackLive(value) {
+  const number = value.trim();
+  if (!number) {
+    formError.textContent = translations[html.lang].errorEmpty;
+    formError.hidden = false;
+    trackingInput.focus();
+    return;
+  }
+
+  formError.hidden = true;
+  setTrackingBusy(true);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 28_000);
+  try {
+    const response = await fetch("/api/track", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      cache: "no-store",
+      signal: controller.signal,
+      body: JSON.stringify({ number, language: html.lang })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const messages = {
+        invalid_input: html.lang === "ar" ? "رقم التتبع غير صالح أو لا يطابق تنسيقًا معروفًا." : "That tracking number is invalid or unsupported.",
+        not_found: html.lang === "ar" ? "لم تعثر شركة الشحن على هذه الشحنة بعد." : "The carrier could not find this shipment yet.",
+        rate_limited: html.lang === "ar" ? "طلبات كثيرة جدًا. حاول بعد قليل." : "Too many requests. Please try again shortly.",
+        input_required: html.lang === "ar" ? "تحتاج هذه الشركة إلى معلومات إضافية مثل الرمز البريدي." : "This carrier needs extra information, such as a postcode.",
+        tracking_unavailable: html.lang === "ar" ? "تعذّر الوصول إلى شركة الشحن الآن. حاول لاحقًا." : "The carrier could not be reached right now. Please try again later.",
+        temporarily_busy: html.lang === "ar" ? "خدمة التتبع مشغولة حاليًا. حاول بعد قليل." : "Tracking is busy right now. Please try again shortly."
+      };
+      throw new Error(messages[payload.error] || (html.lang === "ar" ? "لم نتمكن من تتبع هذه الشحنة." : "We couldn't track this parcel."));
+    }
+
+    const carrier = humanize(payload.carrier || "unknown");
+    const status = stageLabel(payload.status);
+    document.querySelector(".section-eyebrow[data-i18n='sampleResult']").textContent =
+      html.lang === "ar" ? "نتيجة تتبع مباشرة" : "LIVE TRACKING RESULT";
+    document.querySelector(".sample-warning span:last-child").textContent =
+      html.lang === "ar" ? "هذه المعلومات مأخوذة من شركة الشحن أو من موفّر التتبع الموضّح أدناه." : "Live carrier response. Updates depend on the carrier's latest scans.";
+    document.querySelector(".result-carrier").textContent = carrier;
+    document.querySelector(".result-main strong").textContent = status;
+    document.querySelector(".status-pill span:last-child").textContent =
+      html.lang === "ar" ? "مباشر" : "Live";
+    document.getElementById("resultTrackingCode").textContent = number;
+    const events = Array.isArray(payload.events) ? payload.events : [];
+    if (events.length) {
+      renderTimeline(events.map((event, index) => ({
+        title: event.description || (html.lang === "ar" ? "تحديث الشحنة" : "Shipment update"),
+        meta: [event.time, event.location].filter(Boolean).join(" · "),
+        state: index === 0 ? "active" : "complete"
+      })));
+    } else {
+      renderTimeline([{
+        title: html.lang === "ar" ? "تم العثور على الشحنة" : "Shipment found",
+        meta: html.lang === "ar" ? "لم تُرجع شركة الشحن تفاصيل المسح بعد." : "The carrier has not supplied scan details yet.",
+        state: "active"
+      }]);
+    }
+    const service = payload.service ? " · " + payload.service : "";
+    document.querySelector(".result-carrier").textContent = carrier + service;
+    openResultPanel();
+  } catch (error) {
+    formError.textContent = error?.name === "AbortError"
+      ? (html.lang === "ar" ? "انتهت مهلة التتبع. حاول مرة أخرى." : "Tracking timed out. Please try again.")
+      : (error?.message || (html.lang === "ar" ? "حدث خطأ غير متوقع." : "Something went wrong."));
+    formError.hidden = false;
+  } finally {
+    clearTimeout(timeout);
+    setTrackingBusy(false);
+  }
+}
+
 trackingForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  openSampleResult(trackingInput.value);
+  trackLive(trackingInput.value);
 });
 document.getElementById("demoButton").addEventListener("click", () => {
   trackingInput.value = "EXF-DEMO-001";
   clearInput.hidden = false;
-  openSampleResult(trackingInput.value);
+  renderDemoResult(trackingInput.value);
 });
 
 function closeResult() {
