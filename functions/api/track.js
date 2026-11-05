@@ -1,4 +1,4 @@
-import { createTracker, TrackingError } from "universal-parcel-scraper/node";
+import { createTracker, TrackingError } from "../../node_modules/universal-parcel-scraper/dist/facade/index.js";
 
 const MAX_BODY_CHARS = 4_096;
 const MAX_NUMBER_LENGTH = 40;
