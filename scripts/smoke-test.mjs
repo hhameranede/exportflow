@@ -11,7 +11,7 @@ assert.match(html, /<html[^>]+lang="en"[^>]+dir="ltr"/i, "English LTR document s
 for (const id of ["trackingForm", "trackingNumber", "languageToggle", "resultPanel", "faq"]) {
   assert.match(html, new RegExp('id="' + id + '"'), "Missing required element: " + id);
 }
-assert.match(js, /EXF-DEMO-001/, "Demo-only sample flow must stay explicit");
+assert.match(js, /EXF-DEMO-001/, "Demo-only sample flow must stay explicit");\nassert.match(js, /fetch\\("\\/api\\/track"/, "Tracking form must call the server-side tracking API");\nassert.match(js, /renderTimeline/, "Live scan history should be rendered into the timeline");
 assert.match(js, /localStorage\.setItem\(["']exportflow-language["']/, "Language preference should persist locally");
 assert.match(css, /@media\s*\(max-width:\s*680px\)/, "Mobile breakpoint should exist");
 assert.match(css, /@media\s*\(max-width:\s*380px\)/, "Small-phone breakpoint should exist");
