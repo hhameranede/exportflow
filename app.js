@@ -105,11 +105,11 @@ function renderDemoResult(code) {
   document.querySelector(".status-pill span:last-child").textContent = pack.movingStatus;
   document.getElementById("resultTrackingCode").textContent = code;
   const labels = [
-    [pack.eventOne, pack.eventOneMeta, "complete"],
-    [pack.eventTwo, pack.eventTwoMeta, "complete"],
-    [pack.eventThree, pack.eventThreeMeta, "active"],
-    [pack.eventFour, pack.eventFourMeta, "upcoming"],
-    [pack.eventFive, pack.eventFiveMeta, "upcoming"]
+    { title: pack.eventOne, meta: pack.eventOneMeta, state: "complete" },
+    { title: pack.eventTwo, meta: pack.eventTwoMeta, state: "complete" },
+    { title: pack.eventThree, meta: pack.eventThreeMeta, state: "active" },
+    { title: pack.eventFour, meta: pack.eventFourMeta, state: "upcoming" },
+    { title: pack.eventFive, meta: pack.eventFiveMeta, state: "upcoming" }
   ];
   renderTimeline(labels);
   openResultPanel();
