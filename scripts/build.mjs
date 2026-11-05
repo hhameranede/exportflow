@@ -73,7 +73,7 @@ export async function loadSharp(provider) {
   const depponAdapter = resolve(engineDist, "carriers/deppon/adapter.js");
   const depponSource = await readFile(depponAdapter, "utf8");
   const depponCompatible = depponSource.replace(
-    /const sharp = \\(await import\\((["'])sharp\\1\\)\\)\\.default;/,
+    /const sharp = \(await import\((["'])sharp\1\)\)\.default;/,
     "const sharp = () => { throw new ChallengeError(PROVIDER, 'Deppon image challenge decoding is unavailable in Cloudflare Workers'); };"
   );
   if (depponCompatible === depponSource) {
