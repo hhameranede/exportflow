@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { COUNTRY_CODES } from "../functions/lib/country-codes.mjs";
+import { localeForCountry } from "../functions/_middleware.js";
 
 const [
   html, css, js, translationsSource, coverageHtml, coverageJs, trackApi, coverageApi, build,
-  robots, sitemap, headers, carriersApi, privacyHtml, termsHtml
+  robots, sitemap, headers, carriersApi, privacyHtml, termsHtml, middleware
 ] = await Promise.all([
   readFile("index.html", "utf8"),
   readFile("styles.css", "utf8"),
@@ -20,7 +21,8 @@ const [
   readFile("_headers", "utf8"),
   readFile("functions/api/carriers.js", "utf8"),
   readFile("privacy/index.html", "utf8"),
-  readFile("terms/index.html", "utf8")
+  readFile("terms/index.html", "utf8"),
+  readFile("functions/_middleware.js", "utf8")
 ]);
 
 assert.match(html, /<html[^>]+lang="en"[^>]+dir="ltr"/i, "English LTR homepage should exist");
@@ -96,13 +98,34 @@ assert.doesNotMatch(robots, /Disallow: \/api\/coverage/);
 assert.match(coverageApi, /X-Robots-Tag/);
 assert.match(robots, /Sitemap: https:\/\/exportflow\.me\/sitemap\.xml/);
 const sitemapLocations = [...sitemap.matchAll(/<loc>(https:\/\/exportflow\.me\/[^<]*)<\/loc>/g)].map(match => match[1]);
-assert.deepEqual(sitemapLocations.sort(), [
-  "https://exportflow.me/",
-  "https://exportflow.me/coverage/",
-  "https://exportflow.me/privacy/",
-  "https://exportflow.me/terms/"
-].sort(), "Sitemap must list each public static page exactly once");
+const expectedLocalizedUrls = locales.flatMap(locale => [
+  locale === "en" ? "https://exportflow.me/" : "https://exportflow.me/" + locale + "/",
+  locale === "en" ? "https://exportflow.me/coverage/" : "https://exportflow.me/" + locale + "/coverage/"
+]).concat(["https://exportflow.me/privacy/", "https://exportflow.me/terms/"]);
+assert.equal(sitemapLocations.length, 18, "Sitemap must contain sixteen localized URLs and two English legal pages");
+assert.deepEqual(sitemapLocations.sort(), expectedLocalizedUrls.sort(), "Sitemap must list every public locale route exactly once");
+assert.match(sitemap, /xmlns:xhtml="http:\/\/www\.w3\.org\/1999\/xhtml"/, "Sitemap must declare the hreflang namespace");
+for (const locale of locales) assert.ok(sitemap.includes('hreflang="' + locale + '"'), "Sitemap must include hreflang for " + locale);
 assert.doesNotMatch(sitemap, /\/api\/|trackingNumber=/, "Private/API and per-shipment URLs must not enter the sitemap");
+assert.equal(localeForCountry("DZ"), "ar", "Algeria must default to Arabic");
+assert.equal(localeForCountry("SA"), "ar", "Arabic-speaking countries must default to Arabic");
+assert.equal(localeForCountry("FR"), "fr", "France must default to French");
+assert.equal(localeForCountry("SN"), "fr", "Francophone countries must default to French");
+assert.equal(localeForCountry("ES"), "es", "Spain must default to Spanish");
+assert.equal(localeForCountry("BR"), "pt", "Brazil must default to Portuguese");
+assert.equal(localeForCountry("CN"), "zh", "China must default to Chinese");
+assert.equal(localeForCountry("IN"), "hi", "India must default to Hindi");
+assert.equal(localeForCountry("RU"), "ru", "Russia must default to Russian");
+assert.equal(localeForCountry("US"), "en", "Countries without a supported locale must fall back to English");
+assert.match(middleware, /request\.cf\?\.country/, "First-visit locale detection must use Cloudflare's country code");
+assert.match(middleware, /ef-locale/, "An explicit user language preference must override geolocation");
+assert.match(middleware, /Cache-Control.*private, no-store/, "Geo redirects must not be cached between visitors");
+assert.match(js, /window\.history\.replaceState/, "Homepage language choices must update the locale URL");
+assert.match(coverageJs, /window\.history\.replaceState/, "Coverage language choices must update the locale URL");
+assert.match(js, /ef-locale=/, "Homepage must persist language choice in a cookie");
+assert.match(coverageJs, /ef-locale=/, "Coverage page must persist language choice in a cookie");
+assert.match(build, /generateLocalizedPages/, "Build must generate static locale pages");
+assert.match(build, /hreflang/, "Generated locale pages must contain hreflang alternates");
 assert.match(privacyHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\/privacy\/"\s*\/?>/);
 assert.match(termsHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\/terms\/"\s*\/?>/);
 
@@ -144,5 +167,6 @@ assert.match(build, /"coverage\.js"/);
 assert.match(build, /"robots\.txt"/);
 assert.match(build, /"sitemap\.xml"/);
 assert.match(build, /coverage\/index\.html/, "Build must include the nested country directory page");
+assert.match(build, /localizedPageSpecs/, "Build must generate localized copies of the homepage and coverage directory");
 
-console.log("ExportFlow eight-language, tracking, coverage and SEO smoke tests passed.");
+console.log("ExportFlow geo-language routing, localized SEO pages, tracking, coverage and sitemap tests passed.");
