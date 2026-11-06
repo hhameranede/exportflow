@@ -108,7 +108,7 @@ function dedupeEvents(events) {
     const existing = deduped[existingIndex];
     existing.sourceRefs = [...new Set([...existing.sourceRefs, ...event.sourceRefs])];
     existing.source = existing.sourceRefs[0] || "unknown";
-    existing.trusted = existing.trusted && event.trusted;
+    existing.trusted = existing.trusted || event.trusted;
     if (event.originalIndex > existing.originalIndex) {
       existing.originalIndex = event.originalIndex;
     }
@@ -134,7 +134,7 @@ function compareEvents(a, b) {
 function findConflicts(events) {
   const byTimestamp = new Map();
   for (const event of events) {
-    if (!Number.isFinite(event.timestampMs)) continue;
+    if (!event.trusted || event.sourceRefs.length === 0 || !Number.isFinite(event.timestampMs)) continue;
     const key = String(event.timestampMs);
     if (!byTimestamp.has(key)) byTimestamp.set(key, []);
     byTimestamp.get(key).push(event);
