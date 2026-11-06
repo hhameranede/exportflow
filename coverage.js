@@ -48,6 +48,7 @@
   function statusKey(status) {
     return ({
       direct: "coverageStatusDirect",
+      "browser-required": "coverageStatusBrowserRequired",
       "universal-fallback": "coverageStatusFallback",
       "link-only": "coverageStatusLink",
       "not-listed": "coverageStatusNone",
@@ -93,7 +94,7 @@
       row.dataset.status = country.status || "not-listed";
       const carriers = row.querySelector("[data-country-carriers]");
       if (carriers) {
-        const names = (country.carriers || []).map(carrier => carrier.name).filter(Boolean);
+        const names = (country.carriers || []).map(carrier => carrier.name ? (carrier.requiresBrowser ? `${carrier.name} — ${t("coverageBrowserTag")}` : carrier.name) : "").filter(Boolean);
         row.dataset.carriersSearch = names.join(" ");
         carriers.textContent = names.slice(0, 5).join(" · ") + (names.length > 5 ? " · +" + (names.length - 5) : "");
       }
