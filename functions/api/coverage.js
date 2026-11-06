@@ -1,4 +1,5 @@
 import { CARRIERS } from "universal-parcel-scraper";
+import { CUSTOM_CARRIERS } from "../lib/custom-carriers.mjs";
 
 const COUNTRY_NAME = new Intl.DisplayNames(["en"], { type: "region" });
 
@@ -42,6 +43,16 @@ export async function onRequestGet() {
     }
   }
 
+  for (const carrier of CUSTOM_CARRIERS) {
+    const record = {
+      id: carrier.id,
+      name: carrier.name,
+      adapter: carrier.adapter
+    };
+    addCarrier(catalog, carrier.country, record);
+    addCarrier(direct, carrier.country, record);
+  }
+
   const countries = [...direct.entries()]
     .map(([code, carriers]) => ({
       code,
@@ -68,6 +79,7 @@ export async function onRequestGet() {
     dedicatedAdapterCountries: countries,
     universalFallbackOnlyCountries: universalOnlyCountries,
     linkOnlyCountries,
+    customCarriers: CUSTOM_CARRIERS,
     definitions: {
       direct: "At least one selectable carrier has an automatic dedicated adapter and lists this country.",
       universalFallback: "Only an automatic universal/UPU carrier entry lists this country; a live result is not guaranteed.",
