@@ -204,3 +204,22 @@ jobs:
 
             DEFINITION OF DONE
             Materially improve the actual ExportFlow application; preserve and repair useful work from feat/issue29-complete-roadmap; include the two roadmap documents only after checking factual accuracy; run and report actual checks; and allow the OpenCode GitHub integration to publish the managed branch and create one reviewable PR. The PR must remain open and unmerged. If nearing the runner limit, write an exact checkpoint and finish cleanly without changing branches. Never report success if publication failed or if tests were not actually run.
+
+      - name: Verify managed branch and PR publication
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="$(git branch --show-current)"
+          echo "Final branch: ${branch}"
+          if [[ -z "${branch}" || "${branch}" == "main" ]]; then
+            echo "::error::Laguna did not leave a reviewable feature branch."
+            exit 1
+          fi
+          pr_url="$(gh pr list --head "${branch}" --base main --state open --json url --jq '.[0].url // empty')"
+          if [[ -z "${pr_url}" ]]; then
+            echo "::error::No open PR exists for the final branch. The OpenCode action may have skipped publication."
+            exit 1
+          fi
+          echo "Published review PR: ${pr_url}"
