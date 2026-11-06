@@ -7,6 +7,7 @@
 <title>ExportFlow — Every parcel, one place</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&family=Noto+Sans+Arabic:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -46,8 +47,45 @@
 </main>
 <footer class="site-footer"><a class="brand footer-brand" href="#top"><span class="brand-mark" aria-hidden="true">◇</span><span class="brand-name">Export<span>Flow</span></span></a><p data-i18n="footerCopy">A clearer way to follow what you ordered.</p><span class="footer-copyright">© 2026 ExportFlow</span></footer>
 <div class="result-backdrop" id="resultBackdrop" hidden></div>
-<aside class="result-panel" id="resultPanel" role="dialog" aria-modal="true" aria-labelledby="resultTitle" hidden><div class="result-head"><div><span class="section-eyebrow" data-i18n="sampleResult">SAMPLE TRACKING RESULT</span><h2 id="resultTitle" data-i18n="parcelJourney">Your parcel journey</h2></div><button class="close-result" id="closeResult" type="button" aria-label="Close result">×</button></div>
-<div class="sample-warning"><span aria-hidden="true">ⓘ</span><span data-i18n="sampleWarning">Demo only — these are illustrative events, not live carrier data.</span></div><div class="result-summary"><div class="carrier-logo">EF</div><div class="result-main"><span class="result-carrier" data-i18n="sampleCarrier">Sample carrier</span><strong data-i18n="inTransit">In transit</strong><small id="resultTrackingCode">EXF-DEMO-001</small></div><span class="status-pill"><span></span><span data-i18n="movingStatus">Moving</span></span></div>
-<div class="timeline"><div class="timeline-item complete"><span class="timeline-node">✓</span><div><strong data-i18n="eventOne">Shipment information received</strong><small data-i18n="eventOneMeta">Sample event · Origin facility</small></div></div><div class="timeline-item complete"><span class="timeline-node">✓</span><div><strong data-i18n="eventTwo">Parcel picked up</strong><small data-i18n="eventTwoMeta">Sample event · Seller warehouse</small></div></div><div class="timeline-item active"><span class="timeline-node"><i></i></span><div><strong data-i18n="eventThree">Departed origin country</strong><small data-i18n="eventThreeMeta">Sample event · International transit</small></div></div><div class="timeline-item upcoming"><span class="timeline-node"></span><div><strong data-i18n="eventFour">Arrived in destination country</strong><small data-i18n="eventFourMeta">Waiting for next carrier scan</small></div></div><div class="timeline-item upcoming"><span class="timeline-node"></span><div><strong data-i18n="eventFive">Out for delivery</strong><small data-i18n="eventFiveMeta">Not reached yet</small></div></div></div><button class="result-done" id="doneResult" type="button" data-i18n="done">Done</button></aside>
+<aside class="result-panel" id="resultPanel" role="dialog" aria-modal="true" aria-labelledby="resultTitle" hidden>
+  <div class="result-head">
+    <div>
+      <span class="section-eyebrow" id="resultEyebrow">LIVE TRACKING RESULT</span>
+      <h2 id="resultTitle" data-i18n="parcelJourney">Your parcel journey</h2>
+      <p class="result-subtitle" id="resultSubtitle">Your latest carrier updates, together in one place.</p>
+    </div>
+    <button class="close-result" id="closeResult" type="button" aria-label="Close result">×</button>
+  </div>
+  <div class="result-summary">
+    <div class="carrier-logo" aria-hidden="true">EF</div>
+    <div class="result-main">
+      <span class="result-carrier" data-i18n="sampleCarrier">Carrier</span>
+      <strong data-i18n="inTransit">In transit</strong>
+      <small id="resultTrackingCode">—</small>
+    </div>
+    <span class="status-pill"><span></span><span data-i18n="movingStatus">Live</span></span>
+    <div class="eta-chip" id="etaCard" hidden><small data-i18n="etaLabel">Estimated delivery</small><strong id="etaText"></strong></div>
+  </div>
+  <div class="result-source-note" id="resultSourceNote">Carrier scan data. The timing and detail of updates depend on the delivery service.</div>
+  <div class="result-body-grid">
+    <section class="map-section" aria-labelledby="mapTitle">
+      <div class="map-heading">
+        <div><span class="section-eyebrow" data-i18n="mapEyebrow">SHIPMENT ROUTE</span><h3 id="mapTitle" data-i18n="mapTitleText">Confirmed scan locations</h3></div>
+        <span class="map-count" id="mapCount">0 locations</span>
+      </div>
+      <div id="shipmentMap" class="shipment-map" role="region" aria-label="Map of confirmed shipment scan locations"></div>
+      <p class="map-note" id="mapNote" aria-live="polite">The map uses only coordinates supplied by the carrier. Not every carrier provides map locations.</p>
+    </section>
+    <section class="history-section" aria-labelledby="historyTitle">
+      <div class="history-heading">
+        <div><span class="section-eyebrow" data-i18n="historyEyebrow">TRACKING HISTORY</span><h3 id="historyTitle" data-i18n="historyTitleText">Latest updates</h3></div>
+        <span class="event-count" id="eventCount">0 updates</span>
+      </div>
+      <div class="timeline" aria-live="polite"></div>
+    </section>
+  </div>
+  <button class="result-done" id="doneResult" type="button" data-i18n="done">Done</button>
+</aside>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
 <script src="/app.js" defer></script>
 </body></html>
