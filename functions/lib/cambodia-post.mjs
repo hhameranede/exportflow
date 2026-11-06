@@ -95,7 +95,7 @@ function extractRows(html) {
 
 export function parseCambodiaPostHtml(html, trackingNumber) {
   const source = String(html || "");
-  if (/(?:cloudflare|captcha|verify you are human|just a moment|cf-chl-|access denied)/i.test(source)) {
+  if (/(?:captcha|verify you are human|just a moment|cf-chl-|challenge-platform|enable javascript and cookies to continue|access denied)/i.test(source)) {
     throw new ChallengeError("Cambodia Post", "The official tracking page requires an interactive verification.");
   }
   if (/\bnot found\b|មិនឃើញ|រកមិនឃើញ/i.test(htmlText(source))) {
@@ -183,7 +183,7 @@ export function createCambodiaPostAdapter(environment = {}) {
       const declaredLength = Number(response.headers.get("Content-Length") || 0);
       if (declaredLength > MAX_RESPONSE_BYTES) throw new SchemaError("Cambodia Post", "The tracking response exceeded the size limit.");
       const html = await response.text();
-      if (html.length > MAX_RESPONSE_BYTES) throw new SchemaError("Cambodia Post", "The tracking response exceeded the size limit.");
+      if (new TextEncoder().encode(html).byteLength > MAX_RESPONSE_BYTES) throw new SchemaError("Cambodia Post", "The tracking response exceeded the size limit.");
       return parseCambodiaPostHtml(html, number);
     }
   };
