@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 const root = process.cwd();
 const output = resolve(root, "dist");
 const files = ["index.html", "styles.css", "app.js", "translations.js", "coverage.js", "robots.txt", "sitemap.xml", "_headers", "favicon.svg", "favicon-32x32.png", "apple-touch-icon.png", "site.webmanifest", "og-image-20261106.png"];
+const trustPages = ["about", "contact", "privacy", "terms", "cookies", "security", "disclaimer"];
 const engineDist = resolve(root, "node_modules/universal-parcel-scraper/dist");
 
 async function patchWorkerIncompatibleEngineFiles(directory) {
@@ -121,6 +122,11 @@ for (const file of files) {
 
 await mkdir(resolve(output, "coverage"), { recursive: true });
 await cp(resolve(root, "coverage/index.html"), resolve(output, "coverage/index.html"));
+
+for (const page of trustPages) {
+  await mkdir(resolve(output, page), { recursive: true });
+  await cp(resolve(root, page, "index.html"), resolve(output, page, "index.html"));
+}
 
 try {
   const jsonImports = await patchWorkerIncompatibleEngineFiles(engineDist);

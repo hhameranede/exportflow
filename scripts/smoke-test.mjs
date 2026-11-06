@@ -148,4 +148,20 @@ assert.match(build, /"robots\.txt"/);
 assert.match(build, /"sitemap\.xml"/);
 assert.match(build, /coverage\/index\.html/, "Build must include the nested country directory page");
 
-console.log("ExportFlow eight-language, tracking, coverage and SEO smoke tests passed.");
+const trustPages = ["about", "contact", "privacy", "terms", "cookies", "security", "disclaimer"];
+for (const page of trustPages) {
+  const pageHtml = await readFile(page + "/index.html", "utf8");
+  assert.match(pageHtml, new RegExp('rel="canonical" href="https://exportflow\\.me/' + page + '/'));
+  assert.match(pageHtml, /hhameranede@gmail\.com/);
+  assert.match(pageHtml, /href="\/privacy\//);
+  assert.ok(build.includes('"' + page + '"'), "Build must include trust page " + page);
+  assert.ok(sitemap.includes("https://exportflow.me/" + page + "/"), "Sitemap must include " + page);
+  assert.ok(headers.includes("/" + page + "/*"), "Headers must include " + page);
+}
+assert.match(html, /href="\/about\//);
+assert.match(html, /href="\/contact\//);
+assert.match(html, /href="\/privacy\//);
+assert.match(css, /\.trust-page/);
+assert.match(css, /\.trust-contact-grid/);
+
+console.log("ExportFlow eight-language, tracking, coverage, SEO and trust-page smoke tests passed.");
