@@ -17,3 +17,36 @@ button,.header-cta,.text-link,.demo-link{border-radius:999px}
 @media (max-width:680px){.site-header{height:68px;padding:0 16px;gap:8px}.brand-mark{width:32px;height:32px}.brand-name{font-size:18px}.desktop-nav{display:none}.header-actions{gap:7px}.language-picker{height:36px;min-height:36px;padding:0 9px}.language-icon{width:22px;height:22px}.language-icon svg{width:13px;height:13px}.language-picker select{font-size:11px;max-width:60px;padding-right:11px}.language-picker:after{right:8px;top:7px;font-size:12px}.header-cta{min-height:36px;padding:0 12px;font-size:11px}.header-cta span:last-child{display:none}.tracking-card{border-radius:22px;padding:18px}.tracking-form{gap:9px}.submit-button{min-height:48px;border-radius:15px}}
 
 @media(max-width:380px){.hero{padding-left:4vw;padding-right:4vw}.hero h1{font-size:42px}.tracking-card{padding:16px 13px}.form-bottom{align-items:flex-start;flex-direction:column;gap:9px}.route-board{padding:14px}.floating-stat strong{font-size:16px}.floating-stat small{font-size:8px}.site-footer{align-items:flex-start;flex-direction:column}.footer-copyright{margin-left:0}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation:none!important;transition:none!important}}html[dir=rtl] body{font-family:"DM Sans",sans-serif}html[dir=rtl] .desktop-nav{margin-left:0;margin-right:65px}html[dir=rtl] .result-panel{right:auto;left:0}html[dir=rtl] .timeline-item:not(:last-child):before{left:auto;right:10px}
+
+
+/* Global carrier coverage directory */
+.coverage-section{max-width:1180px;margin:0 auto;padding:105px max(0px,5vw)}
+.coverage-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:42px;margin-bottom:34px}
+.coverage-intro{max-width:650px}
+.coverage-intro h2{font:600 clamp(40px,4.5vw,62px)/1.02 "Space Grotesk",sans-serif;letter-spacing:-2.8px;margin:22px 0 16px;color:var(--ink)}
+.coverage-intro h2 em{font-style:normal;color:var(--orange)}
+.coverage-intro p{max-width:520px;color:var(--muted);font-size:14px;line-height:1.75;margin:0}
+.coverage-total{flex:0 0 auto;display:flex;flex-direction:column;gap:6px;padding:17px 21px;border:1px solid var(--line);background:var(--cream);min-width:190px}
+.coverage-total strong{font:700 34px/1 "Space Grotesk",sans-serif;color:var(--orange);letter-spacing:-1px}
+.coverage-total span{font-size:10px;line-height:1.45;color:var(--muted);max-width:150px}
+.coverage-search{display:flex;align-items:center;gap:12px;height:52px;max-width:460px;padding:0 16px;margin:0 0 22px;border:1px solid var(--line);background:#fff;box-shadow:0 8px 22px rgba(16,34,29,.045);color:var(--orange)}
+.coverage-search>span{font:400 23px/1 "Space Grotesk",sans-serif}
+.coverage-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--ink);font:500 13px "DM Sans",sans-serif}
+.coverage-search input::placeholder{color:#9ba59d}
+.coverage-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.coverage-country-card{min-width:0;display:flex;flex-direction:column;gap:12px;padding:16px 17px;background:var(--cream);border:1px solid var(--line);transition:transform .2s,border-color .2s,box-shadow .2s}
+.coverage-country-card:hover{transform:translateY(-3px);border-color:rgba(240,120,69,.45);box-shadow:0 12px 28px rgba(16,34,29,.07)}
+.coverage-country-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.coverage-country-identity{min-width:0;display:flex;align-items:center;gap:9px}
+.coverage-flag{font-size:20px;line-height:1;flex:0 0 auto}
+.coverage-country-name{font:600 13px "Space Grotesk",sans-serif;color:var(--ink);overflow-wrap:anywhere}
+.coverage-country-code{font:700 9px "Space Grotesk",sans-serif;letter-spacing:.1em;color:#8b968e;border:1px solid var(--line);padding:4px 6px;flex:0 0 auto}
+.coverage-carrier-count{font:700 9px "Space Grotesk",sans-serif;letter-spacing:.07em;text-transform:uppercase;color:var(--orange)}
+.coverage-carrier-names{min-height:31px;margin:0;color:#7c8980;font-size:10px;line-height:1.55;overflow-wrap:anywhere}
+.coverage-loading,.coverage-empty{grid-column:1/-1;color:var(--muted);font-size:12px;padding:22px;border:1px dashed var(--line);background:rgba(255,255,255,.35);margin:0}
+.coverage-footnote{max-width:760px;margin:18px 0 0;color:#8b968e;font-size:10px;line-height:1.65}
+html[dir=rtl] .coverage-section-head{direction:rtl}
+html[dir=rtl] .coverage-country-head{direction:rtl}
+html[dir=rtl] .coverage-search{direction:rtl}
+@media(max-width:680px){.coverage-section{padding:78px 5vw}.coverage-section-head{align-items:flex-start;flex-direction:column;gap:24px;margin-bottom:25px}.coverage-intro h2{font-size:clamp(39px,11vw,53px);letter-spacing:-2px}.coverage-intro p{font-size:12px}.coverage-total{min-width:0;width:100%;padding:14px 16px}.coverage-total strong{font-size:30px}.coverage-search{max-width:none;height:50px}.coverage-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.coverage-country-card{padding:12px 11px;gap:9px}.coverage-country-name{font-size:11px}.coverage-flag{font-size:17px}.coverage-carrier-count{font-size:8px}.coverage-carrier-names{font-size:9px}}
+@media(max-width:380px){.coverage-grid{grid-template-columns:1fr}.coverage-country-card{padding:13px 14px}}
