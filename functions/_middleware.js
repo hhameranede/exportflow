@@ -35,6 +35,10 @@ function cookieValue(cookieHeader, name) {
 export async function onRequest({ request, next }) {
   if (request.method !== "GET" && request.method !== "HEAD") return next();
 
+  // Let search crawlers read the canonical English entry point and discover locale alternates.
+  const userAgent = request.headers.get("User-Agent") || "";
+  if (/(bot|crawler|spider|slurp|bingpreview)/i.test(userAgent)) return next();
+
   const url = new URL(request.url);
   const isHome = url.pathname === "/";
   const isCoverage = url.pathname === "/coverage/" || url.pathname === "/coverage";
