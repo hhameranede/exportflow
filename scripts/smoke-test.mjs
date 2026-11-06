@@ -59,6 +59,8 @@ assert.match(js, /html\.dir\s*=\s*locale === "ar" \? "rtl" : "ltr"/, "Arabic mus
 assert.match(js, /localStorage\.setItem\("exportflow-language"/, "Language choice must persist");
 assert.doesNotMatch(js, /EXF-DEMO-001/, "The fake sample parcel flow must not be presented as live tracking");
 assert.doesNotMatch(html, /98\.4%|200\+ carriers worldwide/i, "Unverified homepage statistics must be removed");
+assert.doesNotMatch(html, /LIVE CARRIER RESULT|>Live<\/span>/i, "Static result markup must not claim continuously live data");
+assert.match(html, /meta name="description" content="Track parcels across carrier networks with one clear timeline\. See carrier-reported shipment updates, not guessed data\."/);
 
 assert.match(js, /fetch\("\/api\/track"/, "Tracking form must call the server-side tracking API");
 assert.match(js, /postcodeInput\.value\.trim\(\)/, "Optional postcode should be submitted to the API");
