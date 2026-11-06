@@ -71,7 +71,8 @@
         row.dataset.countryCode || "",
         row.dataset.carriersSearch || row.querySelector("[data-country-carriers]")?.textContent || ""
       ].join(" ").toLocaleLowerCase(locale);
-      const matches = (!term || haystack.includes(term)) && (status === "all" || row.dataset.status === status);
+      const statusMatches = status === "all" || row.dataset.status === status || (status === "browser-required" && row.dataset.browserRequired === "true");
+      const matches = (!term || haystack.includes(term)) && statusMatches;
       row.hidden = !matches;
       if (matches) visible += 1;
     });
@@ -88,10 +89,12 @@
       const country = byCode.get(row.dataset.countryCode);
       if (!country) {
         row.dataset.status = "not-listed";
+        row.dataset.browserRequired = "false";
         updateStatusLabel(row);
         return;
       }
       row.dataset.status = country.status || "not-listed";
+      row.dataset.browserRequired = String(country.browserRequiredCarrierCount > 0);
       const carriers = row.querySelector("[data-country-carriers]");
       if (carriers) {
         const names = (country.carriers || []).map(carrier => carrier.name ? (carrier.requiresBrowser ? `${carrier.name} — ${t("coverageBrowserTag")}` : carrier.name) : "").filter(Boolean);
