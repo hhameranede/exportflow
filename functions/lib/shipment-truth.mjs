@@ -1,9 +1,7 @@
-const DELAY_SIGNALS = ["delay", "delayed", "exception", "held", "failed", "attempt", "weather", "backlog"];
-const CUSTOMS_SIGNALS = ["custom", "clearance", "border", "import", "export", "duty", "inspection"];
-const CUSTOMS_HOLD_SIGNALS = ["hold", "detained", "inspection required", "awaiting documents"];
-
 const normalizeText = (value, max = 320) =>
-  typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, max) : "";
+  typeof value === "string"
+    ? value.replace(/[\\u0000-\\u001f\\u007f]/g, "").trim().slice(0, max)
+    : "";
 
 const normalizeStage = value => {
   if (typeof value !== "string") return "unknown";
@@ -11,158 +9,268 @@ const normalizeStage = value => {
   return /^[a-z_]{2,40}$/.test(stage) ? stage : "unknown";
 };
 
-const parseEventTime = value => {
-  if (typeof value !== "string" || !value.trim()) return { iso: null, timestampMs: null };
-  const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) return { iso: null, timestampMs: null };
+const normalizeSource = value => normalizeText(value, 120);
+
+function parseEventTime(value) {
+  const raw = normalizeText(value, 80);
+  // Event timestamps without Z or an explicit UTC offset are ambiguous.
+  // Keep their raw value for display, but never treat them as trusted chronology.
+  const hasExplicitZone =
+    /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?(?:Z|[+-]\\d{2}:\\d{2})$/i.test(raw);
+  if (!hasExplicitZone) return { iso: null, timestampMs: null };
+
+  const parsed = Date.parse(raw);
+  if (!Number.isFinite(parsed)) return { iso: null, timestampMs: null };
   return { iso: new Date(parsed).toISOString(), timestampMs: parsed };
-};
+}
+
+function collectSourceRefs(event, fallbackSource) {
+  const refs = Array.isArray(event?.sourceRefs)
+    ? event.sourceRefs.map(normalizeSource).filter(Boolean)
+    : [];
+  const directSource = normalizeSource(event?.source);
+  const fallback = normalizeSource(fallbackSource);
+
+  if (directSource) refs.push(directSource);
+  else if (refs.length === 0 && fallback && fallback !== "unknown") refs.push(fallback);
+
+  return [...new Set(refs)];
+}
+
+function normalizeEvent(event, originalIndex, fallbackSource) {
+  const stage = normalizeStage(event?.stage || event?.state);
+  const description = normalizeText(event?.description, 320);
+  const location = normalizeText(event?.location, 180);
+  const rawTime = normalizeText(event?.time, 80) || null;
+  const { iso, timestampMs } = parseEventTime(rawTime);
+  const rawReceivedAt = normalizeText(event?.receivedAt ?? event?.received_at, 80);
+  const { iso: receivedAt, timestampMs: receivedAtMs } = parseEventTime(rawReceivedAt);
+  const sourceRefs = collectSourceRefs(event, fallbackSource);
+  const point = event?.point &&
+    Number.isFinite(event.point.latitude) &&
+    Number.isFinite(event.point.longitude)
+    ? { latitude: event.point.latitude, longitude: event.point.longitude }
+    : null;
+
+  return {
+    stage,
+    description,
+    location,
+    time: iso,
+    rawTime,
+    timestampMs,
+    receivedAt,
+    receivedAtMs,
+    source: sourceRefs[0] || "unknown",
+    sourceRefs,
+    originalIndex,
+    point
+  };
+}
 
 function dedupeEvents(events) {
   const deduped = [];
   const indexByKey = new Map();
+
   for (const event of events) {
-    const minuteBucket = Number.isFinite(event.timestampMs)
-      ? Math.floor(event.timestampMs / 60_000)
-      : `na:${event.description}`;
-    const key = [event.stage, event.location.toLowerCase(), event.description.toLowerCase(), minuteBucket].join("|");
+    // Match only exact normalized timestamps. Minute buckets can collapse
+    // two genuinely different scans that happened in the same minute.
+    const timeKey = Number.isFinite(event.timestampMs)
+      ? String(event.timestampMs)
+      : `invalid:${event.originalIndex}`;
+    const key = [
+      event.stage,
+      event.location.toLowerCase(),
+      event.description.toLowerCase(),
+      timeKey
+    ].join("|");
+
     const existingIndex = indexByKey.get(key);
     if (existingIndex === undefined) {
       indexByKey.set(key, deduped.length);
-      deduped.push({ ...event, sourceRefs: [event.source] });
-    } else {
-      const existing = deduped[existingIndex];
-      if (!existing.sourceRefs.includes(event.source)) existing.sourceRefs.push(event.source);
+      deduped.push({ ...event });
+      continue;
+    }
+
+    const existing = deduped[existingIndex];
+    existing.sourceRefs = [...new Set([...existing.sourceRefs, ...event.sourceRefs])];
+    existing.source = existing.sourceRefs[0] || "unknown";
+    if (event.originalIndex > existing.originalIndex) {
+      existing.originalIndex = event.originalIndex;
+    }
+    if (event.receivedAtMs !== null &&
+        (existing.receivedAtMs === null || event.receivedAtMs > existing.receivedAtMs)) {
+      existing.receivedAtMs = event.receivedAtMs;
+      existing.receivedAt = event.receivedAt;
     }
   }
+
   return deduped;
 }
 
 function compareEvents(a, b) {
-  if (Number.isFinite(a.timestampMs) && Number.isFinite(b.timestampMs) && a.timestampMs !== b.timestampMs) {
+  if (a.timestampMs !== b.timestampMs) {
+    if (a.timestampMs === null) return 1;
+    if (b.timestampMs === null) return -1;
     return b.timestampMs - a.timestampMs;
   }
-  if (Number.isFinite(a.timestampMs) !== Number.isFinite(b.timestampMs)) {
-    return Number.isFinite(a.timestampMs) ? -1 : 1;
-  }
-  return a.originalIndex - b.originalIndex;
+  return b.originalIndex - a.originalIndex;
 }
 
 function findConflicts(events) {
   const byTimestamp = new Map();
   for (const event of events) {
-    const key = Number.isFinite(event.timestampMs) ? String(event.timestampMs) : `unknown-${event.originalIndex}`;
+    if (!Number.isFinite(event.timestampMs)) continue;
+    const key = String(event.timestampMs);
     if (!byTimestamp.has(key)) byTimestamp.set(key, []);
     byTimestamp.get(key).push(event);
   }
+
   const conflicts = [];
   for (const atSameTime of byTimestamp.values()) {
     if (atSameTime.length < 2) continue;
-    const stages = new Set(atSameTime.map(event => event.stage));
-    const locations = new Set(atSameTime.map(event => event.location.toLowerCase()).filter(Boolean));
-    if (stages.size > 1) {
+
+    const stages = [...new Set(atSameTime.map(event => event.stage))];
+    const locations = [...new Set(atSameTime.map(event => event.location.toLowerCase()).filter(Boolean))];
+
+    if (stages.length > 1) {
       conflicts.push({
         type: "status_conflict",
         time: atSameTime[0].time,
-        values: [...stages]
+        values: stages
       });
     }
-    if (locations.size > 1) {
+    if (locations.length > 1) {
       conflicts.push({
         type: "location_conflict",
         time: atSameTime[0].time,
-        values: [...locations]
+        values: locations
       });
     }
   }
   return conflicts;
 }
 
-function buildInsights(events, latestTrusted, expectedDelivery) {
-  const descriptions = events.map(event => event.description.toLowerCase());
-  const hasDelaySignal = descriptions.some(text => DELAY_SIGNALS.some(signal => text.includes(signal)));
-  const hasExceptionStage = events.some(event => ["exception", "failed_attempt", "returned"].includes(event.stage));
-  const hasCustomsSignal = descriptions.some(text => CUSTOMS_SIGNALS.some(signal => text.includes(signal)));
-  const hasCustomsHoldSignal = descriptions.some(text => CUSTOMS_HOLD_SIGNALS.some(signal => text.includes(signal)));
+function latestByReceipt(events) {
+  if (events.length === 0) return null;
+  const allHaveReceiptTimes = events.every(event => event.receivedAtMs !== null);
+  return events.reduce((latest, event) => {
+    if (!latest) return event;
+    if (allHaveReceiptTimes && event.receivedAtMs !== latest.receivedAtMs) {
+      return event.receivedAtMs > latest.receivedAtMs ? event : latest;
+    }
+    return event.originalIndex > latest.originalIndex ? event : latest;
+  }, null);
+}
 
-  const delay = (hasDelaySignal || hasExceptionStage)
-    ? { level: "possible", reason: "carrier_exception_signal" }
-    : events.length >= 2 && latestTrusted?.stage !== "delivered"
-      ? { level: "possible", reason: "in_transit_without_completion" }
-      : { level: "insufficient_evidence", reason: "no_delay_signals" };
+function buildInsights(trustedEvents, latestTrusted, expectedDelivery) {
+  const delayPatterns = [
+    /\\bshipment delayed\\b/i,
+    /\\bdelivery delayed\\b/i,
+    /\\bdelayed due to\\b/i,
+    /\\bdelivery delay reported\\b/i,
+    /\\bservice disruption\\b/i,
+    /\\bcarrier delay confirmed\\b/i
+  ];
+  const hasExplicitDelay = trustedEvents.some(event =>
+    ["delayed", "delivery_delayed", "delay_confirmed"].includes(event.stage) ||
+    delayPatterns.some(pattern => pattern.test(event.description))
+  );
 
-  const customs = hasCustomsHoldSignal
-    ? { state: "hold", reason: "customs_hold_signal" }
-    : hasCustomsSignal
-      ? { state: "processing", reason: "customs_processing_signal" }
-      : { state: "insufficient_evidence", reason: "no_customs_signals" };
+  const hasCustomsHold = trustedEvents.some(event =>
+    ["customs_hold", "held_at_customs"].includes(event.stage) ||
+    /\\b(customs hold|held by customs|detained by customs|inspection required|awaiting (customs )?documents)\\b/i.test(event.description)
+  );
+  const hasCustomsProcessing = trustedEvents.some(event =>
+    ["customs_processing", "customs_clearance"].includes(event.stage) ||
+    /\\b(customs processing|customs clearance in progress|under customs review)\\b/i.test(event.description)
+  );
+  const hasCustomsRelease = trustedEvents.some(event =>
+    ["customs_released", "released_by_customs"].includes(event.stage) ||
+    /\\b(released by customs|customs cleared)\\b/i.test(event.description)
+  );
+
+  const delay = hasExplicitDelay
+    ? { level: "possible", reason: "explicit_carrier_delay_signal" }
+    : { level: "insufficient_evidence", reason: "no_explicit_delay_signal" };
+
+  const customs = hasCustomsHold
+    ? { state: "hold", reason: "explicit_customs_hold_signal" }
+    : hasCustomsProcessing
+      ? { state: "processing", reason: "explicit_customs_processing_signal" }
+      : hasCustomsRelease
+        ? { state: "released", reason: "explicit_customs_release_signal" }
+        : { state: "insufficient_evidence", reason: "no_explicit_customs_signal" };
 
   const estimate = expectedDelivery
     ? { source: "carrier", value: expectedDelivery, confidence: "reported" }
     : { source: "insufficient_data", value: null, confidence: "unknown" };
 
-  return { delay, customs, estimate };
+  return { delay, customs, estimate, latestTrustedTime: latestTrusted?.time || null };
 }
 
-export function resolveShipmentTruth({ events = [], status = "unknown", source = "carrier", expectedDelivery = null } = {}) {
-  const normalized = events.slice(0, 80).map((event, originalIndex) => {
-    const stage = normalizeStage(event?.stage || event?.state || status);
-    const description = normalizeText(event?.description, 320);
-    const location = normalizeText(event?.location, 180);
-    const { iso, timestampMs } = parseEventTime(normalizeText(event?.time, 80));
-    return {
-      stage,
-      description,
-      location,
-      time: iso,
-      rawTime: normalizeText(event?.time, 80) || null,
-      timestampMs,
-      source,
-      originalIndex,
-      point: event?.point && Number.isFinite(event.point.latitude) && Number.isFinite(event.point.longitude)
-        ? { latitude: event.point.latitude, longitude: event.point.longitude }
-        : null
-    };
-  }).filter(event => event.description || event.location || event.time || event.point);
-
-  const deduped = dedupeEvents(normalized).sort(compareEvents);
-  const conflicts = findConflicts(deduped);
-
-  const timestamps = deduped.filter(e => Number.isFinite(e.timestampMs)).map(e => e.timestampMs);
-  const latestTrustedTime = timestamps.length > 0 ? Math.max(...timestamps) : null;
-  const latestReceivedTime = timestamps.length > 0 ? Math.max(...timestamps) : null;
-
-  const latestTrusted = latestTrustedTime !== null
-    ? deduped.find(e => e.timestampMs === latestTrustedTime) || null
-    : null;
-
-  const latestReceived = latestTrusted;
-
-  const confidence = conflicts.length > 0
-    ? "low"
-    : latestTrusted !== null
-      ? (Number.isFinite(latestTrusted.timestampMs) ? "high" : "medium")
-      : "low";
-
-  const timeline = deduped.map(event => ({
+function toPublicEvent(event) {
+  return {
     stage: event.stage,
     description: event.description || null,
     location: event.location || null,
     time: event.time,
     rawTime: event.rawTime,
+    timestampMs: event.timestampMs,
+    receivedAt: event.receivedAt,
     source: event.source,
     sourceRefs: event.sourceRefs,
     ...(event.point ? { point: event.point } : {})
-  }));
+  };
+}
+
+export function resolveShipmentTruth({
+  events = [],
+  status = "unknown",
+  source = "unknown",
+  expectedDelivery = null
+} = {}) {
+  const normalized = (Array.isArray(events) ? events : [])
+    .slice(0, 80)
+    .map((event, originalIndex) => normalizeEvent(event, originalIndex, source))
+    .filter(event =>
+      event.description || event.location || event.rawTime || event.point
+    );
+
+  const deduped = dedupeEvents(normalized);
+  const timelineEvents = [...deduped].sort(compareEvents);
+  const conflicts = findConflicts(timelineEvents);
+
+  // "Received" is ingestion order (or explicit receivedAt when present);
+  // "trusted" is the newest event with a valid, timezone-qualified event time
+  // and at least one source reference. These are deliberately separate fields.
+  const latestReceivedEvent = latestByReceipt(deduped);
+  const trustedEvents = deduped.filter(event =>
+    Number.isFinite(event.timestampMs) && event.sourceRefs.length > 0
+  );
+  const latestTrustedEvent = trustedEvents.sort(compareEvents)[0] || null;
+
+  // A timestamp and one source are not enough to establish high confidence.
+  // Without independently verified source-quality metadata, cap at medium.
+  const confidence = conflicts.length > 0
+    ? "low"
+    : latestTrustedEvent
+      ? "medium"
+      : "low";
+
+  const expected = normalizeText(expectedDelivery, 80) || null;
+  const timeline = timelineEvents.map(toPublicEvent);
+  const latestReceived = latestReceivedEvent ? toPublicEvent(latestReceivedEvent) : null;
+  const latestTrusted = latestTrustedEvent ? toPublicEvent(latestTrustedEvent) : null;
 
   return {
-    status: latestTrusted?.stage || normalizeStage(status),
+    status: latestTrustedEvent?.stage || normalizeStage(status),
     confidence,
     latestReceived,
     latestTrusted,
     selected: latestTrusted,
     conflicts,
     timeline,
-    insights: buildInsights(timeline, latestTrusted, expectedDelivery)
+    insights: buildInsights(trustedEvents, latestTrustedEvent, expected)
   };
 }
