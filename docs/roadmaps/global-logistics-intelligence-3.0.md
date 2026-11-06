@@ -4,12 +4,16 @@
 
 Transform ExportFlow into a global logistics operating platform with a trusted shipment event data fabric, multi-modal visibility, and enterprise-grade operations capabilities.
 
+## Planning Assumptions
+
+All dates, sample sizes, thresholds, and volumes below are **proposed scenario assumptions**, not measured baselines, current capabilities, or commitments. Revalidate them after 2.0 produces real demand, cost, partner, data-quality, and operational evidence. Partner-dependent capabilities remain conditional until written access and technical validation exist.
+
 ---
 
 ## Prerequisite: 2.0 Requirements
 
 3.0 depends on completion of:
-- 200+ live-verified carriers with health telemetry
+- A proposed scale target of up to 200 live-verified carriers with health telemetry, subject to feasibility and partner access
 - Deterministic shipment truth engine with confidence modeling
 - Predictive delay/ETA model calibrated on real outcomes
 - Merchant command center with exception workflows
@@ -52,7 +56,7 @@ Extend tracking beyond parcel carriers to air/sea/road/rail where data partnersh
 | Parcel | Carrier adapters | Partial (200 target) | Partial |
 
 ### Go/No-Go Gates
-- Gate: Minimum 3 external data partnerships secured
+- Proposed gate: secure and technically validate a small initial cohort of external data partnerships (three is an illustrative target, not a commitment)
 - Gate: Compliance framework for sensitive shipment data
 
 ---
@@ -63,13 +67,13 @@ Extend tracking beyond parcel carriers to air/sea/road/rail where data partnersh
 Provide explainable, validated delivery estimates with uncertainty ranges.
 
 ### Model Requirements
-- Historical outcome validation dataset (minimum 50K shipments)
+- A proposed validation dataset target (for example, 50K outcome-labelled shipments), to be recalibrated for statistical power, privacy and cost
 - Real-time weather and infrastructure data feeds
 - Carrier performance decay modeling
 
 ### Proof-of-Value Pilot
 - Region: EU/Atlantic corridor
-- Volume: 10K shipments/month
+- Illustrative pilot volume: 10K shipments/month, subject to access, consent and economics
 - Success Metric: Mean absolute error < 24 hours for ocean freight
 
 ---
@@ -80,7 +84,7 @@ Provide explainable, validated delivery estimates with uncertainty ranges.
 Generate privacy-safe, aggregated performance metrics from verified shipment data.
 
 ### Data Guardrails
-- Minimum sample size: 100 shipments/day per carrier
+- Proposed minimum sample threshold: 100 shipments/day per carrier, to be validated for statistical reliability and privacy risk
 - Anonymized aggregation: no individual shipment identification
 - Opt-in consent: carriers must consent to scorecard inclusion
 
@@ -219,10 +223,10 @@ Enable third-party integrations while maintaining platform integrity.
 
 | Gate | Criteria | Decision Date |
 |------|----------|---------------|
-| Gate 1 | 50+ live-verified carriers | Q1 2027 |
-| Gate 2 | 10K monthly tracked shipments | Q2 2027 |
-| Gate 3 | First carrier partnership signed | Q3 2027 |
-| Gate 4 | SOC 2 Type I audit complete | Q4 2027 |
+| Gate 1 | Validate a first cohort of live-verified carriers against real partner access | Proposed Q1 2027 review gate |
+| Gate 2 | Assess whether monthly tracked volume supports the next phase | Proposed Q2 2027 review gate |
+| Gate 3 | Confirm at least one viable carrier partnership | Proposed Q3 2027 review gate |
+| Gate 4 | Decide whether SOC 2 Type I readiness and audit are justified | Proposed Q4 2027 review gate |
 
 ---
 
