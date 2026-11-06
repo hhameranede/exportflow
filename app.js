@@ -28,7 +28,7 @@
   const t = key => translations[html.lang]?.[key] || translations.en?.[key] || key;
 
   function localeFromPath() {
-    const match = window.location.pathname.match(/^\\/(ar|es|zh|hi|pt|fr|ru)(?=\\/|$)/);
+    const match = window.location.pathname.match(/^\/(ar|es|zh|hi|pt|fr|ru)(?=\/|$)/);
     return match ? match[1] : null;
   }
 
@@ -43,7 +43,7 @@
 
   function syncLocalePath(locale) {
     const currentPath = window.location.pathname;
-    const match = currentPath.match(/^\\/(ar|es|zh|hi|pt|fr|ru)(?=\\/|$)/);
+    const match = currentPath.match(/^\/(ar|es|zh|hi|pt|fr|ru)(?=\/|$)/);
     let pagePath = match ? currentPath.slice(match[0].length) || "/" : currentPath;
     if (!pagePath.startsWith("/")) pagePath = "/" + pagePath;
     const nextPath = locale === "en"
