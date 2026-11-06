@@ -100,11 +100,13 @@ async function consumeRateLimit(request) {
 }
 
 function safeText(value, maxLength = 240) {
-  return typeof value === "string" ? value.replace(/[\\u0000-\\u001f\\u007f]/g, "").slice(0, maxLength) : null;
+  return typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, maxLength) : null;
 }
 
 function safeStage(value) {
-  return typeof value === "string" && /^[a-z_]{2,40}$/.test(value) ? value : "unknown";
+  if (typeof value !== "string") return "unknown";
+  const stage = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return /^[a-z_]{2,40}$/.test(stage) ? stage : "unknown";
 }
 
 function projectResult(response) {
@@ -154,7 +156,7 @@ function projectResult(response) {
       conflicts: truth.conflicts,
       insights: truth.insights
     },
-    expectedDelivery: rawExpectedDelivery,
+    expectedDelivery: truth.insights.estimate.value,
     service: safeText(result.service_name, 120),
     events: truth.timeline.map(event => ({
       time: event.time || event.rawTime,
@@ -234,7 +236,7 @@ export async function onRequestPost({ request, env }) {
   }
 
   const number = typeof input.number === "string" ? input.number.trim() : "";
-  if (number.length < 4 || number.length > MAX_NUMBER_LENGTH || !/^[a-zA-Z0-9\\s-]+$/.test(number)) {
+  if (number.length < 4 || number.length > MAX_NUMBER_LENGTH || !/^[a-zA-Z0-9\s-]+$/.test(number)) {
     return json({ error: "invalid_tracking_number" }, 400);
   }
 
