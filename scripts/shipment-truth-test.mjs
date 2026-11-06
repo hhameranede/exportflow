@@ -273,4 +273,31 @@ test("empty event lists fall back to supplied status without inventing evidence"
   assert.equal(truth.timeline.length, 0);
 });
 
+
+test("invalid timezone offsets are retained but excluded from trusted chronology", () => {
+  const truth = resolveShipmentTruth({
+    source: "carrier-a",
+    events: [
+      event("2026-11-06T10:00:00+25:00", "delivered", "Impossible UTC offset"),
+      event("2026-11-06T11:00:00-00:00", "delivered", "Unknown local offset")
+    ]
+  });
+  assert.equal(truth.latestTrusted, null);
+  assert.equal(truth.confidence, "low");
+  assert.equal(truth.timeline.length, 2);
+});
+
+test("trusted and explicitly untrusted duplicates are not merged", () => {
+  const truth = resolveShipmentTruth({
+    source: "carrier-a",
+    events: [
+      event("2026-11-06T10:00:00Z", "in_transit", "Same provider scan"),
+      event("2026-11-06T10:00:00Z", "in_transit", "Same provider scan", { trusted: false })
+    ]
+  });
+  assert.equal(truth.timeline.length, 2);
+  assert.equal(truth.latestReceived.trusted, undefined);
+  assert.equal(truth.latestTrusted.stage, "in_transit");
+});
+
 console.log("All shipment truth tests passed.");
