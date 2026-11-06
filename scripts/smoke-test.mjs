@@ -1,14 +1,26 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, css, js, api] = await Promise.all([
+const [html, css, js, api, build, headers] = await Promise.all([
   readFile("index.html", "utf8"),
   readFile("styles.css", "utf8"),
   readFile("app.js", "utf8"),
-  readFile("functions/api/track.js", "utf8")
+  readFile("functions/api/track.js", "utf8"),
+  readFile("scripts/build.mjs", "utf8"),
+  readFile("_headers", "utf8")
 ]);
 
 assert.match(html, /<html[^>]+lang="en"[^>]+dir="ltr"/i, "English LTR document should exist");
+
+assert.match(html, /rel="icon" href="\\/favicon\\.svg\\?v=20261106" type="image\\/svg\\+xml"/, "SVG favicon must be linked in the document head");
+assert.match(html, /rel="apple-touch-icon" href="\\/apple-touch-icon\\.png\\?v=20261106"/, "Apple touch icon must be linked");
+assert.match(html, /property="og:image" content="https:\\/\\/exportflow\\.me\\/og-image-20261106\\.png"/, "Open Graph image must use the production image URL");
+assert.match(html, /name="twitter:card" content="summary_large_image"/, "Social cards must request a large image preview");
+for (const asset of ["favicon.svg", "favicon.ico", "favicon-32x32.png", "apple-touch-icon.png", "site.webmanifest", "og-image-20261106.png"]) {
+  assert.ok(build.includes('"' + asset + '"'), "Build must copy the public brand asset: " + asset);
+}
+assert.match(headers, /\\/og-image-20261106\\.png[\\s\\S]*?Cache-Control: public, max-age=31536000, immutable/, "Versioned social preview image should be cacheable");
+
 for (const id of ["trackingForm", "trackingNumber", "postcodeInput", "languageToggle", "resultPanel", "shipmentMap", "mapNote", "eventCount", "faq"]) {
   assert.match(html, new RegExp('id="' + id + '"'), "Missing required element: " + id);
 }
