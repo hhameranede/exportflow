@@ -10,6 +10,7 @@ assert.equal(payload.engine, "universal-parcel-scraper");
 assert.ok(Array.isArray(payload.dedicatedAdapterCountries));
 assert.ok(Array.isArray(payload.universalFallbackOnlyCountries));
 assert.ok(Array.isArray(payload.linkOnlyCountries));
+assert.ok(Array.isArray(payload.customCarriers));
 assert.equal(payload.countryCount, payload.dedicatedAdapterCountries.length);
 assert.ok(
   payload.countryCount >= 100,
@@ -21,6 +22,16 @@ assert.ok(byCode.has("DZ"), "Algeria should be represented by a dedicated carrie
 assert.ok(
   byCode.get("DZ").carriers.some(carrier => carrier.id === "algerie-poste"),
   "Algerie Poste should be included in Algeria's direct carrier coverage"
+);
+const cambodia = byCode.get("KH");
+assert.ok(cambodia, "Cambodia should be included through the ExportFlow custom adapter");
+assert.ok(
+  cambodia.carriers.some(carrier => carrier.id === "cambodia-post" && carrier.adapter === "direct"),
+  "Cambodia Post custom adapter should be counted as direct country coverage"
+);
+assert.ok(
+  payload.customCarriers.some(carrier => carrier.id === "cambodia-post" && carrier.country === "KH"),
+  "Cambodia Post should be exposed in custom carrier metadata"
 );
 assert.ok(
   payload.dedicatedAdapterCountries.every(country =>
