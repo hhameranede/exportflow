@@ -4,7 +4,8 @@ import {
   createCambodiaPostAdapter,
   isCambodiaPostNumber,
   parseCambodiaPostHtml,
-  parseCambodiaPostTime
+  parseCambodiaPostTime,
+  readCambodiaPostBody
 } from "../functions/lib/cambodia-post.mjs";
 import { trackCustomCarrier } from "../functions/lib/custom-carriers.mjs";
 import {
@@ -19,8 +20,17 @@ assert.equal(isCambodiaPostNumber("RR123456789KH"), true);
 assert.equal(isCambodiaPostNumber("RR123456789US"), false);
 assert.equal(parseCambodiaPostTime("2026-11-05 09:35"), "2026-11-05T09:35:00+07:00");
 assert.equal(parseCambodiaPostTime("05/11/2026 09:35"), "2026-11-05T09:35:00+07:00");
+assert.equal(parseCambodiaPostTime("2026-02-31 09:35"), null, "impossible dates must not be normalized into a different day");
 assert.equal(cambodiaPostStage("Item delivered to recipient"), "delivered");
 assert.equal(cambodiaPostStage("Arrived at sorting centre"), "in_transit");
+
+const smallBody = await readCambodiaPostBody(new Response("bounded"));
+assert.equal(smallBody, "bounded");
+await assert.rejects(
+  readCambodiaPostBody(new Response("x".repeat(1_000_001))),
+  SchemaError,
+  "oversized response bodies must be rejected"
+);
 
 const fixture = `
 <!doctype html><html><body>
