@@ -16,12 +16,6 @@ permissions:
   pull-requests: write
   issues: write
 
-# Never cancel active engineering work when another issue comment arrives.
-# New requests for the same issue wait behind the active run.
-concurrency:
-  group: exportflow-laguna-${{ github.event.issue.number || inputs.issue_number || 29 }}
-  cancel-in-progress: false
-
 jobs:
   laguna:
     name: Laguna XS 2.1 resumable engineering run
@@ -33,6 +27,10 @@ jobs:
        (github.event_name == 'issue_comment' &&
         github.event.issue.pull_request == null &&
         startsWith(github.event.comment.body, '/laguna-run')))
+    # Only authorized owner-triggered jobs participate in this concurrency group.
+    concurrency:
+      group: exportflow-laguna-${{ github.event.issue.number || inputs.issue_number || 29 }}
+      cancel-in-progress: false
     steps:
       - name: Authorize owner trigger
         shell: bash
