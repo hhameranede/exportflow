@@ -13,14 +13,13 @@ const normalizeSource = value => normalizeText(value, 120);
 
 function parseEventTime(value) {
   const raw = normalizeText(value, 80);
-  // Event timestamps without Z or an explicit UTC offset are ambiguous.
-  // Keep their raw value for display, but never use them as trusted chronology.
+  // Only explicit UTC/offset timestamps are unambiguous enough for chronology.
   const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-]\d{2}:\d{2})$/i);
   if (!match) return { iso: null, timestampMs: null };
 
-  const [, year, month, day, hour, minute, second = "0"] = match;
-  const calendarDate = ${year}-${month}-${day};
-  const parsedCalendarDate = new Date(${calendarDate}T00:00:00.000Z);
+  const [, year, month, day, hour, minute, second = "0", zone] = match;
+  const calendarDate = [year, month, day].join("-");
+  const parsedCalendarDate = new Date(calendarDate + "T00:00:00.000Z");
   if (
     !Number.isFinite(parsedCalendarDate.getTime()) ||
     parsedCalendarDate.toISOString().slice(0, 10) !== calendarDate ||
@@ -29,6 +28,15 @@ function parseEventTime(value) {
     Number(second) > 59
   ) {
     return { iso: null, timestampMs: null };
+  }
+
+  if (zone.toUpperCase() !== "Z") {
+    const offsetMatch = zone.match(/^([+-])(\d{2}):(\d{2})$/);
+    if (!offsetMatch || Number(offsetMatch[2]) > 23 || Number(offsetMatch[3]) > 59) {
+      return { iso: null, timestampMs: null };
+    }
+    // RFC 3339 uses -00:00 to mean that the local offset is unknown.
+    if (zone === "-00:00") return { iso: null, timestampMs: null };
   }
 
   const parsed = Date.parse(raw);
@@ -86,16 +94,16 @@ function dedupeEvents(events) {
   const indexByKey = new Map();
 
   for (const event of events) {
-    // Match only exact normalized timestamps. Minute buckets can collapse
-    // two genuinely different scans that happened in the same minute.
     const timeKey = Number.isFinite(event.timestampMs)
       ? String(event.timestampMs)
-      : \`invalid:${event.originalIndex}\`;
+      : "invalid:" + String(event.originalIndex);
+    // Do not merge explicitly trusted and untrusted copies of an event.
     const key = [
       event.stage,
       event.location.toLowerCase(),
       event.description.toLowerCase(),
-      timeKey
+      timeKey,
+      String(event.trusted)
     ].join("|");
 
     const existingIndex = indexByKey.get(key);
@@ -108,12 +116,13 @@ function dedupeEvents(events) {
     const existing = deduped[existingIndex];
     existing.sourceRefs = [...new Set([...existing.sourceRefs, ...event.sourceRefs])];
     existing.source = existing.sourceRefs[0] || "unknown";
-    existing.trusted = existing.trusted || event.trusted;
     if (event.originalIndex > existing.originalIndex) {
       existing.originalIndex = event.originalIndex;
     }
-    if (event.receivedAtMs !== null &&
-        (existing.receivedAtMs === null || event.receivedAtMs > existing.receivedAtMs)) {
+    if (
+      event.receivedAtMs !== null &&
+      (existing.receivedAtMs === null || event.receivedAtMs > existing.receivedAtMs)
+    ) {
       existing.receivedAtMs = event.receivedAtMs;
       existing.receivedAt = event.receivedAt;
     }
@@ -212,17 +221,12 @@ function classifyCustomsEvent(event) {
   return null;
 }
 
-function isCustomsEvent(event) {
-  return classifyCustomsEvent(event) !== null;
-}
-
 function normalizeExpectedDelivery(value) {
   const raw = normalizeText(value, 80);
   if (!raw) return null;
 
-  // Carrier ETAs may be date-only values or timezone-qualified ISO timestamps.
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    const date = new Date(${raw}T00:00:00.000Z);
+    const date = new Date(raw + "T00:00:00.000Z");
     return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === raw
       ? raw
       : null;
@@ -231,16 +235,17 @@ function normalizeExpectedDelivery(value) {
 }
 
 function buildInsights(trustedEvents, latestTrusted, expectedDelivery) {
-  // Insights describe the latest known state, not an old exception that a later
-  // scan may have resolved.
   const delay = latestTrusted && hasExplicitDelaySignal(latestTrusted)
     ? { level: "possible", reason: "explicit_carrier_delay_signal" }
-    : { level: "insufficient_evidence", reason: latestTrusted?.stage === "delivered"
-      ? "shipment_delivered"
-      : "no_current_explicit_delay_signal" };
+    : {
+        level: "insufficient_evidence",
+        reason: latestTrusted?.stage === "delivered"
+          ? "shipment_delivered"
+          : "no_current_explicit_delay_signal"
+      };
 
   const latestCustomsEvent = trustedEvents
-    .filter(isCustomsEvent)
+    .filter(event => classifyCustomsEvent(event) !== null)
     .sort(compareEvents)[0] || null;
   const customs = classifyCustomsEvent(latestCustomsEvent) ||
     { state: "insufficient_evidence", reason: "no_explicit_customs_signal" };
@@ -289,10 +294,10 @@ export function resolveShipmentTruth({
   const timelineEvents = [...deduped].sort(compareEvents);
   const conflicts = findConflicts(timelineEvents);
 
-  // "Received" is ingestion order, or explicit receivedAt when every event has
-  // one. "Trusted" means structurally eligible for chronology: valid zoned
-  // event time, a real source reference and no explicit trusted:false flag.
-  // It does NOT assert that the carrier is independently audited or reliable.
+  // Received means latest ingestion order (or latest explicit receivedAt when
+  // all events provide one). Trusted means structurally eligible for chronology:
+  // valid zoned event time, source reference, and no trusted:false marker.
+  // It does not imply independently audited carrier reliability.
   const latestReceivedEvent = latestByReceipt(deduped);
   const trustedEvents = deduped.filter(event =>
     event.trusted &&
@@ -301,8 +306,8 @@ export function resolveShipmentTruth({
   );
   const latestTrustedEvent = [...trustedEvents].sort(compareEvents)[0] || null;
 
-  // No source-quality registry exists yet. Never inflate a single-provider
-  // timestamp into high confidence; reserve that for a future calibrated model.
+  // Source-quality metadata is not available, so a single provider cannot
+  // produce high confidence. Reserve high for a future calibrated model.
   const confidence = conflicts.length > 0
     ? "low"
     : latestTrustedEvent
