@@ -5,3 +5,57 @@ html[dir=rtl] body{font-family:"Noto Sans Arabic","DM Sans",sans-serif}html[dir=
 @media(max-width:680px){.announcement{height:30px;font-size:9px}.site-header{height:65px;padding:0 5vw}.brand-mark{width:31px;height:31px}.brand-name{font-size:18px}.desktop-nav{display:none}.header-actions{gap:12px}.header-cta{padding:10px 12px;gap:8px;font-size:10px}.hero{padding:48px 5vw 40px;gap:0}.hero h1{font-size:clamp(39px,10vw,54px);letter-spacing:-2px}.hero-copy{font-size:13px;margin-bottom:22px}.tracking-card{padding:17px 15px 14px}.tracking-card-top{display:block}.secure-note{margin-top:9px}.tracking-form{grid-template-columns:1fr;gap:8px}.tracking-input-wrap{height:53px}.submit-button{height:48px}.form-bottom{align-items:flex-start}.hero-footnote{font-size:9px;line-height:1.5}.hero-visual{min-height:330px;margin-top:7px}.parcel-scene{height:285px}.parcel-box{transform:scale(.86) rotate(-8deg)}.route-line{width:285px;height:145px}.orbit-one{width:310px;height:310px}.orbit-two{width:240px;height:240px}.floating-tag{padding:9px 11px}.tag-top{right:0;top:15px}.tag-bottom{left:0;bottom:20px}.trust-strip{padding:24px 5vw}.platform-list{gap:20px 27px}.platform{font-size:14px}.section-shell{padding:68px 5vw}.section-heading{margin-bottom:27px}.section-heading h2,.coverage-inner h2{font-size:31px}.steps-grid{grid-template-columns:1fr;gap:11px}.step-card{padding:18px 19px}.step-top{margin-bottom:12px}.coverage-inner{grid-template-columns:1fr;padding:58px 5vw 40px;gap:20px}.coverage-art{height:220px}.faq-section{grid-template-columns:1fr;gap:13px}.faq-title h2{font-size:29px}.site-footer{padding:20px 5vw;flex-wrap:wrap;gap:12px}.site-footer>p{flex-basis:100%;order:3}.result-panel{padding:19px}.result-head h2{font-size:20px}}
 @media(max-width:380px){.site-header{padding:0 4vw}.header-actions{gap:8px}.language-button{font-size:10px}.header-cta{padding:9px 10px}.hero{padding-left:4vw;padding-right:4vw}.hero h1{font-size:38px}.tracking-card{padding:15px 12px}.form-bottom{flex-direction:column;gap:8px}.tag-top{right:-5px}.tag-bottom{left:-5px}.parcel-box{transform:scale(.75) rotate(-8deg)}.route-line{width:250px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important;animation:none!important}}
+
+/* Modern shipment result: map, status and timeline */
+.result-panel{width:min(940px,calc(100vw - 32px));max-height:min(92vh,900px);padding:28px;overflow-x:hidden}
+.result-head{align-items:center;gap:18px;margin-bottom:20px}
+.result-head h2{font-size:clamp(22px,3vw,28px);letter-spacing:-.8px}
+.result-subtitle{margin:6px 0 0;color:#82909c;font-size:11px;line-height:1.6}
+.result-summary{gap:14px;padding:15px 17px;background:#fbfcfd;border-color:#e8edf0}
+.result-main{min-width:0}
+.result-carrier{font-size:10px;font-weight:700;color:#687887}
+.result-main strong{font-size:15px}
+.result-main small{font-size:10px;letter-spacing:.035em}
+.eta-chip{min-width:120px;display:flex;flex-direction:column;gap:4px;padding:9px 12px;border:1px solid #f4dfd3;border-radius:10px;background:#fff8f3}
+.eta-chip small{font-size:9px;color:#a47760}
+.eta-chip strong{font-size:11px;color:#a84f28}
+.result-source-note{margin:10px 2px 17px;color:#929da7;font-size:10px;line-height:1.6}
+.result-body-grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:16px;align-items:stretch}
+.map-section,.history-section{min-width:0;border:1px solid #e8edf0;border-radius:14px;padding:15px;background:#fff}
+.map-heading,.history-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.map-heading h3,.history-heading h3{font:700 14px "Manrope","Noto Sans Arabic",sans-serif;margin:5px 0 0;color:var(--ink)}
+.map-count,.event-count{font-size:9px;font-weight:700;color:#778693;background:#f2f5f6;border-radius:20px;padding:6px 9px;white-space:nowrap}
+.shipment-map{height:310px;width:100%;overflow:hidden;border-radius:10px;background:#edf1f1;z-index:0}
+.shipment-map .leaflet-control-attribution{font-size:8px}
+.shipment-map .leaflet-control-zoom a{color:#334657}
+.map-note{font-size:10px;line-height:1.65;color:#8996a1;margin:10px 2px 0;min-height:32px}
+.history-section{display:flex;flex-direction:column}
+.history-heading{margin-bottom:10px}
+.history-section .timeline{padding:7px 3px 0;overflow:auto;max-height:355px}
+.history-section .timeline-item{min-height:59px;gap:11px}
+.history-section .timeline-item strong{font-size:10px;line-height:1.5}
+.history-section .timeline-item small{font-size:9px;line-height:1.4}
+.result-done{margin-top:16px;height:45px}
+.leaflet-container{font:11px "DM Sans","Noto Sans Arabic",sans-serif}
+.leaflet-popup-content{margin:10px 12px;line-height:1.5}
+html[dir=rtl] .result-head,html[dir=rtl] .result-summary,html[dir=rtl] .map-heading,html[dir=rtl] .history-heading{direction:rtl}
+html[dir=rtl] .history-section .timeline-item:not(:last-child):before{left:auto;right:10px}
+html[dir=rtl] .history-section .timeline-item{direction:rtl}
+@media(max-width:720px){
+  .result-panel{width:calc(100vw - 16px);max-height:96vh;padding:17px;border-radius:16px}
+  .result-head{margin-bottom:15px}
+  .result-summary{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:10px;padding:12px}
+  .eta-chip{grid-column:1/-1;flex-direction:row;align-items:center;justify-content:space-between}
+  .result-body-grid{grid-template-columns:1fr;gap:12px}
+  .shipment-map{height:245px}
+  .history-section .timeline{max-height:260px}
+  .map-section,.history-section{padding:13px}
+}
+@media(max-width:380px){
+  .result-panel{padding:13px}
+  .result-summary{grid-template-columns:34px minmax(0,1fr);gap:9px}
+  .carrier-logo{width:34px;height:34px}
+  .status-pill{grid-column:2;justify-self:start}
+  .map-heading h3,.history-heading h3{font-size:12px}
+  .shipment-map{height:220px}
+}
