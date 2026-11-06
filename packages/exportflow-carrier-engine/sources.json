@@ -73,9 +73,10 @@
       "license": "MIT",
       "language": "Go",
       "role": "carrier-pattern-reference-only",
-      "integrationMode": "reference-only-no-runtime-import",
+      "integrationMode": "monitor-only-reference",
       "runtimeEnabled": false,
-      "notes": "MIT Go multi-carrier engine advertising a 1500+ carrier directory. Code review found simulated fallback tracking events in at least some DHL/UPS paths. Do not treat catalog count as verified coverage or port simulated events; use only carefully reviewed detection patterns."
+      "notes": "MIT Go multi-carrier engine advertising a 1500+ carrier directory. Code review found simulated fallback tracking events in at least some DHL/UPS paths. Do not treat catalog count as verified coverage or port simulated events; use only carefully reviewed detection patterns.",
+      "importPolicy": "monitor-only"
     },
     {
       "id": "myparcel",
