@@ -130,7 +130,7 @@ assert.match(privacyHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\
 assert.match(termsHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\/terms\/"\s*\/?>/);
 
 assert.equal(COUNTRY_CODES.length, 249, "ISO 3166-1 assigned country/territory list should contain 249 alpha-2 codes");
-assert.match(coverageHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\/coverage\/"\s*\/?>/);
+assert.match(coverageHtml, /coverage\\.js\\?v=ef-country-locale-20261106-01/, "Coverage client must use fresh locale-routing assets");\nassert.match(coverageHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\/coverage\/"\s*\/?>/);
 assert.match(coverageHtml, /application\/ld\+json/);
 assert.match(coverageHtml, /id="coverageSearch"/);
 assert.match(coverageHtml, /id="coverageFilter"/);
