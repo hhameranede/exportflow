@@ -28,7 +28,7 @@ The `/api/track` endpoint returns a structured response:
 {
   "carrier": "fedex",
   "source": "fedex",
-  "status": "in_transit",
+  "status": "out_for_delivery",
   "confidence": "medium",
   "truth": {
     "latestReceived": { "stage": "in_transit", "time": "2026-11-06T10:00:00.000Z" },
