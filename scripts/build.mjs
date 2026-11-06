@@ -223,7 +223,9 @@ await cp(resolve(root, "coverage/index.html"), resolve(output, "coverage/index.h
 await mkdir(resolve(output, "privacy"), { recursive: true });
 await cp(resolve(root, "privacy/index.html"), resolve(output, "privacy/index.html"));
 await mkdir(resolve(output, "terms"), { recursive: true });
-await cp(resolve(root, "terms/index.html"), resolve(output, "terms/index.html"));\n\nawait generateLocalizedPages();
+await cp(resolve(root, "terms/index.html"), resolve(output, "terms/index.html"));
+
+await generateLocalizedPages();
 
 try {
   const jsonImports = await patchWorkerIncompatibleEngineFiles(engineDist);
