@@ -144,6 +144,44 @@ jobs:
 
             PRODUCT IMPLEMENTATION
             Inspect the actual codebase and reconcile PR #24 and PR #30 on one current base. Reuse sound work, fix defects, avoid duplicate implementations, and preserve the ExportFlow-owned carrier-engine facade rather than reintroducing direct upstream coupling.
+
+            PHASED EXECUTION PLAN — FOLLOW THIS ORDER
+            Phase 0 — Baseline and recovery:
+            - Read Issue #29 and all comments, repository instructions, package.json, the actual lockfile, project scripts, Node engine requirement, relevant source, and tests.
+            - Inspect the existing feat/issue29-complete-roadmap branch, PR #24 and PR #30 read-only. Record exact SHAs and changed files. Do not switch branches.
+            - Check whether a dependency/build issue is pre-existing on the current base or introduced by this patch. Run each configured baseline command once and record the result.
+            - Create/update the progress checkpoint before substantial edits.
+            Phase 1 — Shipment truth correctness:
+            - Repair chronology, event trust, per-event source provenance, deduplication, conflict handling, timestamp policy, conservative delay/customs interpretation, and confidence semantics.
+            - Add regression tests for each discovered defect before or alongside the fix. Do not merely rewrite tests to match flawed behavior.
+            Phase 2 — Carrier engine and tracking API:
+            - Verify the pinned upstream export/import and Cloudflare Pages compatibility.
+            - Preserve ExportFlow's own facade; verify provider fallback, errors, timeouts, response compatibility, validation, rate limits, and privacy redaction.
+            Phase 3 — Global product experience:
+            - Audit current country/carrier coverage against source data; distinguish catalogued, adapter-ready, tested, and live-verified.
+            - Improve responsive UI, accessibility, all eight configured languages, Arabic RTL, Bengali, and localization consistency without inventing content.
+            Phase 4 — SEO and reliability:
+            - Verify canonical/hreflang/sitemaps/robots/structured data, indexable page quality, duplicate/thin page controls, and metadata.
+            - Review API abuse resistance, sensitive-data handling, error handling, rate-limit limitations, and runtime observability.
+            Phase 5 — Roadmaps and final review:
+            - Only after application code is materially improved, fact-check and update the 2.0/3.0 documents. Separate current facts, proposed targets, assumptions, and partner-dependent items.
+            - Perform an independent self-review of every changed file and run the relevant checks again.
+            - Update the progress checkpoint with exact completed/partial/blocked status and evidence. Never label the issue complete if a required phase remains unimplemented.
+
+            TEST AND DEPENDENCY FAILURE PLAYBOOK
+            - Respect package.json's Node engine and the repository's existing lockfile/package manager. Inspect before installing. Do not switch npm/bun/pnpm, regenerate a lockfile, or alter dependency versions merely to silence an error.
+            - Run only scripts that actually exist in package.json. Do not call invented commands. Capture the exit code and the relevant error output for each check.
+            - If the pinned upstream package fails under the configured Node runtime (for example ESM JSON import attributes), reproduce once, identify the exact upstream file/commit and supported runtime, then choose the smallest reproducible fix. Never hand-edit node_modules and mistake that for a committed fix. Do not silently pin to an older dependency or modify the lockfile without explaining the compatibility trade-off.
+            - Retry a failed command only after changing a concrete cause. Maximum two retries for the same root cause; after that, record the blocker and continue independent phases.
+            - Separate baseline failures from regressions introduced by this branch. Never remove, skip, weaken, or falsify tests to obtain a green result.
+            - If lint/test/build fail, state the exact command, exit code, root cause, fix, and rerun result. A passing build does not imply passing tests; an agent's text summary is not CI evidence.
+
+            CHECKPOINT / ITERATION RULES
+            - Work in small, reviewable milestones. Update docs/engineering/laguna-progress.md after every phase with commit/branch visibility evidence, changed paths, checks, blockers, and the next exact action.
+            - Keep a short current todo list (maximum 8 actionable items); mark an item complete only after verifying the actual file and check.
+            - Do not spend more than one bounded diagnostic cycle on an unrelated dependency or Git issue. Do not repeat repository discovery after the baseline unless new evidence requires it.
+            - If nearing the 330-minute limit, stop starting new features; finish or revert any incomplete unsafe edit, write the exact checkpoint, and exit cleanly so the OpenCode post-action can publish the managed branch.
+            - Never say "all complete" when only documentation, a summary, or a local unpushed workspace exists.
             Continue the original Issue #29 phases in order where practical: modular carrier engine; deterministic shipment truth; evidence-based delay/customs/ETA insights; honest global carrier/country coverage; responsive accessible eight-language UI including full Arabic RTL and Bengali; technical SEO; secure product-facing MCP/API integration where supported by the existing runtime; security/privacy/reliability; complete local verification.
             Treat the previous feature branch feat/issue29-complete-roadmap as unverified work to review, not as a finished product. Inspect its diff and reuse its sound changes on the current managed branch without checking it out.
             Specifically audit and repair these likely correctness defects before claiming completion:
@@ -221,7 +259,7 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: |
           run_started="$(gh run view "${RUN_ID}" --json createdAt --jq '.createdAt')"
-          prs="$(gh pr list --base main --state open --json url,title,body,headRefName,createdAt,updatedAt)"
+          prs="$(gh pr list --limit 100 --base main --state open --json url,title,body,headRefName,createdAt,updatedAt)"
           pr_url="$(jq -r --arg started "${run_started}" --arg issue "${ISSUE_NUMBER}" '
             .[]
             | select((.createdAt >= $started) or (.updatedAt >= $started))
