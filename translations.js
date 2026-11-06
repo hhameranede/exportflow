@@ -112,7 +112,10 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "originLabel": "ORIGIN",
     "inTransitLabel": "IN TRANSIT",
     "destinationLabel": "DESTINATION",
-    "illustrativeRouteLabel": "ILLUSTRATIVE ROUTE · NOT LIVE SHIPMENT DATA"
+    "illustrativeRouteLabel": "ILLUSTRATIVE ROUTE · NOT LIVE SHIPMENT DATA",
+    "coverageEyebrow": "GLOBAL NETWORK / CATALOG DIRECTORY",
+    "coverageFilterLabel": "Coverage type",
+    "coverageCatalogNote": "Catalog source: Universal Parcel Scraper, pinned revision e64a4667. Country/territory list: ISO 3166-1 alpha-2. Carrier presence is not an official partnership and is not a live-tracking success guarantee."
   },
   "ar": {
     "announcement": "تابع كل شحناتك في مكان واحد",
@@ -226,7 +229,10 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "originLabel": "بلد الإرسال",
     "inTransitLabel": "في الطريق",
     "destinationLabel": "الوجهة",
-    "illustrativeRouteLabel": "مسار توضيحي · ليس بيانات شحنة مباشرة"
+    "illustrativeRouteLabel": "مسار توضيحي · ليس بيانات شحنة مباشرة",
+    "coverageEyebrow": "الشبكة العالمية / دليل الكتالوج",
+    "coverageFilterLabel": "نوع التغطية",
+    "coverageCatalogNote": "مصدر الكتالوج: Universal Parcel Scraper بالإصدار المثبّت e64a4667. قائمة الدول والأقاليم وفق ISO 3166-1 alpha-2. وجود شركة في الكتالوج لا يعني شراكة رسمية ولا يضمن نجاح التتبع المباشر."
   },
   "es": {
     "announcement": "Sigue cada entrega desde un solo lugar",
@@ -340,7 +346,10 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "originLabel": "ORIGEN",
     "inTransitLabel": "EN TRÁNSITO",
     "destinationLabel": "DESTINO",
-    "illustrativeRouteLabel": "RUTA ILUSTRATIVA · NO SON DATOS DE UN ENVÍO EN DIRECTO"
+    "illustrativeRouteLabel": "RUTA ILUSTRATIVA · NO SON DATOS DE UN ENVÍO EN DIRECTO",
+    "coverageEyebrow": "RED MUNDIAL / DIRECTORIO DEL CATÁLOGO",
+    "coverageFilterLabel": "Tipo de cobertura",
+    "coverageCatalogNote": "Fuente del catálogo: Universal Parcel Scraper, revisión fijada e64a4667. Lista de países y territorios: ISO 3166-1 alpha-2. La presencia de un transportista no implica una alianza oficial ni garantiza un rastreo en directo."
   },
   "zh": {
     "announcement": "在一个清晰页面跟踪每一次配送",
@@ -454,7 +463,10 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "originLabel": "始发地",
     "inTransitLabel": "运输途中",
     "destinationLabel": "目的地",
-    "illustrativeRouteLabel": "示意路线 · 非实时包裹数据"
+    "illustrativeRouteLabel": "示意路线 · 非实时包裹数据",
+    "coverageEyebrow": "全球网络 / 目录",
+    "coverageFilterLabel": "覆盖类型",
+    "coverageCatalogNote": "目录来源：固定版本 e64a4667 的 Universal Parcel Scraper。国家和地区列表遵循 ISO 3166-1 alpha-2。目录中出现承运商不代表官方合作，也不保证实时追踪一定成功。"
   },
   "hi": {
     "announcement": "हर डिलीवरी को एक ही जगह पर ट्रैक करें",
@@ -568,7 +580,10 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "originLabel": "मूल स्थान",
     "inTransitLabel": "रास्ते में",
     "destinationLabel": "गंतव्य",
-    "illustrativeRouteLabel": "उदाहरण मार्ग · लाइव शिपमेंट डेटा नहीं"
+    "illustrativeRouteLabel": "उदाहरण मार्ग · लाइव शिपमेंट डेटा नहीं",
+    "coverageEyebrow": "वैश्विक नेटवर्क / कैटलॉग निर्देशिका",
+    "coverageFilterLabel": "कवरेज का प्रकार",
+    "coverageCatalogNote": "कैटलॉग स्रोत: Universal Parcel Scraper, पिन किया गया revision e64a4667। देश/क्षेत्र सूची ISO 3166-1 alpha-2 पर आधारित है। कैटलॉग में कूरियर का होना आधिकारिक साझेदारी या लाइव ट्रैकिंग की गारंटी नहीं है।"
   },
   "pt": {
     "announcement": "Acompanhe cada entrega num só lugar",
@@ -682,7 +697,10 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "originLabel": "ORIGEM",
     "inTransitLabel": "EM TRÂNSITO",
     "destinationLabel": "DESTINO",
-    "illustrativeRouteLabel": "ROTA ILUSTRATIVA · NÃO SÃO DADOS DE ENVIO EM TEMPO REAL"
+    "illustrativeRouteLabel": "ROTA ILUSTRATIVA · NÃO SÃO DADOS DE ENVIO EM TEMPO REAL",
+    "coverageEyebrow": "REDE GLOBAL / DIRETÓRIO DO CATÁLOGO",
+    "coverageFilterLabel": "Tipo de cobertura",
+    "coverageCatalogNote": "Fonte do catálogo: Universal Parcel Scraper, revisão fixada e64a4667. Lista de países e territórios: ISO 3166-1 alpha-2. A presença de uma transportadora não implica parceria oficial nem garante rastreamento em tempo real."
   },
   "fr": {
     "announcement": "Suivez chaque livraison au même endroit",
@@ -796,7 +814,10 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "originLabel": "ORIGINE",
     "inTransitLabel": "EN TRANSIT",
     "destinationLabel": "DESTINATION",
-    "illustrativeRouteLabel": "ITINÉRAIRE ILLUSTRATIF · PAS DE DONNÉES D'ENVOI EN DIRECT"
+    "illustrativeRouteLabel": "ITINÉRAIRE ILLUSTRATIF · PAS DE DONNÉES D'ENVOI EN DIRECT",
+    "coverageEyebrow": "RÉSEAU MONDIAL / ANNUAIRE DU CATALOGUE",
+    "coverageFilterLabel": "Type de couverture",
+    "coverageCatalogNote": "Source du catalogue : Universal Parcel Scraper, révision épinglée e64a4667. Liste des pays et territoires : ISO 3166-1 alpha-2. La présence d'un transporteur n'implique aucun partenariat officiel et ne garantit pas un suivi en direct."
   },
   "ru": {
     "announcement": "Следите за каждой доставкой в одном месте",
@@ -910,6 +931,9 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "originLabel": "ОТПРАВЛЕНИЕ",
     "inTransitLabel": "В ПУТИ",
     "destinationLabel": "НАЗНАЧЕНИЕ",
-    "illustrativeRouteLabel": "СХЕМА МАРШРУТА · НЕ ДАННЫЕ ОТПРАВЛЕНИЯ В РЕАЛЬНОМ ВРЕМЕНИ"
+    "illustrativeRouteLabel": "СХЕМА МАРШРУТА · НЕ ДАННЫЕ ОТПРАВЛЕНИЯ В РЕАЛЬНОМ ВРЕМЕНИ",
+    "coverageEyebrow": "ГЛОБАЛЬНАЯ СЕТЬ / КАТАЛОГ",
+    "coverageFilterLabel": "Тип покрытия",
+    "coverageCatalogNote": "Источник каталога: Universal Parcel Scraper, закреплённая версия e64a4667. Список стран и территорий: ISO 3166-1 alpha-2. Наличие перевозчика в каталоге не означает официального партнёрства и не гарантирует успешное отслеживание."
   }
 };
