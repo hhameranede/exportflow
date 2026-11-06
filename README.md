@@ -29,15 +29,15 @@ The `/api/track` endpoint returns a structured response:
   "carrier": "fedex",
   "source": "fedex",
   "status": "in_transit",
-  "confidence": "high",
+  "confidence": "medium",
   "truth": {
-    "latestReceived": { "stage": "in_transit", "timestampMs": 1234567890000, ... },
-    "latestTrusted": { "stage": "out_for_delivery", "timestampMs": 1234569000000, ... },
-    "selected": { "stage": "out_for_delivery", ... },
+    "latestReceived": { "stage": "in_transit", "time": "2026-11-06T10:00:00.000Z" },
+    "latestTrusted": { "stage": "out_for_delivery", "time": "2026-11-06T09:30:00.000Z" },
+    "selected": { "stage": "out_for_delivery" },
     "conflicts": [],
     "insights": {
-      "delay": { "level": "possible", "reason": "in_transit_without_completion" },
-      "customs": { "state": "insufficient_evidence", "reason": "no_customs_signals" },
+      "delay": { "level": "insufficient_evidence", "reason": "no_explicit_delay_signal" },
+      "customs": { "state": "insufficient_evidence", "reason": "no_explicit_customs_signal" },
       "estimate": { "source": "carrier", "value": "2026-11-09", "confidence": "reported" }
     }
   },
@@ -48,12 +48,12 @@ The `/api/track` endpoint returns a structured response:
 ```
 
 - **status**: Determined chronologically by timestamp (not by arbitrary stage scoring)
-- **confidence**: "low" if conflicts detected, "high" for clean single-source, "medium" otherwise
-- **latestTrusted**: The most recent event by timestamp
-- **latestReceived**: Same as latestTrusted (for future multi-source differentiation)
-- **conflicts**: Detected when events at same timestamp have different stages or locations
-- **insights**: Delay/customs/ETA analysis from normalized events
-- **sourceRefs**: Per-event source attribution for provenance tracking
+- **confidence**: "low" when no trusted timestamp exists or evidence conflicts; "medium" when a source-attributed, timezone-qualified event exists. The engine does not claim "high" confidence until independent source quality can be verified.
+- **latestReceived**: The event most recently ingested (or the latest explicit `receivedAt` when every event supplies it). It may be older than the newest carrier event.
+- **latestTrusted**: The newest event with a valid timestamp containing an explicit timezone/UTC offset and at least one source reference. Timezone-less timestamps remain visible as raw values but are not trusted for chronology.
+- **conflicts**: Detected when trusted events at the same timestamp have different stages or locations.
+- **insights**: Delay requires an explicit carrier delay signal; two scans or a generic exception alone are insufficient. Customs states require explicit hold/processing/release evidence. ETA is reported only when supplied by the carrier.
+- **sourceRefs**: Per-event source attribution. Duplicate normalized scans retain all source references found on the original events.
 
 ### Worldwide country directory
 
