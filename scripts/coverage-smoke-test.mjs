@@ -18,12 +18,16 @@ for (const country of payload.countries) {
   assert.match(country.code, /^[A-Z]{2}$/);
   assert.ok(["direct", "browser-required", "universal-fallback", "link-only", "not-listed"].includes(country.status));
   assert.ok(Array.isArray(country.carriers));
+  assert.ok(Array.isArray(country.browserRequiredCarriers));
+  assert.equal(country.browserRequiredCarrierCount, country.browserRequiredCarriers.length);
+  assert.ok(country.browserRequiredCarriers.every(carrier => carrier.requiresBrowser === true));
   assert.equal(country.carrierCount, country.carriers.length);
   assert.ok(country.carriers.every(carrier => typeof carrier.id === "string" && typeof carrier.name === "string"));
   if (country.status === "direct") {
     assert.ok(country.directCarrierCount > 0);
     assert.ok(country.directCarriers.some(carrier => typeof carrier.adapter === "string" && carrier.adapter.length > 0));
   }
+  if (country.status === "browser-required") assert.ok(country.browserRequiredCarrierCount > 0);
   if (country.status === "universal-fallback") assert.ok(country.fallbackCarrierCount > 0);
   if (country.status === "link-only") assert.ok(country.linkOnlyCarrierCount > 0);
   if (country.status === "not-listed") assert.equal(country.carrierCount, 0);
@@ -44,4 +48,4 @@ assert.equal(payload.summary.countriesWithoutCatalogEntry, payload.countries.fil
 assert.ok(payload.summary.catalogEntries > 0);
 assert.ok(payload.upstreamRevision);
 
-console.log(`Coverage catalog tests passed: ${payload.summary.catalogEntries} catalog records across ${payload.summary.allCountries} ISO country/territory codes; ${payload.summary.directCountryCount} have at least one direct adapter.`);
+console.log(`Coverage catalog tests passed: ${payload.summary.catalogEntries} catalog records across ${payload.summary.allCountries} ISO country/territory codes; ${payload.summary.directCountryCount} have at least one server-ready direct adapter.`);
