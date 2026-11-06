@@ -23,6 +23,11 @@ const [
   readFile("terms/index.html", "utf8")
 ]);
 
+const trustPageNames = ["about", "contact", "privacy", "terms", "cookies", "security", "disclaimer"];
+const trustPages = await Promise.all(
+  trustPageNames.map(page => readFile(page + "/index.html", "utf8"))
+);
+
 assert.match(html, /<html[^>]+lang="en"[^>]+dir="ltr"/i, "English LTR homepage should exist");
 for (const id of [
   "trackingForm", "trackingNumber", "postcodeInput", "languageToggle", "resultPanel",
@@ -99,8 +104,13 @@ const sitemapLocations = [...sitemap.matchAll(/<loc>(https:\/\/exportflow\.me\/[
 assert.deepEqual(sitemapLocations.sort(), [
   "https://exportflow.me/",
   "https://exportflow.me/coverage/",
+  "https://exportflow.me/about/",
+  "https://exportflow.me/contact/",
   "https://exportflow.me/privacy/",
-  "https://exportflow.me/terms/"
+  "https://exportflow.me/terms/",
+  "https://exportflow.me/cookies/",
+  "https://exportflow.me/security/",
+  "https://exportflow.me/disclaimer/"
 ].sort(), "Sitemap must list each public static page exactly once");
 assert.doesNotMatch(sitemap, /\/api\/|trackingNumber=/, "Private/API and per-shipment URLs must not enter the sitemap");
 assert.match(privacyHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\/privacy\/"\s*\/?>/);
@@ -146,3 +156,28 @@ assert.match(build, /"sitemap\.xml"/);
 assert.match(build, /coverage\/index\.html/, "Build must include the nested country directory page");
 
 console.log("ExportFlow eight-language, tracking, coverage and SEO smoke tests passed.");
+
+for (const id of ["journeyCard", "journeyProgressTrack", "stepInfo", "stepTransit", "stepDelivery", "stepDelivered"]) {
+  assert.match(html, new RegExp('id="' + id + '"'), "New tracking journey UI is missing: " + id);
+}
+for (const pageName of trustPageNames) {
+  assert.match(html, new RegExp('href="/' + pageName + '/"'), "Homepage footer must link to " + pageName);
+  assert.match(sitemap, new RegExp("https://exportflow\\.me/" + pageName + "/"), "Sitemap must include " + pageName);
+  assert.ok(build.includes('"' + pageName + '"'), "Build must copy the " + pageName + " page");
+}
+for (let index = 0; index < trustPageNames.length; index += 1) {
+  const pageName = trustPageNames[index];
+  const pageHtml = trustPages[index];
+  assert.match(pageHtml, /<link rel="canonical"/, pageName + " must include a canonical URL");
+  assert.ok(pageHtml.includes("/styles.css?v=ef-ui-refresh-20261106-01"), pageName + " must load the current shared design stylesheet");
+}
+assert.match(build, /const publicPageDirectories/, "Build must use the explicit public-page list");
+assert.match(css, /\.trust-page/, "Trust Center pages must share the new site theme");
+assert.match(css, /\.trust-hero/, "Trust Center hero styling must exist");
+assert.match(css, /body\.coverage-page \.legal-container/, "Privacy and terms pages must share the new card layout");
+assert.match(html, /data-count-up/, "Catalog values must be marked for count-up animation");
+assert.match(js, /function animateCatalogMetric/, "Catalog counts must use the animated counter");
+assert.match(js, /IntersectionObserver/, "Counters should animate when visible");
+assert.match(js, /history\.scrollRestoration = "manual"/, "Fresh homepage visits must disable stale scroll restoration");
+assert.match(js, /addEventListener\("pageshow"/, "Homepage must re-check the initial scroll position after page display");
+console.log("ExportFlow design, trust-page, count-up and scroll-restoration checks passed.");
