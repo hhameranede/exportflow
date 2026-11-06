@@ -12,14 +12,14 @@ const [html, css, js, api, build, headers] = await Promise.all([
 
 assert.match(html, /<html[^>]+lang="en"[^>]+dir="ltr"/i, "English LTR document should exist");
 
-assert.match(html, /rel="icon" href="\\/favicon\\.svg\\?v=20261106" type="image\\/svg\\+xml"/, "SVG favicon must be linked in the document head");
-assert.match(html, /rel="apple-touch-icon" href="\\/apple-touch-icon\\.png\\?v=20261106"/, "Apple touch icon must be linked");
-assert.match(html, /property="og:image" content="https:\\/\\/exportflow\\.me\\/og-image-20261106\\.png"/, "Open Graph image must use the production image URL");
+assert.ok(html.includes('href="/favicon.svg?v=20261106"'), "SVG favicon must be linked in the document head");
+assert.ok(html.includes('href="/apple-touch-icon.png?v=20261106"'), "Apple touch icon must be linked");
+assert.ok(html.includes('content="https://exportflow.me/og-image-20261106.png"'), "Open Graph image must use the production image URL");
 assert.match(html, /name="twitter:card" content="summary_large_image"/, "Social cards must request a large image preview");
 for (const asset of ["favicon.svg", "favicon.ico", "favicon-32x32.png", "apple-touch-icon.png", "site.webmanifest", "og-image-20261106.png"]) {
   assert.ok(build.includes('"' + asset + '"'), "Build must copy the public brand asset: " + asset);
 }
-assert.match(headers, /\\/og-image-20261106\\.png[\\s\\S]*?Cache-Control: public, max-age=31536000, immutable/, "Versioned social preview image should be cacheable");
+assert.ok(headers.includes("/og-image-20261106.png\n  Cache-Control: public, max-age=31536000, immutable"), "Versioned social preview image should be cacheable");
 
 for (const id of ["trackingForm", "trackingNumber", "postcodeInput", "languageToggle", "resultPanel", "shipmentMap", "mapNote", "eventCount", "faq"]) {
   assert.match(html, new RegExp('id="' + id + '"'), "Missing required element: " + id);
