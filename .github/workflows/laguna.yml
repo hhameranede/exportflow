@@ -23,19 +23,45 @@ concurrency:
 jobs:
   laguna:
     name: Laguna long-horizon engineering run
-    if: >-
-      github.repository == 'hhameranede/exportflow' &&
-      github.actor == 'hhameranede' &&
-      (
-        github.event_name == 'workflow_dispatch' ||
-        (
-          github.event_name == 'issue_comment' &&
-          contains(github.event.comment.body, '/laguna-run')
-        )
-      )
+    if: github.repository == 'hhameranede/exportflow'
     runs-on: ubuntu-latest
     timeout-minutes: 330
     steps:
+      - name: Authorize owner-triggered execution
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          COMMENT_BODY: ${{ github.event.comment.body || '' }}
+          ISSUE_IS_PULL_REQUEST: ${{ github.event.issue.pull_request != null }}
+        run: |
+          if [[ "${ACTOR}" != "hhameranede" ]]; then
+            echo "::error::Only the ExportFlow repository owner may start Laguna."
+            exit 1
+          fi
+
+          case "${EVENT_NAME}" in
+            workflow_dispatch)
+              echo "Owner-authorized manual workflow dispatch."
+              ;;
+            issue_comment)
+              if [[ "${ISSUE_IS_PULL_REQUEST}" == "true" ]]; then
+                echo "::error::Run Laguna from a normal issue, not a pull-request conversation."
+                exit 1
+              fi
+              first_line="${COMMENT_BODY%%$'\\n'*}"
+              if [[ "${first_line}" != "/laguna-run" ]]; then
+                echo "::error::Issue comment must begin with /laguna-run."
+                exit 1
+              fi
+              echo "Owner-authorized issue-comment trigger."
+              ;;
+            *)
+              echo "::error::Unsupported event type."
+              exit 1
+              ;;
+          esac
+
       - name: Verify NVIDIA credential is configured
         shell: bash
         env:
