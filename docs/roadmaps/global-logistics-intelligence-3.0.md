@@ -13,7 +13,7 @@ All dates, sample sizes, thresholds, and volumes below are **proposed scenario a
 ## Prerequisite: 2.0 Requirements
 
 3.0 depends on completion of:
-- A proposed scale target of up to 200 live-verified carriers with health telemetry, subject to feasibility and partner access
+- A validated, evidence-backed carrier network with health telemetry. A scale of 200+ live-verified carriers is an illustrative future target only, subject to feasibility and partner access.
 - Deterministic shipment truth engine with confidence modeling
 - Predictive delay/ETA model calibrated on real outcomes
 - Merchant command center with exception workflows
