@@ -23,6 +23,8 @@ These figures describe catalog and adapter coverage, not a guarantee that every 
 - Bounded request size, per-isolate rate limits, concurrency limits, a lookup deadline, no-store responses, and privacy-conscious error output.
 - English and Arabic status/timeline UI.
 
+Cloudflare Workers does not implement Fetch `redirect: "error"`; the Pages adapter converts that mode to `redirect: "manual"` so redirects are returned as visible 3xx responses rather than failing before a network request is sent. Carrier adapters that explicitly request `follow` or `manual` keep their chosen mode. This behavior is covered by `scripts/cloudflare-fetch-test.mjs`.
+
 The only universal fallback enabled by default is UPU. Other optional third-party fallback providers are intentionally not enabled because they receive the user's tracking number too. Some carrier adapters need a browser service (TRAWL/Chromium); those adapters can remain unavailable until a separate browser service is configured.
 
 ## Local development
