@@ -23,7 +23,9 @@ jobs:
           npm install --global npm@10.9.9
           npm --version
       - name: Generate package lock without running dependency scripts
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+        run: |
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          test -s package-lock.json
       - name: Install pinned engine and run its approved prepare script
         run: npm ci --no-audit --no-fund --foreground-scripts
       - name: Run regression tests
@@ -47,12 +49,12 @@ jobs:
           test -s dist/coverage/index.html
       - name: Commit generated npm lockfile
         run: |
-          if git diff --quiet -- package-lock.json; then
+          git add -f package-lock.json
+          if git diff --cached --quiet; then
             echo "package-lock.json is already synchronized"
           else
             git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add package-lock.json
+            git config user.email "41898282+users.noreply.github.com"
             git commit -m "chore: lock npm dependencies for pinned parcel engine"
             git push origin HEAD:fix/bun-lockfile-sync-2026-11-06
           fi
