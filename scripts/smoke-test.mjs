@@ -111,6 +111,8 @@ assert.match(coverageJs, /row\.dataset\.carriersSearch = names\.join\(" "\)/, "D
 assert.match(coverageJs, /row\.dataset\.carriersSearch/, "Carrier search index must be used when filtering countries");
 assert.match(coverageJs, /coverageStatusDirect/);
 assert.match(coverageJs, /coverageStatusBrowserRequired/);
+assert.ok(expectedKeys.includes("coverageStatusBrowserRequired"), "Browser-required coverage needs a translated label");
+assert.ok(expectedKeys.includes("coverageBrowserTag"), "Browser-required carrier names need a translated tag");
 assert.match(coverageJs, /carrier\.requiresBrowser/);
 assert.match(coverageJs, /coverageStatusFallback/);
 assert.match(coverageJs, /coverageStatusLink/);
