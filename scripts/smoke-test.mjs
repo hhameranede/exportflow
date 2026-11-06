@@ -29,4 +29,10 @@ assert.match(css, /\.postcode-field/, "Optional postcode input should be styled"
 assert.match(css, /@media\s*\(max-width:\s*680px\)/, "Mobile breakpoint should exist");
 assert.match(css, /@media\s*\(max-width:\s*380px\)/, "Small-phone breakpoint should exist");
 assert.match(css, /html\[dir=rtl\]/, "RTL presentation rules should exist");
+
+assert.match(css, /\.hero-gridline\{position:absolute;inset:0/, "Hero decorative layer must not occupy a grid column");
+assert.match(css, /@media \(max-width:680px\)[\s\S]*?\.postcode-field\{display:grid/, "Mobile postcode field should stack label and input");
+assert.match(css, /\.header-cta\{[^}]*white-space:nowrap/, "Responsive header CTA must keep its label on one line");
+assert.match(css, /\.step-card p\{font-size:14px/, "Mobile step-card copy must remain readable");
+
 console.log("ExportFlow live tracking smoke tests passed.");
