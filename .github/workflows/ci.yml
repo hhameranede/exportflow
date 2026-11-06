@@ -40,6 +40,8 @@ jobs:
         run: npm test
       - name: Build Cloudflare Pages output
         run: npm run build
+      - name: Bundle Pages Functions with production Wrangler
+        run: npx --yes wrangler@3.114.17 pages functions build functions --outdir .wrangler/pages-functions
       - name: Verify all public build artifacts
         run: |
           test -s dist/index.html
