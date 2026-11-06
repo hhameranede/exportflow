@@ -13,7 +13,7 @@ This backlog records carriers with an official tracking entry point that were no
 | Kuwait | Ministry of Communications shipment tracking | https://www.moc.gov.kw/ar/shipment-tracking | Official shipment-tracking service. Confirm which postal/courier services it covers and whether an API is available. |
 | Mauritania | MAURIPOST | https://mauripost.mr/ | Official tracking form accepts postal S10-style references and states that parcel tracking uses the UPU network. Prefer UPU handoff validation before building a separate scraper. |
 
-## Priority A — African countries
+**Already covered (not a new integration): Oman Post** is mapped to the dedicated `asyad-express` adapter in the pinned upstream engine. The adapter supports Oman Post aliases and the official Oman Post tracking URL; we therefore exclude it from the missing-carrier backlog.\n\n## Priority A — African countries
 
 | Country | Operator | Official tracking entry point | Integration notes |
 | --- | --- | --- | --- |
