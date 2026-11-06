@@ -1,0 +1,58 @@
+name: Generate npm lockfile and verify pinned engine
+on:
+  push:
+    branches:
+      - fix/bun-lockfile-sync-2026-11-06
+permissions:
+  contents: write
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: fix/bun-lockfile-sync-2026-11-06
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Match Cloudflare npm version
+        run: |
+          npm install --global npm@10.9.9
+          npm --version
+      - name: Generate package lock without running dependency scripts
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Install pinned engine and run its approved prepare script
+        run: npm ci --no-audit --no-fund --foreground-scripts
+      - name: Run regression tests
+        run: npm test
+      - name: Build Cloudflare Pages output
+        run: npm run build
+      - name: Verify public artifacts
+        run: |
+          test -s dist/index.html
+          test -s dist/styles.css
+          test -s dist/app.js
+          test -s dist/translations.js
+          test -s dist/coverage.js
+          test -s dist/robots.txt
+          test -s dist/sitemap.xml
+          test -s dist/favicon.svg
+          test -s dist/favicon-32x32.png
+          test -s dist/apple-touch-icon.png
+          test -s dist/site.webmanifest
+          test -s dist/og-image-20261106.png
+          test -s dist/coverage/index.html
+      - name: Commit generated npm lockfile
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock.json is already synchronized"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "chore: lock npm dependencies for pinned parcel engine"
+            git push origin HEAD:fix/bun-lockfile-sync-2026-11-06
+          fi
