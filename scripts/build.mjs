@@ -134,12 +134,16 @@ for (const file of files) {
   await cp(resolve(root, file), resolve(output, file));
 }
 
+const publicPageDirectories = ["about", "contact", "cookies", "disclaimer", "privacy", "security", "terms"];
+for (const pageDirectory of publicPageDirectories) {
+  const sourceDirectory = resolve(root, pageDirectory);
+  const destinationDirectory = resolve(output, pageDirectory);
+  await mkdir(destinationDirectory, { recursive: true });
+  await cp(sourceDirectory, destinationDirectory, { recursive: true });
+}
+
 await mkdir(resolve(output, "coverage"), { recursive: true });
 await cp(resolve(root, "coverage/index.html"), resolve(output, "coverage/index.html"));
-await mkdir(resolve(output, "privacy"), { recursive: true });
-await cp(resolve(root, "privacy/index.html"), resolve(output, "privacy/index.html"));
-await mkdir(resolve(output, "terms"), { recursive: true });
-await cp(resolve(root, "terms/index.html"), resolve(output, "terms/index.html"));
 
 try {
   const jsonImports = await patchWorkerIncompatibleEngineFiles(engineDist);
