@@ -43,6 +43,11 @@ Evidence gathered during this pilot:
 - No owner-approval prompts were triggered during this pilot.
 - Context blocker encountered and resolved safely: the coordination docs referenced in issue #26 were not present on this branch, so they were reviewed from draft PR #25's branch ref for policy/context before making this documentation-only change.
 
+## External integrations and CI status notes
+
+- The agent did not access Vercel or initiate a deployment. The repository’s existing Vercel GitHub integration automatically attempted a PR deployment; it failed due to the daily deployment quota. No successful deployment occurred.
+- GitHub Actions run `Verify ExportFlow` for this PR is currently `action_required` with no jobs reported (`total_jobs: 0`, `failed_jobs: 0`).
+
 ## Scope/safety confirmation
 
 - No application code changed.
