@@ -40,6 +40,7 @@ assert.ok(expectedKeys.length >= 90, "The homepage and coverage UI translation b
 for (const locale of locales) {
   assert.deepEqual(Object.keys(translations[locale]).sort(), expectedKeys, locale + " must provide every translation key");
   assert.ok(translations[locale].metaDescription, locale + " must include translated SEO description");
+  assert.ok(translations[locale].resultLiveEyebrow && translations[locale].liveLabel, locale + " must label carrier responses");
 }
 for (const locale of locales) assert.match(html, new RegExp('<option value="' + locale + '"'), "Language selector is missing " + locale);
 for (const [pageName, pageHtml] of [["homepage", html], ["coverage page", coverageHtml]]) {
@@ -51,6 +52,8 @@ for (const [pageName, pageHtml] of [["homepage", html], ["coverage page", covera
   }
 }
 assert.match(js, /supportedLocales\s*=\s*\["en", "ar", "es", "zh", "hi", "pt", "fr", "ru"\]/);
+assert.equal(translations.en.resultLiveEyebrow, "CARRIER RESPONSE", "A returned carrier lookup must not imply a continuously live connection");
+assert.equal(translations.en.liveLabel, "Received", "The result badge must describe receipt, not live freshness");
 assert.match(trackApi, /\^\(en\|ar\|es\|zh\|hi\|pt\|fr\|ru\)\$/i, "Tracking API must accept exactly the eight supported locales");
 assert.match(js, /html\.dir\s*=\s*locale === "ar" \? "rtl" : "ltr"/, "Arabic must switch the page to RTL");
 assert.match(js, /localStorage\.setItem\("exportflow-language"/, "Language choice must persist");
