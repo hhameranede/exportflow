@@ -4,7 +4,7 @@ import { COUNTRY_CODES } from "../functions/lib/country-codes.mjs";
 
 const [
   html, css, js, translationsSource, coverageHtml, coverageJs, trackApi, coverageApi, build,
-  robots, sitemap, headers, carriersApi
+  robots, sitemap, headers, carriersApi, privacyHtml, termsHtml
 ] = await Promise.all([
   readFile("index.html", "utf8"),
   readFile("styles.css", "utf8"),
@@ -18,8 +18,15 @@ const [
   readFile("robots.txt", "utf8"),
   readFile("sitemap.xml", "utf8"),
   readFile("_headers", "utf8"),
-  readFile("functions/api/carriers.js", "utf8")
+  readFile("functions/api/carriers.js", "utf8"),
+  readFile("privacy/index.html", "utf8"),
+  readFile("terms/index.html", "utf8")
 ]);
+
+const trustPageNames = ["about", "contact", "privacy", "terms", "cookies", "security", "disclaimer"];
+const trustPages = await Promise.all(
+  trustPageNames.map(page => readFile(page + "/index.html", "utf8"))
+);
 
 assert.match(html, /<html[^>]+lang="en"[^>]+dir="ltr"/i, "English LTR homepage should exist");
 for (const id of [
@@ -83,9 +90,9 @@ for (const asset of ["favicon.svg", "favicon-32x32.png", "apple-touch-icon.png",
 assert.ok(headers.includes("/og-image-20261106.png\n  Cache-Control: public, max-age=31536000, immutable"), "Versioned social preview image must have immutable caching");
 
 assert.match(html, /href="\/coverage\//, "Homepage must link to the global carrier directory");
-assert.match(html, /styles\.css\?v=ef-assets-refresh-20261106-02/, "Homepage CSS must use a fresh cache-busting release URL");
-assert.match(html, /translations\.js\?v=ef-assets-refresh-20261106-02/, "Translations must use a fresh cache-busting release URL");
-assert.match(html, /app\.js\?v=ef-assets-refresh-20261106-02/, "Homepage application JS must use a fresh cache-busting release URL");
+assert.match(html, /styles\.css\?v=ef-ui-refresh-20261106-01/, "Homepage CSS must use a fresh cache-busting release URL");
+assert.match(html, /translations\.js\?v=ef-ui-refresh-20261106-01/, "Translations must use a fresh cache-busting release URL");
+assert.match(html, /app\.js\?v=ef-ui-refresh-20261106-01/, "Homepage application JS must use a fresh cache-busting release URL");
 assert.ok(headers.includes("/app.js\n  Cache-Control: public, max-age=0, must-revalidate"), "Homepage app JavaScript must be revalidated");
 assert.match(robots, /User-agent: \*/);
 assert.match(robots, /Allow: \/api\/coverage/, "Search engines must be allowed to load the directory data");
@@ -93,9 +100,16 @@ assert.match(robots, /Disallow: \/api\/track/);
 assert.doesNotMatch(robots, /Disallow: \/api\/coverage/);
 assert.match(coverageApi, /X-Robots-Tag/);
 assert.match(robots, /Sitemap: https:\/\/exportflow\.me\/sitemap\.xml/);
-assert.match(sitemap, /<loc>https:\/\/exportflow\.me\/<\/loc>/);
-assert.match(sitemap, /<loc>https:\/\/exportflow\.me\/coverage\/<\/loc>/);
+const sitemapLocations = [...sitemap.matchAll(/<loc>(https:\/\/exportflow\.me\/[^<]*)<\/loc>/g)].map(match => match[1]);
+assert.deepEqual(sitemapLocations.sort(), [
+  "https://exportflow.me/",
+  "https://exportflow.me/coverage/",
+  "https://exportflow.me/privacy/",
+  "https://exportflow.me/terms/"
+].sort(), "Sitemap must list each public static page exactly once");
 assert.doesNotMatch(sitemap, /\/api\/|trackingNumber=/, "Private/API and per-shipment URLs must not enter the sitemap");
+assert.match(privacyHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\/privacy\/"\s*\/?>/);
+assert.match(termsHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\/terms\/"\s*\/?>/);
 
 assert.equal(COUNTRY_CODES.length, 249, "ISO 3166-1 assigned country/territory list should contain 249 alpha-2 codes");
 assert.match(coverageHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\/coverage\/"\s*\/?>/);
@@ -137,3 +151,28 @@ assert.match(build, /"sitemap\.xml"/);
 assert.match(build, /coverage\/index\.html/, "Build must include the nested country directory page");
 
 console.log("ExportFlow eight-language, tracking, coverage and SEO smoke tests passed.");
+
+for (const id of ["journeyCard", "journeyProgressTrack", "stepInfo", "stepTransit", "stepDelivery", "stepDelivered"]) {
+  assert.match(html, new RegExp('id="' + id + '"'), "New tracking journey UI is missing: " + id);
+}
+for (const pageName of trustPageNames) {
+  assert.match(html, new RegExp('href="/' + pageName + '/"'), "Homepage footer must link to " + pageName);
+  assert.match(sitemap, new RegExp("https://exportflow\\.me/" + pageName + "/"), "Sitemap must include " + pageName);
+  assert.ok(build.includes('"' + pageName + '"'), "Build must copy the " + pageName + " page");
+}
+for (let index = 0; index < trustPageNames.length; index += 1) {
+  const pageName = trustPageNames[index];
+  const pageHtml = trustPages[index];
+  assert.match(pageHtml, /<link rel="canonical"/, pageName + " must include a canonical URL");
+  assert.match(pageHtml, new RegExp('/styles\\.css\\?v=' + release), pageName + " must load the current shared design stylesheet");
+}
+assert.match(build, /const publicPageDirectories/, "Build must use the explicit public-page list");
+assert.match(css, /\.trust-page/, "Trust Center pages must share the new site theme");
+assert.match(css, /\.trust-hero/, "Trust Center hero styling must exist");
+assert.match(css, /body\.coverage-page \.legal-container/, "Privacy and terms pages must share the new card layout");
+assert.match(html, /data-count-up/, "Catalog values must be marked for count-up animation");
+assert.match(js, /function animateCatalogMetric/, "Catalog counts must use the animated counter");
+assert.match(js, /IntersectionObserver/, "Counters should animate when visible");
+assert.match(js, /history\.scrollRestoration = "manual"/, "Fresh homepage visits must disable stale scroll restoration");
+assert.match(js, /addEventListener\("pageshow"/, "Homepage must re-check the initial scroll position after page display");
+console.log("ExportFlow design, trust-page, count-up and scroll-restoration checks passed.");

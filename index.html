@@ -29,7 +29,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-<link rel="stylesheet" href="/styles.css?v=ef-assets-refresh-20261106-02">
+<link rel="stylesheet" href="/styles.css?v=ef-ui-refresh-20261106-01">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"ExportFlow","url":"https://exportflow.me/","description":"Track parcels across carrier networks with one clear timeline."}</script>
 </head>
 <body>
@@ -130,22 +130,23 @@
               </svg>
             </span>
             <span class="input-prefix-chip">EF</span>
-            <input id="trackingNumber" name="trackingNumber" type="text" autocomplete="off" spellcheck="false" inputmode="text" autocapitalize="characters" placeholder="LX123456789CN" aria-label="Tracking number" data-i18n-aria-label="trackingInputAria" required>
+            <input id="trackingNumber" name="trackingNumber" type="text" autocomplete="off" spellcheck="false" inputmode="text" autocapitalize="characters" placeholder="LX123456789CN" aria-label="Tracking number" data-i18n-aria-label="trackingInputAria" title="Press Enter to track, Esc to clear" required>
             <div class="input-actions-group">
               <button class="field-inline-btn" id="pasteBtn" type="button" aria-label="Paste tracking number" title="Paste">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
                   <rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
                 </svg>
               </button>
-              <button class="field-inline-btn clear-input" id="clearInput" type="button" aria-label="Clear tracking number" data-i18n-aria-label="clearTrackingAria" hidden>
+              <button class="field-inline-btn clear-input" id="clearInput" type="button" aria-label="Clear tracking number" data-i18n-aria-label="clearTrackingAria" title="Clear inputs (Esc)" hidden>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
                   <path d="M18 6 6 18M6 6l12 12"/>
                 </svg>
               </button>
             </div>
           </label>
-          <button class="submit-button" type="submit">
+          <button class="submit-button" type="submit" title="Track parcel (Enter)">
             <span data-i18n="trackNow">Track parcel</span>
+            <span class="submit-kbd-badge" aria-hidden="true"><kbd>↵</kbd></span>
             <span class="button-arrow icon-flip" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <path d="M5 12h14M12 5l7 7-7 7"/>
@@ -160,7 +161,7 @@
             <span data-i18n="postcodeLabel">POSTCODE (OPTIONAL — SOME CARRIERS REQUIRE IT)</span>
             <span class="optional-badge" data-i18n="optionalBadge">Optional</span>
           </span>
-          <input id="postcodeInput" name="postcode" type="text" autocomplete="postal-code" inputmode="numeric" maxlength="24" placeholder="10001" aria-label="Delivery postcode" data-i18n-aria-label="postcodeInputAria">
+          <input id="postcodeInput" name="postcode" type="text" autocomplete="postal-code" inputmode="numeric" maxlength="24" placeholder="10001" aria-label="Delivery postcode" data-i18n-aria-label="postcodeInputAria" title="Press Enter to track, Esc to clear">
         </label>
 
         <div class="form-bottom">
@@ -172,6 +173,10 @@
             </span>
             <span data-i18n="noAccount">No account needed</span>
           </span>
+          <div class="tracking-shortcuts-hint" aria-hidden="true">
+            <span class="shortcut-chip"><kbd>↵ Enter</kbd></span>
+            <span class="shortcut-chip"><kbd>Esc</kbd></span>
+          </div>
           <p class="private-note" data-i18n="heroFootnote">From online stores to your door. Tracking, made clearer.</p>
         </div>
         <p class="form-error" id="formError" role="alert" hidden></p>
@@ -415,15 +420,15 @@
   </div>
   <div class="catalog-stats">
     <article class="catalog-stat">
-      <strong id="catalogEntryCount">—</strong>
+      <strong id="catalogEntryCount" data-count-up aria-live="off">—</strong>
       <span data-i18n="metricCatalogRecords">carrier records in the installed catalog</span>
     </article>
     <article class="catalog-stat">
-      <strong id="directCountryCount">—</strong>
+      <strong id="directCountryCount" data-count-up aria-live="off">—</strong>
       <span data-i18n="metricDirectCountries">countries with direct carrier adapters</span>
     </article>
     <article class="catalog-stat">
-      <strong id="isoCountryCount">249</strong>
+      <strong id="isoCountryCount" data-count-up aria-live="off">249</strong>
       <span data-i18n="metricAllCountries">countries and territories listed</span>
     </article>
   </div>
@@ -620,10 +625,19 @@
     </div>
 
     <div class="footer-links-col">
+      <span class="footer-col-title">Project</span>
+      <a href="/about/">About ExportFlow</a>
+      <a href="/contact/">Contact</a>
+      <a href="/coverage/" data-i18n="catalogSnapshot">Carrier Directory</a>
+    </div>
+
+    <div class="footer-links-col">
       <span class="footer-col-title">Legal</span>
       <a href="/privacy/" data-i18n="privacyPolicy">Privacy Policy</a>
       <a href="/terms/" data-i18n="termsOfService">Terms of Service</a>
-      <a href="/coverage/" data-i18n="catalogSnapshot">Carrier Directory</a>
+      <a href="/cookies/">Cookies</a>
+      <a href="/security/">Security</a>
+      <a href="/disclaimer/">Disclaimer</a>
     </div>
   </div>
 
@@ -685,6 +699,106 @@
     </button>
   </div>
 
+  <!-- Interactive Visual Parcel Journey Stepper -->
+  <div class="journey-card" id="journeyCard">
+    <div class="journey-card-header">
+      <div class="journey-header-title">
+        <span class="journey-pulse-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48 2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48 2.83-2.83"/>
+          </svg>
+        </span>
+        <span class="journey-header-label" data-i18n="parcelJourney">Your parcel journey</span>
+      </div>
+      <span class="journey-live-pill" id="journeyLivePill">
+        <span class="pulse-dot"></span>
+        <span id="journeyLiveStage">—</span>
+      </span>
+    </div>
+
+    <!-- 4-Stage Stepper Track -->
+    <div class="journey-stepper" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" id="journeyProgressTrack">
+      <div class="journey-track-bg"></div>
+      <div class="journey-track-fill" id="journeyTrackFill" style="width: 50%;">
+        <span class="journey-truck-marker" id="journeyTruckMarker" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/>
+            <path d="M15 18H9"/>
+            <path d="M19 18h2a1 1 0 0 0 1-1v-5.5a1.5 1.5 0 0 0-.44-1.06L18 7h-4v11"/>
+            <circle cx="7" cy="18" r="2"/>
+            <circle cx="17" cy="18" r="2"/>
+          </svg>
+        </span>
+      </div>
+
+      <div class="journey-steps">
+        <!-- Step 1: Info Received -->
+        <div class="journey-step" id="stepInfo" data-step="1">
+          <div class="journey-step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+              <path d="m3.3 7 8.7 5 8.7-5M12 12v10"/>
+              <path d="m7.5 14.5 2 2 5-5" stroke-width="2.2"/>
+            </svg>
+          </div>
+          <div class="journey-step-text">
+            <strong class="journey-step-title" data-i18n="stageInfoReceived">Shipment information received</strong>
+            <small class="journey-step-sub" data-i18n="originLabel">ORIGIN</small>
+          </div>
+        </div>
+
+        <!-- Step 2: In Transit -->
+        <div class="journey-step active" id="stepTransit" data-step="2">
+          <div class="journey-step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/>
+              <path d="M15 18H9"/>
+              <path d="M19 18h2a1 1 0 0 0 1-1v-5.5a1.5 1.5 0 0 0-.44-1.06L18 7h-4v11"/>
+              <circle cx="7" cy="18" r="2"/>
+              <circle cx="17" cy="18" r="2"/>
+              <path d="M1 9h3M2 13h2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="journey-step-text">
+            <strong class="journey-step-title" data-i18n="stageInTransit">In transit</strong>
+            <small class="journey-step-sub" data-i18n="inTransitLabel">IN TRANSIT</small>
+          </div>
+        </div>
+
+        <!-- Step 3: Out for Delivery -->
+        <div class="journey-step upcoming" id="stepDelivery" data-step="3">
+          <div class="journey-step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <rect width="16" height="13" x="4" y="5" rx="2"/>
+              <path d="m4 8 8 5 8-5"/>
+              <circle cx="18" cy="18" r="3" fill="var(--ef-coral)" stroke="none"/>
+              <path d="M12 21a9 9 0 0 1-9-9" stroke-dasharray="2 2"/>
+            </svg>
+          </div>
+          <div class="journey-step-text">
+            <strong class="journey-step-title" data-i18n="stageOutForDelivery">Out for delivery</strong>
+            <small class="journey-step-sub" data-i18n="etaLabel">Estimated delivery</small>
+          </div>
+        </div>
+
+        <!-- Step 4: Delivered -->
+        <div class="journey-step upcoming" id="stepDelivered" data-step="4">
+          <div class="journey-step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <polyline points="9 22 9 12 15 12 15 22"/>
+              <path d="m8 11 3 3 5-5" stroke="var(--ef-success)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="journey-step-text">
+            <strong class="journey-step-title" data-i18n="stageDelivered">Delivered</strong>
+            <small class="journey-step-sub" data-i18n="destinationLabel">DESTINATION</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <p class="result-source-note" id="resultSourceNote" data-i18n="resultSourceNote">This result is returned by a carrier integration.</p>
 
   <div class="result-body-grid">
@@ -716,7 +830,7 @@
 </aside>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" defer></script>
-<script src="/translations.js?v=ef-assets-refresh-20261106-02" defer></script>
-<script src="/app.js?v=ef-assets-refresh-20261106-02" defer></script>
+<script src="/translations.js?v=ef-ui-refresh-20261106-01" defer></script>
+<script src="/app.js?v=ef-ui-refresh-20261106-01" defer></script>
 </body>
 </html>
