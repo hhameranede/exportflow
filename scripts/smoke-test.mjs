@@ -36,9 +36,9 @@ assert.match(css, /\.header-cta\{[^}]*white-space:nowrap/, "Responsive header CT
 assert.match(css, /\.step-card p\{font-size:14px/, "Mobile step-card copy must remain readable");
 
 
-assert.match(css, /@media \(max-width:680px\)[\s\S]*?\.language-picker select\{[^}]*font-size:13px/, "Mobile language name must remain comfortably readable");
-assert.match(css, /\.language-picker:after\{[^}]*content:"";[^}]*border-right:/, "Language selector must use one consistent custom chevron");
-assert.match(css, /\.header-cta span:first-child\{[^}]*white-space:nowrap;[^}]*flex:0 0 auto;/, "Header CTA label must not wrap or shrink");
-assert.match(css, /\.announcement\{[^}]*font-size:12px/, "Announcement copy must meet the revised mobile type scale");
+assert.match(css, /\.language-picker select\s*\{[^}]*max-width:\s*50px;[^}]*font-size:\s*13px/, "Compact mobile language name must remain comfortably readable");
+assert.match(css, /\.language-picker:after\s*\{[^}]*content:\s*"";[^}]*border-right:/, "Language selector must use one consistent custom chevron");
+assert.match(css, /\.header-cta span:first-child\s*\{[^}]*white-space:\s*nowrap;[^}]*flex:\s*0 0 auto;/, "Header CTA label must not wrap or shrink");
+assert.match(css, /\.announcement\s*\{[^}]*font-size:\s*12px/, "Announcement copy must meet the revised type scale");
 
 console.log("ExportFlow live tracking smoke tests passed.");
