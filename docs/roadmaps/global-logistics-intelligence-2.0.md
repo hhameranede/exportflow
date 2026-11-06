@@ -6,7 +6,7 @@ Build ExportFlow into a production-grade shipment tracking and logistics intelli
 
 ## Baseline and Target Interpretation
 
-Current-state statements describe repository evidence, not assumed production capability. All numeric counts, percentages, dates, and thresholds in this roadmap are **proposed planning targets**, not measured baselines, delivery commitments, or present capabilities. Validate them against observed demand, operating cost, carrier access, privacy requirements, and a measured baseline before approval. A carrier catalogue entry or adapter record does not establish successful live tracking.
+Current-state figures below are repository or CI snapshots and must be read with their stated source and revision. Numeric values in objectives, phase tables, and milestone targets are **proposals**, not present capabilities, measured performance, or delivery commitments. Validate proposals against observed demand, operating cost, carrier access, privacy requirements, and a measured baseline before approval. A carrier catalogue entry or adapter record does not establish successful live tracking.
 
 ---
 
@@ -19,8 +19,8 @@ Current-state statements describe repository evidence, not assumed production ca
 
 ### Current State
 - Single universal fallback provider (UPU) enabled by default
-- The pinned upstream catalog contains carrier IDs and adapter metadata; exact counts must be generated from that pinned revision when needed.
-- This roadmap does not attach reproducible live-verification evidence to catalog entries; do not describe an adapter as live-verified without recorded test evidence.
+- The CI catalog test for pinned upstream revision `e64a466772ef25ce68e02d9c7c9f1613eec1208b` reported 1,339 catalog records across 249 assigned ISO country/territory codes; 123 ISO entries had at least one direct adapter. This is a catalogue snapshot, not a carrier count or proof of successful live tracking.
+- The catalog test does not produce per-carrier live-verification evidence. Do not describe an adapter as live-verified without reproducible external test evidence.
 
 ### Phases
 
