@@ -35,4 +35,10 @@ assert.match(css, /@media \(max-width:680px\)[\s\S]*?\.postcode-field\{display:g
 assert.match(css, /\.header-cta\{[^}]*white-space:nowrap/, "Responsive header CTA must keep its label on one line");
 assert.match(css, /\.step-card p\{font-size:14px/, "Mobile step-card copy must remain readable");
 
+
+assert.match(css, /@media \(max-width:680px\)[\s\S]*?\.language-picker select\{[^}]*font-size:13px/, "Mobile language name must remain comfortably readable");
+assert.match(css, /\.language-picker:after\{[^}]*content:"";[^}]*border-right:/, "Language selector must use one consistent custom chevron");
+assert.match(css, /\.header-cta span:first-child\{[^}]*white-space:nowrap;[^}]*flex:0 0 auto;/, "Header CTA label must not wrap or shrink");
+assert.match(css, /\.announcement\{[^}]*font-size:12px/, "Announcement copy must meet the revised mobile type scale");
+
 console.log("ExportFlow live tracking smoke tests passed.");
