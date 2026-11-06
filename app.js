@@ -19,13 +19,30 @@
   const refreshBtn = document.getElementById("refreshBtn");
   const carrierLogoBadge = document.getElementById("carrierLogoBadge");
 
+  function restoreInitialScrollPosition() {
+    const navigation = performance.getEntriesByType("navigation")[0];
+    const isHistoryTraversal = navigation && navigation.type === "back_forward";
+    if (window.location.hash || isHistoryTraversal) return;
+
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    const resetToTop = () => {
+      document.documentElement.style.scrollBehavior = "auto";
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    };
+    resetToTop();
+    requestAnimationFrame(resetToTop);
+    window.addEventListener("pageshow", event => {
+      if (!event.persisted && !window.location.hash) resetToTop();
+    }, { once: true });
+  }
+
+  restoreInitialScrollPosition();
+
   let shipmentMapInstance = null;
   let shipmentMapLayer = null;
   let currentMapEvents = [];
   let currentTrackingNumber = "";
-
-  const localeOf = value => supportedLocales.includes(value) ? value : "en";
-  const t = key => translations[html.lang]?.[key] || translations.en?.[key] || key;
+  let currentStatus = "";
 
   function localeFromPath() {
     const match = window.location.pathname.match(/^\/(ar|es|zh|hi|pt|fr|ru)(?=\/|$)/);
@@ -66,6 +83,9 @@
     });
   }
 
+  const localeOf = value => supportedLocales.includes(value) ? value : "en";
+  const t = key => translations[html.lang]?.[key] || translations.en?.[key] || key;
+
   function setLanguage(value) {
     const locale = localeOf(value);
     html.lang = locale;
@@ -96,11 +116,18 @@
     const description = document.querySelector('meta[name="description"]');
     if (description) description.content = t("metaDescription");
 
+    document.querySelectorAll("[data-count-complete='true']").forEach(element => {
+      const target = Number(element.dataset.countTarget);
+      if (Number.isFinite(target)) element.textContent = target.toLocaleString(locale);
+    });
+
     document.title = "ExportFlow — " + t("kicker");
     const ogTitle = document.querySelector('meta[property="og:title"]');
     const ogDescription = document.querySelector('meta[property="og:description"]');
     if (ogTitle) ogTitle.content = document.title;
     if (ogDescription && description) ogDescription.content = description.content;
+
+    if (currentStatus) updateJourneyStepper(currentStatus);
 
     syncLocalePath(locale);
     persistLocale(locale);
@@ -135,20 +162,50 @@
     languageToggle.addEventListener("change", event => setLanguage(event.target.value));
   }
 
+  function clearTrackingInputs() {
+    let hadValue = false;
+    if (trackingInput && trackingInput.value) {
+      trackingInput.value = "";
+      hadValue = true;
+    }
+    if (postcodeInput && postcodeInput.value) {
+      postcodeInput.value = "";
+      hadValue = true;
+    }
+    if (clearInput) clearInput.hidden = true;
+    if (formError) formError.hidden = true;
+    if (trackingInput) trackingInput.focus();
+    return hadValue;
+  }
+
+  function updateClearBtnVisibility() {
+    if (clearInput) {
+      const hasContent = Boolean(
+        (trackingInput && trackingInput.value.length > 0) ||
+        (postcodeInput && postcodeInput.value.length > 0)
+      );
+      clearInput.hidden = !hasContent;
+    }
+  }
+
   // Input actions (typing, clear, paste)
   if (trackingInput) {
     trackingInput.addEventListener("input", () => {
-      if (clearInput) clearInput.hidden = trackingInput.value.length === 0;
+      updateClearBtnVisibility();
       if (formError) formError.hidden = true;
     });
   }
 
-  if (clearInput && trackingInput) {
-    clearInput.addEventListener("click", () => {
-      trackingInput.value = "";
-      clearInput.hidden = true;
+  if (postcodeInput) {
+    postcodeInput.addEventListener("input", () => {
+      updateClearBtnVisibility();
       if (formError) formError.hidden = true;
-      trackingInput.focus();
+    });
+  }
+
+  if (clearInput) {
+    clearInput.addEventListener("click", () => {
+      clearTrackingInputs();
     });
   }
 
@@ -159,7 +216,7 @@
           const text = await navigator.clipboard.readText();
           if (text) {
             trackingInput.value = text.trim();
-            if (clearInput) clearInput.hidden = false;
+            updateClearBtnVisibility();
             if (formError) formError.hidden = true;
             trackingInput.focus();
           }
@@ -168,6 +225,48 @@
         }
       } catch {
         trackingInput.focus();
+      }
+    });
+  }
+
+  // Keyboard shortcuts for tracking form:
+  // - 'Enter' to submit form from either input
+  // - 'Esc' to clear inputs and focus tracking input
+  function handleFormKeydown(event) {
+    if (event.key === "Escape" || event.key === "Esc") {
+      event.preventDefault();
+      event.stopPropagation();
+      clearTrackingInputs();
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (trackingForm) {
+        if (typeof trackingForm.requestSubmit === "function") {
+          trackingForm.requestSubmit();
+        } else {
+          trackLive(trackingInput ? trackingInput.value : "");
+        }
+      }
+    }
+  }
+
+  if (trackingInput) {
+    trackingInput.addEventListener("keydown", handleFormKeydown);
+  }
+
+  if (postcodeInput) {
+    postcodeInput.addEventListener("keydown", handleFormKeydown);
+  }
+
+  if (trackingForm) {
+    trackingForm.addEventListener("keydown", event => {
+      if (event.key === "Escape" || event.key === "Esc") {
+        if (!resultPanel || resultPanel.hidden) {
+          event.preventDefault();
+          clearTrackingInputs();
+        }
       }
     });
   }
@@ -296,6 +395,102 @@
     requestAnimationFrame(() => shipmentMapInstance?.invalidateSize());
   }
 
+  function getTimelineEventIcon(title, stage, isLatest) {
+    const text = String(title || "").toLowerCase();
+
+    // 1. Delivered / Arrival at destination
+    if (text.includes("deliver") || text.includes("وصل") || text.includes("توصيل") || stage === "delivered") {
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m8 12 3 3 5-5" stroke-width="2.5"/></svg>`;
+    }
+    // 2. Out for delivery / Courier / Vehicle / Hand-off
+    if (text.includes("out for delivery") || text.includes("مع المندوب") || text.includes("courier") || text.includes("driver") || stage === "out_for_delivery") {
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect width="16" height="12" x="4" y="6" rx="2"/><circle cx="18" cy="18" r="3"/><path d="M4 10h16M10 14h4"/></svg>`;
+    }
+    // 3. Sorting facility / Hub / Distribution center / Warehouse
+    if (text.includes("facility") || text.includes("hub") || text.includes("center") || text.includes("sort") || text.includes("مركز") || text.includes("فرز") || text.includes("station")) {
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 21h18M5 21V7l8-4v18M13 11l6-3v13"/><path d="M9 9h1M9 13h1M9 17h1"/></svg>`;
+    }
+    // 4. Customs / Clearance / International / Port / Inspection
+    if (text.includes("custom") || text.includes("clearance") || text.includes("جمارك") || text.includes("border") || text.includes("import") || text.includes("export") || text.includes("tax")) {
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>`;
+    }
+    // 5. Transit / En route / Transport / Flight / Departed
+    if (text.includes("transit") || text.includes("depart") || text.includes("غادر") || text.includes("طريق") || text.includes("flight") || text.includes("arrive") || stage === "in_transit") {
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-5.5a1.5 1.5 0 0 0-.44-1.06L18 7h-4v11"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>`;
+    }
+    // 6. Information received / Order confirmed / Label created
+    if (text.includes("info") || text.includes("label") || text.includes("order") || text.includes("received") || text.includes("طلب") || text.includes("بيانات") || stage === "information_received" || stage === "pending") {
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 12v10"/></svg>`;
+    }
+    // 7. Active latest event / Fallback
+    if (isLatest) {
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>`;
+    }
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6 9 17l-5-5"/></svg>`;
+  }
+
+  function updateJourneyStepper(stage) {
+    const card = document.getElementById("journeyCard");
+    const fill = document.getElementById("journeyTrackFill");
+    const liveStage = document.getElementById("journeyLiveStage");
+    const track = document.getElementById("journeyProgressTrack");
+    const steps = [
+      document.getElementById("stepInfo"),
+      document.getElementById("stepTransit"),
+      document.getElementById("stepDelivery"),
+      document.getElementById("stepDelivered")
+    ];
+    if (!card || !fill || !liveStage) return;
+
+    let activeIndex = 1; // 0 = info, 1 = transit, 2 = delivery, 3 = delivered
+    let percent = 50;
+
+    switch (stage) {
+      case "information_received":
+      case "pending":
+        activeIndex = 0;
+        percent = 15;
+        break;
+      case "in_transit":
+        activeIndex = 1;
+        percent = 50;
+        break;
+      case "out_for_delivery":
+      case "available_for_pickup":
+        activeIndex = 2;
+        percent = 78;
+        break;
+      case "delivered":
+        activeIndex = 3;
+        percent = 100;
+        break;
+      default:
+        activeIndex = 1;
+        percent = 50;
+        break;
+    }
+
+    fill.style.width = percent + "%";
+    if (track) track.setAttribute("aria-valuenow", String(percent));
+    liveStage.textContent = stageLabel(stage);
+
+    steps.forEach((step, idx) => {
+      if (!step) return;
+      step.classList.remove("completed", "active", "upcoming");
+      if (idx < activeIndex) {
+        step.classList.add("completed");
+      } else if (idx === activeIndex) {
+        if (stage === "delivered") {
+          step.classList.add("completed");
+        } else {
+          step.classList.add("active");
+        }
+      } else {
+        step.classList.add("upcoming");
+      }
+    });
+  }
+
   function renderTimeline(events) {
     const timeline = document.querySelector(".timeline");
     if (!timeline) return;
@@ -303,29 +498,15 @@
     const eventCount = document.getElementById("eventCount");
     if (eventCount) eventCount.textContent = events.length.toLocaleString(html.lang);
 
-    for (const event of events) {
+    events.forEach((event, index) => {
       const item = document.createElement("div");
       item.className = "timeline-item " + (event.state || "upcoming");
+      item.style.animationDelay = (index * 50) + "ms";
 
       const node = document.createElement("span");
       node.className = "timeline-node";
       node.setAttribute("aria-hidden", "true");
-
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      svg.setAttribute("viewBox", "0 0 24 24");
-      svg.setAttribute("fill", "none");
-      svg.setAttribute("stroke", "currentColor");
-
-      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      if (event.state === "complete") {
-        path.setAttribute("d", "M20 6 9 17l-5-5");
-      } else if (event.state === "active") {
-        path.setAttribute("d", "M12 2v20M2 12h20");
-      } else {
-        path.setAttribute("d", "M12 6v6l4 2");
-      }
-      svg.appendChild(path);
-      node.appendChild(svg);
+      node.innerHTML = getTimelineEventIcon(event.title, event.stage, index === 0);
 
       const body = document.createElement("div");
       const title = document.createElement("strong");
@@ -336,7 +517,7 @@
 
       item.append(node, body);
       timeline.append(item);
-    }
+    });
   }
 
   async function trackLive(value) {
@@ -409,6 +590,9 @@
         etaCard.hidden = true;
       }
 
+      currentStatus = payload.status || "in_transit";
+      updateJourneyStepper(currentStatus);
+
       const events = Array.isArray(payload.events) ? payload.events : [];
       setMapEvents(events);
 
@@ -416,12 +600,14 @@
         renderTimeline(events.map((event, index) => ({
           title: event.description || t("resultSubtitle"),
           meta: [event.time, event.location].filter(Boolean).join(" · "),
+          stage: event.stage || (index === 0 ? payload.status : "in_transit"),
           state: index === 0 ? "active" : "complete"
         })));
       } else {
         renderTimeline([{
           title: t("emptyResultTitle"),
           meta: t("emptyResultCopy"),
+          stage: payload.status || "information_received",
           state: "active"
         }]);
       }
@@ -504,8 +690,82 @@
   if (resultBackdrop) resultBackdrop.addEventListener("click", closeResult);
 
   document.addEventListener("keydown", event => {
-    if (event.key === "Escape" && resultPanel && !resultPanel.hidden) closeResult();
+    if (event.key === "Escape" || event.key === "Esc") {
+      if (resultPanel && !resultPanel.hidden) {
+        closeResult();
+        return;
+      }
+      if (languageMenu && languageMenu.classList.contains("open")) {
+        languageMenu.classList.remove("open");
+        if (languageBtnTrigger) languageBtnTrigger.setAttribute("aria-expanded", "false");
+        return;
+      }
+      const activeEl = document.activeElement;
+      const isWithinForm = trackingForm && (
+        trackingForm.contains(activeEl) ||
+        activeEl === trackingInput ||
+        activeEl === postcodeInput
+      );
+      if (isWithinForm) {
+        event.preventDefault();
+        clearTrackingInputs();
+      }
+    }
   });
+
+  function animateCatalogMetric(element, rawValue) {
+    if (!element) return;
+    const target = Number(rawValue);
+    if (!Number.isFinite(target) || target < 0) {
+      element.textContent = "—";
+      return;
+    }
+    const value = Math.round(target);
+    element.dataset.countTarget = String(value);
+    let started = false;
+
+    const run = () => {
+      if (started) return;
+      started = true;
+      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const format = number => Math.round(number).toLocaleString(html.lang || "en");
+      if (reducedMotion) {
+        element.textContent = format(value);
+        element.dataset.countComplete = "true";
+        return;
+      }
+
+      element.classList.add("is-counting");
+      const duration = 760;
+      const startTime = performance.now();
+      const frame = now => {
+        const progress = Math.min((now - startTime) / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 4);
+        element.textContent = format(value * eased);
+        if (progress < 1) {
+          requestAnimationFrame(frame);
+        } else {
+          element.textContent = format(value);
+          element.classList.remove("is-counting");
+          element.classList.add("is-counted");
+          element.dataset.countComplete = "true";
+        }
+      };
+      requestAnimationFrame(frame);
+    };
+
+    if ("IntersectionObserver" in window) {
+      const observer = new IntersectionObserver(entries => {
+        if (entries.some(entry => entry.isIntersecting)) {
+          observer.disconnect();
+          run();
+        }
+      }, { threshold: 0.35 });
+      observer.observe(element);
+    } else {
+      run();
+    }
+  }
 
   async function loadCatalogStats() {
     try {
@@ -516,16 +776,89 @@
       const catalogEl = document.getElementById("catalogEntryCount");
       const directEl = document.getElementById("directCountryCount");
       const isoEl = document.getElementById("isoCountryCount");
-      if (catalogEl) catalogEl.textContent = Number(summary.catalogEntries || 0).toLocaleString(html.lang);
-      if (directEl) directEl.textContent = Number(summary.directCountryCount || 0).toLocaleString(html.lang);
-      if (isoEl) isoEl.textContent = Number(summary.allCountries || 249).toLocaleString(html.lang);
+      animateCatalogMetric(catalogEl, summary.catalogEntries ?? 0);
+      animateCatalogMetric(directEl, summary.directCountryCount ?? 0);
+      animateCatalogMetric(isoEl, summary.allCountries ?? 249);
     } catch {
       const catalogEl = document.getElementById("catalogEntryCount");
       const directEl = document.getElementById("directCountryCount");
       const isoEl = document.getElementById("isoCountryCount");
       if (catalogEl) catalogEl.textContent = "—";
       if (directEl) directEl.textContent = "—";
-      if (isoEl) isoEl.textContent = "249";
+      animateCatalogMetric(isoEl, 249);
+    }
+  }
+
+  // Smooth scroll handler for all internal navigation links (#how, #faq, #track, #top, etc.)
+  function initSmoothScrolling() {
+    function smoothScrollTo(targetElement, hash) {
+      if (!targetElement) return;
+      const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      targetElement.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "start"
+      });
+
+      if (hash) {
+        try {
+          history.pushState(null, "", hash);
+        } catch {
+          window.location.hash = hash;
+        }
+      }
+
+      // If targeting the tracking card, focus tracking input for seamless usability
+      if (targetElement.id === "track" || targetElement.contains(trackingInput)) {
+        if (trackingInput) {
+          setTimeout(() => trackingInput.focus({ preventScroll: true }), 400);
+        }
+      } else {
+        targetElement.setAttribute("tabindex", "-1");
+        targetElement.focus({ preventScroll: true });
+      }
+    }
+
+    document.addEventListener("click", event => {
+      const anchor = event.target.closest("a");
+      if (!anchor) return;
+
+      const href = anchor.getAttribute("href");
+      if (!href) return;
+
+      // Match internal hashes: "#something" or "/#something" or "index.html#something"
+      let hash = "";
+      if (href.startsWith("#") && href.length > 1) {
+        hash = href;
+      } else {
+        try {
+          const url = new URL(anchor.href, window.location.href);
+          if (url.origin === window.location.origin &&
+              (url.pathname === window.location.pathname || url.pathname === "/" || url.pathname === "/index.html") &&
+              url.hash && url.hash.length > 1) {
+            hash = url.hash;
+          }
+        } catch {}
+      }
+
+      if (!hash) return;
+
+      const targetId = hash.slice(1);
+      const targetElement = document.getElementById(targetId);
+      if (targetElement) {
+        event.preventDefault();
+        smoothScrollTo(targetElement, hash);
+      }
+    });
+
+    // Handle initial hash on page load
+    if (window.location.hash) {
+      const initialId = window.location.hash.slice(1);
+      const initialTarget = document.getElementById(initialId);
+      if (initialTarget) {
+        setTimeout(() => {
+          smoothScrollTo(initialTarget, window.location.hash);
+        }, 150);
+      }
     }
   }
 
@@ -533,4 +866,5 @@
   try { savedLanguage = localStorage.getItem("exportflow-language") || ""; } catch {}
   setLanguage(localeFromPath() || savedLanguage || html.lang || "en");
   loadCatalogStats();
+  initSmoothScrolling();
 })();
