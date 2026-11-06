@@ -27,6 +27,45 @@
   const localeOf = value => supportedLocales.includes(value) ? value : "en";
   const t = key => translations[html.lang]?.[key] || translations.en?.[key] || key;
 
+  function localeFromPath() {
+    const match = window.location.pathname.match(/^\\/(ar|es|zh|hi|pt|fr|ru)(?=\\/|$)/);
+    return match ? match[1] : null;
+  }
+
+  function persistLocale(locale) {
+    try { localStorage.setItem("exportflow-language", locale); } catch {}
+    try {
+      document.cookie = "ef-locale=" + encodeURIComponent(locale) +
+        "; Max-Age=31536000; Path=/; SameSite=Lax" +
+        (window.location.protocol === "https:" ? "; Secure" : "");
+    } catch {}
+  }
+
+  function syncLocalePath(locale) {
+    const currentPath = window.location.pathname;
+    const match = currentPath.match(/^\\/(ar|es|zh|hi|pt|fr|ru)(?=\\/|$)/);
+    let pagePath = match ? currentPath.slice(match[0].length) || "/" : currentPath;
+    if (!pagePath.startsWith("/")) pagePath = "/" + pagePath;
+    const nextPath = locale === "en"
+      ? pagePath
+      : "/" + locale + (pagePath === "/" ? "/" : pagePath);
+
+    if (nextPath !== currentPath) {
+      window.history.replaceState(window.history.state, "", nextPath + window.location.search + window.location.hash);
+    }
+    const canonical = document.querySelector('link[rel="canonical"]');
+    if (canonical) canonical.href = window.location.origin + nextPath;
+    const ogUrl = document.querySelector('meta[property="og:url"]');
+    if (ogUrl) ogUrl.content = window.location.origin + nextPath;
+
+    document.querySelectorAll('a[href="/"]').forEach(link => {
+      link.setAttribute("href", locale === "en" ? "/" : "/" + locale + "/");
+    });
+    document.querySelectorAll('a[href="/coverage/"]').forEach(link => {
+      link.setAttribute("href", locale === "en" ? "/coverage/" : "/" + locale + "/coverage/");
+    });
+  }
+
   function setLanguage(value) {
     const locale = localeOf(value);
     html.lang = locale;
@@ -58,8 +97,13 @@
     if (description) description.content = t("metaDescription");
 
     document.title = "ExportFlow — " + t("kicker");
+    const ogTitle = document.querySelector('meta[property="og:title"]');
+    const ogDescription = document.querySelector('meta[property="og:description"]');
+    if (ogTitle) ogTitle.content = document.title;
+    if (ogDescription && description) ogDescription.content = description.content;
 
-    try { localStorage.setItem("exportflow-language", locale); } catch {}
+    syncLocalePath(locale);
+    persistLocale(locale);
   }
 
   // Language Dropdown Interactions
@@ -485,8 +529,8 @@
     }
   }
 
-  let savedLanguage = "en";
-  try { savedLanguage = localStorage.getItem("exportflow-language") || "en"; } catch {}
-  setLanguage(savedLanguage);
+  let savedLanguage = "";
+  try { savedLanguage = localStorage.getItem("exportflow-language") || ""; } catch {}
+  setLanguage(localeFromPath() || savedLanguage || html.lang || "en");
   loadCatalogStats();
 })();
