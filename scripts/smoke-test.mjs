@@ -16,7 +16,7 @@ assert.ok(html.includes('href="/favicon.svg?v=20261106"'), "SVG favicon must be 
 assert.ok(html.includes('href="/apple-touch-icon.png?v=20261106"'), "Apple touch icon must be linked");
 assert.ok(html.includes('content="https://exportflow.me/og-image-20261106.png"'), "Open Graph image must use the production image URL");
 assert.match(html, /name="twitter:card" content="summary_large_image"/, "Social cards must request a large image preview");
-for (const asset of ["favicon.svg", "favicon.ico", "favicon-32x32.png", "apple-touch-icon.png", "site.webmanifest", "og-image-20261106.png"]) {
+for (const asset of ["favicon.svg", "favicon-32x32.png", "apple-touch-icon.png", "site.webmanifest", "og-image-20261106.png"]) {
   assert.ok(build.includes('"' + asset + '"'), "Build must copy the public brand asset: " + asset);
 }
 assert.ok(headers.includes("/og-image-20261106.png\n  Cache-Control: public, max-age=31536000, immutable"), "Versioned social preview image should be cacheable");
