@@ -1,4 +1,5 @@
 import { createTracker, TrackingError } from "../../node_modules/universal-parcel-scraper/dist/facade/index.js";
+import { createCloudflareFetch } from "../lib/cloudflare-fetch.mjs";
 
 const MAX_BODY_CHARS = 4_096;
 const MAX_NUMBER_LENGTH = 40;
@@ -62,6 +63,10 @@ function getTracker(env) {
     trackerTrawlUrl = trawlUrl;
     tracker = createTracker({
       userAgent: "ExportFlow/0.1",
+      // Cloudflare Workers rejects redirect: "error" before sending a request.
+      // Preserve carrier-specific "follow"/"manual" modes and emulate error mode
+      // with a visible 3xx response instead of a transport failure.
+      fetcher: createCloudflareFetch(),
       // Carrier adapters run first. UPU is the only universal fallback enabled
       // by default; third-party aggregators are deliberately not sent parcel IDs.
       providers: ["UPU"],
