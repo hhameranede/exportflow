@@ -400,3 +400,18 @@ html[dir="rtl"] .hero h1,
 html[dir="rtl"] .brand-name,
 html[dir="rtl"] .desktop-nav a,
 html[dir="rtl"] .header-cta { font-family: "Cairo", "Noto Sans Arabic", sans-serif; letter-spacing: 0; }
+
+/* Fine fit for common compact Android widths. */
+@media (max-width:680px) {
+  .language-picker { min-width:104px; padding-inline:8px 22px; gap:4px; }
+  .language-icon { width:20px; height:20px; flex-basis:20px; }
+  .language-icon svg { width:13px; height:13px; }
+  .language-picker select { max-width:50px; font-size:13px; }
+  .header-cta { min-width:112px; padding-inline:10px; font-size:12.5px; }
+}
+@media (max-width:380px) {
+  .brand-mark { width:27px; height:27px; flex-basis:27px; }
+  .brand-name { font-size:16px; }
+  .language-picker { min-width:100px; }
+  .header-cta { min-width:108px; font-size:12px; }
+}
