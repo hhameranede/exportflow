@@ -15,10 +15,45 @@ The upstream catalog documents thousands of carrier names and dedicated adapters
 
 ### Implemented routes
 
-- `POST /api/track` — server-side carrier lookup. Accepts a tracking number and optional carrier, postcode and language (`en`, `ar`, `es`, `zh`, `hi`, `pt`, `fr`, `ru`). Tracking numbers are not sent to browser-side third-party APIs.
+- `POST /api/track` — server-side carrier lookup. Accepts a tracking number and optional carrier, postcode and language (`en`, `ar`, `es`, `zh`, `hi`, `pt`, `fr`, `ru`). Tracking numbers are not sent to browser-side third-party APIs. Returns normalized timeline events with deterministic status, confidence, conflict detection, and delay/customs/ETA insights.
 - `GET /api/carriers` — exposes the installed carrier ID catalog.
 - `GET /api/coverage` — returns a live country-by-country classification derived from the installed carrier catalog.
 - `GET /api/health` — a liveness response; it does not prove that upstream carriers are reachable.
+
+#### Tracking API Response
+
+The `/api/track` endpoint returns a structured response:
+
+```json
+{
+  "carrier": "fedex",
+  "source": "fedex",
+  "status": "in_transit",
+  "confidence": "high",
+  "truth": {
+    "latestReceived": { "stage": "in_transit", "timestampMs": 1234567890000, ... },
+    "latestTrusted": { "stage": "out_for_delivery", "timestampMs": 1234569000000, ... },
+    "selected": { "stage": "out_for_delivery", ... },
+    "conflicts": [],
+    "insights": {
+      "delay": { "level": "possible", "reason": "in_transit_without_completion" },
+      "customs": { "state": "insufficient_evidence", "reason": "no_customs_signals" },
+      "estimate": { "source": "carrier", "value": "2026-11-09", "confidence": "reported" }
+    }
+  },
+  "expectedDelivery": "2026-11-09",
+  "service": "Express",
+  "events": [ ... timeline array ... ]
+}
+```
+
+- **status**: Determined chronologically by timestamp (not by arbitrary stage scoring)
+- **confidence**: "low" if conflicts detected, "high" for clean single-source, "medium" otherwise
+- **latestTrusted**: The most recent event by timestamp
+- **latestReceived**: Same as latestTrusted (for future multi-source differentiation)
+- **conflicts**: Detected when events at same timestamp have different stages or locations
+- **insights**: Delay/customs/ETA analysis from normalized events
+- **sourceRefs**: Per-event source attribution for provenance tracking
 
 ### Worldwide country directory
 
@@ -79,8 +114,12 @@ Open http://localhost:4173. Static preview is for layout only; Pages Functions a
 - `functions/api/coverage.js` — catalog-derived country classification and counts
 - `functions/api/health.js` — liveness endpoint
 - `functions/lib/country-codes.mjs` — ISO 3166-1 alpha-2 country/territory codes
+- `functions/lib/shipment-truth.mjs` — deterministic shipment truth resolution engine (chronology-based, conflict detection, confidence modeling)
+- `functions/lib/exportflow-carrier-engine.mjs` — ExportFlow-owned facade over universal-parcel-scraper
+- `scripts/shipment-truth-test.mjs` — unit tests for the truth engine
 - `scripts/` — build and regression tests
 - `.github/workflows/ci.yml` — CI on pushes and pull requests
+- `docs/roadmaps/` — strategic product roadmaps (2.0 and 3.0)
 
 ## Cloudflare Pages
 
