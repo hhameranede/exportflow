@@ -1,6 +1,7 @@
 import { createTracker, TrackingError } from "../../node_modules/universal-parcel-scraper/dist/facade/index.js";
 import { createCloudflareFetch } from "../lib/cloudflare-fetch.mjs";
 import { safeEventPoint } from "../lib/coordinates.mjs";
+import { resolveShipmentTruth } from "../lib/shipment-truth.mjs";
 
 const MAX_BODY_CHARS = 4_096;
 const MAX_NUMBER_LENGTH = 40;
@@ -126,14 +127,34 @@ function projectResult(response) {
     stage: safeStage(event?.stage),
     ...(safeEventPoint(event?.point) ? { point: safeEventPoint(event.point) } : {})
   })) : [];
+  const truth = resolveShipmentTruth({
+    events,
+    status: safeStage(result.current_stage),
+    source: safeText(response?.source, 80) || "carrier",
+    expectedDelivery: safeText(result.expected_delivery, 80)
+  });
 
   return {
     carrier: safeText(response?.carrier, 80) || "unknown",
     source: safeText(response?.source, 80) || "carrier",
-    status: safeStage(result.current_stage),
+    status: truth.status,
+    confidence: truth.confidence,
+    truth: {
+      selected: truth.selected,
+      conflicts: truth.conflicts,
+      insights: truth.insights
+    },
     expectedDelivery: safeText(result.expected_delivery, 80),
     service: safeText(result.service_name, 120),
-    events
+    events: truth.timeline.map(event => ({
+      time: event.time || event.rawTime,
+      location: event.location,
+      description: event.description,
+      stage: safeStage(event.stage),
+      source: event.source,
+      sourceRefs: event.sourceRefs,
+      ...(safeEventPoint(event.point) ? { point: safeEventPoint(event.point) } : {})
+    }))
   };
 }
 

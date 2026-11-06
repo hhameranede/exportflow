@@ -15,7 +15,7 @@ The upstream catalog documents thousands of carrier names and dedicated adapters
 
 ### Implemented routes
 
-- `POST /api/track` — server-side carrier lookup. Accepts a tracking number and optional carrier, postcode and language (`en`, `ar`, `es`, `zh`, `hi`, `pt`, `fr`, `ru`). Tracking numbers are not sent to browser-side third-party APIs.
+- `POST /api/track` — server-side carrier lookup. Accepts a tracking number and optional carrier, postcode and language (`en`, `ar`, `es`, `zh`, `hi`, `pt`, `fr`, `ru`). Returns normalized timeline events with deterministic status/confidence/conflict insights. Tracking numbers are not sent to browser-side third-party APIs.
 - `GET /api/carriers` — exposes the installed carrier ID catalog.
 - `GET /api/coverage` — returns a live country-by-country classification derived from the installed carrier catalog.
 - `GET /api/health` — a liveness response; it does not prove that upstream carriers are reachable.
