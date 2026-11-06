@@ -291,13 +291,16 @@ test("trusted and explicitly untrusted duplicates are not merged", () => {
   const truth = resolveShipmentTruth({
     source: "carrier-a",
     events: [
-      event("2026-11-06T10:00:00Z", "in_transit", "Same provider scan"),
-      event("2026-11-06T10:00:00Z", "in_transit", "Same provider scan", { trusted: false })
+      event("2026-11-06T10:00:00Z", "in_transit", "Same provider scan", { source: "carrier-a" }),
+      event("2026-11-06T10:00:00Z", "in_transit", "Same provider scan", {
+        trusted: false,
+        source: "carrier-b"
+      })
     ]
   });
   assert.equal(truth.timeline.length, 2);
-  assert.equal(truth.latestReceived.trusted, undefined);
-  assert.equal(truth.latestTrusted.stage, "in_transit");
+  assert.equal(truth.latestReceived.source, "carrier-b");
+  assert.equal(truth.latestTrusted.source, "carrier-a");
 });
 
 console.log("All shipment truth tests passed.");
