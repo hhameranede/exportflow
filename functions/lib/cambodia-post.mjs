@@ -65,6 +65,10 @@ export function parseCambodiaPostTime(raw) {
   if (meridiem === "AM" && hour === 12) hour = 0;
   if (year < 2000 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31
     || hour > 23 || minute > 59 || secondOfMinute > 59) return null;
+  const calendar = new Date(Date.UTC(year, month - 1, day, hour, minute, secondOfMinute));
+  if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1
+    || calendar.getUTCDate() !== day || calendar.getUTCHours() !== hour
+    || calendar.getUTCMinutes() !== minute || calendar.getUTCSeconds() !== secondOfMinute) return null;
 
   const iso = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:${String(secondOfMinute).padStart(2, "0")}+07:00`;
   return Number.isFinite(Date.parse(iso)) ? iso : null;
@@ -78,6 +82,37 @@ export function cambodiaPostStage(value) {
   if (/in transit|transit|departed|arrived|dispatch|forwarded|customs|sorting|processed|received at/.test(text)) return "in_transit";
   if (/accepted|posted|shipment information|item accepted|pre-advice|collected/.test(text)) return "pending";
   return "unknown";
+}
+
+export async function readCambodiaPostBody(response) {
+  const reader = response?.body?.getReader?.();
+  if (!reader) {
+    const body = await response.text();
+    if (new TextEncoder().encode(body).byteLength > MAX_RESPONSE_BYTES) {
+      throw new SchemaError("Cambodia Post", "The tracking response exceeded the size limit.");
+    }
+    return body;
+  }
+
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let body = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > MAX_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => {});
+        throw new SchemaError("Cambodia Post", "The tracking response exceeded the size limit.");
+      }
+      body += decoder.decode(value, { stream: true });
+    }
+    body += decoder.decode();
+    return body;
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 function extractRows(html) {
@@ -182,8 +217,7 @@ export function createCambodiaPostAdapter(environment = {}) {
 
       const declaredLength = Number(response.headers.get("Content-Length") || 0);
       if (declaredLength > MAX_RESPONSE_BYTES) throw new SchemaError("Cambodia Post", "The tracking response exceeded the size limit.");
-      const html = await response.text();
-      if (new TextEncoder().encode(html).byteLength > MAX_RESPONSE_BYTES) throw new SchemaError("Cambodia Post", "The tracking response exceeded the size limit.");
+      const html = await readCambodiaPostBody(response);
       return parseCambodiaPostHtml(html, number);
     }
   };
