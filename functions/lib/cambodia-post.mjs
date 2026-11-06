@@ -85,7 +85,7 @@ function extractRows(html) {
   for (const tableMatch of String(html).matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/gi)) {
     const table = tableMatch[1];
     for (const rowMatch of table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
-      const cells = [...rowMatch[1].matchAll(/<td\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)]
+      const cells = [...rowMatch[1].matchAll(/<td\\b[^>]*>([\\s\\S]*?)<\\/td>/gi)]
         .map(match => htmlText(match[1]));
       if (cells.length >= 3 && cells.some(Boolean)) rows.push(cells);
     }
