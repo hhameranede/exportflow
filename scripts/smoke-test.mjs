@@ -40,6 +40,7 @@ assert.ok(expectedKeys.length >= 90, "The homepage and coverage UI translation b
 for (const locale of locales) {
   assert.deepEqual(Object.keys(translations[locale]).sort(), expectedKeys, locale + " must provide every translation key");
   assert.ok(translations[locale].metaDescription, locale + " must include translated SEO description");
+  assert.ok(translations[locale].resultLiveEyebrow && translations[locale].liveLabel, locale + " must label carrier responses");
 }
 for (const locale of locales) assert.match(html, new RegExp('<option value="' + locale + '"'), "Language selector is missing " + locale);
 for (const [pageName, pageHtml] of [["homepage", html], ["coverage page", coverageHtml]]) {
@@ -51,11 +52,15 @@ for (const [pageName, pageHtml] of [["homepage", html], ["coverage page", covera
   }
 }
 assert.match(js, /supportedLocales\s*=\s*\["en", "ar", "es", "zh", "hi", "pt", "fr", "ru"\]/);
+assert.equal(translations.en.resultLiveEyebrow, "CARRIER RESPONSE", "A returned carrier lookup must not imply a continuously live connection");
+assert.equal(translations.en.liveLabel, "Received", "The result badge must describe receipt, not live freshness");
 assert.match(trackApi, /\^\(en\|ar\|es\|zh\|hi\|pt\|fr\|ru\)\$/i, "Tracking API must accept exactly the eight supported locales");
 assert.match(js, /html\.dir\s*=\s*locale === "ar" \? "rtl" : "ltr"/, "Arabic must switch the page to RTL");
 assert.match(js, /localStorage\.setItem\("exportflow-language"/, "Language choice must persist");
 assert.doesNotMatch(js, /EXF-DEMO-001/, "The fake sample parcel flow must not be presented as live tracking");
 assert.doesNotMatch(html, /98\.4%|200\+ carriers worldwide/i, "Unverified homepage statistics must be removed");
+assert.doesNotMatch(html, /LIVE CARRIER RESULT|>Live<\/span>/i, "Static result markup must not claim continuously live data");
+assert.match(html, /meta name="description" content="Track parcels across carrier networks with one clear timeline\. See carrier-reported shipment updates, not guessed data\."/);
 
 assert.match(js, /fetch\("\/api\/track"/, "Tracking form must call the server-side tracking API");
 assert.match(js, /postcodeInput\.value\.trim\(\)/, "Optional postcode should be submitted to the API");
@@ -99,6 +104,7 @@ assert.match(coverageHtml, /<link rel="canonical" href="https:\/\/exportflow\.me
 assert.match(coverageHtml, /application\/ld\+json/);
 assert.match(coverageHtml, /id="coverageSearch"/);
 assert.match(coverageHtml, /id="coverageFilter"/);
+assert.match(coverageHtml, /value="browser-required"/);
 assert.equal((coverageHtml.match(/data-country-code="/g) || []).length, 249, "Coverage directory must statically list all 249 country/territory codes");
 assert.match(coverageHtml, /not a guarantee that every parcel can be tracked/i, "Coverage page must explain that catalog presence is not a guarantee");
 assert.match(coverageJs, /fetch\("\/api\/coverage"/);
@@ -106,13 +112,22 @@ assert.match(coverageJs, /Intl\.DisplayNames/, "Country names should be localize
 assert.match(coverageJs, /row\.dataset\.carriersSearch = names\.join\(" "\)/, "Directory search must include every carrier, not only displayed names");
 assert.match(coverageJs, /row\.dataset\.carriersSearch/, "Carrier search index must be used when filtering countries");
 assert.match(coverageJs, /coverageStatusDirect/);
+assert.match(coverageJs, /coverageStatusBrowserRequired/);
+assert.match(coverageJs, /row\.dataset\.browserRequired = String\(country\.browserRequiredCarrierCount > 0\)/, "Browser-required carrier presence must be tracked separately from each country's primary status");
+assert.match(coverageJs, /status === "browser-required" && row\.dataset\.browserRequired === "true"/, "Browser-required filter must include countries that also have direct adapters or universal fallbacks");
+assert.ok(expectedKeys.includes("coverageStatusBrowserRequired"), "Browser-required coverage needs a translated label");
+assert.ok(expectedKeys.includes("coverageBrowserTag"), "Browser-required carrier names need a translated tag");
+assert.match(coverageJs, /carrier\.requiresBrowser/);
 assert.match(coverageJs, /coverageStatusFallback/);
 assert.match(coverageJs, /coverageStatusLink/);
 assert.match(coverageJs, /coverageStatusNone/);
 assert.match(coverageApi, /CARRIERS/);
+assert.match(coverageApi, /CARRIER_DEFINITIONS/);
+assert.match(coverageApi, /browser-required/);
 assert.match(coverageApi, /universal-fallback/);
 assert.match(coverageApi, /link-only/);
 assert.match(coverageApi, /not-listed/);
+assert.match(coverageApi, /browserRequiredCountryCount/);
 assert.match(coverageApi, /SOURCE_REVISION/);
 assert.match(carriersApi, /CARRIER_IDS/);
 
