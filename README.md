@@ -31,8 +31,8 @@ The `/api/track` endpoint returns a structured response:
   "status": "out_for_delivery",
   "confidence": "medium",
   "truth": {
-    "latestReceived": { "stage": "in_transit", "time": "2026-11-06T10:00:00.000Z" },
-    "latestTrusted": { "stage": "out_for_delivery", "time": "2026-11-06T09:30:00.000Z" },
+    "latestReceived": { "stage": "in_transit", "time": "2026-11-06T08:00:00.000Z", "receivedAt": "2026-11-06T10:00:00.000Z" },
+    "latestTrusted": { "stage": "out_for_delivery", "time": "2026-11-06T09:30:00.000Z", "receivedAt": "2026-11-06T09:31:00.000Z" },
     "selected": { "stage": "out_for_delivery" },
     "conflicts": [],
     "insights": {
