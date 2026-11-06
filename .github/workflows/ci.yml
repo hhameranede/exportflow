@@ -57,3 +57,6 @@ jobs:
           test -s dist/site.webmanifest
           test -s dist/og-image-20261106.png
           test -s dist/coverage/index.html
+          for page in about contact cookies disclaimer privacy security terms; do
+            test -s "dist/$page/index.html"
+          done
