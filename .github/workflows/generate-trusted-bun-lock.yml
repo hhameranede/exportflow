@@ -1,0 +1,39 @@
+name: Generate Bun lockfile with approved engine script
+on:
+  push:
+    branches:
+      - fix/bun-lockfile-sync-2026-11-06
+permissions:
+  contents: write
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          ref: fix/bun-lockfile-sync-2026-11-06
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Bun 1.4.4
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Generate lockfile from trusted manifest
+        run: bun install --lockfile-only
+      - name: Run approved engine lifecycle script
+        run: bun install --frozen-lockfile
+      - name: Verify tests
+        run: npm test
+      - name: Build Pages output
+        run: npm run build
+      - name: Commit generated lockfile
+        run: |
+          if git diff --quiet -- bun.lock; then
+            echo "bun.lock is already synchronized"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add bun.lock
+            git commit -m "chore: trust pinned parcel engine and sync Bun lock"
+            git push origin HEAD:fix/bun-lockfile-sync-2026-11-06
+          fi
