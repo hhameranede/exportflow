@@ -4,7 +4,7 @@ import { COUNTRY_CODES } from "../functions/lib/country-codes.mjs";
 
 const [
   html, css, js, translationsSource, coverageHtml, coverageJs, trackApi, coverageApi, build,
-  robots, sitemap, headers, carriersApi
+  robots, sitemap, headers, carriersApi, privacyHtml, termsHtml
 ] = await Promise.all([
   readFile("index.html", "utf8"),
   readFile("styles.css", "utf8"),
@@ -18,7 +18,9 @@ const [
   readFile("robots.txt", "utf8"),
   readFile("sitemap.xml", "utf8"),
   readFile("_headers", "utf8"),
-  readFile("functions/api/carriers.js", "utf8")
+  readFile("functions/api/carriers.js", "utf8"),
+  readFile("privacy/index.html", "utf8"),
+  readFile("terms/index.html", "utf8")
 ]);
 
 assert.match(html, /<html[^>]+lang="en"[^>]+dir="ltr"/i, "English LTR homepage should exist");
@@ -93,9 +95,16 @@ assert.match(robots, /Disallow: \/api\/track/);
 assert.doesNotMatch(robots, /Disallow: \/api\/coverage/);
 assert.match(coverageApi, /X-Robots-Tag/);
 assert.match(robots, /Sitemap: https:\/\/exportflow\.me\/sitemap\.xml/);
-assert.match(sitemap, /<loc>https:\/\/exportflow\.me\/<\/loc>/);
-assert.match(sitemap, /<loc>https:\/\/exportflow\.me\/coverage\/<\/loc>/);
+const sitemapLocations = [...sitemap.matchAll(/<loc>(https:\/\/exportflow\.me\/[^<]*)<\/loc>/g)].map(match => match[1]);
+assert.deepEqual(sitemapLocations.sort(), [
+  "https://exportflow.me/",
+  "https://exportflow.me/coverage/",
+  "https://exportflow.me/privacy/",
+  "https://exportflow.me/terms/"
+].sort(), "Sitemap must list each public static page exactly once");
 assert.doesNotMatch(sitemap, /\/api\/|trackingNumber=/, "Private/API and per-shipment URLs must not enter the sitemap");
+assert.match(privacyHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\/privacy\/"\s*\/?>/);
+assert.match(termsHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\/terms\/"\s*\/?>/);
 
 assert.equal(COUNTRY_CODES.length, 249, "ISO 3166-1 assigned country/territory list should contain 249 alpha-2 codes");
 assert.match(coverageHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\/coverage\/"\s*\/?>/);
