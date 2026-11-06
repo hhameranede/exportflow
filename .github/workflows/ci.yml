@@ -35,6 +35,10 @@ jobs:
           node --check functions/api/carriers.js
           node --check functions/api/coverage.js
           node --check functions/api/health.js
+          node --check functions/api/engine-status.js
+          node --check functions/lib/exportflow-carrier-engine.mjs
+          node --check scripts/check-carrier-upstreams.mjs
+          node --check scripts/update-upstream-pin.mjs
           node --check functions/_middleware.js
           node --check scripts/locale-build-test.mjs
           node --check functions/lib/country-codes.mjs

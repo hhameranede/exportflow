@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "project": "ExportFlow Carrier Engine",
+  "policy": {
+    "automaticCodeImport": false,
+    "automaticProductionDeployment": false,
+    "requirePinnedRevision": true,
+    "requireLicenseVerification": true,
+    "requireOfflineFixtures": true,
+    "allowedPermissiveLicenses": ["Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC"],
+    "copyleftReviewRequired": ["LGPL-3.0", "LGPL-2.1", "AGPL-3.0", "GPL-3.0", "GPL-2.0"],
+    "privateRepositoryDoesNotRemoveUpstreamLicenseObligations": true
+  },
+  "sources": [
+    {
+      "id": "universal-parcel-scraper",
+      "repository": "plhery/universal-parcel-scraper",
+      "branch": "main",
+      "license": "Apache-2.0",
+      "role": "runtime-core",
+      "integrationMode": "pinned-dependency-and-gradual-first-party-migration",
+      "pinnedCommit": "e64a466772ef25ce68e02d9c7c9f1613eec1208b",
+      "runtimeEnabled": true,
+      "notes": "Existing tracking engine. Preserve LICENSE and NOTICE. Optional TRAWL component is AGPL-3.0 and is not included or enabled by the current integration."
+    },
+    {
+      "id": "home-assistant-parcel-integrations",
+      "organization": "ha-parcel-integrations",
+      "repositoryDiscovery": "all public ha-* repositories, excluding documentation, templates and aggregator repositories",
+      "branch": "default",
+      "license": "Per-repository SPDX metadata; no blanket license assumption",
+      "role": "carrier-adapter-candidates",
+      "integrationMode": "review-and-port-to-exportflow-adapter-contract",
+      "runtimeEnabled": false,
+      "notes": "The suite has 70+ independent repositories. Their licenses are checked individually from GitHub repository metadata. Most are Python/Home Assistant integrations and cannot be dropped into Cloudflare Pages Functions unchanged. The integration logic may be ported only after per-repository license verification, attribution review and tests."
+    },
+    {
+      "id": "parcel-tracker-bot",
+      "repository": "bernalli/parcel-tracker-bot",
+      "branch": "main",
+      "license": "MIT",
+      "role": "supplementary-carrier-candidates",
+      "integrationMode": "manual-review-and-port",
+      "runtimeEnabled": false,
+      "notes": "A smaller self-hosted plugin-based tracker. Use as an additional source of carrier candidates, not as a production dependency."
+    },
+    {
+      "id": "karrio",
+      "repository": "karrioapi/karrio",
+      "branch": "main",
+      "license": "NOASSERTION in GitHub repository metadata; Karrio README states LGPL-3.0 for core/community and a separate enterprise license for /ee",
+      "role": "shipping-api-and-carrier-plugin-reference",
+      "integrationMode": "monitor-only-until-compliance-review",
+      "runtimeEnabled": false,
+      "notes": "Potentially useful for carrier API operations such as rates, labels and tracking where supported. GitHub reports NOASSERTION for the root repository while its README describes LGPL-3.0 for core/community and a separate enterprise license for /ee. Do not import enterprise code. Require file-level license verification and a separate legal review before linking or redistributing components."
+    }
+  ]
+}

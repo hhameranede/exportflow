@@ -3,3 +3,11 @@ name = "exportflow"
 pages_build_output_dir = "./dist"
 compatibility_date = "2026-11-05"
 compatibility_flags = ["nodejs_compat"]
+
+# EU-only production and preview databases. Preview traffic never writes to production.
+[[d1_databases]]
+binding = "EXPORTFLOW_DB"
+database_name = "exportflow-intelligence-db"
+database_id = "3e91ee40-75f8-45b3-9459-a4c306f52b3b"
+preview_database_id = "9657dfdc-5b80-4a0b-a982-8865152b2c82"
+migrations_dir = "migrations"
