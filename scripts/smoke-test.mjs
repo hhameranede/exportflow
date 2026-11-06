@@ -83,7 +83,10 @@ for (const asset of ["favicon.svg", "favicon-32x32.png", "apple-touch-icon.png",
 assert.ok(headers.includes("/og-image-20261106.png\n  Cache-Control: public, max-age=31536000, immutable"), "Versioned social preview image must have immutable caching");
 
 assert.match(html, /href="\/coverage\//, "Homepage must link to the global carrier directory");
-assert.match(html, /ef-global-coverage-20261106/, "Homepage stylesheet URL must be cache-busted for this release");
+assert.match(html, /styles\.css\?v=ef-assets-refresh-20261106-02/, "Homepage CSS must use a fresh cache-busting release URL");
+assert.match(html, /translations\.js\?v=ef-assets-refresh-20261106-02/, "Translations must use a fresh cache-busting release URL");
+assert.match(html, /app\.js\?v=ef-assets-refresh-20261106-02/, "Homepage application JS must use a fresh cache-busting release URL");
+assert.ok(headers.includes("/app.js\\n  Cache-Control: public, max-age=0, must-revalidate"), "Homepage app JavaScript must be revalidated");
 assert.match(robots, /User-agent: \*/);
 assert.match(robots, /Allow: \/api\/coverage/, "Search engines must be allowed to load the directory data");
 assert.match(robots, /Disallow: \/api\/track/);
