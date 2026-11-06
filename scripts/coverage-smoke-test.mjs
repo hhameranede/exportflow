@@ -11,6 +11,14 @@ assert.ok(Array.isArray(payload.dedicatedAdapterCountries));
 assert.ok(Array.isArray(payload.universalFallbackOnlyCountries));
 assert.ok(Array.isArray(payload.linkOnlyCountries));
 assert.ok(Array.isArray(payload.customCarriers));
+assert.ok(
+  payload.universalFallbackOnlyCountries.every(country => Array.isArray(country.carriers) && country.carriers.length > 0),
+  "Universal-only countries should include the carrier names that need direct integrations"
+);
+assert.ok(
+  payload.linkOnlyCountries.every(country => Array.isArray(country.carriers) && country.carriers.length > 0),
+  "Link-only countries should include the carrier names that need direct integrations"
+);
 assert.equal(payload.countryCount, payload.dedicatedAdapterCountries.length);
 assert.ok(
   payload.countryCount >= 100,
