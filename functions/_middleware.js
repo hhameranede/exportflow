@@ -21,6 +21,29 @@ export function localeForCountry(countryCode) {
   return COUNTRY_TO_LOCALE.get(code) || "en";
 }
 
+const PREFERENCE_SENSITIVE_COUNTRIES = {
+  CA: ["fr"],
+  BE: ["fr"],
+  LU: ["fr"],
+  CH: ["fr"],
+  SG: ["zh"],
+  VU: ["fr"]
+};
+
+export function localeForVisitor(countryCode, acceptLanguage) {
+  const code = String(countryCode || "").trim().toUpperCase();
+  const alternatives = PREFERENCE_SENSITIVE_COUNTRIES[code];
+  if (!alternatives) return localeForCountry(code);
+
+  const accepted = String(acceptLanguage || "").split(",")
+    .map(value => value.trim().split(";")[0].split("-")[0].toLowerCase())
+    .filter(Boolean);
+  const matching = accepted.find(locale =>
+    SUPPORTED_LOCALES.has(locale) && (locale === "en" || alternatives.includes(locale))
+  );
+  return matching || localeForCountry(code);
+}
+
 function cookieValue(cookieHeader, name) {
   const prefix = name + "=";
   for (const item of String(cookieHeader || "").split(";")) {
@@ -47,7 +70,7 @@ export async function onRequest({ request, next }) {
   const savedLocale = cookieValue(request.headers.get("Cookie"), "ef-locale");
   const locale = SUPPORTED_LOCALES.has(savedLocale)
     ? savedLocale
-    : localeForCountry(request.cf?.country);
+    : localeForVisitor(request.cf?.country, request.headers.get("Accept-Language"));
 
   // English is the safe fallback and already lives at the unprefixed canonical URL.
   if (locale === "en") return next();
