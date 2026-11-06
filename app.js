@@ -1,3 +1,5 @@
+const languageNames = { en: "English", ar: "العربية", es: "Español", zh: "中文", hi: "हिन्दी", pt: "Português", fr: "Français", ru: "Русский" };
+
 const translations = {
 en: {
 announcement:"One simple place for all your deliveries",navHow:"How it works",navCoverage:"Coverage",navFaq:"FAQ",trackParcel:"Track a parcel",kicker:"THE DELIVERY TRACKER THAT JUST MAKES SENSE",heroLine1:"Every parcel.",heroLine2:"One clear view.",heroCopy:"Waiting on an order? Follow your delivery from dispatch to doorstep — without jumping between courier websites.",trackingLabel:"YOUR TRACKING NUMBER",postcodeLabel:"POSTCODE (OPTIONAL — SOME CARRIERS REQUIRE IT)",trackingHint:"Paste the number from your order or shipping email.",privateNote:"Private by design",trackNow:"Track parcel",noAccount:"No account needed",tryDemo:"Try a sample tracking number",heroFootnote:"From online stores to your front door. Your delivery, made simple.",moving:"Moving your way",shipmentUpdate:"Shipment update",allTogether:"All updates, together",oneTrackingPage:"One tracking page",visualCaption:"LESS GUESSING. MORE KNOWING.",shopPlatforms:"SHOP FROM YOUR FAVOURITE STORES",simpleSteps:"SIMPLE FROM THE START",howTitle:"Your parcel's journey,<br><em>without the hassle.</em>",howCopy:"No complicated setup. Just the information you need, right when you need it.",stepOneTitle:"Add your number",stepOneCopy:"Copy the tracking number from your store, seller or shipping email.",stepTwoTitle:"We find the carrier",stepTwoCopy:"ExportFlow identifies the delivery service and brings its updates together.",stepThreeTitle:"Follow every move",stepThreeCopy:"See the latest shipment status and its journey in one easy-to-read timeline.",coverageEyebrow:"BUILT FOR ONLINE SHOPPERS",coverageTitle:"One destination.<br><em>Many delivery networks.</em>",coverageCopy:"Your order can pass through more than one carrier. Our goal is to make the hand-off easier to follow, from the first scan to the final delivery.",startTracking:"Start tracking <span aria-hidden='true'>→</span>",faqEyebrow:"GOOD TO KNOW",faqTitle:"A few quick answers.",faqQ1:"Is ExportFlow a store or a courier?",faqA1:"Neither. ExportFlow is a parcel-tracking experience designed to help you follow deliveries from different stores and shipping carriers in one place.",faqQ2:"Do I need to create an account?",faqA2:"The first version is designed to let you check a parcel without creating an account. Saved parcels and alerts can be added later.",faqQ3:"Why doesn't my tracking number show an update yet?",faqA3:"A carrier may need time to register the first scan. Tracking updates appear as soon as the carrier makes them available.",footerCopy:"A clearer way to follow what you ordered.",mapEyebrow:"SHIPMENT ROUTE",mapTitleText:"Confirmed scan locations",historyEyebrow:"TRACKING HISTORY",historyTitleText:"Latest updates",etaLabel:"Estimated delivery",resultSubtitle:"Your latest carrier updates, together in one place.",sampleResult:"SAMPLE TRACKING RESULT",parcelJourney:"Your parcel journey",sampleWarning:"Demo only — these are illustrative events, not live carrier data.",sampleCarrier:"Sample carrier",inTransit:"In transit",movingStatus:"Moving",eventOne:"Shipment information received",eventOneMeta:"Sample event · Origin facility",eventTwo:"Parcel picked up",eventTwoMeta:"Sample event · Seller warehouse",eventThree:"Departed origin country",eventThreeMeta:"Sample event · International transit",eventFour:"Arrived in destination country",eventFourMeta:"Waiting for next carrier scan",eventFive:"Out for delivery",eventFiveMeta:"Not reached yet",done:"Done",errorEmpty:"Enter a tracking number first.",errorUnknown:"This prototype only recognises the sample code EXF-DEMO-001. Live carrier lookup is not connected yet."
@@ -9,7 +11,6 @@ announcement:"مكان واحد بسيط لمتابعة جميع شحناتك",n
 
 const html = document.documentElement;
 const languageToggle = document.getElementById("languageToggle");
-const languageLabel = document.getElementById("languageLabel");
 const trackingInput = document.getElementById("trackingNumber");
 const postcodeInput = document.getElementById("postcodeInput");
 const clearInput = document.getElementById("clearInput");
@@ -22,21 +23,21 @@ let shipmentMapLayer = null;
 let currentMapEvents = [];
 
 function setLanguage(language) {
-  const pack = translations[language];
+  const pack = translations[language] || translations.en;
   html.lang = language;
   html.dir = language === "ar" ? "rtl" : "ltr";
+  languageToggle.value = language;
   document.querySelectorAll("[data-i18n]").forEach((element) => {
     const value = pack[element.dataset.i18n];
     if (value !== undefined) element.innerHTML = value;
   });
-  languageLabel.textContent = language === "en" ? "العربية" : "English";
   document.querySelector('meta[name="description"]').content = language === "ar"
     ? "تابع طرودك في مكان واحد. يجمع ExportFlow تحديثات الشحن في تجربة تتبع بسيطة."
     : "Track your parcels in one clear place. Follow deliveries from online stores across carriers.";
   localStorage.setItem("exportflow-language", language);
 }
 
-languageToggle.addEventListener("click", () => setLanguage(html.lang === "en" ? "ar" : "en"));
+languageToggle.addEventListener("change", (event) => setLanguage(event.target.value));
 trackingInput.addEventListener("input", () => {
   clearInput.hidden = trackingInput.value.length === 0;
   formError.hidden = true;
