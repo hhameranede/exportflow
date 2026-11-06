@@ -47,6 +47,19 @@ This backlog records carriers with an official tracking entry point that were no
 | --- | --- | --- | --- |
 | Fiji | Post Fiji | https://www.postfiji.com.fj/VPO/Tracking.aspx | The portal was reported as under construction during research; recheck before integration. |
 
+## Priority A — European countries to upgrade from universal-only
+
+The following operators are already named in the upstream carrier catalog, but their pinned `carrier.json` definitions currently set `tracking.adapter: "universal"` and their READMEs state that they have no dedicated adapter. These are **upgrade targets**, not missing catalog names.
+
+| Country | Operator | Official tracking entry point | Current blocker / next step |
+| --- | --- | --- | --- |
+| Moldova | Poșta Moldovei | https://www.posta.md/en/track-trace | Cataloged as universal-only. The public portal accepts item IDs; inspect the official form flow and validate domestic and international formats. |
+| Montenegro | Pošta Crne Gore | https://webpostar.postacg.me/web_services/track_and_trace | Cataloged as universal-only. The upstream carrier README records a reCAPTCHA gate; request an approved API / partner channel rather than bypassing the challenge. |
+| Bosnia and Herzegovina | Hrvatska pošta Mostar | https://www.post.ba/services/track-and-trace | Cataloged as universal-only. Public Track & Trace accepts shipment number via `tntnumber`; confirm a real sample and distinguish it from BH Pošta, which is a separate operator. |
+| Kosovo | Posta e Kosovës | https://postakosoves.com/ | Cataloged as universal-only. Upstream notes that the tracking form uses a WordPress nonce and no public known-item sample has verified a usable response. Ask for an approved integration route. |
+
+Other European operators already have dedicated adapters and must not be counted as new additions here: Posta Shqiptare and HayPost, for example.
+
 ## Implementation gates
 
 1. Confirm that the candidate is absent from the current dedicated-adapter registry and identify whether UPU already returns usable history.
