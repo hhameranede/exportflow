@@ -3423,3 +3423,334 @@ body.coverage-page .coverage-footer a:hover { color: var(--ef-coral); }
 @media (prefers-reduced-motion: reduce) {
   .catalog-stat strong.is-counted { animation: none; }
 }
+
+
+/* ==========================================================================
+   13. UNIFIED DIRECTORY + TRUST PAGE SYSTEM (Hi design alignment)
+   ========================================================================== */
+.coverage-page,
+.trust-page {
+  background: var(--ef-cream);
+  color: var(--ef-text-main);
+  overflow-x: clip;
+}
+.coverage-page .coverage-header,
+.coverage-page .site-header,
+.trust-page .site-header {
+  box-sizing: border-box;
+  width: min(1180px, calc(100% - 40px));
+  min-height: 70px;
+  height: 70px;
+  margin: 18px auto 0;
+  padding: 0 22px;
+  border: 1px solid var(--ef-border-light);
+  border-radius: var(--radius-xl);
+  background: rgba(255,255,255,.96);
+  box-shadow: var(--shadow-subtle);
+}
+.coverage-page .coverage-header .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.coverage-page .coverage-header .header-cta,
+.trust-page .site-header .header-cta,
+.coverage-page .site-header .header-cta {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 16px;
+  border-radius: var(--radius-full);
+  background: var(--ef-navy);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.coverage-page .coverage-header .header-cta:hover,
+.trust-page .site-header .header-cta:hover,
+.coverage-page .site-header .header-cta:hover {
+  background: var(--ef-coral);
+  transform: translateY(-1px);
+}
+.coverage-page .coverage-main {
+  width: min(1180px, calc(100% - 40px));
+  padding: 54px 0 80px;
+}
+.coverage-page .coverage-intro {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: clamp(30px, 5.5vw, 62px);
+  border: 1px solid var(--ef-border-light);
+  border-radius: 28px;
+  background: linear-gradient(140deg,#fff 0%,#fcfaf7 100%);
+  box-shadow: var(--shadow-card);
+}
+.coverage-page .coverage-intro::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 300px;
+  height: 300px;
+  inset-block-start: -130px;
+  inset-inline-end: -100px;
+  border-radius: 50%;
+  background: radial-gradient(circle,var(--ef-coral-tint),transparent 70%);
+  pointer-events: none;
+}
+.coverage-page .coverage-intro .eyebrow {
+  color: var(--ef-coral);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: .13em;
+}
+.coverage-page .coverage-intro h1 {
+  max-width: 14ch;
+  margin: 12px 0 16px;
+  font-size: clamp(36px,5.8vw,64px);
+  line-height: 1.04;
+  letter-spacing: -.045em;
+}
+.coverage-page .coverage-lead {
+  max-width: 68ch;
+  margin: 0;
+  font-size: clamp(15px,1.6vw,18px);
+  line-height: 1.75;
+}
+.coverage-page .coverage-metrics {
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 0;
+  margin: 34px 0 0;
+  padding: 18px 0 0;
+  border-top: 1px solid var(--ef-border-light);
+}
+.coverage-page .coverage-metrics article {
+  min-width: 0;
+  padding: 8px 22px;
+  border: 0;
+  border-inline-end: 1px solid var(--ef-border-light);
+  border-radius: 0;
+  background: transparent;
+  gap: 4px;
+}
+.coverage-page .coverage-metrics article:first-child { padding-inline-start: 0; }
+.coverage-page .coverage-metrics article:last-child {
+  padding-inline-end: 0;
+  border-inline-end: 0;
+}
+.coverage-page .coverage-metrics strong {
+  font-size: clamp(26px,3vw,36px);
+  line-height: 1.1;
+}
+.coverage-page .coverage-metrics span { font-size: 12.5px; line-height: 1.5; }
+.coverage-page .coverage-tools {
+  grid-template-columns: minmax(0,1fr) minmax(220px,280px);
+  align-items: end;
+  gap: 14px;
+  margin: 28px 0 12px;
+  padding: 18px;
+  border: 1px solid var(--ef-border-light);
+  border-radius: 20px;
+  background: rgba(255,255,255,.78);
+}
+.coverage-page .coverage-tools label { gap: 7px; font-size: 12px; }
+.coverage-page .coverage-tools input,
+.coverage-page .coverage-tools select {
+  min-height: 50px;
+  height: 50px;
+  border-radius: 13px;
+  border-color: #e4e1db;
+  background: #fff;
+  font-size: 14px;
+}
+.coverage-page .coverage-result-count {
+  margin: 14px 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.coverage-page .coverage-country-list {
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 10px;
+}
+.coverage-page .coverage-country-list li {
+  min-width: 0;
+  padding: 14px 15px;
+  border-radius: 15px;
+  box-shadow: 0 2px 8px rgba(18,26,43,.025);
+}
+.coverage-page .coverage-country-list li:hover {
+  border-color: var(--ef-coral);
+  box-shadow: 0 8px 24px rgba(18,26,43,.06);
+}
+.coverage-page .coverage-country-name { font-size: 13.5px; }
+.coverage-page .coverage-country-list [data-country-status] {
+  border-radius: var(--radius-full);
+  background: var(--ef-paper);
+  font-size: 10.5px;
+}
+.coverage-page .coverage-footer {
+  box-sizing: border-box;
+  width: min(1180px,calc(100% - 40px));
+  margin: 0 auto 24px;
+  padding: 24px 28px;
+  border-radius: 20px;
+  background: var(--ef-navy-dark);
+  color: var(--ef-text-on-dark-muted);
+}
+.coverage-page .coverage-footer a {
+  color: var(--ef-text-on-dark);
+  text-decoration: none;
+}
+.coverage-page .coverage-footer a:hover { color: var(--ef-coral); }
+
+/* Privacy and terms join the same page shell as About, Contact and Security. */
+body.trust-page .site-header {
+  width: min(1180px,calc(100% - 40px));
+}
+body.trust-page .legal-container {
+  box-sizing: border-box;
+  width: min(940px,calc(100% - 40px));
+  max-width: none;
+  margin: 0 auto;
+  padding: 28px 0 76px;
+}
+body.trust-page .legal-container > .privacy-badge,
+body.trust-page .legal-container > h1,
+body.trust-page .legal-container > .legal-date,
+body.trust-page .legal-container > .legal-content {
+  display: block;
+}
+body.trust-page .legal-container > .privacy-badge { margin-top: 24px; }
+body.trust-page .legal-container > h1 {
+  margin: 12px 0;
+  font-size: clamp(36px,6vw,64px);
+  line-height: 1.04;
+  letter-spacing: -.045em;
+}
+body.trust-page .legal-date {
+  margin: 0 0 20px;
+  font-size: 12px;
+}
+body.trust-page .legal-content {
+  max-width: 76ch;
+  margin: 18px 0 0;
+  padding: clamp(24px,4.6vw,44px);
+  border: 1px solid var(--ef-border-light);
+  border-radius: 24px;
+  background: var(--ef-surface-white);
+  box-shadow: var(--shadow-card);
+}
+body.trust-page .legal-content h2 {
+  margin: 30px 0 10px;
+  font-size: clamp(19px,2.8vw,24px);
+  line-height: 1.25;
+}
+body.trust-page .legal-content h2:first-child { margin-top: 0; }
+body.trust-page .legal-content p,
+body.trust-page .legal-content li {
+  font-size: 15px;
+  line-height: 1.82;
+}
+body.trust-page .coverage-footer {
+  width: min(1180px,calc(100% - 40px));
+  margin: 0 auto 24px;
+}
+
+/* Small screens: one consistent compact header and no horizontal page drift. */
+@media (max-width: 900px) {
+  .coverage-page .coverage-country-list { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 680px) {
+  .coverage-page .coverage-header,
+  .coverage-page .site-header,
+  .trust-page .site-header {
+    width: calc(100% - 24px);
+    min-height: 60px;
+    height: 60px;
+    margin-top: 12px;
+    padding: 0 14px;
+    gap: 8px;
+  }
+  .coverage-page .coverage-header .header-actions { gap: 7px; }
+  .coverage-page .coverage-header .header-cta,
+  .trust-page .site-header .header-cta,
+  .coverage-page .site-header .header-cta {
+    min-height: 38px;
+    padding: 0 11px;
+    font-size: 11.5px;
+  }
+  .coverage-page .coverage-main {
+    width: calc(100% - 24px);
+    padding: 24px 0 48px;
+  }
+  .coverage-page .coverage-intro {
+    padding: 28px 22px 22px;
+    border-radius: 22px;
+  }
+  .coverage-page .coverage-intro h1 {
+    max-width: 12ch;
+    font-size: clamp(34px,9vw,46px);
+  }
+  .coverage-page .coverage-lead { font-size: 14px; }
+  .coverage-page .coverage-metrics {
+    grid-template-columns: repeat(3,minmax(0,1fr));
+    gap: 8px;
+    margin-top: 24px;
+    padding-top: 16px;
+  }
+  .coverage-page .coverage-metrics article {
+    padding: 4px 7px;
+    border-inline-end: 1px solid var(--ef-border-light);
+  }
+  .coverage-page .coverage-metrics strong { font-size: 22px; }
+  .coverage-page .coverage-metrics span { font-size: 10px; line-height: 1.35; }
+  .coverage-page .coverage-tools {
+    grid-template-columns: minmax(0,1fr);
+    gap: 12px;
+    margin-top: 18px;
+    padding: 14px;
+    border-radius: 17px;
+  }
+  .coverage-page .coverage-tools input,
+  .coverage-page .coverage-tools select { min-height: 48px; height: 48px; }
+  .coverage-page .coverage-country-list {
+    grid-template-columns: minmax(0,1fr);
+    gap: 8px;
+  }
+  .coverage-page .coverage-country-list li {
+    grid-template-columns: minmax(0,1fr) auto;
+    padding: 12px 14px;
+    border-radius: 13px;
+  }
+  .coverage-page .coverage-country-list [data-country-carriers] { font-size: 11px; }
+  .coverage-page .coverage-footer {
+    width: calc(100% - 24px);
+    margin-bottom: 14px;
+    padding: 20px 18px;
+  }
+  body.trust-page .legal-container {
+    width: calc(100% - 24px);
+    padding: 22px 0 48px;
+  }
+  body.trust-page .legal-container > h1 { font-size: clamp(34px,10vw,46px); }
+  body.trust-page .legal-content {
+    padding: 24px 20px;
+    border-radius: 20px;
+  }
+  body.trust-page .coverage-footer {
+    width: calc(100% - 24px);
+    margin-bottom: 14px;
+  }
+}
+@media (max-width: 360px) {
+  .coverage-page .coverage-header .brand-name,
+  .trust-page .site-header .brand-name { font-size: 16px; }
+  .coverage-page .coverage-header .header-cta,
+  .trust-page .site-header .header-cta { padding-inline: 8px; font-size: 10.5px; }
+  .coverage-page .coverage-metrics span { font-size: 9px; }
+}
