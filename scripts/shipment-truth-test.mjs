@@ -28,7 +28,7 @@ test("exact duplicate events merge source provenance", () => {
     ]
   });
   assert.equal(truth.timeline.length, 1);
-  assert.deepEqual(truth.timeline[0].sourceRefs.sort(), ["carrier-a", "carrier-b"]);
+  assert.deepEqual([...truth.timeline[0].sourceRefs].sort(), ["carrier-a", "carrier-b"]);
 });
 
 test("different scans within the same minute are not collapsed", () => {
@@ -67,6 +67,22 @@ test("latestReceived and latestTrusted represent different facts", () => {
   assert.notEqual(truth.latestReceived.timestampMs, truth.latestTrusted.timestampMs);
 });
 
+test("explicit receivedAt timestamps override ingestion order when complete", () => {
+  const truth = resolveShipmentTruth({
+    source: "carrier-a",
+    events: [
+      event("2026-11-06T10:00:00Z", "out_for_delivery", "Newer scan", {
+        receivedAt: "2026-11-06T10:04:00Z"
+      }),
+      event("2026-11-06T08:00:00Z", "in_transit", "Older scan received later", {
+        receivedAt: "2026-11-06T10:05:00Z"
+      })
+    ]
+  });
+  assert.equal(truth.latestReceived.description, "Older scan received later");
+  assert.equal(truth.latestTrusted.description, "Newer scan");
+});
+
 test("event-level source references are preserved", () => {
   const truth = resolveShipmentTruth({
     source: "fallback-source",
@@ -82,9 +98,7 @@ test("event-level source references are preserved", () => {
 test("timezone-less timestamps are retained but not trusted", () => {
   const truth = resolveShipmentTruth({
     source: "carrier-a",
-    events: [
-      event("2026-11-06T10:00:00", "delivered", "Ambiguous local timestamp")
-    ]
+    events: [event("2026-11-06T10:00:00", "delivered", "Ambiguous local timestamp")]
   });
   assert.equal(truth.timeline[0].time, null);
   assert.equal(truth.timeline[0].rawTime, "2026-11-06T10:00:00");
@@ -92,16 +106,29 @@ test("timezone-less timestamps are retained but not trusted", () => {
   assert.equal(truth.confidence, "low");
 });
 
-test("invalid timestamps do not become trusted facts", () => {
+test("invalid calendar timestamps do not become trusted facts", () => {
   const truth = resolveShipmentTruth({
     source: "carrier-a",
     events: [
-      event("not-a-date", "delivered", "Invalid timestamp"),
+      event("2026-02-30T10:00:00Z", "delivered", "Impossible calendar date"),
       event("2026-11-06T09:00:00+01:00", "in_transit", "Valid offset timestamp")
     ]
   });
   assert.equal(truth.latestTrusted.stage, "in_transit");
   assert.equal(truth.latestTrusted.time, "2026-11-06T08:00:00.000Z");
+});
+
+test("explicitly untrusted events are excluded from trusted chronology", () => {
+  const truth = resolveShipmentTruth({
+    source: "carrier-a",
+    events: [
+      event("2026-11-06T10:00:00Z", "delivered", "Unverified imported scan", { trusted: false }),
+      event("2026-11-06T09:00:00Z", "in_transit", "Validated scan")
+    ]
+  });
+  assert.equal(truth.latestReceived.description, "Unverified imported scan");
+  assert.equal(truth.latestTrusted.description, "Validated scan");
+  assert.equal(truth.status, "in_transit");
 });
 
 test("single-source timestamp evidence is medium, not high confidence", () => {
@@ -116,7 +143,10 @@ test("same-time status and location conflicts reduce confidence", () => {
   const truth = resolveShipmentTruth({
     events: [
       event("2026-11-06T08:00:00Z", "in_transit", "Arrived at facility", { location: "Riyadh" }),
-      event("2026-11-06T08:00:00Z", "out_for_delivery", "Out for delivery", { location: "Jeddah", source: "carrier-b" })
+      event("2026-11-06T08:00:00Z", "out_for_delivery", "Out for delivery", {
+        location: "Jeddah",
+        source: "carrier-b"
+      })
     ],
     source: "carrier-a"
   });
@@ -144,13 +174,36 @@ test("two ordinary scans alone do not imply a delay", () => {
   assert.equal(truth.insights.delay.level, "insufficient_evidence");
 });
 
-test("explicit carrier delay evidence is classified as possible, not confirmed", () => {
+test("explicit current carrier delay evidence is classified as possible, not confirmed", () => {
   const truth = resolveShipmentTruth({
     source: "carrier-a",
     events: [event("2026-11-06T08:00:00Z", "delayed", "Shipment delayed due to operational disruption")]
   });
   assert.equal(truth.insights.delay.level, "possible");
   assert.equal(truth.insights.delay.reason, "explicit_carrier_delay_signal");
+});
+
+test("a later normal or delivered scan clears an older possible delay signal", () => {
+  const truth = resolveShipmentTruth({
+    source: "carrier-a",
+    events: [
+      event("2026-11-06T08:00:00Z", "delayed", "Shipment delayed due to weather"),
+      event("2026-11-06T10:00:00Z", "delivered", "Delivered to recipient")
+    ]
+  });
+  assert.equal(truth.insights.delay.level, "insufficient_evidence");
+  assert.equal(truth.insights.delay.reason, "shipment_delivered");
+});
+
+test("latest customs event supersedes an older hold", () => {
+  const truth = resolveShipmentTruth({
+    source: "carrier-a",
+    events: [
+      event("2026-11-06T08:00:00Z", "customs_hold", "Customs hold: inspection required"),
+      event("2026-11-06T10:00:00Z", "customs_released", "Released by customs")
+    ]
+  });
+  assert.equal(truth.insights.customs.state, "released");
 });
 
 test("customs hold and active processing are distinguished", () => {
@@ -167,7 +220,7 @@ test("customs hold and active processing are distinguished", () => {
   assert.equal(processing.insights.customs.state, "processing");
 });
 
-test("ETA is reported only when supplied by the carrier", () => {
+test("ETA is reported only when supplied as a valid carrier date or zoned timestamp", () => {
   const noEta = resolveShipmentTruth({
     source: "carrier-a",
     events: [event("2026-11-06T08:00:00Z", "in_transit")]
@@ -182,6 +235,13 @@ test("ETA is reported only when supplied by the carrier", () => {
   });
   assert.equal(reportedEta.insights.estimate.source, "carrier");
   assert.equal(reportedEta.insights.estimate.value, "2026-11-09");
+
+  const invalidEta = resolveShipmentTruth({
+    source: "carrier-a",
+    events: [event("2026-11-06T08:00:00Z", "in_transit")],
+    expectedDelivery: "2026-02-30"
+  });
+  assert.equal(invalidEta.insights.estimate.source, "insufficient_data");
 });
 
 test("chronology overrides stage importance", () => {
