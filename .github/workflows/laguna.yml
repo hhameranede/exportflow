@@ -8,6 +8,8 @@ on:
         required: true
         default: 29
         type: number
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: write
@@ -15,13 +17,22 @@ permissions:
   issues: write
 
 concurrency:
-  group: exportflow-laguna-issue-${{ inputs.issue_number }}
+  group: exportflow-laguna-issue-${{ github.event.issue.number || inputs.issue_number }}
   cancel-in-progress: false
 
 jobs:
   laguna:
     name: Laguna long-horizon engineering run
-    if: github.repository == 'hhameranede/exportflow' && github.actor == 'hhameranede'
+    if: >-
+      github.repository == 'hhameranede/exportflow' &&
+      github.actor == 'hhameranede' &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event_name == 'issue_comment' &&
+          contains(github.event.comment.body, '/laguna-run')
+        )
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 330
     steps:
@@ -59,9 +70,9 @@ jobs:
           prompt: |
             You are Laguna XS 2.1, the single long-horizon engineering executor explicitly started by the ExportFlow repository owner for this run.
 
-            Execute ExportFlow issue #${{ inputs.issue_number }} in the existing repository. Read the issue and all comments first, then inspect the current codebase, PR #30, and PR #24 before making changes. Reuse sound work and avoid duplicate or competing implementations.
+            Execute ExportFlow issue #${{ github.event.issue.number || inputs.issue_number }} in the existing repository. Read the issue and all comments first, then inspect the current codebase, PR #30, and PR #24 before making changes. Reuse sound work and avoid duplicate or competing implementations.
 
-            This manual run is the owner's explicit instruction to use Laguna as the executor; older comments naming a different agent are superseded for this run. Do not delegate to Copilot or any other agent.
+            This owner-triggered run is the explicit instruction to use Laguna as the executor; older comments naming a different agent are superseded for this run. Do not delegate to Copilot or any other agent.
 
             Work through implementation, tests, failure diagnosis, repairs, and final review. Do not stop after planning or documentation. Make material improvements to the actual ExportFlow product and open one coherent, review-ready pull request against main.
 
@@ -75,6 +86,6 @@ jobs:
             - Do not invent carrier integrations, tracking data, delivery estimates, country support, statistics, or test results.
             - Keep tracking numbers and personal shipment data out of logs and diagnostics.
             - Do not intentionally trigger deployment workflows.
-            - Preserve the current architecture, stack, design direction, and working behavior unless a justified fix requires a change.
+            - Preserve the current architecture, stack, design direction, and working behavior unless a justified change requires it.
 
-            Issue #${{ inputs.issue_number }} is the source of truth for the full roadmap and detailed definition of done. Follow its phases and the mandatory self-repair protocol in its comments. Report exact commands and truthful test outcomes. Keep changes reviewable, explain limitations, and leave the pull request open and unmerged.
+            Issue #${{ github.event.issue.number || inputs.issue_number }} is the source of truth for the full roadmap and detailed definition of done. Follow its phases and the mandatory self-repair protocol in its comments. Report exact commands and truthful test outcomes. Keep changes reviewable, explain limitations, and leave the pull request open and unmerged.
