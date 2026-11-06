@@ -52,7 +52,9 @@ A country appearing in the directory does not mean ExportFlow has a working dire
 
 The public site includes a canonical homepage URL, crawlable metadata, `robots.txt`, an XML sitemap and a separate crawlable country directory. The sitemap intentionally includes only public pages. It does not include API routes, tracking numbers or per-shipment URLs.
 
-The eight language choices currently translate the shared interface in-browser. They do not yet have separate locale-specific URL routes, so ExportFlow does not publish misleading hreflang alternates for URLs that do not exist.
+The eight supported interface languages have crawlable locale routes for the homepage and country directory: English uses the unprefixed canonical URLs, while Arabic, Spanish, Chinese, Hindi, Portuguese, French and Russian use `/{locale}/` and `/{locale}/coverage/`. The build generates canonical metadata and reciprocal `hreflang` alternates for all eight languages and includes every locale URL in the XML sitemap.
+
+On first visits to the homepage or country directory, Cloudflare Pages middleware uses the visitor's country code to select a supported language. Countries without a configured language use English. A visitor's explicit language choice is stored in a first-party `ef-locale` cookie and local storage and takes precedence over country detection on later visits.
 
 ## Local development
 
