@@ -2,23 +2,26 @@
 
 A mobile-first parcel tracker in English and Arabic. Live tracking runs server-side through the open-source Universal Parcel Scraper engine.
 
-## Live tracking engine
+## Global carrier coverage
 
-ExportFlow integrates [Universal Parcel Scraper](https://github.com/plhery/universal-parcel-scraper) at the pinned upstream commit `e64a466772ef25ce68e02d9c7c9f1613eec1208b`.
+ExportFlow pins [Universal Parcel Scraper](https://github.com/plhery/universal-parcel-scraper) to upstream commit `c61efbf18b780f3d3b8764a5847520c69a28f212`.
 
 The upstream currently documents:
-- 3,500+ carriers in its catalog
-- 732 dedicated carrier adapters
-- 5 universal fallback providers
-- 1,339 catalog entries across 156 countries
+- 3,500+ carrier names in its catalog
+- 733 dedicated carrier adapters
+- 5 optional universal fallback providers
+- 1,340 catalog entries representing 156 countries
 
-These figures describe catalog and adapter coverage, not a guarantee that every shipment number will return a live scan. The project benchmarks a selected sample, and carriers may rate-limit or block automated requests.
+ExportFlow exposes `GET /api/coverage`, which derives a country-by-country coverage matrix from the installed carrier catalog. A country is counted as **directly covered** only when at least one selectable carrier has an automatic, dedicated adapter and explicitly lists that country. Link-only entries and the UPU/universal fallback are reported separately and do not inflate the direct-coverage count.
+
+The coverage count means the engine has a direct carrier integration serving that country; it is not a guarantee that every carrier, tracking number, route or shipment will return live scans. Carrier websites can rate-limit, block automated requests, require extra recipient details, or temporarily change their systems. Each provider's availability is therefore surfaced separately from catalog presence.
 
 ### What works in this integration
 
 - Automatic carrier detection and direct carrier adapters.
 - A server-side `POST /api/track` endpoint. Tracking numbers are never sent to browser-side third-party APIs.
 - A server-side `GET /api/carriers` endpoint exposing the engine catalog.
+- A server-side `GET /api/coverage` endpoint exposing directly covered countries and the carrier adapters serving each one, with link-only and universal-fallback coverage separated.
 - A health endpoint at `GET /api/health`.
 - Bounded request size, per-isolate rate limits, concurrency limits, a lookup deadline, no-store responses, and privacy-conscious error output.
 - English and Arabic status/timeline UI.
@@ -45,6 +48,7 @@ Open http://localhost:4173. Static preview is for layout only; live API routes r
 
 - `index.html`, `styles.css`, `app.js` — bilingual frontend
 - `functions/api/track.js` — server-side live tracking
+- `functions/api/coverage.js` — country-by-country coverage derived from automatic dedicated adapters
 - `functions/lib/coordinates.mjs` — validation for carrier-supplied map coordinates
 - `functions/api/carriers.js` — upstream carrier catalog
 - `functions/api/health.js` — API health check
