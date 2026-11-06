@@ -221,10 +221,10 @@ jobs:
           RUN_ID: ${{ github.run_id }}
         run: |
           run_started="$(gh run view "${RUN_ID}" --json createdAt --jq '.createdAt')"
-          prs="$(gh pr list --base main --state open --json url,title,body,headRefName,createdAt)"
+          prs="$(gh pr list --base main --state open --json url,title,body,headRefName,createdAt,updatedAt)"
           pr_url="$(jq -r --arg started "${run_started}" --arg issue "${ISSUE_NUMBER}" '
             .[]
-            | select(.createdAt >= $started)
+            | select((.createdAt >= $started) or (.updatedAt >= $started))
             | select((.headRefName | startswith("opencode/issue" + $issue + "-"))
               or ((.title // "") | contains("Issue #" + $issue))
               or ((.body // "") | contains("/issues/" + $issue)))
