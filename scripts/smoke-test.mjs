@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { COUNTRY_CODES } from "../functions/lib/country-codes.mjs";
-import { localeForCountry } from "../functions/_middleware.js";
+import { localeForCountry, onRequest } from "../functions/_middleware.js";
 
 const [
   html, css, js, translationsSource, coverageHtml, coverageJs, trackApi, coverageApi, build,
@@ -117,6 +117,35 @@ assert.equal(localeForCountry("CN"), "zh", "China must default to Chinese");
 assert.equal(localeForCountry("IN"), "hi", "India must default to Hindi");
 assert.equal(localeForCountry("RU"), "ru", "Russia must default to Russian");
 assert.equal(localeForCountry("US"), "en", "Countries without a supported locale must fall back to English");
+
+const algeriaRedirect = await onRequest({
+  request: { method: "GET", url: "https://exportflow.me/", headers: new Headers(), cf: { country: "DZ" } },
+  next: () => new Response("next")
+});
+assert.equal(algeriaRedirect.status, 302);
+assert.equal(algeriaRedirect.headers.get("Location"), "https://exportflow.me/ar/");
+assert.match(algeriaRedirect.headers.get("Set-Cookie") || "", /ef-locale=ar/);
+
+const franceCoverageRedirect = await onRequest({
+  request: { method: "GET", url: "https://exportflow.me/coverage/?source=test", headers: new Headers(), cf: { country: "FR" } },
+  next: () => new Response("next")
+});
+assert.equal(franceCoverageRedirect.headers.get("Location"), "https://exportflow.me/fr/coverage/?source=test");
+
+let englishPreferencePassedThrough = false;
+const englishPreference = await onRequest({
+  request: { method: "GET", url: "https://exportflow.me/", headers: new Headers({ Cookie: "ef-locale=en" }), cf: { country: "DZ" } },
+  next: () => { englishPreferencePassedThrough = true; return new Response("next"); }
+});
+assert.equal(englishPreference.status, 200);
+assert.equal(englishPreferencePassedThrough, true, "An explicit English preference must override the visitor's country");
+
+let crawlerPassedThrough = false;
+await onRequest({
+  request: { method: "GET", url: "https://exportflow.me/", headers: new Headers({ "User-Agent": "Googlebot" }), cf: { country: "FR" } },
+  next: () => { crawlerPassedThrough = true; return new Response("next"); }
+});
+assert.equal(crawlerPassedThrough, true, "Search crawlers must not be geo-redirected away from the canonical entry point");
 assert.match(middleware, /request\.cf\?\.country/, "First-visit locale detection must use Cloudflare's country code");
 assert.match(middleware, /ef-locale/, "An explicit user language preference must override geolocation");
 assert.match(middleware, /Cache-Control.*private, no-store/, "Geo redirects must not be cached between visitors");
