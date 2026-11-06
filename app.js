@@ -21,6 +21,31 @@ const resultBackdrop = document.getElementById("resultBackdrop");
 let shipmentMapInstance = null;
 let shipmentMapLayer = null;
 let currentMapEvents = [];
+let directCoverageCount = 0;
+
+function updateCoverageLabel() {
+  const label = document.getElementById("coverageCaption");
+  if (!label || !directCoverageCount) return;
+  label.textContent = html.lang === "ar"
+    ? `تتبع مباشر في ${directCoverageCount} دولة`
+    : `${directCoverageCount} countries / Direct carrier routes`;
+}
+
+async function loadCoverageSummary() {
+  try {
+    const response = await fetch("/api/coverage", {
+      headers: { Accept: "application/json" },
+      cache: "no-store"
+    });
+    if (!response.ok) return;
+    const payload = await response.json();
+    if (!Number.isInteger(payload.countryCount) || payload.countryCount < 1) return;
+    directCoverageCount = payload.countryCount;
+    updateCoverageLabel();
+  } catch {
+    // Keep the neutral static label when the optional summary endpoint is unavailable.
+  }
+}
 
 function setLanguage(language) {
   const pack = translations[language] || translations.en;
@@ -35,6 +60,7 @@ function setLanguage(language) {
     ? "تابع طرودك في مكان واحد. يجمع ExportFlow تحديثات الشحن في تجربة تتبع بسيطة."
     : "Track your parcels in one clear place. Follow deliveries from online stores across carriers.";
   localStorage.setItem("exportflow-language", language);
+  updateCoverageLabel();
 }
 
 languageToggle.addEventListener("change", (event) => setLanguage(event.target.value));
@@ -330,6 +356,8 @@ resultBackdrop.addEventListener("click", closeResult);
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !resultPanel.hidden) closeResult();
 });
+
+loadCoverageSummary();
 
 const savedLanguage = localStorage.getItem("exportflow-language");
 if (savedLanguage === "ar") setLanguage("ar");
