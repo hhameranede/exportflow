@@ -572,3 +572,32 @@ html[dir="rtl"] .header-cta { font-family: "Cairo", "Noto Sans Arabic", sans-ser
 }
 html[dir="rtl"] .coverage-page { font-family: "Cairo", "Noto Sans Arabic", sans-serif; }
 html[dir="rtl"] .coverage-intro h1, html[dir="rtl"] .coverage-methodology h2 { font-family: "Cairo", sans-serif; letter-spacing: 0; }
+
+/* ExportFlow trust center pages */
+.trust-page{min-height:100vh;background:var(--cream);color:var(--ink)}
+.trust-header{position:relative;top:auto;height:76px}
+.trust-header .header-cta{white-space:nowrap;text-decoration:none}
+.trust-main{width:min(900px,calc(100% - 40px));margin:0 auto;padding:28px 0 90px}
+.trust-breadcrumb{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:12px;margin:6px 0 34px}
+.trust-breadcrumb a{color:var(--muted);text-decoration:none}.trust-breadcrumb a:hover,.trust-content a:hover{color:var(--orange)}
+.trust-hero{padding:54px clamp(22px,5vw,64px);border:1px solid var(--line);border-radius:26px;background:linear-gradient(135deg,#fff 0%,#f4f1ea 100%);box-shadow:var(--shadow)}
+.trust-hero .eyebrow{font-size:10px;letter-spacing:.16em;font-weight:800;color:var(--orange)}
+.trust-hero h1{font:800 clamp(38px,7vw,68px)/1.05 "Plus Jakarta Sans",sans-serif;letter-spacing:-.055em;margin:18px 0;color:var(--ink)}
+.trust-hero h1 em{font-style:normal;color:var(--orange)}
+.trust-lead{max-width:680px;font-size:clamp(16px,2vw,19px);line-height:1.75;color:var(--muted)}
+.trust-meta{margin-top:22px;color:var(--muted);font-size:12px}
+.trust-content{max-width:760px;margin:48px auto 0;font-size:15px;line-height:1.85;color:#42534b}
+.trust-content h2{font:700 22px/1.3 "Plus Jakarta Sans",sans-serif;letter-spacing:-.025em;color:var(--ink);margin:36px 0 10px}
+.trust-content p{margin:12px 0}.trust-content li{margin:8px 0}.trust-content a{color:#245b4b;text-decoration:underline;text-underline-offset:3px}
+.trust-content code{background:#ecefe9;border-radius:5px;padding:2px 5px}
+.trust-note{padding:16px 18px;border-left:3px solid var(--orange);background:#f2eee6;border-radius:0 12px 12px 0}
+.trust-contact-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:24px 0 36px}
+.trust-contact-card{padding:24px;border:1px solid var(--line);border-radius:18px;background:#fff;box-shadow:0 10px 30px rgba(16,34,29,.05)}
+.trust-card-label{font-size:10px;letter-spacing:.14em;font-weight:800;color:var(--orange)}
+.trust-contact-card h2{margin:12px 0 6px;font-size:20px}.trust-contact-card p{font-size:13px;color:var(--muted)}
+.trust-contact-value{display:inline-block;font-weight:800;font-size:clamp(15px,2vw,19px);overflow-wrap:anywhere}
+.trust-footer{border-top:1px solid var(--line);padding:28px max(calc((100vw - 1180px)/2),5vw) 34px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;background:#f4f1ea}
+.trust-footer nav{display:flex;gap:12px 20px;flex-wrap:wrap;margin-left:auto}
+.trust-footer nav a{font-size:12px;color:var(--muted);text-decoration:none}.trust-footer nav a:hover{color:var(--orange)}
+.trust-footer p{width:100%;margin:0;color:var(--muted);font-size:11px}
+@media(max-width:640px){.trust-header{height:68px;padding:0 18px}.trust-main{width:min(100% - 28px,900px);padding-top:18px}.trust-breadcrumb{margin-bottom:20px}.trust-hero{padding:34px 22px;border-radius:20px}.trust-content{margin-top:32px;font-size:14px}.trust-content h2{font-size:19px}.trust-contact-grid{grid-template-columns:1fr}.trust-footer{padding:24px 18px}.trust-footer nav{margin-left:0;width:100%;gap:12px 16px}}
