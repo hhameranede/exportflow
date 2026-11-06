@@ -1,8 +1,8 @@
 const SUPPORTED_LOCALES = new Set(["en", "ar", "es", "zh", "hi", "pt", "fr", "ru"]);
 
 const COUNTRY_GROUPS = {
-  ar: ["DZ", "BH", "KM", "DJ", "EG", "IQ", "JO", "KW", "LB", "LY", "MR", "MA", "OM", "PS", "QA", "SA", "SO", "SD", "SY", "TN", "AE", "YE"],
-  fr: ["BE", "BJ", "BF", "BI", "CM", "CA", "CF", "TD", "CG", "CD", "CI", "FR", "GA", "GN", "HT", "LU", "MG", "ML", "MC", "NE", "SN", "SC", "CH", "TG", "VU"],
+  ar: ["DZ", "BH", "KM", "DJ", "EG", "IQ", "JO", "KW", "LB", "LY", "MR", "MA", "OM", "PS", "QA", "SA", "SO", "SD", "SY", "TD", "TN", "AE", "YE"],
+  fr: ["BE", "BJ", "BF", "BI", "CM", "CA", "CF", "CG", "CD", "CI", "FR", "GA", "GN", "HT", "LU", "MG", "ML", "MC", "NE", "RW", "SN", "SC", "CH", "TG", "VU"],
   es: ["AR", "BO", "CL", "CO", "CR", "CU", "DO", "EC", "SV", "GQ", "GT", "HN", "MX", "NI", "PA", "PY", "PE", "ES", "UY", "VE"],
   pt: ["AO", "BR", "CV", "GW", "MZ", "PT", "ST", "TL"],
   zh: ["CN", "HK", "MO", "SG", "TW"],
