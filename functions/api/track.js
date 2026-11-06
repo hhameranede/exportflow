@@ -1,5 +1,8 @@
 import { createTracker, TrackingError } from "../../node_modules/universal-parcel-scraper/dist/facade/index.js";
 import { createCloudflareFetch } from "../lib/cloudflare-fetch.mjs";
+import { trackCustomCarrier } from "../lib/custom-carriers.mjs";
+import { isCambodiaPostNumber, CAMBODIA_POST_ID } from "../lib/cambodia-post.mjs";
+import { CarrierError } from "../../node_modules/universal-parcel-scraper/dist/core/errors/index.js";
 import { safeEventPoint } from "../lib/coordinates.mjs";
 
 const MAX_BODY_CHARS = 4_096;
@@ -138,6 +141,21 @@ function projectResult(response) {
 }
 
 function trackingFailure(error) {
+  if (error instanceof CarrierError) {
+    const kind = error.kind || "unavailable";
+    const status = kind === "not_found" ? 404
+      : kind === "rate_limited" ? 429
+      : kind === "invalid_input" ? 400
+      : kind === "input_required" ? 422
+      : kind === "challenge" ? 403
+      : kind === "maintenance" ? 503
+      : 502;
+    const retryAfter = Number.isFinite(error.retryAfterMs) && error.retryAfterMs > 0
+      ? Math.ceil(error.retryAfterMs / 1000)
+      : null;
+    return json({ error: kind }, status, retryAfter ? { "Retry-After": String(retryAfter) } : {});
+  }
+
   if (error instanceof TrackingError) {
     const kind = error.hint?.kind || "unavailable";
     const status = kind === "not_found" ? 404
@@ -232,6 +250,23 @@ export async function onRequestPost({ request, env }) {
 
   activeLookups += 1;
   try {
+    const useCambodiaPost = carrier === CAMBODIA_POST_ID || (!carrier && isCambodiaPostNumber(number));
+    if (useCambodiaPost) {
+      const result = await trackCustomCarrier(CAMBODIA_POST_ID, {
+        number,
+        ...(postcode ? { postcode } : {}),
+        ...(language ? { language } : {})
+      }, {
+        budgetMs: LOOKUP_BUDGET_MS,
+        signal: request.signal
+      }, createCloudflareFetch());
+      return json(projectResult({
+        carrier: "Cambodia Post",
+        source: "direct",
+        result
+      }), 200);
+    }
+
     const result = await getTracker(env).track({
       number,
       ...(carrier ? { carrier } : {}),
