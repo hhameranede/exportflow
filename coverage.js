@@ -3,6 +3,8 @@
   const html = document.documentElement;
   const translations = window.EXPORTFLOW_TRANSLATIONS || {};
   const languageToggle = document.getElementById("languageToggle");
+  const languageBtnTrigger = document.getElementById("languageBtnTrigger");
+  const languageMenu = document.getElementById("languageMenu");
   const searchInput = document.getElementById("coverageSearch");
   const filterSelect = document.getElementById("coverageFilter");
   const list = document.getElementById("coverageCountryList");
@@ -25,7 +27,12 @@
     locale = safeLocale(value);
     html.lang = locale;
     html.dir = locale === "ar" ? "rtl" : "ltr";
-    languageToggle.value = locale;
+    if (languageToggle) languageToggle.value = locale;
+    if (languageMenu) {
+      languageMenu.querySelectorAll(".language-option-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.locale === locale);
+      });
+    }
     document.querySelectorAll("[data-i18n]").forEach(element => {
       const translation = t(element.dataset.i18n);
       if (translation) element.textContent = translation;
@@ -48,7 +55,6 @@
   function statusKey(status) {
     return ({
       direct: "coverageStatusDirect",
-      "browser-required": "coverageStatusBrowserRequired",
       "universal-fallback": "coverageStatusFallback",
       "link-only": "coverageStatusLink",
       "not-listed": "coverageStatusNone",
@@ -71,8 +77,7 @@
         row.dataset.countryCode || "",
         row.dataset.carriersSearch || row.querySelector("[data-country-carriers]")?.textContent || ""
       ].join(" ").toLocaleLowerCase(locale);
-      const statusMatches = status === "all" || row.dataset.status === status || (status === "browser-required" && row.dataset.browserRequired === "true");
-      const matches = (!term || haystack.includes(term)) && statusMatches;
+      const matches = (!term || haystack.includes(term)) && (status === "all" || row.dataset.status === status);
       row.hidden = !matches;
       if (matches) visible += 1;
     });
@@ -89,15 +94,13 @@
       const country = byCode.get(row.dataset.countryCode);
       if (!country) {
         row.dataset.status = "not-listed";
-        row.dataset.browserRequired = "false";
         updateStatusLabel(row);
         return;
       }
       row.dataset.status = country.status || "not-listed";
-      row.dataset.browserRequired = String(country.browserRequiredCarrierCount > 0);
       const carriers = row.querySelector("[data-country-carriers]");
       if (carriers) {
-        const names = (country.carriers || []).map(carrier => carrier.name ? (carrier.requiresBrowser ? `${carrier.name} — ${t("coverageBrowserTag")}` : carrier.name) : "").filter(Boolean);
+        const names = (country.carriers || []).map(carrier => carrier.name).filter(Boolean);
         row.dataset.carriersSearch = names.join(" ");
         carriers.textContent = names.slice(0, 5).join(" · ") + (names.length > 5 ? " · +" + (names.length - 5) : "");
       }
@@ -125,7 +128,29 @@
 
   searchInput.addEventListener("input", updateList);
   filterSelect.addEventListener("change", updateList);
-  languageToggle.addEventListener("change", event => setLanguage(event.target.value));
+  if (languageToggle) {
+    languageToggle.addEventListener("change", event => setLanguage(event.target.value));
+  }
+  if (languageBtnTrigger && languageMenu) {
+    languageBtnTrigger.addEventListener("click", event => {
+      event.stopPropagation();
+      const isOpen = languageMenu.classList.toggle("open");
+      languageBtnTrigger.setAttribute("aria-expanded", String(isOpen));
+    });
+    languageMenu.querySelectorAll(".language-option-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        setLanguage(btn.dataset.locale);
+        languageMenu.classList.remove("open");
+        languageBtnTrigger.setAttribute("aria-expanded", "false");
+      });
+    });
+    document.addEventListener("click", event => {
+      if (!languageBtnTrigger.contains(event.target) && !languageMenu.contains(event.target)) {
+        languageMenu.classList.remove("open");
+        languageBtnTrigger.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
   let saved = "en";
   try { saved = localStorage.getItem("exportflow-language") || "en"; } catch {}
   setLanguage(saved);

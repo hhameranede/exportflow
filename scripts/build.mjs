@@ -3,54 +3,39 @@ import { resolve } from "node:path";
 
 const root = process.cwd();
 const output = resolve(root, "dist");
-const files = ["index.html", "styles.css", "app.js", "translations.js", "coverage.js", "robots.txt", "sitemap.xml", "_headers", "favicon.svg", "favicon-32x32.png", "apple-touch-icon.png", "site.webmanifest", "og-image-20261106.png"];
-const trustPages = ["about", "contact", "privacy", "terms", "cookies", "security", "disclaimer"];
+const files = ["index.html", "styles.css", "app.js", "translations.js", "coverage.js", "robots.txt", "sitemap.xml", "_headers", "favicon.svg", "favicon-32x32.png", "apple-touch-icon.png", "site.webmanifest", "og-image-20261106.png", "404.html"];
 const engineDist = resolve(root, "node_modules/universal-parcel-scraper/dist");
 
 async function patchWorkerIncompatibleEngineFiles(directory) {
-  let jsonImports = 0;
-  const entries = await readdir(directory, { withFileTypes: true });
-
-  for (const entry of entries) {
-    const path = resolve(directory, entry.name);
-    if (entry.isDirectory()) {
-      jsonImports += await patchWorkerIncompatibleEngineFiles(path);
-      continue;
-    }
-    if (!entry.isFile() || !/\.(?:js|mjs)$/.test(entry.name)) continue;
-
-    const original = await readFile(path, "utf8");
-    const compatible = original.replace(
-      /\s+with\s*\{\s*type\s*:\s*(["'])json\1\s*\}/g,
-      () => {
-        jsonImports += 1;
-        return "";
-      }
-    );
-    if (compatible !== original) await writeFile(path, compatible);
-  }
-
-  return jsonImports;
+  // In Node 22+, `with { type: "json" }` is strictly required by the ESM loader.
+  // Preserving import attributes maintains engine compatibility during test and build runs.
+  return 0;
 }
 
 async function patchWorkerPlaceAssets() {
   const placesFile = resolve(engineDist, "places/index.js");
   let source = await readFile(placesFile, "utf8");
 
+  if (source.includes("Place enrichment is optional on Workers")) {
+    return;
+  }
+
   // Workers' bundled module URL is not a Node file URL. Keep these URLs valid
   // at module initialization; file reads below are guarded and fall back to
   // empty place datasets when the Worker has no filesystem-backed package data.
   let urlCount = 0;
-  source = source.replace(
-    /const (DATA|PINCODES|ZIPCODES) = new URL\((["'])\.\/(places\.tsv\.br|pincodes\.json|zipcodes\.json)\2, import\.meta\.url\);/g,
-    (_match, name, quote, filename) => {
-      urlCount += 1;
-      return "const " + name + " = new URL(" + quote + "./" + filename + quote +
-        ', "file:///exportflow/node_modules/universal-parcel-scraper/dist/places/index.js");';
+  if (!source.includes("file:///exportflow")) {
+    source = source.replace(
+      /const (DATA|PINCODES|ZIPCODES) = new URL\((["'])\.\/(places\.tsv\.br|pincodes\.json|zipcodes\.json)\2, import\.meta\.url\);/g,
+      (_match, name, quote, filename) => {
+        urlCount += 1;
+        return "const " + name + " = new URL(" + quote + "./" + filename + quote +
+          ', "file:///exportflow/node_modules/universal-parcel-scraper/dist/places/index.js");';
+      }
+    );
+    if (urlCount !== 3) {
+      throw new Error("Expected to normalize all three place-data module URLs; found " + urlCount);
     }
-  );
-  if (urlCount !== 3) {
-    throw new Error("Expected to normalize all three place-data module URLs; found " + urlCount);
   }
 
   const lines = source.split(/\r?\n/);
@@ -122,11 +107,10 @@ for (const file of files) {
 
 await mkdir(resolve(output, "coverage"), { recursive: true });
 await cp(resolve(root, "coverage/index.html"), resolve(output, "coverage/index.html"));
-
-for (const page of trustPages) {
-  await mkdir(resolve(output, page), { recursive: true });
-  await cp(resolve(root, page, "index.html"), resolve(output, page, "index.html"));
-}
+await mkdir(resolve(output, "privacy"), { recursive: true });
+await cp(resolve(root, "privacy/index.html"), resolve(output, "privacy/index.html"));
+await mkdir(resolve(output, "terms"), { recursive: true });
+await cp(resolve(root, "terms/index.html"), resolve(output, "terms/index.html"));
 
 try {
   const jsonImports = await patchWorkerIncompatibleEngineFiles(engineDist);
@@ -156,14 +140,16 @@ try {
   // Replace Deppon's direct Sharp solver so its adapter can fail gracefully without native Sharp.
   const depponAdapter = resolve(engineDist, "carriers/deppon/adapter.js");
   const depponSource = await readFile(depponAdapter, "utf8");
-  const depponCompatible = depponSource.replace(
-    /const sharp = \(await import\((["'])sharp\1\)\)\.default;/,
-    "const sharp = () => { throw new ChallengeError(PROVIDER, 'Deppon image challenge decoding is unavailable in Cloudflare Workers'); };"
-  );
-  if (depponCompatible === depponSource) {
-    throw new Error("Could not locate Deppon's native Sharp import for the Pages compatibility patch");
+  if (!depponSource.includes("ChallengeError")) {
+    const depponCompatible = depponSource.replace(
+      /const sharp = \(await import\((["'])sharp\1\)\)\.default;/,
+      "const sharp = () => { throw new ChallengeError(PROVIDER, 'Deppon image challenge decoding is unavailable in Cloudflare Workers'); };"
+    );
+    if (depponCompatible === depponSource) {
+      throw new Error("Could not locate Deppon's native Sharp import for the Pages compatibility patch");
+    }
+    await writeFile(depponAdapter, depponCompatible);
   }
-  await writeFile(depponAdapter, depponCompatible);
 
   console.log(
     "Prepared upstream engine for Pages: normalized " + jsonImports +
