@@ -19,14 +19,14 @@ async function patchWorkerIncompatibleEngineFiles(directory) {
         await visit(file);
         continue;
       }
-      if (!entry.isFile() || !/\\.m?js$/.test(entry.name)) continue;
+      if (!entry.isFile() || !/\.m?js$/.test(entry.name)) continue;
 
       const original = await readFile(file, "utf8");
-      const matches = original.match(/\\bfrom\\s+["'][^"']+\\.json["']\\s+with\\s*\\{\\s*type\\s*:\\s*["']json["']\\s*\\}/g) ?? [];
+      const matches = original.match(/\bfrom\s+["'][^"']+\.json["']\s+with\s*\{\s*type\s*:\s*["']json["']\s*\}/g) ?? [];
       if (matches.length === 0) continue;
 
       const compatible = original.replace(
-        /(["'][^"']+\\.json["'])\\s+with\\s*\\{\\s*type\\s*:\\s*["']json["']\\s*\\}/g,
+        /(["'][^"']+\.json["'])\s+with\s*\{\s*type\s*:\s*["']json["']\s*\}/g,
         "$1"
       );
       await writeFile(file, compatible);
