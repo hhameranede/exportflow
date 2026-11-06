@@ -77,7 +77,7 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "stageInfoReceived": "Shipment information received",
     "stagePending": "Pending",
     "stageUnknown": "Status unavailable",
-    "metaDescription": "Track parcels across carrier networks with one clear timeline. See live carrier-reported updates, not guessed shipment data.",
+    "metaDescription": "Track parcels across carrier networks with one clear timeline. See carrier-reported shipment updates, not guessed data.",
     "coveragePageTitle": "Worldwide carrier directory",
     "coveragePageDescription": "Browse all 249 ISO 3166-1 country and territory codes. Each coverage label is based on carrier records in the installed tracking catalog, not a promise that every parcel can be tracked.",
     "coverageTotalCountries": "countries and territories in this directory",
