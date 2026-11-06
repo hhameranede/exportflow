@@ -1,0 +1,40 @@
+name: Refresh Bun lockfile and verify
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: write
+jobs:
+  refresh-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout pull request branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Bun 1.4.4
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - name: Regenerate lockfile from package.json
+        run: bun install --lockfile-only
+      - name: Confirm frozen install
+        run: bun install --frozen-lockfile
+      - name: Run lint, tests, and build
+        run: |
+          bun run lint
+          bun test
+          bun run build
+      - name: Commit refreshed lockfile
+        run: |
+          if git diff --quiet -- bun.lock; then
+            echo "bun.lock already synchronized"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add bun.lock
+            git commit -m "chore: synchronize Bun lockfile"
+            git push origin "HEAD:${GITHUB_HEAD_REF}"
+          fi
