@@ -36,7 +36,7 @@ A country appearing in the directory does not mean ExportFlow has a working dire
 - Automatic carrier detection and direct carrier adapters from the pinned engine.
 - UPU is the only universal fallback enabled by default.
 - Other optional third-party universal fallback providers remain disabled because they would also receive users' tracking numbers.
-- Some upstream adapters require a remote browser service (TRAWL/Chromium). The coverage directory marks these as browser-required, not as server-ready direct adapters, until a compatible service is configured. In the pinned Algeria catalog, Algérie Poste, ZR Express and NOEST have direct HTTP adapters, while Yalidine requires TRAWL.
+- Some upstream adapters require a remote browser service (TRAWL/Chromium). The coverage directory marks these as browser-required, not as server-ready direct adapters, until a compatible service is configured. In the pinned Algeria catalog, Algérie Poste, ZR Express, NOEST and Mylerz have direct HTTP adapters; Mylerz uses country-specific service endpoints and still needs live availability checks. Yalidine requires TRAWL.
 - A shipment map displays only carrier-supplied scan coordinates after server-side validation. It does not geocode recipient addresses or invent locations.
 
 ### Privacy and safeguards
