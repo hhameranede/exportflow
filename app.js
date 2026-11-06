@@ -27,8 +27,8 @@ function updateCoverageLabel() {
   const label = document.getElementById("coverageCaption");
   if (!label || !directCoverageCount) return;
   label.textContent = html.lang === "ar"
-    ? `تتبع مباشر في ${directCoverageCount} دولة`
-    : `${directCoverageCount} countries / Direct carrier routes`;
+    ? `تغطية مباشرة / ${directCoverageCount} دولة`
+    : `${directCoverageCount} COUNTRIES / DIRECT`;
 }
 
 async function loadCoverageSummary() {
