@@ -41,4 +41,9 @@ assert.match(css, /\.language-picker:after\s*\{[^}]*content:\s*"";[^}]*border-ri
 assert.match(css, /\.header-cta span:first-child\s*\{[^}]*white-space:\s*nowrap;[^}]*flex:\s*0 0 auto;/, "Header CTA label must not wrap or shrink");
 assert.match(css, /\.announcement\s*\{[^}]*font-size:\s*12px/, "Announcement copy must meet the revised type scale");
 
+
+assert.match(html, /href="\\/styles\\.css\\?v=ef-header-20261106-3"/, "The stylesheet URL must be versioned to invalidate stale mobile browser caches");
+assert.match(css, /\.language-picker select\s*\{[^}]*max-width:\s*54px;[^}]*font-size:\s*14px/, "Mobile language label must be clearly readable");
+assert.match(css, /\.header-cta\s*\{[^}]*min-width:\s*114px;[^}]*font-size:\s*13px/, "Mobile tracking CTA must retain a generous touch target and readable label");
+
 console.log("ExportFlow live tracking smoke tests passed.");
