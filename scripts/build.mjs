@@ -78,7 +78,7 @@ async function generateLocalizedPages() {
     }
   }
 
-  for (const route of ["/privacy/", "/terms/"]) {
+  for (const route of ["/about/", "/contact/", "/privacy/", "/terms/", "/cookies/", "/security/", "/disclaimer/"]) {
     sitemapEntries.push("  <url>\n    <loc>https://exportflow.me" + route + "</loc>\n  </url>");
   }
 
@@ -218,12 +218,13 @@ for (const file of files) {
   await cp(resolve(root, file), resolve(output, file));
 }
 
-await mkdir(resolve(output, "coverage"), { recursive: true });
-await cp(resolve(root, "coverage/index.html"), resolve(output, "coverage/index.html"));
-await mkdir(resolve(output, "privacy"), { recursive: true });
-await cp(resolve(root, "privacy/index.html"), resolve(output, "privacy/index.html"));
-await mkdir(resolve(output, "terms"), { recursive: true });
-await cp(resolve(root, "terms/index.html"), resolve(output, "terms/index.html"));
+const publicPageDirectories = [
+  "coverage", "about", "contact", "privacy", "terms", "cookies", "security", "disclaimer"
+];
+for (const page of publicPageDirectories) {
+  await mkdir(resolve(output, page), { recursive: true });
+  await cp(resolve(root, page, "index.html"), resolve(output, page, "index.html"));
+}
 
 await generateLocalizedPages();
 
