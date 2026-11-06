@@ -22,6 +22,7 @@ These figures describe catalog and adapter coverage, not a guarantee that every 
 - A health endpoint at `GET /api/health`.
 - Bounded request size, per-isolate rate limits, concurrency limits, a lookup deadline, no-store responses, and privacy-conscious error output.
 - English and Arabic status/timeline UI.
+- An interactive shipment map using Leaflet and OpenStreetMap tiles. It plots only carrier-supplied scan coordinates after server-side validation; it does not guess locations or geocode private addresses. OpenStreetMap attribution is displayed on the map.
 
 Cloudflare Workers does not implement Fetch `redirect: "error"`; the Pages adapter converts that mode to `redirect: "manual"` so redirects are returned as visible 3xx responses rather than failing before a network request is sent. Carrier adapters that explicitly request `follow` or `manual` keep their chosen mode. This behavior is covered by `scripts/cloudflare-fetch-test.mjs`.
 
@@ -44,6 +45,7 @@ Open http://localhost:4173. Static preview is for layout only; live API routes r
 
 - `index.html`, `styles.css`, `app.js` — bilingual frontend
 - `functions/api/track.js` — server-side live tracking
+- `functions/lib/coordinates.mjs` — validation for carrier-supplied map coordinates
 - `functions/api/carriers.js` — upstream carrier catalog
 - `functions/api/health.js` — API health check
 - `scripts/` — build and smoke tests
