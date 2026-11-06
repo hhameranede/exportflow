@@ -1,11 +1,11 @@
 const normalizeText = (value, max = 320) =>
   typeof value === "string"
-    ? value.replace(/[\\u0000-\\u001f\\u007f]/g, "").trim().slice(0, max)
+    ? value.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, max)
     : "";
 
 const normalizeStage = value => {
   if (typeof value !== "string") return "unknown";
-  const stage = value.trim().toLowerCase();
+  const stage = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
   return /^[a-z_]{2,40}$/.test(stage) ? stage : "unknown";
 };
 
@@ -14,10 +14,22 @@ const normalizeSource = value => normalizeText(value, 120);
 function parseEventTime(value) {
   const raw = normalizeText(value, 80);
   // Event timestamps without Z or an explicit UTC offset are ambiguous.
-  // Keep their raw value for display, but never treat them as trusted chronology.
-  const hasExplicitZone =
-    /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d+)?)?(?:Z|[+-]\\d{2}:\\d{2})$/i.test(raw);
-  if (!hasExplicitZone) return { iso: null, timestampMs: null };
+  // Keep their raw value for display, but never use them as trusted chronology.
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-]\d{2}:\d{2})$/i);
+  if (!match) return { iso: null, timestampMs: null };
+
+  const [, year, month, day, hour, minute, second = "0"] = match;
+  const calendarDate = ${year}-${month}-${day};
+  const parsedCalendarDate = new Date(${calendarDate}T00:00:00.000Z);
+  if (
+    !Number.isFinite(parsedCalendarDate.getTime()) ||
+    parsedCalendarDate.toISOString().slice(0, 10) !== calendarDate ||
+    Number(hour) > 23 ||
+    Number(minute) > 59 ||
+    Number(second) > 59
+  ) {
+    return { iso: null, timestampMs: null };
+  }
 
   const parsed = Date.parse(raw);
   if (!Number.isFinite(parsed)) return { iso: null, timestampMs: null };
@@ -63,6 +75,7 @@ function normalizeEvent(event, originalIndex, fallbackSource) {
     receivedAtMs,
     source: sourceRefs[0] || "unknown",
     sourceRefs,
+    trusted: event?.trusted !== false,
     originalIndex,
     point
   };
@@ -77,7 +90,7 @@ function dedupeEvents(events) {
     // two genuinely different scans that happened in the same minute.
     const timeKey = Number.isFinite(event.timestampMs)
       ? String(event.timestampMs)
-      : `invalid:${event.originalIndex}`;
+      : \`invalid:${event.originalIndex}\`;
     const key = [
       event.stage,
       event.location.toLowerCase(),
@@ -95,6 +108,7 @@ function dedupeEvents(events) {
     const existing = deduped[existingIndex];
     existing.sourceRefs = [...new Set([...existing.sourceRefs, ...event.sourceRefs])];
     existing.source = existing.sourceRefs[0] || "unknown";
+    existing.trusted = existing.trusted && event.trusted;
     if (event.originalIndex > existing.originalIndex) {
       existing.originalIndex = event.originalIndex;
     }
@@ -163,50 +177,84 @@ function latestByReceipt(events) {
   }, null);
 }
 
-function buildInsights(trustedEvents, latestTrusted, expectedDelivery) {
-  const delayPatterns = [
-    /\\bshipment delayed\\b/i,
-    /\\bdelivery delayed\\b/i,
-    /\\bdelayed due to\\b/i,
-    /\\bdelivery delay reported\\b/i,
-    /\\bservice disruption\\b/i,
-    /\\bcarrier delay confirmed\\b/i
+function hasExplicitDelaySignal(event) {
+  if (!event) return false;
+  const explicitStages = new Set(["delayed", "delivery_delayed", "delay_confirmed"]);
+  const explicitDescriptions = [
+    /\bshipment delayed\b/i,
+    /\bdelivery delayed\b/i,
+    /\bdelayed due to\b/i,
+    /\bdelivery delay reported\b/i,
+    /\bservice disruption\b/i,
+    /\bcarrier delay confirmed\b/i
   ];
-  const hasExplicitDelay = trustedEvents.some(event =>
-    ["delayed", "delivery_delayed", "delay_confirmed"].includes(event.stage) ||
-    delayPatterns.some(pattern => pattern.test(event.description))
-  );
+  return explicitStages.has(event.stage) ||
+    explicitDescriptions.some(pattern => pattern.test(event.description));
+}
 
-  const hasCustomsHold = trustedEvents.some(event =>
+function classifyCustomsEvent(event) {
+  if (!event) return null;
+  if (
     ["customs_hold", "held_at_customs"].includes(event.stage) ||
-    /\\b(customs hold|held by customs|detained by customs|inspection required|awaiting (customs )?documents)\\b/i.test(event.description)
-  );
-  const hasCustomsProcessing = trustedEvents.some(event =>
-    ["customs_processing", "customs_clearance"].includes(event.stage) ||
-    /\\b(customs processing|customs clearance in progress|under customs review)\\b/i.test(event.description)
-  );
-  const hasCustomsRelease = trustedEvents.some(event =>
+    /\b(customs hold|held by customs|detained by customs|inspection required|awaiting (customs )?documents)\b/i.test(event.description)
+  ) return { state: "hold", reason: "explicit_customs_hold_signal" };
+
+  if (
     ["customs_released", "released_by_customs"].includes(event.stage) ||
-    /\\b(released by customs|customs cleared)\\b/i.test(event.description)
-  );
+    /\b(released by customs|customs cleared)\b/i.test(event.description)
+  ) return { state: "released", reason: "explicit_customs_release_signal" };
 
-  const delay = hasExplicitDelay
+  if (
+    ["customs_processing", "customs_clearance"].includes(event.stage) ||
+    /\b(customs processing|customs clearance in progress|under customs review)\b/i.test(event.description)
+  ) return { state: "processing", reason: "explicit_customs_processing_signal" };
+
+  return null;
+}
+
+function isCustomsEvent(event) {
+  return classifyCustomsEvent(event) !== null;
+}
+
+function normalizeExpectedDelivery(value) {
+  const raw = normalizeText(value, 80);
+  if (!raw) return null;
+
+  // Carrier ETAs may be date-only values or timezone-qualified ISO timestamps.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const date = new Date(${raw}T00:00:00.000Z);
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === raw
+      ? raw
+      : null;
+  }
+  return parseEventTime(raw).iso ? raw : null;
+}
+
+function buildInsights(trustedEvents, latestTrusted, expectedDelivery) {
+  // Insights describe the latest known state, not an old exception that a later
+  // scan may have resolved.
+  const delay = latestTrusted && hasExplicitDelaySignal(latestTrusted)
     ? { level: "possible", reason: "explicit_carrier_delay_signal" }
-    : { level: "insufficient_evidence", reason: "no_explicit_delay_signal" };
+    : { level: "insufficient_evidence", reason: latestTrusted?.stage === "delivered"
+      ? "shipment_delivered"
+      : "no_current_explicit_delay_signal" };
 
-  const customs = hasCustomsHold
-    ? { state: "hold", reason: "explicit_customs_hold_signal" }
-    : hasCustomsProcessing
-      ? { state: "processing", reason: "explicit_customs_processing_signal" }
-      : hasCustomsRelease
-        ? { state: "released", reason: "explicit_customs_release_signal" }
-        : { state: "insufficient_evidence", reason: "no_explicit_customs_signal" };
+  const latestCustomsEvent = trustedEvents
+    .filter(isCustomsEvent)
+    .sort(compareEvents)[0] || null;
+  const customs = classifyCustomsEvent(latestCustomsEvent) ||
+    { state: "insufficient_evidence", reason: "no_explicit_customs_signal" };
 
   const estimate = expectedDelivery
     ? { source: "carrier", value: expectedDelivery, confidence: "reported" }
     : { source: "insufficient_data", value: null, confidence: "unknown" };
 
-  return { delay, customs, estimate, latestTrustedTime: latestTrusted?.time || null };
+  return {
+    delay,
+    customs,
+    estimate,
+    latestTrustedTime: latestTrusted?.time || null
+  };
 }
 
 function toPublicEvent(event) {
@@ -241,24 +289,27 @@ export function resolveShipmentTruth({
   const timelineEvents = [...deduped].sort(compareEvents);
   const conflicts = findConflicts(timelineEvents);
 
-  // "Received" is ingestion order (or explicit receivedAt when present);
-  // "trusted" is the newest event with a valid, timezone-qualified event time
-  // and at least one source reference. These are deliberately separate fields.
+  // "Received" is ingestion order, or explicit receivedAt when every event has
+  // one. "Trusted" means structurally eligible for chronology: valid zoned
+  // event time, a real source reference and no explicit trusted:false flag.
+  // It does NOT assert that the carrier is independently audited or reliable.
   const latestReceivedEvent = latestByReceipt(deduped);
   const trustedEvents = deduped.filter(event =>
-    Number.isFinite(event.timestampMs) && event.sourceRefs.length > 0
+    event.trusted &&
+    Number.isFinite(event.timestampMs) &&
+    event.sourceRefs.length > 0
   );
-  const latestTrustedEvent = trustedEvents.sort(compareEvents)[0] || null;
+  const latestTrustedEvent = [...trustedEvents].sort(compareEvents)[0] || null;
 
-  // A timestamp and one source are not enough to establish high confidence.
-  // Without independently verified source-quality metadata, cap at medium.
+  // No source-quality registry exists yet. Never inflate a single-provider
+  // timestamp into high confidence; reserve that for a future calibrated model.
   const confidence = conflicts.length > 0
     ? "low"
     : latestTrustedEvent
       ? "medium"
       : "low";
 
-  const expected = normalizeText(expectedDelivery, 80) || null;
+  const expected = normalizeExpectedDelivery(expectedDelivery);
   const timeline = timelineEvents.map(toPublicEvent);
   const latestReceived = latestReceivedEvent ? toPublicEvent(latestReceivedEvent) : null;
   const latestTrusted = latestTrustedEvent ? toPublicEvent(latestTrustedEvent) : null;
