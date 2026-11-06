@@ -7,9 +7,38 @@ const files = ["index.html", "styles.css", "app.js", "translations.js", "coverag
 const engineDist = resolve(root, "node_modules/universal-parcel-scraper/dist");
 
 async function patchWorkerIncompatibleEngineFiles(directory) {
-  // In Node 22+, `with { type: "json" }` is strictly required by the ESM loader.
-  // Preserving import attributes maintains engine compatibility during test and build runs.
-  return 0;
+  // Wrangler's current esbuild parser does not accept Node's JSON import attributes.
+  // The files are bundled by esbuild, which already selects the JSON loader by extension.
+  // This happens after Node regression tests and only in the Pages build tree.
+  let normalized = 0;
+
+  async function visit(folder) {
+    for (const entry of await readdir(folder, { withFileTypes: true })) {
+      const file = resolve(folder, entry.name);
+      if (entry.isDirectory()) {
+        await visit(file);
+        continue;
+      }
+      if (!entry.isFile() || !/\\.m?js$/.test(entry.name)) continue;
+
+      const original = await readFile(file, "utf8");
+      const matches = original.match(/\\bfrom\\s+["'][^"']+\\.json["']\\s+with\\s*\\{\\s*type\\s*:\\s*["']json["']\\s*\\}/g) ?? [];
+      if (matches.length === 0) continue;
+
+      const compatible = original.replace(
+        /(["'][^"']+\\.json["'])\\s+with\\s*\\{\\s*type\\s*:\\s*["']json["']\\s*\\}/g,
+        "$1"
+      );
+      await writeFile(file, compatible);
+      normalized += matches.length;
+    }
+  }
+
+  await visit(directory);
+  if (normalized === 0) {
+    throw new Error("Expected JSON import attributes in the pinned engine build; none were found");
+  }
+  return normalized;
 }
 
 async function patchWorkerPlaceAssets() {
@@ -140,7 +169,7 @@ try {
   // Replace Deppon's direct Sharp solver so its adapter can fail gracefully without native Sharp.
   const depponAdapter = resolve(engineDist, "carriers/deppon/adapter.js");
   const depponSource = await readFile(depponAdapter, "utf8");
-  if (!depponSource.includes("ChallengeError")) {
+  if (!depponSource.includes("Deppon image challenge decoding is unavailable in Cloudflare Workers")) {
     const depponCompatible = depponSource.replace(
       /const sharp = \(await import\((["'])sharp\1\)\)\.default;/,
       "const sharp = () => { throw new ChallengeError(PROVIDER, 'Deppon image challenge decoding is unavailable in Cloudflare Workers'); };"
