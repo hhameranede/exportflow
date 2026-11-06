@@ -203,21 +203,35 @@ jobs:
             DEFINITION OF DONE
             Materially improve the actual ExportFlow application; preserve and repair useful work from feat/issue29-complete-roadmap; include the two roadmap documents only after checking factual accuracy; run and report actual checks; and allow the OpenCode GitHub integration to publish the managed branch and create one reviewable PR. The PR must remain open and unmerged. If nearing the runner limit, write an exact checkpoint and finish cleanly without changing branches. Never report success if publication failed or if tests were not actually run.
 
-      - name: Verify managed branch and PR publication
-        if: success()
+  verify-publication:
+    name: Verify Laguna PR publication after OpenCode cleanup
+    needs: laguna
+    if: always() && needs.laguna.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+      actions: read
+    steps:
+      - name: Verify a new Issue PR was published
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number || 29 }}
+          RUN_ID: ${{ github.run_id }}
         run: |
-          branch="$(git branch --show-current)"
-          echo "Final branch: ${branch}"
-          if [[ -z "${branch}" || "${branch}" == "main" ]]; then
-            echo "::error::Laguna did not leave a reviewable feature branch."
-            exit 1
-          fi
-          pr_url="$(gh pr list --head "${branch}" --base main --state open --json url --jq '.[0].url // empty')"
+          run_started="$(gh run view "${RUN_ID}" --json createdAt --jq '.createdAt')"
+          prs="$(gh pr list --base main --state open --json url,title,body,headRefName,createdAt)"
+          pr_url="$(jq -r --arg started "${run_started}" --arg issue "${ISSUE_NUMBER}" '
+            .[]
+            | select(.createdAt >= $started)
+            | select((.headRefName | startswith("opencode/issue" + $issue + "-"))
+              or ((.title // "") | contains("Issue #" + $issue))
+              or ((.body // "") | contains("/issues/" + $issue)))
+            | .url
+          ' <<< "${prs}" | head -n 1)"
           if [[ -z "${pr_url}" ]]; then
-            echo "::error::No open PR exists for the final branch. The OpenCode action may have skipped publication."
+            echo "::error::OpenCode finished successfully but no new open PR for Issue #${ISSUE_NUMBER} was found after its post-action."
             exit 1
           fi
-          echo "Published review PR: ${pr_url}"
+          echo "Verified published PR: ${pr_url}"
