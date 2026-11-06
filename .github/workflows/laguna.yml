@@ -16,16 +16,23 @@ permissions:
   pull-requests: write
   issues: write
 
-# A replacement run for the same issue supersedes a stuck run.
+# Never cancel active engineering work when another issue comment arrives.
+# New requests for the same issue wait behind the active run.
 concurrency:
   group: exportflow-laguna-${{ github.event.issue.number || inputs.issue_number || 29 }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   laguna:
     name: Laguna XS 2.1 resumable engineering run
     runs-on: ubuntu-latest
-    # timeout-minutes intentionally omitted: GitHub applies its default job limit.
+    timeout-minutes: 330
+    if: >-
+      github.actor == 'hhameranede' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request == null &&
+        startsWith(github.event.comment.body, '/laguna-run')))
     steps:
       - name: Authorize owner trigger
         shell: bash
@@ -121,10 +128,12 @@ jobs:
             1. Inspect the current default-branch HEAD, all remote branches, recent commits, open PRs, PR #24 and PR #30, and Issue #29 comments.
             2. Identify any durable feature branch, commits, draft PR, progress file, or checkpoint produced by previous work. Continue from the most advanced durable checkpoint and preserve useful changes.
             3. Never claim to have recovered uncommitted files from a terminated runner. If no checkpoint exists, state that no previous code changes were persisted and continue from the latest repository state.
-            4. Start one dedicated recovery feature branch from the latest main. Use one consistent branch and one PR for the product work.
-            5. Persist progress continuously: commit and push every coherent implementation milestone; maintain a concise checkpoint file (for example docs/engineering/laguna-progress.md) with completed work, remaining work, exact commands/results, and next step. Do not leave multiple large phases only in an ephemeral working tree.
-            6. Open/update a draft PR after the first meaningful code checkpoint, then keep adding commits to that same PR. Do not wait until the very end to persist all work.
-            7. Before ending, update the checkpoint and PR body with truthful phase-by-phase status and exact test outcomes.
+            4. CRITICAL — BRANCH OWNERSHIP: The OpenCode GitHub action owns branch and PR lifecycle. Remain on the branch managed by this action. Never create or switch branches yourself.
+            5. Never run git branch, git checkout, git switch, git worktree, or any command/script that changes HEAD. Never manually push, force-push, run gh pr create, or call GitHub PR APIs. These actions can change HEAD away from the action-managed branch and cause PR publication to be skipped.
+            6. Existing work on other branches may be inspected read-only with git fetch, git log, git show, and git diff. Do not check out those branches. Selectively apply useful changes onto the current managed branch without switching HEAD; resolve conflicts carefully.
+            7. Maintain docs/engineering/laguna-progress.md as a concise checkpoint: completed, remaining, blocked, exact commands/results, and next action. Let the OpenCode integration publish the branch and create the PR; do not claim persistence until the PR or branch is visible on GitHub.
+            8. Work in bounded milestones. Diagnose a repeated blocker once, record the evidence, then continue independent tasks. Do not loop indefinitely or spend the run on one dependency.
+            9. Before finishing, verify the intended changes are on the current managed branch, no unrelated changes were made, and the OpenCode integration has an open PR. Report its URL only if it actually exists.
 
             GIT DEPENDENCY UNBLOCKING — STRICTLY BOUNDED
             The last visible reasoning was: "The git dependency seems to be checking out a commit that already has the patch. Let me check the raw git source."
@@ -138,7 +147,17 @@ jobs:
             PRODUCT IMPLEMENTATION
             Inspect the actual codebase and reconcile PR #24 and PR #30 on one current base. Reuse sound work, fix defects, avoid duplicate implementations, and preserve the ExportFlow-owned carrier-engine facade rather than reintroducing direct upstream coupling.
             Continue the original Issue #29 phases in order where practical: modular carrier engine; deterministic shipment truth; evidence-based delay/customs/ETA insights; honest global carrier/country coverage; responsive accessible eight-language UI including full Arabic RTL and Bengali; technical SEO; secure product-facing MCP/API integration where supported by the existing runtime; security/privacy/reliability; complete local verification.
-            Address previously reported review risks: chronology must not be overridden by arbitrary stage/description scores; distinguish latest-received from latest-trustworthy events; exceptions must not automatically mean confirmed delays; source references must not imply independent multi-provider corroboration unless independent sources are actually queried; test conflicting newer/older events, timestamp ties, timezone-less/invalid timestamps, provenance, and insufficient evidence.
+            Treat the previous feature branch feat/issue29-complete-roadmap as unverified work to review, not as a finished product. Inspect its diff and reuse its sound changes on the current managed branch without checking it out.
+            Specifically audit and repair these likely correctness defects before claiming completion:
+            - latestReceived and latestTrusted must not be identical aliases unless the evidence model proves they are semantically identical; define and test both meanings.
+            - Preserve source provenance per event. Do not assign one global provider to unrelated events or imply independent-source corroboration without actual independent sources.
+            - Do not label confidence high merely because a timestamp exists. Confidence must reflect source reliability, event validity, conflicts, and evidence quality; otherwise remain low/unknown.
+            - Handle timezone-less timestamps deterministically and disclose the policy. Invalid or ambiguous timestamps must not silently become trusted facts.
+            - Do not infer a possible delay solely because there are two scans or a generic exception keyword; explain the signal and keep weak evidence as insufficient.
+            - Ensure status selection cannot be overridden by arbitrary text/stage scores; test chronology, equal timestamps, duplicate events, invalid timestamps, and conflicting sources.
+            - Review all roadmap numbers and current-state claims. Mark numeric values as proposed targets where appropriate; remove unsupported baselines or claims of live carrier coverage.
+            - Verify the carrier facade import/export contract against the pinned dependency and the actual Pages runtime, not only a local mocked test.
+            - Confirm API response compatibility, redaction of tracking identifiers, input validation, and that sourceRefs refer to real event sources.
             No fake carriers, live verification, countries, shipment scans, confidence, ETAs, stats, or test results. Do not call a carrier live-verified merely because it exists in a catalogue.
 
             REQUIRED ROADMAP DOCUMENTS
@@ -184,4 +203,4 @@ jobs:
             - Preserve the existing stack, architecture, design direction and working behavior unless a justified change is required.
 
             DEFINITION OF DONE
-            Materially improve the actual ExportFlow application; persist milestones as commits on the feature branch; keep one reviewable draft PR updated; include the two roadmap documents; run and report actual checks; and leave the final PR open and unmerged. If the runner limit is approaching, commit/push a checkpoint, update the progress file and PR with precise remaining work, then exit cleanly. Never stop merely because the Git dependency investigation, one test, or one phase is inconvenient.
+            Materially improve the actual ExportFlow application; preserve and repair useful work from feat/issue29-complete-roadmap; include the two roadmap documents only after checking factual accuracy; run and report actual checks; and allow the OpenCode GitHub integration to publish the managed branch and create one reviewable PR. The PR must remain open and unmerged. If nearing the runner limit, write an exact checkpoint and finish cleanly without changing branches. Never report success if publication failed or if tests were not actually run.
