@@ -28,13 +28,13 @@ function withLocaleMetadata(source, locale, spec, translations) {
   const canonical = localizedUrl(locale, spec.route);
   const alternates = localeCodes.map(code =>
     '<link rel="alternate" hreflang="' + code + '" href="' + localizedUrl(code, spec.route) + '">'
-  ).concat('<link rel="alternate" hreflang="x-default" href="' + localizedUrl("en", spec.route) + '">').join("\\n");
+  ).concat('<link rel="alternate" hreflang="x-default" href="' + localizedUrl("en", spec.route) + '">').join("\n");
 
   let html = source
     .replace(/<html lang="[^"]+" dir="[^"]*">/, '<html lang="' + locale + '" dir="' + (locale === "ar" ? "rtl" : "ltr") + '">')
-    .replace(/<title>[\\s\\S]*?<\\/title>/, "<title>" + htmlAttribute(title) + "</title>")
+    .replace(/<title>[\s\S]*?<\/title>/, "<title>" + htmlAttribute(title) + "</title>")
     .replace(/<meta name="description" content="[^"]*">/, '<meta name="description" content="' + htmlAttribute(description) + '">')
-    .replace(/<link rel="canonical" href="[^"]+"\\s*\\/?\\s*>/, '<link rel="canonical" href="' + canonical + '">')
+    .replace(/<link rel="canonical" href="[^"]+"\s*\/?\s*>/, '<link rel="canonical" href="' + canonical + '">')
     .replace(/<meta property="og:title" content="[^"]*">/, '<meta property="og:title" content="' + htmlAttribute(title) + '">')
     .replace(/<meta property="og:description" content="[^"]*">/, '<meta property="og:description" content="' + htmlAttribute(description) + '">')
     .replace(/<meta property="og:url" content="[^"]*">/, '<meta property="og:url" content="' + canonical + '">');
@@ -43,12 +43,12 @@ function withLocaleMetadata(source, locale, spec, translations) {
     html = html.replaceAll('href="/"', 'href="/' + locale + '/"');
     html = html.replaceAll('href="/coverage/"', 'href="/' + locale + '/coverage/"');
   }
-  return html.replace("</head>", alternates + "\\n</head>");
+  return html.replace("</head>", alternates + "\n</head>");
 }
 
 async function generateLocalizedPages() {
   const translationSource = await readFile(resolve(root, "translations.js"), "utf8");
-  const match = translationSource.match(/window\\.EXPORTFLOW_TRANSLATIONS\\s*=\\s*([\\s\\S]*);\\s*$/);
+  const match = translationSource.match(/window\.EXPORTFLOW_TRANSLATIONS\s*=\s*([\s\S]*);\s*$/);
   if (!match) throw new Error("Could not parse ExportFlow locale dictionaries during the build");
   const translations = JSON.parse(match[1]);
   if (localeCodes.some(locale => !translations[locale])) {
@@ -72,19 +72,19 @@ async function generateLocalizedPages() {
       await writeFile(target, withLocaleMetadata(source, locale, spec, translations));
 
       sitemapEntries.push(
-        "  <url>\\n    <loc>" + localizedUrl(locale, spec.route) + "</loc>\\n" +
-        alternateLinks.join("\\n") + "\\n  </url>"
+        "  <url>\n    <loc>" + localizedUrl(locale, spec.route) + "</loc>\n" +
+        alternateLinks.join("\n") + "\n  </url>"
       );
     }
   }
 
   for (const route of ["/privacy/", "/terms/"]) {
-    sitemapEntries.push("  <url>\\n    <loc>https://exportflow.me" + route + "</loc>\\n  </url>");
+    sitemapEntries.push("  <url>\n    <loc>https://exportflow.me" + route + "</loc>\n  </url>");
   }
 
-  const sitemap = '<?xml version="1.0" encoding="UTF-8"?>\\n' +
-    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\\n' +
-    sitemapEntries.join("\\n") + "\\n</urlset>\\n";
+  const sitemap = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n' +
+    sitemapEntries.join("\n") + "\n</urlset>\n";
   await writeFile(resolve(output, "sitemap.xml"), sitemap);
   console.log("Generated " + (localeCodes.length * localizedPageSpecs.length) + " localized SEO pages and an hreflang sitemap.");
 }
