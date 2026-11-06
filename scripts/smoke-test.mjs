@@ -102,6 +102,7 @@ assert.match(coverageHtml, /<link rel="canonical" href="https:\/\/exportflow\.me
 assert.match(coverageHtml, /application\/ld\+json/);
 assert.match(coverageHtml, /id="coverageSearch"/);
 assert.match(coverageHtml, /id="coverageFilter"/);
+assert.match(coverageHtml, /value="browser-required"/);
 assert.equal((coverageHtml.match(/data-country-code="/g) || []).length, 249, "Coverage directory must statically list all 249 country/territory codes");
 assert.match(coverageHtml, /not a guarantee that every parcel can be tracked/i, "Coverage page must explain that catalog presence is not a guarantee");
 assert.match(coverageJs, /fetch\("\/api\/coverage"/);
@@ -109,13 +110,18 @@ assert.match(coverageJs, /Intl\.DisplayNames/, "Country names should be localize
 assert.match(coverageJs, /row\.dataset\.carriersSearch = names\.join\(" "\)/, "Directory search must include every carrier, not only displayed names");
 assert.match(coverageJs, /row\.dataset\.carriersSearch/, "Carrier search index must be used when filtering countries");
 assert.match(coverageJs, /coverageStatusDirect/);
+assert.match(coverageJs, /coverageStatusBrowserRequired/);
+assert.match(coverageJs, /carrier\.requiresBrowser/);
 assert.match(coverageJs, /coverageStatusFallback/);
 assert.match(coverageJs, /coverageStatusLink/);
 assert.match(coverageJs, /coverageStatusNone/);
 assert.match(coverageApi, /CARRIERS/);
+assert.match(coverageApi, /CARRIER_DEFINITIONS/);
+assert.match(coverageApi, /browser-required/);
 assert.match(coverageApi, /universal-fallback/);
 assert.match(coverageApi, /link-only/);
 assert.match(coverageApi, /not-listed/);
+assert.match(coverageApi, /browserRequiredCountryCount/);
 assert.match(coverageApi, /SOURCE_REVISION/);
 assert.match(carriersApi, /CARRIER_IDS/);
 
