@@ -19,7 +19,6 @@
 /index.html
   Cache-Control: public, max-age=0, must-revalidate
 
-
 /favicon.svg
   Cache-Control: public, max-age=86400
 
@@ -39,6 +38,27 @@
   Cache-Control: public, max-age=0, must-revalidate
 
 /coverage/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/about/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+/contact/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+/privacy/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+/terms/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+/cookies/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+/security/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+/disclaimer/*
   Cache-Control: public, max-age=0, must-revalidate
 
 /translations.js
