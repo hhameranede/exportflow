@@ -40,6 +40,7 @@ const algeria = payload.countries.find(country => country.code === "DZ");
 assert.ok(algeria?.directCarriers.some(carrier => carrier.id === "algerie-poste"), "Algérie Poste should be a browser-free direct adapter");
 assert.ok(algeria?.directCarriers.some(carrier => carrier.id === "zr-express"), "ZR Express should be a browser-free direct adapter");
 assert.ok(algeria?.directCarriers.some(carrier => carrier.id === "noest"), "NOEST should be a browser-free direct adapter");
+assert.ok(algeria?.directCarriers.some(carrier => carrier.id === "mylerz"), "Mylerz should be a browser-free direct adapter for Algeria");
 assert.ok(algeria?.browserRequiredCarriers.some(carrier => carrier.id === "yalidine"), "Yalidine must be flagged as browser-required");
 assert.ok(!algeria?.directCarriers.some(carrier => carrier.id === "yalidine"), "Yalidine must not inflate server-ready direct coverage");
 assert.equal(payload.summary.universalFallbackCountryCount, payload.countries.filter(country => country.fallbackCarrierCount > 0).length);
