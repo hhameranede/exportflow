@@ -8,7 +8,7 @@ function addCarrier(map, code, carrier) {
   map.get(code).push({
     id: carrier.id,
     name: carrier.name,
-    adapter: carrier.capabilities.tracking.adapter
+    adapter: carrier.adapter ?? carrier.capabilities?.tracking?.adapter ?? null
   });
 }
 
