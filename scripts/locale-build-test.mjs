@@ -24,12 +24,22 @@ for (const locale of locales) {
   }
 }
 
+const trustPageNames = ["about", "contact", "privacy", "terms", "cookies", "security", "disclaimer"];
+for (const pageName of trustPageNames) {
+  const page = await readFile("dist/" + pageName + "/index.html", "utf8");
+  assert.ok(page.includes('<link rel="canonical"'), pageName + " page must retain its canonical URL");
+  assert.ok(page.includes("/styles.css?v=ef-ui-refresh-20261106-01"), pageName + " page must load the shared design stylesheet");
+}
+
 const sitemap = await readFile("dist/sitemap.xml", "utf8");
 const locations = [...sitemap.matchAll(/<loc>(https:\/\/exportflow\.me\/[^<]*)<\/loc>/g)].map(match => match[1]);
-assert.equal(locations.length, 18, "Built sitemap must include sixteen localized routes and two legal pages");
+assert.equal(locations.length, 23, "Built sitemap must include sixteen localized routes and seven static trust pages");
 assert.ok(sitemap.includes('xmlns:xhtml="http://www.w3.org/1999/xhtml"'));
 assert.ok(locations.includes("https://exportflow.me/privacy/"));
 assert.ok(locations.includes("https://exportflow.me/terms/"));
+for (const pageName of trustPageNames) {
+  assert.ok(locations.includes("https://exportflow.me/" + pageName + "/"), "Built sitemap must include " + pageName);
+}
 assert.ok(!sitemap.includes("/api/") && !sitemap.includes("trackingNumber="));
 
 console.log("Localized page artifacts, canonical URLs and hreflang sitemap verified.");

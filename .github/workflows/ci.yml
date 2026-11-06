@@ -61,3 +61,10 @@ jobs:
           test -s dist/site.webmanifest
           test -s dist/og-image-20261106.png
           test -s dist/coverage/index.html
+          test -s dist/about/index.html
+          test -s dist/contact/index.html
+          test -s dist/privacy/index.html
+          test -s dist/terms/index.html
+          test -s dist/cookies/index.html
+          test -s dist/security/index.html
+          test -s dist/disclaimer/index.html

@@ -25,6 +25,11 @@ const [
   readFile("functions/_middleware.js", "utf8")
 ]);
 
+const trustPageNames = ["about", "contact", "privacy", "terms", "cookies", "security", "disclaimer"];
+const trustPages = await Promise.all(
+  trustPageNames.map(page => readFile(page + "/index.html", "utf8"))
+);
+
 assert.match(html, /<html[^>]+lang="en"[^>]+dir="ltr"/i, "English LTR homepage should exist");
 for (const id of [
   "trackingForm", "trackingNumber", "postcodeInput", "languageToggle", "resultPanel",
@@ -87,9 +92,9 @@ for (const asset of ["favicon.svg", "favicon-32x32.png", "apple-touch-icon.png",
 assert.ok(headers.includes("/og-image-20261106.png\n  Cache-Control: public, max-age=31536000, immutable"), "Versioned social preview image must have immutable caching");
 
 assert.match(html, /href="\/coverage\//, "Homepage must link to the global carrier directory");
-assert.match(html, /styles\.css\?v=ef-assets-refresh-20261106-02/, "Homepage CSS must use a fresh cache-busting release URL");
-assert.match(html, /translations\.js\?v=ef-assets-refresh-20261106-02/, "Translations must use a fresh cache-busting release URL");
-assert.match(html, /app\.js\?v=ef-country-locale-20261106-01/, "Homepage application JS must use fresh locale-routing code");
+assert.match(html, /styles\.css\?v=ef-ui-refresh-20261106-01/, "Homepage CSS must use a fresh cache-busting release URL");
+assert.match(html, /translations\.js\?v=ef-ui-refresh-20261106-01/, "Translations must use a fresh cache-busting release URL");
+assert.match(html, /app\.js\?v=ef-ui-refresh-20261106-01/, "Homepage application JS must use fresh locale-routing code");
 assert.ok(headers.includes("/app.js\n  Cache-Control: public, max-age=0, must-revalidate"), "Homepage app JavaScript must be revalidated");
 assert.match(robots, /User-agent: \*/);
 assert.match(robots, /Allow: \/api\/coverage/, "Search engines must be allowed to load the directory data");
@@ -101,8 +106,8 @@ const sitemapLocations = [...sitemap.matchAll(/<loc>(https:\/\/exportflow\.me\/[
 const expectedLocalizedUrls = locales.flatMap(locale => [
   locale === "en" ? "https://exportflow.me/" : "https://exportflow.me/" + locale + "/",
   locale === "en" ? "https://exportflow.me/coverage/" : "https://exportflow.me/" + locale + "/coverage/"
-]).concat(["https://exportflow.me/privacy/", "https://exportflow.me/terms/"]);
-assert.equal(sitemapLocations.length, 18, "Sitemap must contain sixteen localized URLs and two English legal pages");
+]).concat(["https://exportflow.me/about/", "https://exportflow.me/contact/", "https://exportflow.me/privacy/", "https://exportflow.me/terms/", "https://exportflow.me/cookies/", "https://exportflow.me/security/", "https://exportflow.me/disclaimer/"]);
+assert.equal(sitemapLocations.length, 23, "Sitemap must contain sixteen localized URLs and seven trust pages");
 assert.deepEqual(sitemapLocations.sort(), expectedLocalizedUrls.sort(), "Sitemap must list every public locale route exactly once");
 assert.match(sitemap, /xmlns:xhtml="http:\/\/www\.w3\.org\/1999\/xhtml"/, "Sitemap must declare the hreflang namespace");
 for (const locale of locales) assert.ok(sitemap.includes('hreflang="' + locale + '"'), "Sitemap must include hreflang for " + locale);
@@ -162,7 +167,7 @@ assert.match(privacyHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\
 assert.match(termsHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\/terms\/"\s*\/?>/);
 
 assert.equal(COUNTRY_CODES.length, 249, "ISO 3166-1 assigned country/territory list should contain 249 alpha-2 codes");
-assert.match(coverageHtml, /coverage\.js\?v=ef-country-locale-20261106-01/, "Coverage client must use fresh locale-routing code");
+assert.match(coverageHtml, /coverage\.js\?v=ef-ui-refresh-20261106-01/, "Coverage client must use fresh locale-routing code");
 assert.match(coverageHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\/coverage\/"\s*\/?>/);
 assert.match(coverageHtml, /application\/ld\+json/);
 assert.match(coverageHtml, /id="coverageSearch"/);
@@ -203,3 +208,28 @@ assert.match(build, /coverage\/index\.html/, "Build must include the nested coun
 assert.match(build, /localizedPageSpecs/, "Build must generate localized copies of the homepage and coverage directory");
 
 console.log("ExportFlow geo-language routing, localized SEO pages, tracking, coverage and sitemap tests passed.");
+
+for (const id of ["journeyCard", "journeyProgressTrack", "stepInfo", "stepTransit", "stepDelivery", "stepDelivered"]) {
+  assert.match(html, new RegExp('id="' + id + '"'), "New tracking journey UI is missing: " + id);
+}
+for (const pageName of trustPageNames) {
+  assert.match(html, new RegExp('href="/' + pageName + '/"'), "Homepage footer must link to " + pageName);
+  assert.match(sitemap, new RegExp("https://exportflow\\.me/" + pageName + "/"), "Sitemap must include " + pageName);
+  assert.ok(build.includes('"' + pageName + '"'), "Build must copy the " + pageName + " page");
+}
+for (let index = 0; index < trustPageNames.length; index += 1) {
+  const pageName = trustPageNames[index];
+  const pageHtml = trustPages[index];
+  assert.match(pageHtml, /<link rel="canonical"/, pageName + " must include a canonical URL");
+  assert.ok(pageHtml.includes("/styles.css?v=ef-ui-refresh-20261106-01"), pageName + " must load the new shared stylesheet");
+}
+assert.match(build, /const publicPageDirectories/, "Cloudflare build must include all seven trust pages");
+assert.match(css, /\.trust-page/, "Trust Center pages must share the new site theme");
+assert.match(css, /\.trust-hero/, "Trust Center hero styling must exist");
+assert.match(css, /body\.coverage-page \.legal-container/, "Privacy and terms pages must share the new card layout");
+assert.match(html, /data-count-up/, "Catalog values must be marked for count-up animation");
+assert.match(js, /function animateCatalogMetric/, "Catalog counts must use the animated counter");
+assert.match(js, /IntersectionObserver/, "Counters should animate when visible");
+assert.match(js, /history\.scrollRestoration = "manual"/, "Fresh homepage visits must disable stale scroll restoration");
+assert.match(js, /addEventListener\("pageshow"/, "Homepage must re-check initial scroll position after page display");
+console.log("ExportFlow Hi design, trust pages, counters and scroll restoration verified.");
