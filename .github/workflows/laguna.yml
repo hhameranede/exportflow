@@ -73,6 +73,28 @@ jobs:
           fi
           echo "NVIDIA_API_KEY is present. Its value will not be printed."
 
+      - name: Verify NVIDIA Laguna XS 2.1 endpoint
+        shell: bash
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          response_file="$RUNNER_TEMP/laguna-nvidia-smoke.json"
+          if ! curl --silent --show-error --fail \
+            --request POST \
+            --url "https://integrate.api.nvidia.com/v1/chat/completions" \
+            --header "Authorization: Bearer ${NVIDIA_API_KEY}" \
+            --header "Content-Type: application/json" \
+            --data '{"model":"poolside/laguna-xs-2.1","messages":[{"role":"user","content":"Reply with READY only."}],"max_tokens":8,"stream":false}' \
+            --output "$response_file"; then
+            echo "::error::NVIDIA rejected the Laguna XS 2.1 smoke request. The response body is intentionally not printed."
+            exit 1
+          fi
+          if ! jq -e '.choices[0].message.content | type == "string"' "$response_file" >/dev/null; then
+            echo "::error::NVIDIA returned an unexpected response for Laguna XS 2.1."
+            exit 1
+          fi
+          echo "NVIDIA accepted poolside/laguna-xs-2.1 and returned a model response."
+
       - name: Check out ExportFlow
         uses: actions/checkout@v6
         with:
