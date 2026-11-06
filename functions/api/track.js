@@ -134,7 +134,8 @@ function projectResult(response) {
       sourceRefs: Array.isArray(event?.sourceRefs)
         ? event.sourceRefs.map(value => safeText(value, 80)).filter(Boolean)
         : undefined,
-      receivedAt: safeText(event?.receivedAt ?? event?.received_at, 80)
+      receivedAt: safeText(event?.receivedAt ?? event?.received_at, 80),
+      trusted: event?.trusted !== false
     })),
     status: rawStatus,
     source: rawSource,
