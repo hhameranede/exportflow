@@ -22,7 +22,7 @@ export async function onRequestGet() {
   const catalog = new Map();
 
   for (const carrier of Object.values(CARRIERS)) {
-    if (!carrier || carrier.id === "unknown") continue;
+    if (!carrier || carrier.id === "unknown" || carrier.capabilities?.selectable !== true) continue;
     const codes = Array.isArray(carrier.countries) ? carrier.countries : [];
     const tracking = carrier.capabilities?.tracking;
     if (!tracking) continue;
