@@ -4,25 +4,29 @@
 
 Build ExportFlow into a production-grade shipment tracking and logistics intelligence platform with verifiable carrier coverage, deterministic event resolution, and enterprise-ready observability.
 
+## Baseline and Target Interpretation
+
+Current-state statements describe repository evidence, not assumed production capability. All numeric counts, percentages, dates, and thresholds in this roadmap are **proposed planning targets**, not measured baselines, delivery commitments, or present capabilities. Validate them against observed demand, operating cost, carrier access, privacy requirements, and a measured baseline before approval. A carrier catalogue entry or adapter record does not establish successful live tracking.
+
 ---
 
 ## Pillar 1: Global Carrier Network
 
 ### Objectives
-- Expand direct adapter coverage to 200+ live-verified carriers across major regions
+- Work toward a proposed target of up to 200 live-verified carriers across major regions, subject to demand, technical feasibility, and partner access
 - Establish adapter contract standards for contribution
 - Implement live-verification evidence collection for each integration
 
 ### Current State
 - Single universal fallback provider (UPU) enabled by default
-- Adapter catalog from upstream contains 3,500+ entries, 731 custom adapters
-- No verified live tracking integrations (catalogued, not tested)
+- The pinned upstream catalog contains carrier IDs and adapter metadata; exact counts must be generated from that pinned revision when needed.
+- This roadmap does not attach reproducible live-verification evidence to catalog entries; do not describe an adapter as live-verified without recorded test evidence.
 
 ### Phases
 
 | Phase | Work | Dependencies | Risks | Acceptance Criteria | Metrics |
 |-------|------|--------------|-------|---------------------|---------|
-| 2.1 | Audit current adapter catalog and identify top 50 carriers by parcel volume | Upstream catalog data | External provider API changes | Catalog of top 50 carriers with adapter status | 50 carrier entries documented |
+| 2.1 | Audit current adapter catalog and identify a prioritized carrier cohort using measured ExportFlow demand or a cited, current parcel-volume source | Upstream catalog data | External provider API changes | Catalog of top 50 carriers with adapter status | 50 carrier entries documented |
 | 2.2 | Implement modular carrier adapter facade | Phase 2.1 completed | Credential management | CarrierAdapter interface with health/status methods | 10 adapters with test coverage |
 | 2.3 | Add live verification for first 5 carriers | Test credentials obtained | Rate limiting, blocking | Verified tracking lookups with evidence | 5 carriers with live test records |
 
@@ -155,9 +159,9 @@ Build ExportFlow into a production-grade shipment tracking and logistics intelli
 
 ## Phase Delivery Order
 
-1. **Phase 2.1** (Current) - Audit and documentation foundation
-2. **Phase 2.2** - Interface implementation (CarrierAdapter, Merchant API)
-3. **Phase 2.3** - Live verification and data collection
+1. **Foundation** - Complete the Issue #29 truth and adapter foundations, then audit demand and dependencies.
+2. **Pilot** - Implement adapter contracts and controlled tests for carriers with available official interfaces.
+3. **Expansion** - Add live verification and data collection only when credentials, consent, and partner access exist.
 
 ---
 
