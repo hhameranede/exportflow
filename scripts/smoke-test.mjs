@@ -89,7 +89,7 @@ assert.ok(headers.includes("/og-image-20261106.png\n  Cache-Control: public, max
 assert.match(html, /href="\/coverage\//, "Homepage must link to the global carrier directory");
 assert.match(html, /styles\.css\?v=ef-assets-refresh-20261106-02/, "Homepage CSS must use a fresh cache-busting release URL");
 assert.match(html, /translations\.js\?v=ef-assets-refresh-20261106-02/, "Translations must use a fresh cache-busting release URL");
-assert.match(html, /app\.js\?v=ef-assets-refresh-20261106-02/, "Homepage application JS must use a fresh cache-busting release URL");
+assert.match(html, /app\.js\?v=ef-country-locale-20261106-01/, "Homepage application JS must use fresh locale-routing code");
 assert.ok(headers.includes("/app.js\n  Cache-Control: public, max-age=0, must-revalidate"), "Homepage app JavaScript must be revalidated");
 assert.match(robots, /User-agent: \*/);
 assert.match(robots, /Allow: \/api\/coverage/, "Search engines must be allowed to load the directory data");
@@ -130,7 +130,6 @@ assert.match(privacyHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\
 assert.match(termsHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\/terms\/"\s*\/?>/);
 
 assert.equal(COUNTRY_CODES.length, 249, "ISO 3166-1 assigned country/territory list should contain 249 alpha-2 codes");
-assert.match(coverageHtml, /coverage\\.js\\?v=ef-country-locale-20261106-01/, "Coverage client must use fresh locale-routing assets");
 assert.match(coverageHtml, /coverage\.js\?v=ef-country-locale-20261106-01/, "Coverage client must use fresh locale-routing code");
 assert.match(coverageHtml, /<link rel="canonical" href="https:\/\/exportflow\.me\/coverage\/"\s*\/?>/);
 assert.match(coverageHtml, /application\/ld\+json/);
