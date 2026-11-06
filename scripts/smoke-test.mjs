@@ -133,4 +133,12 @@ assert.match(build, /"robots\.txt"/);
 assert.match(build, /"sitemap\.xml"/);
 assert.match(build, /coverage\/index\.html/, "Build must include the nested country directory page");
 
+const trustPages = ["about", "contact", "cookies", "disclaimer", "privacy", "security", "terms"];
+for (const page of trustPages) {
+  const pageHtml = await readFile(page + "/index.html", "utf8");
+  assert.match(pageHtml, /<title>/i, page + " trust page must include a title");
+  assert.match(pageHtml, /rel=["']canonical["']/i, page + " trust page must include a canonical URL");
+  assert.ok(build.includes('"' + page + '"'), "Build must publish the " + page + " trust page");
+}
+
 console.log("ExportFlow eight-language, tracking, coverage and SEO smoke tests passed.");
