@@ -8,8 +8,8 @@
 - [x] Confirm repository default branch and permissions.
 - [x] Define asynchronous GitHub handoff model.
 - [x] Define task contract and permission boundaries.
-- [ ] Create the first scoped Copilot task issue.
-- [ ] Verify Copilot Cloud Agent availability for this repository/account.
+- [x] Create the first scoped Copilot task issue: #26.
+- [ ] Verify Copilot Cloud Agent availability for this repository/account (pilot issue #26; owner action pending).
 - [ ] Run one small pilot issue and validate the handoff loop.
 - [ ] Review whether a custom MCP extension is needed and eligible.
 
@@ -33,6 +33,12 @@ Use GitHub Issues and PRs as the initial shared control plane. This is durable, 
 3. Have the owner assign it to Copilot or paste the issue into the Copilot coding agent UI.
 4. ChatGPT reviews the resulting PR and records the outcome here.
 
+## GitHub artifacts
+
+- Draft coordination PR: https://github.com/hhameranede/exportflow/pull/25
+- Documentation-only Copilot pilot issue: https://github.com/hhameranede/exportflow/issues/26
+- Working branch: `feat/chatgpt-copilot-coordination-bridge-2026-11-06`
+
 ## Verification
 
-No project code, production infrastructure, or Cloudflare resources were changed in this phase. Documentation-only changes are pending PR review.
+Five documentation files were committed to the working branch. No application code, production infrastructure, Cloudflare resources, Vercel resources, secrets, or deployments were changed. PR #25 remains draft and unmerged. The pilot requires the owner to assign/launch Copilot coding agent from issue #26; availability has not yet been proven.
