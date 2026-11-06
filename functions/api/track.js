@@ -1,5 +1,6 @@
 import { createTracker, TrackingError } from "../../node_modules/universal-parcel-scraper/dist/facade/index.js";
 import { createCloudflareFetch } from "../lib/cloudflare-fetch.mjs";
+import { safeEventPoint } from "../lib/coordinates.mjs";
 
 const MAX_BODY_CHARS = 4_096;
 const MAX_NUMBER_LENGTH = 40;
@@ -122,7 +123,8 @@ function projectResult(response) {
     time: safeText(event?.time, 80),
     location: safeText(event?.location, 180),
     description: safeText(event?.description, 320),
-    stage: safeStage(event?.stage)
+    stage: safeStage(event?.stage),
+    ...(safeEventPoint(event?.point) ? { point: safeEventPoint(event.point) } : {})
   })) : [];
 
   return {

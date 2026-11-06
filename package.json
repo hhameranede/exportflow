@@ -10,7 +10,7 @@
     "dev": "python3 -m http.server 4173",
     "start": "python3 -m http.server 4173",
     "check": "node scripts/smoke-test.mjs",
-    "test": "node scripts/engine-smoke-test.mjs && node scripts/cloudflare-fetch-test.mjs && npm run check",
+    "test": "node scripts/engine-smoke-test.mjs && node scripts/cloudflare-fetch-test.mjs && node scripts/map-coordinates-test.mjs && npm run check",
     "build": "node scripts/build.mjs"
   },
   "dependencies": {

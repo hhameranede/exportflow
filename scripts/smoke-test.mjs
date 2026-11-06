@@ -9,7 +9,7 @@ const [html, css, js, api] = await Promise.all([
 ]);
 
 assert.match(html, /<html[^>]+lang="en"[^>]+dir="ltr"/i, "English LTR document should exist");
-for (const id of ["trackingForm", "trackingNumber", "postcodeInput", "languageToggle", "resultPanel", "faq"]) {
+for (const id of ["trackingForm", "trackingNumber", "postcodeInput", "languageToggle", "resultPanel", "shipmentMap", "mapNote", "eventCount", "faq"]) {
   assert.match(html, new RegExp('id="' + id + '"'), "Missing required element: " + id);
 }
 assert.match(js, /EXF-DEMO-001/, "Demo-only sample flow must stay explicit");
@@ -18,6 +18,10 @@ assert.match(js, /postcode: postcodeInput\.value\.trim\(\)/, "Optional postcode 
 assert.match(js, /renderTimeline/, "Live scan history should be rendered into the timeline");
 assert.match(js, /state: "complete"/, "Demo timeline events should use renderable event objects");
 assert.match(api, /createTracker/, "Tracking API must use the upstream parcel engine");
+assert.match(api, /safeEventPoint\(event\.point\)/, "Carrier scan coordinates should be validated before projection");
+assert.match(js, /renderShipmentMap/, "Live tracking should render its map panel");
+assert.match(js, /https:\/\/tile\.openstreetmap\.org/, "The map should use the OpenStreetMap tile endpoint");
+assert.match(css, /\.shipment-map/, "The result map should have responsive dimensions");
 assert.match(api, /readBoundedBody/, "Tracking API must stream and cap request bodies");
 assert.match(api, /Cache-Control/, "Tracking API must disable response caching");
 assert.match(api, /MAX_CONCURRENT_LOOKUPS/, "Tracking API must bound concurrent lookups");
