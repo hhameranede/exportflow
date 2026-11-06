@@ -5,6 +5,90 @@ const root = process.cwd();
 const output = resolve(root, "dist");
 const files = ["index.html", "styles.css", "app.js", "translations.js", "coverage.js", "robots.txt", "sitemap.xml", "_headers", "favicon.svg", "favicon-32x32.png", "apple-touch-icon.png", "site.webmanifest", "og-image-20261106.png", "404.html"];
 const engineDist = resolve(root, "node_modules/universal-parcel-scraper/dist");
+const localeCodes = ["en", "ar", "es", "zh", "hi", "pt", "fr", "ru"];
+const localizedPageSpecs = [
+  { source: "index.html", route: "/", kind: "home" },
+  { source: "coverage/index.html", route: "/coverage/", kind: "coverage" }
+];
+
+function htmlAttribute(value) {
+  return String(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function localizedUrl(locale, route) {
+  return "https://exportflow.me/" + (locale === "en" ? "" : locale + "/") + (route === "/" ? "" : route.replace(/^\//, ""));
+}
+
+function withLocaleMetadata(source, locale, spec, translations) {
+  const dictionary = translations[locale];
+  const title = spec.kind === "home"
+    ? "ExportFlow — " + dictionary.kicker
+    : dictionary.coveragePageTitle + " — ExportFlow";
+  const description = spec.kind === "home" ? dictionary.metaDescription : dictionary.coveragePageDescription;
+  const canonical = localizedUrl(locale, spec.route);
+  const alternates = localeCodes.map(code =>
+    '<link rel="alternate" hreflang="' + code + '" href="' + localizedUrl(code, spec.route) + '">'
+  ).concat('<link rel="alternate" hreflang="x-default" href="' + localizedUrl("en", spec.route) + '">').join("\\n");
+
+  let html = source
+    .replace(/<html lang="[^"]+" dir="[^"]*">/, '<html lang="' + locale + '" dir="' + (locale === "ar" ? "rtl" : "ltr") + '">')
+    .replace(/<title>[\\s\\S]*?<\\/title>/, "<title>" + htmlAttribute(title) + "</title>")
+    .replace(/<meta name="description" content="[^"]*">/, '<meta name="description" content="' + htmlAttribute(description) + '">')
+    .replace(/<link rel="canonical" href="[^"]+"\\s*\\/?\\s*>/, '<link rel="canonical" href="' + canonical + '">')
+    .replace(/<meta property="og:title" content="[^"]*">/, '<meta property="og:title" content="' + htmlAttribute(title) + '">')
+    .replace(/<meta property="og:description" content="[^"]*">/, '<meta property="og:description" content="' + htmlAttribute(description) + '">')
+    .replace(/<meta property="og:url" content="[^"]*">/, '<meta property="og:url" content="' + canonical + '">');
+
+  if (locale !== "en") {
+    html = html.replaceAll('href="/"', 'href="/' + locale + '/"');
+    html = html.replaceAll('href="/coverage/"', 'href="/' + locale + '/coverage/"');
+  }
+  return html.replace("</head>", alternates + "\\n</head>");
+}
+
+async function generateLocalizedPages() {
+  const translationSource = await readFile(resolve(root, "translations.js"), "utf8");
+  const match = translationSource.match(/window\\.EXPORTFLOW_TRANSLATIONS\\s*=\\s*([\\s\\S]*);\\s*$/);
+  if (!match) throw new Error("Could not parse ExportFlow locale dictionaries during the build");
+  const translations = JSON.parse(match[1]);
+  if (localeCodes.some(locale => !translations[locale])) {
+    throw new Error("A required locale dictionary is missing; localized SEO pages were not generated");
+  }
+
+  const sitemapEntries = [];
+  for (const spec of localizedPageSpecs) {
+    const source = await readFile(resolve(root, spec.source), "utf8");
+    const alternateLinks = localeCodes.map(locale =>
+      '    <xhtml:link rel="alternate" hreflang="' + locale + '" href="' + localizedUrl(locale, spec.route) + '" />'
+    ).concat('    <xhtml:link rel="alternate" hreflang="x-default" href="' + localizedUrl("en", spec.route) + '" />');
+
+    for (const locale of localeCodes) {
+      const prefix = locale === "en" ? "" : locale + "/";
+      const relativePath = spec.kind === "home"
+        ? prefix + "index.html"
+        : prefix + "coverage/index.html";
+      const target = resolve(output, relativePath);
+      await mkdir(resolve(target, ".."), { recursive: true });
+      await writeFile(target, withLocaleMetadata(source, locale, spec, translations));
+
+      sitemapEntries.push(
+        "  <url>\\n    <loc>" + localizedUrl(locale, spec.route) + "</loc>\\n" +
+        alternateLinks.join("\\n") + "\\n  </url>"
+      );
+    }
+  }
+
+  for (const route of ["/privacy/", "/terms/"]) {
+    sitemapEntries.push("  <url>\\n    <loc>https://exportflow.me" + route + "</loc>\\n  </url>");
+  }
+
+  const sitemap = '<?xml version="1.0" encoding="UTF-8"?>\\n' +
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\\n' +
+    sitemapEntries.join("\\n") + "\\n</urlset>\\n";
+  await writeFile(resolve(output, "sitemap.xml"), sitemap);
+  console.log("Generated " + (localeCodes.length * localizedPageSpecs.length) + " localized SEO pages and an hreflang sitemap.");
+}
+
 
 async function patchWorkerIncompatibleEngineFiles(directory) {
   // Wrangler's current esbuild parser does not accept Node's JSON import attributes.
@@ -139,7 +223,7 @@ await cp(resolve(root, "coverage/index.html"), resolve(output, "coverage/index.h
 await mkdir(resolve(output, "privacy"), { recursive: true });
 await cp(resolve(root, "privacy/index.html"), resolve(output, "privacy/index.html"));
 await mkdir(resolve(output, "terms"), { recursive: true });
-await cp(resolve(root, "terms/index.html"), resolve(output, "terms/index.html"));
+await cp(resolve(root, "terms/index.html"), resolve(output, "terms/index.html"));\n\nawait generateLocalizedPages();
 
 try {
   const jsonImports = await patchWorkerIncompatibleEngineFiles(engineDist);
