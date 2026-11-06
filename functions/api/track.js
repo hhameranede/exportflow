@@ -100,7 +100,7 @@ async function consumeRateLimit(request) {
 }
 
 function safeText(value, maxLength = 240) {
-  return typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, maxLength) : null;
+  return typeof value === "string" ? value.replace(/[\\u0000-\\u001f\\u007f]/g, "").slice(0, maxLength) : null;
 }
 
 function safeStage(value) {
@@ -130,7 +130,11 @@ function projectResult(response) {
       description: event?.description,
       stage: event?.stage || event?.state,
       point: event?.point,
-      source: rawSource
+      source: safeText(event?.source, 80) || rawSource,
+      sourceRefs: Array.isArray(event?.sourceRefs)
+        ? event.sourceRefs.map(value => safeText(value, 80)).filter(Boolean)
+        : undefined,
+      receivedAt: safeText(event?.receivedAt ?? event?.received_at, 80)
     })),
     status: rawStatus,
     source: rawSource,
@@ -229,7 +233,7 @@ export async function onRequestPost({ request, env }) {
   }
 
   const number = typeof input.number === "string" ? input.number.trim() : "";
-  if (number.length < 4 || number.length > MAX_NUMBER_LENGTH || !/^[a-zA-Z0-9\s-]+$/.test(number)) {
+  if (number.length < 4 || number.length > MAX_NUMBER_LENGTH || !/^[a-zA-Z0-9\\s-]+$/.test(number)) {
     return json({ error: "invalid_tracking_number" }, 400);
   }
 
