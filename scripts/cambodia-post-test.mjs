@@ -6,6 +6,7 @@ import {
   parseCambodiaPostHtml,
   parseCambodiaPostTime
 } from "../functions/lib/cambodia-post.mjs";
+import { trackCustomCarrier } from "../functions/lib/custom-carriers.mjs";
 import {
   ChallengeError,
   InvalidInputError,
@@ -47,6 +48,10 @@ const adapter = createCambodiaPostAdapter({ fetcher: fakeFetcher });
 const result = await adapter.track({ number: "RR123456789KH" }, { budgetMs: 1000 });
 assert.match(requestedUrl, /\/RR123456789KH$/);
 assert.equal(result.current_stage, "delivered");
+const registeredResult = await trackCustomCarrier("cambodia-post", {
+  number: "RR123456789KH"
+}, { budgetMs: 1000 }, fakeFetcher);
+assert.equal(registeredResult.current_stage, "delivered", "custom adapter should dispatch through the upstream registry extension");
 await assert.rejects(adapter.track({ number: "RR123456789US" }), InvalidInputError);
 
 const throttled = createCambodiaPostAdapter({
