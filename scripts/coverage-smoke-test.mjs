@@ -16,7 +16,7 @@ assert.deepEqual(payload.countries.map(country => country.code).sort(), [...COUN
 
 for (const country of payload.countries) {
   assert.match(country.code, /^[A-Z]{2}$/);
-  assert.ok(["direct", "universal-fallback", "link-only", "not-listed"].includes(country.status));
+  assert.ok(["direct", "browser-required", "universal-fallback", "link-only", "not-listed"].includes(country.status));
   assert.ok(Array.isArray(country.carriers));
   assert.equal(country.carrierCount, country.carriers.length);
   assert.ok(country.carriers.every(carrier => typeof carrier.id === "string" && typeof carrier.name === "string"));
@@ -29,7 +29,15 @@ for (const country of payload.countries) {
   if (country.status === "not-listed") assert.equal(country.carrierCount, 0);
 }
 
-assert.equal(payload.summary.directCountryCount, payload.countries.filter(country => country.status === "direct").length);
+assert.equal(payload.summary.directCountryCount, payload.countries.filter(country => country.directCarrierCount > 0).length);
+assert.equal(payload.summary.browserRequiredCountryCount, payload.countries.filter(country => country.browserRequiredCarrierCount > 0).length);
+assert.ok(payload.summary.browserRequiredCarrierRecords > 0);
+const algeria = payload.countries.find(country => country.code === "DZ");
+assert.ok(algeria?.directCarriers.some(carrier => carrier.id === "algerie-poste"), "Algérie Poste should be a browser-free direct adapter");
+assert.ok(algeria?.directCarriers.some(carrier => carrier.id === "zr-express"), "ZR Express should be a browser-free direct adapter");
+assert.ok(algeria?.directCarriers.some(carrier => carrier.id === "noest"), "NOEST should be a browser-free direct adapter");
+assert.ok(algeria?.browserRequiredCarriers.some(carrier => carrier.id === "yalidine"), "Yalidine must be flagged as browser-required");
+assert.ok(!algeria?.directCarriers.some(carrier => carrier.id === "yalidine"), "Yalidine must not inflate server-ready direct coverage");
 assert.equal(payload.summary.universalFallbackCountryCount, payload.countries.filter(country => country.fallbackCarrierCount > 0).length);
 assert.equal(payload.summary.linkOnlyCountryCount, payload.countries.filter(country => country.status === "link-only").length);
 assert.equal(payload.summary.countriesWithoutCatalogEntry, payload.countries.filter(country => country.status === "not-listed").length);
