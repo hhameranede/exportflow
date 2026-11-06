@@ -28,7 +28,7 @@ This backlog records carriers with an official tracking entry point that were no
 
 | Country | Operator | Official tracking entry point | Integration notes |
 | --- | --- | --- | --- |
-| Cambodia | Cambodia Post | https://www.cambodiapost.com.kh/tracking/search | Official tracking form. Test server-side access and inspect terms before writing an adapter. |
+| Cambodia | Cambodia Post | https://www.cambodiapost.com.kh/tracking/search | **ExportFlow custom adapter implemented** (KH S10 auto-detection and explicit carrier routing); synthetic parser and HTTP tests are included in CI. A positive public shipment sample has not yet been verified, so this is pending live-canary validation rather than live-verified support. The adapter returns challenge/rate-limit errors and does not bypass site protections. |
 | Brunei | PosBru | https://posbru.com.bn/ | Official site exposes Track & Receive. The destination service and public API contract need validation. |
 | Sri Lanka | Koombiyo Delivery | https://koombiyodelivery.lk/track | Tracking form requires a tracking ID and the registered mobile number; handle the phone number as recipient data and never log it. |
 
@@ -59,6 +59,14 @@ The following operators are already named in the upstream carrier catalog, but t
 | Kosovo | Posta e Kosovës | https://postakosoves.com/ | Cataloged as universal-only. Upstream notes that the tracking form uses a WordPress nonce and no public known-item sample has verified a usable response. Ask for an approved integration route. |
 
 Other European operators already have dedicated adapters and must not be counted as new additions here: Posta Shqiptare and HayPost, for example.
+
+## Implemented outside the upstream package
+
+| Country | Operator | ExportFlow carrier ID | Current validation |
+| --- | --- | --- | --- |
+| Cambodia | Cambodia Post | `cambodia-post` | Dedicated ExportFlow-owned adapter and offline fixture/HTTP tests. Auto-detects S10 numbers ending in `KH`. The official portal has been inspected, but no positive public tracking number has been verified; do not describe the integration as live-verified until an authorized positive canary is tested. |
+
+Custom adapters are dispatched through the upstream engine's public adapter registry seam. They are listed in `GET /api/carriers` and included in `GET /api/coverage` separately from the upstream catalogue.
 
 ## Implementation gates
 
