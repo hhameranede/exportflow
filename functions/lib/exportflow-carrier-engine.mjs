@@ -13,14 +13,20 @@ export const EXPORTFLOW_ENGINE_METADATA = Object.freeze({
 });
 
 /**
- * Stable first-party factory for ExportFlow's tracking API.
- * Carrier adapters remain pinned upstream for now; new first-party adapters
- * will be registered behind this factory instead of changing api/track.js.
+ * ExportFlow-owned tracking boundary.
+ * The upstream adapters stay pinned until each candidate has passed our
+ * licensing, Cloudflare compatibility, fixture and live-canary gates.
  */
 export function createExportFlowCarrierEngine({ trawlUrl = "" } = {}) {
   if (typeof trawlUrl !== "string") {
-    throw new TypeError("trawlU\›]\İ™HHİš[™ÈŠNÂˆB‚ˆ™]\›ˆÜ™X]U˜XÚÙ\ŠÂˆ\Ù\YÙ[ˆ‘^Ü›İËÌŒˆ‹ˆ™]Ú\ˆÜ™X]PÛİY›\™Q™]Ú
+    throw new TypeError("trawlUrl must be a string");
+  }
 
-KˆËÈ™]™\ˆ›ÜØ\™H\˜Ù[Y[YšY\ˆÈÜ[Û˜[\™\\HYÙÜ™YØ]ÜœÂˆËÈÚ]İ]HÙ\\˜][H™]šY]ÙYš]˜XŞH[™›ÙXİXÚ\Ú[Û‹‚ˆ›İšY\œÎˆË‹‹‘VÔ•“Õ×ÑS‘ÒS‘WÓQUQUK™Y˜][[š]™\œØ[˜[˜XÚÜ×Kˆ‹‹Š˜]Û\›š[J
-HÈÈ˜]Û\›ˆ˜]Û\›š[J
-HHˆßJBˆJNÂŸB
+  return createTracker({
+    userAgent: "ExportFlow/0.2",
+    fetcher: createCloudflareFetch(),
+    // Do not forward parcel IDs to optional third-party aggregators by default.
+    providers: [...EXPORTFLOW_ENGINE_METADATA.defaultUniversalFallbacks],
+    ...(trawlUrl.trim() ? { trawlUrl: trawlUrl.trim() } : {})
+  });
+}
