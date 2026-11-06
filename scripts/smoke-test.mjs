@@ -86,7 +86,7 @@ assert.match(html, /href="\/coverage\//, "Homepage must link to the global carri
 assert.match(html, /styles\.css\?v=ef-assets-refresh-20261106-02/, "Homepage CSS must use a fresh cache-busting release URL");
 assert.match(html, /translations\.js\?v=ef-assets-refresh-20261106-02/, "Translations must use a fresh cache-busting release URL");
 assert.match(html, /app\.js\?v=ef-assets-refresh-20261106-02/, "Homepage application JS must use a fresh cache-busting release URL");
-assert.ok(headers.includes("/app.js\\n  Cache-Control: public, max-age=0, must-revalidate"), "Homepage app JavaScript must be revalidated");
+assert.ok(headers.includes("/app.js\n  Cache-Control: public, max-age=0, must-revalidate"), "Homepage app JavaScript must be revalidated");
 assert.match(robots, /User-agent: \*/);
 assert.match(robots, /Allow: \/api\/coverage/, "Search engines must be allowed to load the directory data");
 assert.match(robots, /Disallow: \/api\/track/);
