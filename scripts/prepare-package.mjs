@@ -17,11 +17,8 @@ async function patchJsonImports(dir) {
     if (hasAttr.test(source)) continue;
     
     const patch = source.replace(
-      /import\s+(\w+)\s+from\s+['"]([^"']+\.json)['"][^;]*;?/,
-      (_, varName, importPath) => `import ${varName} from ${JSON.stringify(importPath)} with { type: "json" };`
-    ).replace(
-      /import\s+(\w+)\s+from\s+["]([^"]+\.json)["][^;]*;?/,
-      (_, varName, importPath) => `import ${varName} from ${JSON.stringify(importPath)} with { type: "json" };`
+      /import\s+(\w+)\s+from\s+['"]([^"']+\.json)['"][^;]*;?(\n|\r)/g,
+      (_, varName, importPath, newline) => `import ${varName} from ${JSON.stringify(importPath)} with { type: "json" };${newline}`
     );
 
     if (patch !== source) {
