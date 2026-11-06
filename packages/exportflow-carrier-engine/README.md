@@ -23,7 +23,10 @@ Initial source strategy:
 1. **Universal Parcel Scraper** — Apache-2.0 core. Existing runtime dependency and first migration target. Preserve `LICENSE`, `NOTICE`, attribution and the exact source revision.
 2. **Home Assistant Parcel Integrations** — individual carrier repositories must have their own license checked; no organization-wide license is assumed. They are Python/Home Assistant integrations, so their tracking logic must be reviewed and ported to ExportFlow's worker-compatible adapter contract; do not copy Home Assistant-specific runtime code into Pages Functions.
 3. **parcel-tracker-bot** — MIT. A supplementary source for carrier candidates and patterns, subject to per-file review and tests.
-4. **Karrio** — LGPL-3.0 for its open-source core and community plugins. Monitored separately; no code from its enterprise-only directory is eligible. Do not merge LGPL code into the first-party adapter package without a deliberate compliance review.
+4. **Karrio** — GitHub reports `NOASSERTION` for the root repository; its README describes LGPL-3.0 for core/community and a separate enterprise license for `/ee`. Monitored separately; verify file-level licensing before any reuse, and exclude enterprise-only code.
+5. **open-parcels** — MIT Go reference for carrier detection patterns. It advertises a 1,500+ carrier directory, but source review found simulated fallback events in some carrier paths. It is reference-only until individual adapters are proven to return carrier-sourced data.
+6. **myparcel** — MIT Python community integrations, including Royal Mail, DPD, Evri, Amazon Logistics and Relay. These are port candidates, not drop-in Workers dependencies.
+7. **nordic-parcel** — MIT Home Assistant integration covering Bring/Posten Norge, PostNord and Helthjem; carrier logic only is eligible for review and porting.
 
 ## Adapter acceptance gates
 

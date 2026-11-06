@@ -50,7 +50,10 @@ const previous = await readLock();
 const fixedDefinitions = [
   { full_name: 'plhery/universal-parcel-scraper', role: 'runtime-core' },
   { full_name: 'bernalli/parcel-tracker-bot', role: 'supplementary-candidate' },
-  { full_name: 'karrioapi/karrio', role: 'compliance-review-only' }
+  { full_name: 'karrioapi/karrio', role: 'compliance-review-only' },
+  { full_name: 'gek0v/open-parcels', role: 'pattern-reference-only' },
+  { full_name: 'Satal/myparcel', role: 'carrier-adapter-candidate' },
+  { full_name: 'jumpingmushroom/nordic-parcel', role: 'nordic-carrier-candidate' }
 ];
 const [fixed, haRepos] = await Promise.all([
   Promise.all(fixedDefinitions.map(async item => ({ ...(await github(`/repos/${item.full_name}`)), role: item.role }))),

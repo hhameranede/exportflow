@@ -64,7 +64,8 @@ assert.doesNotMatch(html, /98\.4%|200\+ carriers worldwide/i, "Unverified homepa
 assert.match(js, /fetch\("\/api\/track"/, "Tracking form must call the server-side tracking API");
 assert.match(js, /postcodeInput\.value\.trim\(\)/, "Optional postcode should be submitted to the API");
 assert.match(js, /renderTimeline/, "Live scan history should be rendered into the timeline");
-assert.match(trackApi, /createTracker/, "Tracking API must use the upstream parcel engine");
+assert.match(trackApi, /createExportFlowCarrierEngine/, "Tracking API must use ExportFlow carrier engine facade");
+assert.doesNotMatch(trackApi, /node_modules\/universal-parcel-scraper\/dist\/facade/, "Tracking API must not construct the upstream engine directly");
 assert.match(trackApi, /safeEventPoint\(event\.point\)/, "Carrier scan coordinates should be validated before projection");
 assert.match(js, /renderShipmentMap/, "Live tracking should render its map panel");
 assert.match(js, /https:\/\/tile\.openstreetmap\.org/, "The map should use the OpenStreetMap tile endpoint");

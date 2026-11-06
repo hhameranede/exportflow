@@ -7,8 +7,20 @@
     "requirePinnedRevision": true,
     "requireLicenseVerification": true,
     "requireOfflineFixtures": true,
-    "allowedPermissiveLicenses": ["Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause", "ISC"],
-    "copyleftReviewRequired": ["LGPL-3.0", "LGPL-2.1", "AGPL-3.0", "GPL-3.0", "GPL-2.0"],
+    "allowedPermissiveLicenses": [
+      "Apache-2.0",
+      "MIT",
+      "BSD-2-Clause",
+      "BSD-3-Clause",
+      "ISC"
+    ],
+    "copyleftReviewRequired": [
+      "LGPL-3.0",
+      "LGPL-2.1",
+      "AGPL-3.0",
+      "GPL-3.0",
+      "GPL-2.0"
+    ],
     "privateRepositoryDoesNotRemoveUpstreamLicenseObligations": true
   },
   "sources": [
@@ -53,6 +65,39 @@
       "integrationMode": "monitor-only-until-compliance-review",
       "runtimeEnabled": false,
       "notes": "Potentially useful for carrier API operations such as rates, labels and tracking where supported. GitHub reports NOASSERTION for the root repository while its README describes LGPL-3.0 for core/community and a separate enterprise license for /ee. Do not import enterprise code. Require file-level license verification and a separate legal review before linking or redistributing components."
+    },
+    {
+      "id": "open-parcels-reference",
+      "repository": "gek0v/open-parcels",
+      "branch": "main",
+      "license": "MIT",
+      "language": "Go",
+      "role": "carrier-pattern-reference-only",
+      "integrationMode": "reference-only-no-runtime-import",
+      "runtimeEnabled": false,
+      "notes": "MIT Go multi-carrier engine advertising a 1500+ carrier directory. Code review found simulated fallback tracking events in at least some DHL/UPS paths. Do not treat catalog count as verified coverage or port simulated events; use only carefully reviewed detection patterns."
+    },
+    {
+      "id": "myparcel",
+      "repository": "Satal/myparcel",
+      "branch": "main",
+      "license": "MIT",
+      "language": "Python",
+      "role": "carrier-adapter-candidates",
+      "integrationMode": "review-and-port-to-exportflow-adapter-contract",
+      "runtimeEnabled": false,
+      "notes": "Community-maintained Python adapters include Royal Mail, DPD, Evri, Amazon Logistics and Relay. Some paths use browser automation or credentials; port carrier-specific logic only after fixture, privacy, credential and runtime review."
+    },
+    {
+      "id": "nordic-parcel",
+      "repository": "jumpingmushroom/nordic-parcel",
+      "branch": "main",
+      "license": "MIT",
+      "language": "Python",
+      "role": "nordic-carrier-adapter-candidates",
+      "integrationMode": "review-and-port-to-exportflow-adapter-contract",
+      "runtimeEnabled": false,
+      "notes": "Home Assistant integration for Bring/Posten Norge, PostNord and Helthjem. Candidate reference for Nordic carriers; port only its carrier logic, not Home Assistant runtime."
     }
   ]
 }
