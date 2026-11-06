@@ -65,11 +65,21 @@ export async function onRequestGet() {
   const catalogCountries = [...catalog.keys()].sort();
   const universalOnlyCountries = [...universal.keys()]
     .filter(code => !direct.has(code))
-    .map(code => ({ code, name: COUNTRY_NAME.of(code) || code, carrierCount: universal.get(code).length }))
+    .map(code => ({
+      code,
+      name: COUNTRY_NAME.of(code) || code,
+      carrierCount: universal.get(code).length,
+      carriers: sortedCarriers(universal.get(code))
+    }))
     .sort((a, b) => a.name.localeCompare(b.name, "en"));
   const linkOnlyCountries = [...linkOnly.keys()]
     .filter(code => !direct.has(code) && !universal.has(code))
-    .map(code => ({ code, name: COUNTRY_NAME.of(code) || code, carrierCount: linkOnly.get(code).length }))
+    .map(code => ({
+      code,
+      name: COUNTRY_NAME.of(code) || code,
+      carrierCount: linkOnly.get(code).length,
+      carriers: sortedCarriers(linkOnly.get(code))
+    }))
     .sort((a, b) => a.name.localeCompare(b.name, "en"));
 
   return new Response(JSON.stringify({
