@@ -1,0 +1,80 @@
+name: Run Laguna XS 2.1
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "ExportFlow issue to execute"
+        required: true
+        default: 29
+        type: number
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: exportflow-laguna-issue-${{ inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  laguna:
+    name: Laguna long-horizon engineering run
+    if: github.repository == 'hhameranede/exportflow' && github.actor == 'hhameranede'
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - name: Verify NVIDIA credential is configured
+        shell: bash
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          if [[ -z "${NVIDIA_API_KEY}" ]]; then
+            echo "::error::Missing repository Actions secret NVIDIA_API_KEY. Add the NVIDIA Build API key under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          echo "NVIDIA_API_KEY is present. Its value will not be printed."
+
+      - name: Check out ExportFlow
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Configure commit identity
+        shell: bash
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run Laguna XS 2.1
+        uses: anomalyco/opencode/github@latest
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          model: nvidia/laguna-xs-2.1
+          use_github_token: true
+          prompt: |
+            You are Laguna XS 2.1, the single long-horizon engineering executor explicitly started by the ExportFlow repository owner for this run.
+
+            Execute ExportFlow issue #${{ inputs.issue_number }} in the existing repository. Read the issue and all comments first, then inspect the current codebase, PR #30, and PR #24 before making changes. Reuse sound work and avoid duplicate or competing implementations.
+
+            This manual run is the owner's explicit instruction to use Laguna as the executor; older comments naming a different agent are superseded for this run. Do not delegate to Copilot or any other agent.
+
+            Work through implementation, tests, failure diagnosis, repairs, and final review. Do not stop after planning or documentation. Make material improvements to the actual ExportFlow product and open one coherent, review-ready pull request against main.
+
+            Non-negotiable safety rules:
+            - Work only in this repository and on a dedicated feature branch.
+            - Never push directly to main, merge any PR, or deploy.
+            - Do not access Cloudflare, Vercel, DNS, production services, remote databases, or external account dashboards.
+            - Do not read, print, copy, or expose secrets or environment-variable values. Never print NVIDIA_API_KEY or GITHUB_TOKEN.
+            - Do not modify repository secrets, permissions, billing, GitHub Apps, or account settings.
+            - Do not delete user data, migrations, existing features, or important project files.
+            - Do not invent carrier integrations, tracking data, delivery estimates, country support, statistics, or test results.
+            - Keep tracking numbers and personal shipment data out of logs and diagnostics.
+            - Do not intentionally trigger deployment workflows.
+            - Preserve the current architecture, stack, design direction, and working behavior unless a justified fix requires a change.
+
+            Issue #${{ inputs.issue_number }} is the source of truth for the full roadmap and detailed definition of done. Follow its phases and the mandatory self-repair protocol in its comments. Report exact commands and truthful test outcomes. Keep changes reviewable, explain limitations, and leave the pull request open and unmerged.
