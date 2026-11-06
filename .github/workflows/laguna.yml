@@ -49,7 +49,7 @@ jobs:
                 echo "::error::Run Laguna from a normal issue, not a pull-request conversation."
                 exit 1
               fi
-              first_line="$(printf '%s\\n' "${COMMENT_BODY}" | head -n 1)"
+              IFS= read -r first_line <<< "${COMMENT_BODY}"
               if [[ "${first_line}" != "/laguna-run" ]]; then
                 echo "::error::Issue comment must begin with /laguna-run."
                 exit 1
