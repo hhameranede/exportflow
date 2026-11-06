@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { COUNTRY_CODES } from "../functions/lib/country-codes.mjs";
-import { localeForCountry, onRequest } from "../functions/_middleware.js";
+import { localeForCountry, localeForVisitor, onRequest } from "../functions/_middleware.js";
 
 const [
   html, css, js, translationsSource, coverageHtml, coverageJs, trackApi, coverageApi, build,
@@ -117,6 +117,9 @@ assert.equal(localeForCountry("CN"), "zh", "China must default to Chinese");
 assert.equal(localeForCountry("IN"), "hi", "India must default to Hindi");
 assert.equal(localeForCountry("RU"), "ru", "Russia must default to Russian");
 assert.equal(localeForCountry("US"), "en", "Countries without a supported locale must fall back to English");
+assert.equal(localeForVisitor("CA", "en-CA,en;q=0.9,fr;q=0.8"), "en", "English-preferring visitors in bilingual countries should keep English");
+assert.equal(localeForVisitor("CA", "fr-CA,fr;q=0.9,en;q=0.8"), "fr", "French-preferring visitors in bilingual countries should receive French");
+assert.equal(localeForVisitor("SG", "zh-SG,zh;q=0.9,en;q=0.8"), "zh", "Chinese-preferring visitors in Singapore should receive Chinese");
 
 const algeriaRedirect = await onRequest({
   request: { method: "GET", url: "https://exportflow.me/", headers: new Headers(), cf: { country: "DZ" } },
