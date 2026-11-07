@@ -16,7 +16,7 @@ The upstream catalog documents thousands of carrier names and dedicated adapters
 ### Implemented routes
 
 - `POST /api/track` — server-side carrier lookup. Accepts a tracking number and optional carrier, postcode and language (`en`, `ar`, `es`, `zh`, `hi`, `pt`, `fr`, `bn`). Tracking numbers are not sent to browser-side third-party APIs. Returns normalized timeline events with deterministic status, confidence, conflict detection, and delay/customs/ETA insights.
-- `GET /api/carriers` — exposes the installed carrier ID list and sanitized selectable carrier records (name, catalog country mappings, tracking mode and adapter metadata). These are catalog capabilities, not live availability or partnership claims.
+- `GET /api/carriers` — exposes the installed carrier ID list, sanitized adapter metadata and a D1-backed evidence register for 22 researched global carrier networks. Each record separates catalog/adapter state, official source, account-access requirements, third-party tracking rights and verification level. All seed entries begin at `research`; a carrier catalog or adapter is never presented as a successful live integration.
 - `GET /api/coverage` — returns a live country-by-country classification derived from the installed carrier catalog.
 - `GET /api/health` — a liveness response; it does not prove that upstream carriers are reachable.
 - `POST /api/batch-track` — bounded batch tracking for up to five shipments. Each result includes an individual status and reuses the single-tracking validation and safeguards.
@@ -71,6 +71,14 @@ The directory lists all **249 assigned ISO 3166-1 alpha-2 country and territory 
 
 A country appearing in the directory does not mean ExportFlow has a working direct integration there. A carrier catalog entry does not guarantee every tracking number will return live scan data. Carriers can require additional details, rate-limit automated requests, block traffic or change their tracking systems. The directory explicitly separates catalog presence from automatic support.
 
+### Carrier evidence and permission model
+
+The D1 `carrier_evidence` registry starts with 22 researched global networks: Aramex, Australia Post, Cainiao, Canada Post, China Post, Correos, DHL Express, DPD/Geopost, Emirates Post, FedEx, GLS, India Post, Japan Post, La Poste/Colissimo, PostNL, Royal Mail, SF Express, Singapore Post, UPS, USPS, Yanwen and YunExpress.
+
+Every seed remains `research` until its own source, adapter scope, access model and use rights have been confirmed. The registry distinguishes a present adapter from country-specific adapters and missing adapters; it also records whether access is account-bound, merchant-scoped, partner-onboarded or requires written permission. For example, the DPD and GLS entries are country-specific, PostNL is tied to customer codes, and DHL Express/FedEx/UPS have third-party permission conditions. These facts are not collapsed into a generic "supported" badge.
+
+The API exposes only public summaries and official source links; internal research notes and authorization documents are not returned. A row can become `verified` only with a repeatable live test, a timestamp, a test-evidence URL, an authorization-evidence URL and a declared rights scope. D1 constraints and a trigger reject status-only promotions. The registry is an evidence workflow, not a claim that these providers are already connected or commercially cleared.
+
 ### What is enabled in the server integration
 
 - Automatic carrier detection and direct carrier adapters from the pinned engine.
@@ -97,15 +105,11 @@ The eight supported interface languages have crawlable locale routes for the hom
 
 On first visits to the homepage or country directory, Cloudflare Pages middleware uses the visitor's country code to select a supported language. Countries without a configured language use English. A visitor's explicit language choice is stored in a first-party `ef-locale` cookie and local storage and takes precedence over country detection on later visits.
 
-## Additional upstream source repositories
+## Additional upstream source snapshots
 
-Pinned source repositories are recorded as Git submodules under `vendor/`. To fetch their complete source checkouts after cloning:
+Reviewed upstream repositories are stored as ordinary tracked source snapshots under `vendor/sources/`; they are not Git submodules and this repository has no `.gitmodules` file. The pinned snapshots can be inspected directly after cloning without running `git submodule update`.
 
-```bash
-git submodule update --init --recursive
-```
-
-Only Universal Parcel Scraper is part of the current runtime. The other submodules are reference sources and are not automatically included in the Cloudflare Pages bundle. License details, exact pins and carrier-authorization caveats are documented in [Third-party source registry](docs/THIRD_PARTY_SOURCES.md).
+Only Universal Parcel Scraper is part of the current runtime. Shopana, Karrio Community and the Algerian DZ Delivery SDK are reference sources, not additional production engines. License details, exact pins, exclusions and carrier-authorization caveats are documented in [Third-party source registry](docs/THIRD_PARTY_SOURCES.md).
 
 ## Local development
 
