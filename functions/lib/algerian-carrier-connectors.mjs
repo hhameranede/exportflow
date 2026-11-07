@@ -38,7 +38,7 @@ const PROVIDERS = Object.freeze({
   mdm: {
     sdkProvider: "mdm",
     credentials: ["apiKey", "storeId"],
-    required: ["apiKey", "storeId"]
+    required: ["apiKey"]
   },
   elogistia: {
     sdkProvider: "elogistia",
@@ -60,12 +60,14 @@ const STATUSES = new Set([
 const ECOTRACK_COURIERS = new Set([
   "dhd",
   "anderson",
+  "andersondelivery",
   "worldexpress",
-  "48hr",
+  "48hrexpress",
   "ecorapid",
   "conexlog",
   "msmgo",
-  "packers"
+  "packers",
+  "rocketdelivery"
 ]);
 
 const MAX_EVENTS = 60;
@@ -128,8 +130,10 @@ function providerConfig(provider) {
     throw new AlgerianConnectorError("unsupported_provider");
   }
   const id = provider.trim().toLowerCase();
+  if (!Object.hasOwn(PROVIDERS, id)) {
+    throw new AlgerianConnectorError("unsupported_provider");
+  }
   const config = PROVIDERS[id];
-  if (!config) throw new AlgerianConnectorError("unsupported_provider");
   return { id, config };
 }
 
