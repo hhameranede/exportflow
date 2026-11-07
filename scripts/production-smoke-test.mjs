@@ -45,10 +45,10 @@ export async function runProductionSmoke({
   async function request(path, init = {}) {
     try {
       return await fetchImpl(new URL(path, origin), {
+        ...init,
         redirect: "manual",
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         headers: { "User-Agent": "ExportFlowSmokeBot/1.0", ...(init.headers || {}) },
-        ...init,
       });
     } catch {
       throw new Error("network_error_or_timeout");
