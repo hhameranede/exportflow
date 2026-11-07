@@ -121,6 +121,8 @@ assert.ok(ups);
 assert.equal(ups.sourceIntegration.integrationClass, "provider_api_client");
 assert.equal(ups.sourceIntegration.apiClient, "source_module_present");
 assert.equal(ups.sourceIntegration.apiAuthentication, "oauth2_client_credentials");
+assert.equal(ups.sourceIntegration.sandboxMode, "customer_integration_environment");
+assert.equal(ups.sourceIntegration.sandboxBaseUrl, "https://wwwcie.ups.com");
 assert.deepEqual(ups.sourceIntegration.requiredEnvironment, ["UPS_CLIENT_ID", "UPS_CLIENT_SECRET"]);
 assert.equal(ups.sourceIntegration.mockContractTest, "carrier-official-api-contract-test");
 assert.equal(ups.sourceIntegration.commercialAuthorization, "not_assessed");
