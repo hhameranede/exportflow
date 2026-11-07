@@ -1,6 +1,6 @@
 # Algerian carrier connector layer
 
-**Status: isolated adapter boundary + mock-tested contract. Not enabled in production.**
+**Status: merchant-only tracking route added on PR #49 branch; code-level route test registered. Cloudflare Preview bundle and live authorization remain unverified. Not enabled in Production.**
 
 This layer specializes ExportFlow for Algerian merchants without changing the global tracking engine. It is deliberately read-only: it supports tracking, not order creation, cancellation, labels, fee quotes, parcel lists or merchant-side write operations.
 
@@ -8,13 +8,13 @@ This layer specializes ExportFlow for Algerian merchants without changing the gl
 
 - Global public tracking remains in `functions/api/track.js` and `functions/lib/exportflow-carrier-engine.mjs`.
 - Algerian merchant-account tracking is isolated in `functions/lib/algerian-carrier-connectors.mjs`.
-- The Algerian connector is not imported by the public tracking route and is not an automatic fallback.
+- The Algerian connector is not imported by public `POST /api/track` and is never an automatic fallback. The separate `POST /api/merchant/track` route calls it only after a verified merchant session, same-origin check, server-side credential resolution and global rate-limit approval.
 - A caller must inject the upstream SDK `createClient` function, an authorization check and a server-side credential resolver.
 - A failed Algerian merchant connection must not silently fall through to UPU or another carrier. Keep the two paths explicit.
 
-The complete upstream source snapshot is already present as ordinary Git files under `vendor/sources/algeria/dz-delivery/` in the parent Global Logistics branch: 910 files / 4,228,323 bytes, pinned to the exact upstream commit above. Its root MIT LICENSE and `packages/ts/package.json` are preserved. Do not create a second copy. The SDK is not yet installed as an ExportFlow runtime dependency or imported into the Cloudflare bundle.
+The complete upstream source snapshot is present as ordinary Git files under `vendor/sources/algeria/dz-delivery/`: 910 files / 4,228,323 bytes, pinned to the exact upstream commit above. Its root MIT LICENSE and `packages/ts/package.json` are preserved. Do not create a second copy. The merchant route dynamically imports the pinned TypeScript source entrypoint at `packages/ts/src/index.ts`; no npm runtime dependency or generated `dist` artifact was added. Wrangler bundling of that TypeScript source is still awaiting CI verification.
 
-The connector uses dependency injection rather than importing the SDK directly. This keeps the current Cloudflare build and lockfile unchanged until package integrity, Worker compatibility, credentials and carrier authorization have been approved.
+The connector retains dependency injection. The merchant endpoint supplies a factory that dynamically imports `createClient` from the pinned MIT source only after the request passes session, origin, provider and quota checks. This keeps the public tracking engine and global fallback independent. The source's MIT license and attribution remain preserved.
 
 ## Upstream source review
 
@@ -56,7 +56,7 @@ The factory requires three injected functions:
 
 1. `authorizeMerchantProvider({ merchantId, provider, operation: "track" })` must return literal `true` only after checking the authenticated merchant owns that connection and has tracking permission.
 2. `resolveCredentials({ merchantId, provider })` must return the saved provider credentials from a server-side secret store. It is called only after authorization succeeds.
-3. `createClient(provider, config)` is the upstream SDK factory supplied by the eventual integration module.
+3. `createClient(provider, config)` is supplied by the merchant route from the pinned `@dz-delivery/core` source. The API only calls the provider tracking method; parcel creation, cancellation, labels, rates and order operations are not exposed.
 
 The merchant ID passed to this internal boundary must come from a verified server session, never from a request body or browser local storage. The resolver must scope every credential lookup to that authenticated merchant and selected provider.
 
@@ -74,7 +74,7 @@ The merchant ID passed to this internal boundary must come from a verified serve
 - Upstream exceptions are converted to stable error codes; raw provider messages are not exposed.
 - The connector boundary itself performs no credential persistence, logging, telemetry or network request.
 
-A separate encrypted AES-256-GCM credential-vault adapter and D1 schema are added in stacked PR [#44](https://github.com/hhameranede/exportflow/pull/44), with design notes in [MERCHANT_CREDENTIAL_VAULT.md](MERCHANT_CREDENTIAL_VAULT.md). That module is still isolated: no D1 database has been provisioned or bound, no key has been configured, and no route imports it. Merchant authentication/session handling, account ownership verification, consent UI, rate limits and audit trail integration remain outstanding.
+The encrypted AES-256-GCM credential vault, Google OIDC session layer and merchant audit schema are present in the stacked PR chain. Migrations 0001-0004 were applied to the EU Preview D1 only; Production was not migrated. Preview has 22 research-only carrier records and the pre-existing integration/source rows were preserved. The route imports the session-bound vault, but `MERCHANT_CREDENTIAL_KEYRING_JSON`, Google OAuth credentials and `MERCHANT_APP_ORIGIN` have not been configured; therefore no real merchant sign-in or credential save has been exercised.
 
 ## Test and evidence status
 
@@ -82,7 +82,10 @@ Run:
 
 ```bash
 node scripts/algerian-connectors-test.mjs
+node scripts/merchant-tracking-route-test.mjs
 ```
+
+The second suite covers the merchant-only HTTP boundary, session binding, same-origin guard, global quota fail-closed behavior, credential isolation, provider selection, response minimization and Elogistia's disabled default. It uses injected mock clients and does not call a carrier.
 
 The mock tests cover the provider allowlist, GuepEx alias and fixed endpoint, credential field filtering, authorization-before-secret-resolution, prototype-key provider rejection, valid and invalid Ecotrack courier keys, MDM tracking without an optional store ID, response minimization, redaction and sanitized upstream failures.
 
@@ -90,11 +93,11 @@ Evidence level for every provider remains **catalogued / mock-tested only**. No 
 
 ## Production activation gates
 
-1. Choose and implement an encrypted server-side credential store. Do not place carrier API keys in GitHub, static pages, local storage, analytics, logs or the public tracking payload.
-2. Add authenticated merchant connection setup, proof of account ownership, explicit consent, per-provider scopes and immediate revocation.
+1. Configure a recoverable AES-256-GCM key ring as an encrypted Pages secret (`MERCHANT_CREDENTIAL_KEYRING_JSON`) only after documenting backup, rotation and recovery. Never place carrier API keys in GitHub, static pages, local storage, analytics, logs or public payloads.
+2. Configure and independently test Google OAuth (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `MERCHANT_APP_ORIGIN` and exact callback URI), then complete account ownership proof, explicit consent, per-provider scopes and immediate revocation.
 3. Review each carrier's current API contract, terms, display rights, rate limits and data-retention conditions independently.
-4. Adopt the already materialized TypeScript SDK only after a Cloudflare Pages compatibility build and supply-chain review. Keep its existing MIT LICENSE and upstream notices with the source snapshot; do not duplicate the snapshot.
+4. Complete Wrangler bundling and Preview compatibility checks for the pinned TypeScript source import. Keep the existing MIT LICENSE and upstream notices with the source snapshot; do not duplicate it.
 5. Add provider-specific mock fixtures and run tests with synthetic values. Use official sandbox/read-only credentials where available; any live test requires the merchant's explicit authorization.
-6. Enable providers individually only after their own evidence reaches sandbox-tested or live-verified. Never display a provider as active merely because its adapter exists.
+6. Configure the Preview-only vault key and OAuth credentials, pass the new route's CI and Cloudflare Preview bundle, then test only with owner-authorized sandbox credentials. Enable providers individually only after their own evidence reaches sandbox-tested or live-verified. Never display a provider as active merely because its adapter exists.
 
-Until those gates are complete, this code is an isolated, testable foundation and has no effect on production tracking.
+Until those gates are complete, the route remains a Preview/PR feature. It does not change public tracking, does not use carrier credentials belonging to other merchants, and does not establish live carrier coverage or commercial authorization.
