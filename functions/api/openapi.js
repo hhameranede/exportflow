@@ -71,7 +71,7 @@ const OPENAPI = {
         summary: "List carrier catalog IDs",
         responses: {
           "200": {
-            description: "Carrier IDs and sanitized catalog capability metadata from the pinned upstream catalog; this is not a live-availability guarantee or partnership claim.",
+            description: "Carrier catalog metadata plus a D1-backed evidence register. Research status, account-access conditions and third-party display rights are disclosed separately. Verified requires repeatable live test evidence and an authorization reference.",
             content: { "application/json": { schema: { $ref: "#/components/schemas/CarrierCatalog" } } }
           }
         }
@@ -195,7 +195,7 @@ const OPENAPI = {
       },
       CarrierCatalog: {
         type: "object",
-        required: ["catalogEntries", "selectableCarrierRecords", "carriers", "carrierRecords", "metadataNotice"],
+        required: ["catalogEntries", "selectableCarrierRecords", "carriers", "carrierRecords", "evidenceRegistryAvailable", "evidenceRegistryCounts", "evidenceRegistry", "metadataNotice"],
         properties: {
           catalogEntries: { type: "integer", minimum: 0 },
           selectableCarrierRecords: { type: "integer", minimum: 0 },
@@ -219,11 +219,66 @@ const OPENAPI = {
                     mode: { type: "string", enum: ["automatic", "link-only", "not-declared"] },
                     adapter: { type: ["string", "null"] }
                   }
-                }
+                },
+                evidence: { $ref: "#/components/schemas/CarrierEvidenceSummary" }
               }
             }
           },
+          evidenceRegistryAvailable: { type: "boolean" },
+          evidenceRegistryCounts: {
+            type: "object",
+            properties: {
+              researched: { type: "integer" },
+              testing: { type: "integer" },
+              integrated: { type: "integer" },
+              verified: { type: "integer" },
+              blocked: { type: "integer" },
+              withoutAdapter: { type: "integer" }
+            }
+          },
+          evidenceRegistry: { type: "array", items: { $ref: "#/components/schemas/CarrierEvidence" } },
           metadataNotice: { type: "string" }
+        }
+      },
+      CarrierEvidenceVerification: {
+        type: "object",
+        required: ["method", "liveVerified", "verifiedAt", "evidenceUrl", "authorizationConfirmed"],
+        properties: {
+          method: { type: "string", enum: ["none", "mock", "sandbox", "live"] },
+          liveVerified: { type: "boolean" },
+          verifiedAt: { type: ["string", "null"], format: "date-time" },
+          evidenceUrl: { type: ["string", "null"], format: "uri" },
+          authorizationConfirmed: { type: "boolean" }
+        }
+      },
+      CarrierEvidenceSummary: {
+        type: "object",
+        required: ["level", "commercialAccess", "trackingRights", "sourceUrl", "disclosure", "verification"],
+        properties: {
+          level: { type: "string", enum: ["catalogued", "research", "testing", "integrated", "verified", "blocked", "deprecated"] },
+          commercialAccess: { type: "string" },
+          trackingRights: { type: "string" },
+          sourceUrl: { type: ["string", "null"], format: "uri" },
+          disclosure: { type: "string" },
+          verification: { $ref: "#/components/schemas/CarrierEvidenceVerification" }
+        }
+      },
+      CarrierEvidence: {
+        type: "object",
+        required: ["id", "name", "countryScope", "integrationMethod", "adapterState", "adapterIds", "evidenceLevel", "verification", "commercialAccess", "trackingRights", "sourceUrl", "disclosure"],
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          countryScope: { type: "string" },
+          integrationMethod: { type: "string" },
+          adapterState: { type: "string", enum: ["present", "country_specific", "missing"] },
+          adapterIds: { type: "array", items: { type: "string" } },
+          evidenceLevel: { type: "string", enum: ["research", "testing", "integrated", "verified", "blocked", "deprecated"] },
+          verification: { $ref: "#/components/schemas/CarrierEvidenceVerification" },
+          commercialAccess: { type: "string" },
+          trackingRights: { type: "string" },
+          sourceUrl: { type: ["string", "null"], format: "uri" },
+          disclosure: { type: "string" }
         }
       },
       BatchTrackingItem: {
