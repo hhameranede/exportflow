@@ -5,6 +5,7 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -52,6 +53,7 @@ jobs:
           node --check scripts/production-smoke-test.mjs
           node --check scripts/production-smoke-test-unit.mjs
           node --check functions/lib/country-codes.mjs
+          node --check scripts/materialize-vendor-sources.mjs
       - name: Detect Datadog Test Optimization configuration
         id: datadog-config
         shell: bash
