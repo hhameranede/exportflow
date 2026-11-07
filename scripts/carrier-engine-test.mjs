@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { onRequestGet as getCarrierCatalog } from "../functions/api/carriers.js";
 import {
   createExportFlowCarrierEngine,
   EXPORTFLOW_ENGINE_METADATA,
@@ -23,4 +24,28 @@ assert.throws(
   "Facade should reject a non-string TRAWL URL"
 );
 
-console.log("ExportFlow carrier engine facade tests passed.");
+const catalogResponse = await getCarrierCatalog();
+assert.equal(catalogResponse.status, 200);
+assert.match(catalogResponse.headers.get("Cache-Control") || "", /max-age=3600/);
+const catalog = await catalogResponse.json();
+assert.ok(catalog.catalogEntries >= catalog.carriers.length);
+assert.ok(catalog.selectableCarrierRecords > 0);
+assert.ok(catalog.carrierRecords.length > 0);
+assert.equal(catalog.carrierRecords.length, catalog.selectableCarrierRecords);
+assert.equal(
+  catalog.directAdapterCatalogRecords + catalog.universalFallbackCatalogRecords +
+    catalog.linkOnlyCatalogRecords,
+  catalog.carrierRecords.filter(record =>
+    ["automatic", "link-only"].includes(record.tracking.mode)
+  ).length
+);
+for (const record of catalog.carrierRecords) {
+  assert.match(record.id, /^[a-z0-9-]{2,80}$/i);
+  assert.ok(Array.isArray(record.countries));
+  assert.ok(record.countries.every(code => /^[A-Z]{2}$/.test(code)));
+  assert.ok(["automatic", "link-only", "not-declared"].includes(record.tracking.mode));
+}
+assert.match(catalog.metadataNotice, /not a live availability check/);
+assert.ok(!JSON.stringify(catalog).includes("apiKey"), "Public carrier metadata must not include secrets");
+
+console.log("ExportFlow carrier engine facade and structured carrier catalog tests passed.");
