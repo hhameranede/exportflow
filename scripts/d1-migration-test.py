@@ -8,8 +8,8 @@ db = sqlite3.connect(":memory:")
 db.execute("PRAGMA foreign_keys = ON")
 
 migrations = sorted((ROOT / "migrations").glob("*.sql"))
-if len(migrations) < 2:
-    raise SystemExit("Expected the credential-vault and merchant-identity migrations.")
+if len(migrations) < 3:
+    raise SystemExit("Expected credential-vault, merchant-identity and provider-audit migrations.")
 
 for migration in migrations:
     db.executescript(migration.read_text(encoding="utf-8"))
@@ -25,6 +25,7 @@ required = {
     "merchant_users",
     "merchant_sessions",
     "merchant_security_events",
+    "merchant_provider_audit_events",
 }
 missing = required - tables
 assert not missing, f"Missing D1 tables: {sorted(missing)}"
@@ -92,5 +93,58 @@ except sqlite3.IntegrityError:
     pass
 else:
     raise AssertionError("Merchant sessions must reference an existing merchant.")
+
+
+# A credential write emits metadata-only lifecycle events automatically.
+credential_row = (
+    "merchant-test-1", "yalidine", "test-key-v1", "a" * 16,
+    "ciphertext-only-test-value", "track", "2026-11-07T12:01:00Z",
+    "2026-11-07T12:01:00Z", "2026-11-07T12:01:00Z"
+)
+db.execute(
+    """INSERT INTO merchant_provider_credentials
+       (merchant_id, provider, key_id, iv, ciphertext, scope, consented_at,
+        created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    credential_row
+)
+audit_rows = db.execute(
+    "SELECT event_type, provider, metadata_json FROM merchant_provider_audit_events ORDER BY occurred_at"
+).fetchall()
+assert audit_rows == [("credential.connected", "yalidine", '{"scope":"track"}')], audit_rows
+
+# Updating an existing connection and disconnecting it each produce one event.
+db.execute(
+    """UPDATE merchant_provider_credentials
+       SET key_id = ?, iv = ?, ciphertext = ?, updated_at = ?
+       WHERE merchant_id = ? AND provider = ?""",
+    ("test-key-v2", "b" * 16, "replacement-ciphertext", "2026-11-07T12:02:00Z",
+     "merchant-test-1", "yalidine")
+)
+db.execute(
+    "DELETE FROM merchant_provider_credentials WHERE merchant_id = ? AND provider = ?",
+    ("merchant-test-1", "yalidine")
+)
+audit_rows = db.execute(
+    "SELECT event_type, provider, metadata_json FROM merchant_provider_audit_events ORDER BY occurred_at"
+).fetchall()
+assert audit_rows == [
+    ("credential.connected", "yalidine", '{"scope":"track"}'),
+    ("credential.updated", "yalidine", '{"scope":"track"}'),
+    ("credential.disconnected", "yalidine", '{"scope":"track"}')
+], audit_rows
+assert "ciphertext-only-test-value" not in str(audit_rows)
+assert "apiToken" not in str(audit_rows)
+
+for statement in (
+    "UPDATE merchant_provider_audit_events SET metadata_json = '{}' WHERE event_type = 'credential.connected'",
+    "DELETE FROM merchant_provider_audit_events WHERE event_type = 'credential.connected'",
+):
+    try:
+        db.execute(statement)
+    except sqlite3.IntegrityError:
+        pass
+    else:
+        raise AssertionError("Merchant provider audit events must be append-only.")
 
 print(f"D1 migrations passed ({len(migrations)} files; {len(required)} required tables).")
