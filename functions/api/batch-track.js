@@ -58,7 +58,32 @@ function validItem(item) {
   );
 }
 
+function itemValidationError(item) {
+  const number = typeof item.number === "string" ? item.number.trim() : "";
+  if (number.length < 4 || number.length > 40 || !/^[a-zA-Z0-9\\s-]+$/.test(number)) {
+    return "invalid_tracking_number";
+  }
+  if (item.carrier !== undefined &&
+      (typeof item.carrier !== "string" || !/^[a-z0-9-]{2,80}$/i.test(item.carrier))) {
+    return "invalid_carrier";
+  }
+  if (item.postcode !== undefined &&
+      (typeof item.postcode !== "string" || item.postcode.length > 24 || !/^[a-z0-9 -]+$/i.test(item.postcode))) {
+    return "invalid_postcode";
+  }
+  if (item.language !== undefined &&
+      (typeof item.language !== "string" || !/^(en|ar|es|zh|hi|pt|fr|bn)$/i.test(item.language))) {
+    return "invalid_language";
+  }
+  return null;
+}
+
 async function runOne({ item, request, env }) {
+  const validationError = itemValidationError(item);
+  if (validationError) {
+    return { id: item.id, status: 400, data: { error: validationError } };
+  }
+
   const payload = {
     number: item.number,
     ...(item.carrier !== undefined ? { carrier: item.carrier } : {}),
