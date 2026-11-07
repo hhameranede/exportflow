@@ -271,12 +271,56 @@
     });
   }
 
+  let trackingRequestInFlight = false;
+
   function setTrackingBusy(busy) {
     const button = trackingForm ? trackingForm.querySelector('button[type="submit"]') : null;
     if (button) {
       button.disabled = busy;
       button.setAttribute("aria-busy", String(busy));
     }
+  }
+
+  function showTrackingError(message) {
+    if (!formError) return;
+    formError.textContent = String(message || t("errorGeneric"));
+    formError.dataset.state = "error";
+    formError.hidden = false;
+    // Keep failures visible on short/mobile viewports instead of leaving the
+    // user with a button that simply returns to its idle appearance.
+    if (typeof formError.scrollIntoView === "function") {
+      formError.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+    if (typeof formError.focus === "function") {
+      formError.setAttribute("tabindex", "-1");
+      formError.focus({ preventScroll: true });
+    }
+  }
+
+  function trackingErrorMessage(payload, status) {
+    const errors = {
+      invalid_tracking_number: "errorInvalid",
+      invalid_input: "errorInvalid",
+      invalid_carrier: "errorInvalid",
+      not_found: "errorNotFound",
+      rate_limited: "errorRateLimited",
+      input_required: "errorInputRequired",
+      tracking_unavailable: "errorUnavailable",
+      temporarily_busy: "errorBusy",
+      global_rate_limiter_unavailable: "errorUnavailable",
+      global_rate_limiter_not_configured: "errorUnavailable",
+      global_rate_limiter_invalid_response: "errorUnavailable"
+    };
+    const key = errors[payload?.error] || (status >= 500 ? "errorUnavailable" : "errorGeneric");
+    const base = t(key);
+    const attempts = Array.isArray(payload?.attempts)
+      ? payload.attempts.slice(0, 3).map(attempt => {
+          const source = humanize(attempt?.source || "carrier");
+          const reason = humanize(attempt?.kind || "unavailable");
+          return source + ": " + reason;
+        })
+      : [];
+    return attempts.length ? base + " (" + attempts.join("; ") + ")" : base;
   }
 
   function humanize(value) {
@@ -521,18 +565,21 @@
   }
 
   async function trackLive(value) {
-    const number = (value || "").trim();
+    const number = (value || "").replace(/[\\u200B-\\u200D\\uFEFF]/g, "").trim();
     if (!number) {
-      if (formError) {
-        formError.textContent = t("errorEmpty");
-        formError.hidden = false;
-      }
+      showTrackingError(t("errorEmpty"));
       if (trackingInput) trackingInput.focus();
       return;
     }
+    if (trackingRequestInFlight) return;
 
     currentTrackingNumber = number;
-    if (formError) formError.hidden = true;
+    trackingRequestInFlight = true;
+    if (formError) {
+      formError.hidden = true;
+      formError.textContent = "";
+      delete formError.dataset.state;
+    }
     setTrackingBusy(true);
 
     const controller = new AbortController();
@@ -552,18 +599,19 @@
         })
       });
 
-      const payload = await response.json().catch(() => ({}));
+      let payload = {};
+      try {
+        payload = await response.json();
+      } catch {
+        throw new Error(t(response.status >= 500 ? "errorUnavailable" : "errorGeneric"));
+      }
+
       if (!response.ok) {
-        const errors = {
-          invalid_tracking_number: "errorInvalid",
-          invalid_input: "errorInvalid",
-          not_found: "errorNotFound",
-          rate_limited: "errorRateLimited",
-          input_required: "errorInputRequired",
-          tracking_unavailable: "errorUnavailable",
-          temporarily_busy: "errorBusy"
-        };
-        throw new Error(t(errors[payload.error] || "errorGeneric"));
+        throw new Error(trackingErrorMessage(payload, response.status));
+      }
+      if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
+          typeof payload.status !== "string" || typeof payload.carrier !== "string") {
+        throw new Error(t("errorUnavailable"));
       }
 
       document.getElementById("resultEyebrow").textContent = t("resultLiveEyebrow");
@@ -614,12 +662,13 @@
 
       openResultPanel();
     } catch (error) {
-      if (formError) {
-        formError.textContent = error?.name === "AbortError" ? t("errorTimedOut") : (error?.message || t("errorGeneric"));
-        formError.hidden = false;
-      }
+      const message = error?.name === "AbortError"
+        ? t("errorTimedOut")
+        : error?.message || t("errorGeneric");
+      showTrackingError(message);
     } finally {
       clearTimeout(timeout);
+      trackingRequestInFlight = false;
       setTrackingBusy(false);
     }
   }
