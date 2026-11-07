@@ -25,10 +25,14 @@ assert.match(base.headers.get("Cache-Control") || "", /max-age=300/);
 const first = await base.json();
 
 assert.equal(CARRIER_IDS.length, 1339, "ExportFlow native catalog must retain its 1,339 snapshot records.");
-assert.equal(CARRIER_CATALOG_METADATA.catalogOwner, "ExportFlow");
+assert.equal(CARRIER_CATALOG_METADATA.catalogMaintainer, "ExportFlow");
+assert.equal("catalogOwner" in CARRIER_CATALOG_METADATA, false);
 assert.equal(first.summary.catalogEntries, 1339);
 assert.equal(first.summary.integrationMatrixRecords, 1338);
 assert.equal(first.summary.apiClientRecords, 3);
+assert.equal(first.summary.sourceLicenseCoverageRecords, 1338);
+assert.equal(first.summary.officialCarrierIdentityVerifiedRecords, 0);
+assert.equal(first.summary.carrierAuthorizationRecords, 0);
 assert.equal(Object.values(first.summary.integrationCounts).reduce((sum, count) => sum + count, 0), 1338);
 assert.equal(first.filters.integration, "all");
 assert.equal(first.summary.catalogRecordObjects, 1338, "The display directory excludes the reserved unknown carrier record.");
@@ -50,6 +54,10 @@ assert.ok(first.records.every(record => Array.isArray(record.aliases) && Array.i
 assert.ok(first.records.every(record => ["dedicated", "universal-fallback", "link-only", "none"].includes(record.adapterType)));
 assert.ok(first.records.every(record => record.evidence.verification.liveVerified === false));
 assert.ok(first.records.every(record => record.isCatalogEntry === true));
+assert.ok(first.records.every(record => record.sourceProvenance?.sourceLicense === "Apache-2.0"));
+assert.ok(first.records.every(record => record.sourceProvenance?.licenseStatus === "recorded_from_pinned_upstream_repository"));
+assert.ok(first.records.every(record => record.sourceProvenance?.officialCarrierStatus === "not_independently_verified"));
+assert.ok(first.records.every(record => record.sourceProvenance?.carrierApiAuthorization === "not_granted_by_software_license"));
 assert.equal(first.summary.totalDirectoryRecords, 1338, "The public catalogue directory excludes the reserved unknown record.");
 
 // Paging is stable, bounded, and does not repeat carrier identifiers.
@@ -93,6 +101,22 @@ assert.ok(fallback.records.every(record => record.adapterType === "universal-fal
 const cataloguedOnlyResponse = await onRequestGet({ request: request({ evidence: "catalogued" }) });
 const cataloguedOnly = await cataloguedOnlyResponse.json();
 assert.equal(cataloguedOnly.pagination.totalMatches, 1338, "Catalogued directory entries exclude the reserved unknown record.");
+
+// Audit all 1,338 public display records, not only the first page.
+const auditedIds = new Set();
+const totalPages = Math.ceil(1338 / 100);
+for (let page = 1; page <= totalPages; page += 1) {
+  const payload = await (await onRequestGet({ request: request({ page, pageSize: 100 }) })).json();
+  for (const record of payload.records) {
+    assert.equal(record.sourceProvenance.sourceLicense, "Apache-2.0");
+    assert.equal(record.sourceProvenance.licenseStatus, "recorded_from_pinned_upstream_repository");
+    assert.equal(record.sourceProvenance.officialCarrierStatus, "not_independently_verified");
+    assert.ok(record.sourceProvenance.sourceUrl.startsWith("https://github.com/plhery/universal-parcel-scraper/blob/"));
+    assert.equal(auditedIds.has(record.id), false, "Duplicate carrier id during provenance paging: " + record.id);
+    auditedIds.add(record.id);
+  }
+}
+assert.equal(auditedIds.size, 1338, "Every display carrier must carry provenance in the directory response.");
 
 // D1 remains the curated evidence overlay; it does not replace the 1,339-entry source catalog.
 const evidenceRows = [{
