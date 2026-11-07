@@ -84,6 +84,6 @@ assert.equal(failure.passed, 8);
 assert.equal(failure.results.length, 9, "Smoke checks should continue after an individual failure.");
 assert.equal(failingFixture.calls.length, 9, "Every endpoint should be checked even when one response is invalid.");
 
-assert.throws(() => runProductionSmoke({ baseUrl: "http://example.com" }), /HTTPS/);
-assert.throws(() => runProductionSmoke({ baseUrl: "https://example.com/path" }), /origin only/);
+await assert.rejects(runProductionSmoke({ baseUrl: "http://example.com" }), /HTTPS/);
+await assert.rejects(runProductionSmoke({ baseUrl: "https://example.com/path" }), /origin only/);
 console.log("Production smoke test fixtures passed.");
