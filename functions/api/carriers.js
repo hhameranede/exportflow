@@ -68,7 +68,11 @@ function publicEvidenceRecord(row) {
       liveVerified: defensibleVerified,
       verifiedAt: defensibleVerified ? verifiedAt : null,
       evidenceUrl: defensibleVerified ? verifiedEvidenceUrl : null,
-      authorizationConfirmed: Boolean(authorizationEvidenceUrl)
+      authorizationConfirmed: Boolean(
+        authorizationEvidenceUrl &&
+        row?.tracking_rights_status === "third_party_authorized" &&
+        row?.commercial_access_status === "authorized_service_provider"
+      )
     },
     commercialAccess: typeof row.commercial_access_status === "string"
       ? row.commercial_access_status
@@ -144,7 +148,7 @@ function publicCarrierRecord(carrier, evidenceByAdapter) {
           trackingRights: "not_assessed",
           sourceUrl: null,
           disclosure: GENERIC_DISCLOSURE,
-          verification: { method: "none", liveVerified: false, verifiedAt: null, evidenceUrl: null }
+          verification: { method: "none", liveVerified: false, verifiedAt: null, evidenceUrl: null, authorizationConfirmed: false }
         }
   };
 }
