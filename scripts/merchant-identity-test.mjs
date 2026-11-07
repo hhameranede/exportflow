@@ -304,7 +304,7 @@ async function main() {
       method: "DELETE",
       headers: { Origin: ORIGIN, Cookie: cookieHeader([sessionCookiePair]) }
     }),
-    { MERCHANT_DB: db },
+    { MERCHANT_DB: db, MERCHANT_APP_ORIGIN: ORIGIN },
     { cryptoApi: webcrypto, now: () => NOW + 1000 }
   );
   assert.equal(logoutResponse.status, 200, JSON.stringify(await logoutResponse.clone().json()));
