@@ -14,7 +14,7 @@
 | Provider | Primary source | What it establishes | Boundary / remaining work |
 | --- | --- | --- | --- |
 | China Post | [China Post — Contact Us](https://iframe.chinapost.com.cn/en/category/1408/3925-1.htm) | China Post directs international letters/parcels to its international postal tracker and international EMS tracking to the EMS website. | Official public trackers are not proof of a developer API; no current open China Post tracking API was established. Existing upstream EMS-based adapter is not a permission grant. |
-| YunExpress | [YunExpress official website](https://www.yunexpress.com/) and [Yuntrack](https://www.yuntrack.com/) | Official website exposes YT shipment tracking; a business API documentation portal also exists. | Specific API documentation requires login and was not independently reviewed. No ExportFlow credentials, service-provider approval or third-party data-display rights are recorded. |
+| YunExpress | [YunExpress AWB Tracking Platform](https://www.yunexpress.com/resource/shipment-tracking) | The company-owned website exposes its AWB Tracking Platform and identifies the operating company. | The separate business API documentation portal is login-protected and was not independently reviewed. No ExportFlow credentials, service-provider approval or third-party data-display rights are recorded. |
 
 ## D1 evidence status
 
