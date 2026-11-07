@@ -76,7 +76,7 @@ if (!existsSync(upstream)) {
   const stats = countTree(destination);
   const manifest = path.join(ROOT, "vendor/sources/README.md");
   const current = existsSync(manifest) ? (await import("node:fs")).readFileSync(manifest, "utf8") : "";
-  if (!current.includes("## dz-delivery-algeria")) appendFileSync(manifest, "\\n## dz-delivery-algeria\\n- Upstream: " + REPOSITORY + "\\n- Pinned commit: `" + COMMIT + "`\\n- License: MIT (root LICENSE and @dz-delivery/core package metadata)\\n- Files stored: " + stats.files + "\\n- Source bytes stored: " + stats.bytes + "\\n- Scope: full upstream repository snapshot; TypeScript SDK is under `packages/ts`; PHP package and documentation are retained as source references\\n- Runtime: reference-only; not imported into Cloudflare Pages\\n");
+  if (!current.includes("## dz-delivery-algeria")) appendFileSync(manifest, "\n## dz-delivery-algeria\n- Upstream: " + REPOSITORY + "\n- Pinned commit: `" + COMMIT + "`\n- License: MIT (root LICENSE and @dz-delivery/core package metadata)\n- Files stored: " + stats.files + "\n- Source bytes stored: " + stats.bytes + "\n- Scope: full upstream repository snapshot; TypeScript SDK is under `packages/ts`; PHP package and documentation are retained as source references\n- Runtime: reference-only; not imported into Cloudflare Pages\n");
   console.log(JSON.stringify({ alreadyMaterialized: true, ...stats }, null, 2));
   process.exit(0);
 }
@@ -102,7 +102,7 @@ if (existsSync(path.join(destination, ".git")) ||
 const stats = countTree(destination);
 const manifest = path.join(ROOT, "vendor/sources/README.md");
 if (!existsSync(manifest)) throw new Error("Global vendor source manifest is missing.");
-appendFileSync(manifest, "\\n## dz-delivery-algeria\\n- Upstream: " + REPOSITORY + "\\n- Pinned commit: `" + COMMIT + "`\\n- License: MIT (root LICENSE and @dz-delivery/core package metadata)\\n- Files stored: " + stats.files + "\\n- Source bytes stored: " + stats.bytes + "\\n- Scope: full upstream repository snapshot; TypeScript SDK is under `packages/ts`; PHP package and documentation are retained as source references\\n- Runtime: reference-only; not imported into Cloudflare Pages\\n");
+appendFileSync(manifest, "\n## dz-delivery-algeria\n- Upstream: " + REPOSITORY + "\n- Pinned commit: `" + COMMIT + "`\n- License: MIT (root LICENSE and @dz-delivery/core package metadata)\n- Files stored: " + stats.files + "\n- Source bytes stored: " + stats.bytes + "\n- Scope: full upstream repository snapshot; TypeScript SDK is under `packages/ts`; PHP package and documentation are retained as source references\n- Runtime: reference-only; not imported into Cloudflare Pages\n");
 rmSync(upstream, { recursive: true, force: true });
 console.log(JSON.stringify({
   repository: REPOSITORY, commit: COMMIT, destination: DESTINATION, ...stats
