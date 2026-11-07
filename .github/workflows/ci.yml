@@ -35,6 +35,12 @@ jobs:
           node --check functions/api/carriers.js
           node --check functions/api/coverage.js
           node --check functions/api/health.js
+          node --check functions/api/batch-track.js
+          node --check functions/api/openapi.js
+          node --check exportflow-sdk.mjs
+          node --check scripts/batch-track-test.mjs
+          node --check scripts/openapi-test.mjs
+          node --check scripts/sdk-test.mjs
           node --check functions/_middleware.js
           node --check scripts/locale-build-test.mjs
           node --check functions/lib/country-codes.mjs
