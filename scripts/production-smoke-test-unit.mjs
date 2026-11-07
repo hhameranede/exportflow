@@ -9,7 +9,7 @@ function fixtureFetch({ openApiVersion = "3.1.0" } = {}) {
   const fetchImpl = async (url, init = {}) => {
     const path = new URL(url).pathname;
     const method = init.method || "GET";
-    calls.push({ path, method, body: init.body || null });
+    calls.push({ path, method, body: init.body || null, headers: init.headers || {} });
 
     if (method === "POST" && path === "/api/track") {
       return new Response(JSON.stringify({ error: "invalid_tracking_number" }), {
@@ -65,6 +65,7 @@ assert.equal(success.passed, 9);
 assert.equal(success.failed, 0);
 assert.equal(success.results.length, 9);
 assert.equal(successFixture.calls.length, 9);
+assert.ok(successFixture.calls.every(call => call.headers["User-Agent"] === "ExportFlowSmokeBot/1.0"));
 const trackingProbe = successFixture.calls.find(call => call.path === "/api/track");
 const batchProbe = successFixture.calls.find(call => call.path === "/api/batch-track");
 assert.deepEqual(JSON.parse(trackingProbe.body), { number: "x" });
