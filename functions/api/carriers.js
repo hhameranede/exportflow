@@ -45,6 +45,8 @@ function publicEvidenceRecord(row) {
   const verifiedAt = typeof row?.verified_at === "string" ? row.verified_at : null;
   const defensibleVerified = evidenceStatus === "verified" &&
     verificationMethod === "live" &&
+    row?.tracking_rights_status === "third_party_authorized" &&
+    row?.commercial_access_status === "authorized_service_provider" &&
     Boolean(verifiedAt && verifiedEvidenceUrl && authorizationEvidenceUrl);
   const safeEvidenceStatus = evidenceStatus === "verified" && !defensibleVerified
     ? "research"
@@ -62,7 +64,7 @@ function publicEvidenceRecord(row) {
     adapterIds: parseAdapterIds(row.adapter_ids_json),
     evidenceLevel: safeEvidenceStatus,
     verification: {
-      method: defensibleVerified ? verificationMethod : "none",
+      method: evidenceStatus === "verified" && !defensibleVerified ? "none" : verificationMethod,
       liveVerified: defensibleVerified,
       verifiedAt: defensibleVerified ? verifiedAt : null,
       evidenceUrl: defensibleVerified ? verifiedEvidenceUrl : null,
