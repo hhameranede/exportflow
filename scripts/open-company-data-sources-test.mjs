@@ -44,8 +44,9 @@ assert.ok(gleif.limitations.some(value => /official GLEIF Access Service/i.test(
 assert.ok(gleif.limitations.some(value => /do not imply GLEIF endorsement/i.test(value)));
 
 const latvia = registry.sources.find(source => source.id === "latvia-enterprise-register");
-assert.match(latvia.ingestion_status, /quarantined/);
-assert.match(latvia.rights_status, /confirm_exact_dataset_metadata/);
+assert.equal(latvia.license, "CC0-1.0");
+assert.equal(latvia.rights_status, "verified_open");
+assert.match(latvia.ingestion_status, /personal_data_filter/);
 
 const ireland = registry.sources.find(source => source.id === "ireland-cro-company-records");
 assert.equal(ireland.license, "CC-BY-4.0");
