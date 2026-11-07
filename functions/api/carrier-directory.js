@@ -152,18 +152,18 @@ function buildCatalogRecords() {
 }
 
 const CATALOG_RECORDS = buildCatalogRecords();
-const EVIDENCE_BY_ADAPTER = new Map();
-function attachEvidence(records) {
-  EVIDENCE_BY_ADAPTER.clear();
+function buildEvidenceByAdapter(records) {
+  const map = new Map();
   for (const record of records) {
     for (const adapterId of record.adapterIds) {
-      EVIDENCE_BY_ADAPTER.set(adapterId, record);
+      map.set(adapterId, record);
     }
   }
+  return map;
 }
 
-function publicRecord(carrier) {
-  const evidence = carrier.adapter ? EVIDENCE_BY_ADAPTER.get(carrier.adapter) : null;
+function publicRecord(carrier, evidenceByAdapter) {
+  const evidence = carrier.adapter ? evidenceByAdapter.get(carrier.adapter) : null;
   return {
     ...carrier,
     evidence: evidence
@@ -219,8 +219,8 @@ export async function onRequestGet({ request, env } = {}) {
   }
 
   const evidenceRegistry = await loadEvidence(env);
-  attachEvidence(evidenceRegistry.records);
-  const evidenceByCarrier = CATALOG_RECORDS.map(publicRecord);
+  const evidenceByAdapter = buildEvidenceByAdapter(evidenceRegistry.records);
+  const evidenceByCarrier = CATALOG_RECORDS.map(record => publicRecord(record, evidenceByAdapter));
 
   const totalCatalogue = CATALOG_RECORDS.length;
   const selectableCount = CATALOG_RECORDS.filter(record => record.selectable).length;
@@ -254,7 +254,7 @@ export async function onRequestGet({ request, env } = {}) {
     source: "pinned-universal-parcel-scraper-catalog",
     upstreamRevision: SOURCE_REVISION,
     upstreamSnapshot: {
-      catalogEntries: 1339,
+      catalogEntries: CARRIER_IDS.length,
       countriesRepresented: 156,
       dedicatedAdapters: 732,
       universalFallbacks: 5,
@@ -263,7 +263,8 @@ export async function onRequestGet({ request, env } = {}) {
     },
     generatedAt: new Date().toISOString(),
     summary: {
-      catalogEntries: totalCatalogue,
+      catalogEntries: CARRIER_IDS.length,
+      catalogRecordObjects: totalCatalogue,
       selectableRecords: selectableCount,
       dedicatedAdapterRecords: dedicatedCount,
       universalFallbackRecords: universalCount,
