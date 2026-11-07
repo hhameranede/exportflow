@@ -86,3 +86,17 @@ The World Company Database index lists further official sources, including Franc
 - Dateno registry licence and scope: [dataportals-registry](https://github.com/datenoio/dataportals-registry).
 - ODbL obligations: [OpenStreetMap copyright and licence](https://www.openstreetmap.org/copyright).
 - OpenCorporates restrictions: [Terms of Use](https://opencorporates.com/terms-of-use/), [Self-serve API Terms](https://opencorporates.com/legal-information/self-service-api-terms-of-service/).
+
+
+## GitHub repository screening — rejected or held
+
+These public repositories were inspected directly. They are not copied into ExportFlow because the dataset rights are missing or the content is not a company dataset:
+
+| Repository | Evidence observed | Decision |
+|---|---|---|
+| [mratanusarkar/Dataset-Indian-Companies](https://github.com/mratanusarkar/Dataset-Indian-Companies) | README says 452,520 company rows were scraped from AmbitionBox in 2020; no LICENSE file found | **Blocked** — no dataset licence and third-party scrape rights are unverified |
+| [saqibcare/German-Company-Name-Dataset](https://github.com/saqibcare/German-Company-Name-Dataset) | README points to the original Hasso-Plattner-Institute dataset; no LICENSE file found in this fork | **Blocked** — verify original publisher's licence and terms before considering any source |
+| [aashok30/Logistic-Company-s-Dataset](https://github.com/aashok30/Logistic-Company-s-Dataset) | README describes employee, customer, payment and shipment details; no LICENSE file found | **Blocked** — missing licence plus personal/confidential-data risk |
+| [ncreighton/ce66bdc9-logistics-shipping-directory](https://github.com/ncreighton/ce66bdc9-logistics-shipping-directory) | WordPress plugin source; README claims GPLv2-or-later; no standalone company/carrier dataset identified | **Not a data source** — code licensing does not create a reusable company dataset |
+
+A public repository with no explicit data licence is not treated as CC0, MIT or public domain. No records from the rejected repositories are imported.
