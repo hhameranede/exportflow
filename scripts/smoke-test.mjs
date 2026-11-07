@@ -73,7 +73,7 @@ assert.ok(trackApi.includes(String.raw`^[a-zA-Z0-9\s().\/_-]+$`), "Tracking API 
 assert.match(js, /let trackingRequestInFlight = false/, "Tracking requests must be deduplicated");
 assert.match(js, /function showTrackingError/, "Tracking errors must use a visible error handler");
 assert.ok(js.includes("formError.scrollIntoView"), "Tracking failures must be brought into view on mobile");
-assert.ok(js.includes('typeof payload.status === "string"'), "Malformed success responses must not open an empty result panel");
+assert.ok(js.includes('typeof payload.status !== "string"'), "Malformed success responses must not open an empty result panel");
 assert.match(js, /error instanceof TypeError/, "Network failures must map to a localized unavailable message");
 assert.ok(css.includes(".form-error[hidden]") && css.includes("display: none !important"), "The tracking error element must respect its hidden state");
 
@@ -243,3 +243,4 @@ assert.match(js, /IntersectionObserver/, "Counters should animate when visible")
 assert.match(js, /history\.scrollRestoration = "manual"/, "Fresh homepage visits must disable stale scroll restoration");
 assert.match(js, /addEventListener\("pageshow"/, "Homepage must re-check initial scroll position after page display");
 console.log("ExportFlow Hi design, trust pages, counters and scroll restoration verified.");
+
