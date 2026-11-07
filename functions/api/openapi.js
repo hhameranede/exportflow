@@ -240,7 +240,7 @@ const OPENAPI = {
       },
       CarrierDirectoryRecord: {
         type: "object",
-        required: ["id", "name", "aliases", "countries", "selectable", "trackingMode", "adapter", "adapterType", "evidence"],
+        required: ["id", "name", "aliases", "countries", "selectable", "trackingMode", "adapter", "adapterType", "isCatalogEntry", "evidence"],
         properties: {
           id: { type: "string" },
           name: { type: "string" },
@@ -250,6 +250,8 @@ const OPENAPI = {
           trackingMode: { type: "string", enum: ["automatic", "link-only", "not-declared"] },
           adapter: { type: ["string", "null"] },
           adapterType: { type: "string", enum: ["dedicated", "universal-fallback", "link-only", "none"] },
+          isCatalogEntry: { type: "boolean" },
+          countryScope: { type: "string" },
           evidence: { $ref: "#/components/schemas/CarrierDirectoryEvidence" }
         }
       },
