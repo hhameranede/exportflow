@@ -31,6 +31,11 @@ assert.equal(registry.policy.commercial_use_required, true);
 assert.equal(registry.policy.redistribution_required, true);
 assert.equal(registry.policy.repository_publicity_is_not_a_license, true);
 assert.equal(registry.policy.software_license_does_not_license_embedded_data, true);
+const seedMigration = await readFile("migrations/0006_seed_open_company_data_sources.sql", "utf8");
+assert.match(seedMigration, /INSERT OR IGNORE INTO company_data_sources/);
+for (const source of registry.sources) {
+  assert.ok(seedMigration.includes("'" + source.id + "'"), source.id + " must be seeded in the D1 source register");
+}
 assert.ok(registry.sources.length >= 18, "Expected the external source register to keep growing");
 assert.ok(registry.rejected_candidates.length >= 4, "Unlicensed and unsuitable GitHub candidates must remain explicitly rejected");
 assert.ok(registry.existing_exportflow_sources.length >= 4, "Existing pinned sources must remain documented");
