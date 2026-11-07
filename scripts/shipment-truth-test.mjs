@@ -287,6 +287,14 @@ test("latest customs event supersedes an older hold", () => {
   assert.equal(truth.insights.customs.state, "released");
 });
 
+test("generic inspection wording does not imply a customs hold", () => {
+  const truth = resolveShipmentTruth({
+    source: "carrier-a",
+    events: [event("2026-11-06T10:00:00Z", "exception", "Inspection required")]
+  });
+  assert.equal(truth.insights.customs.state, "insufficient_evidence");
+});
+
 test("conflicting customs signals at the same latest time remain insufficient evidence", () => {
   const truth = resolveShipmentTruth({
     events: [
