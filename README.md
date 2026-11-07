@@ -133,4 +133,4 @@ Pages Functions are deployed from the root `functions/` directory. The build pre
 
 ## Licensing
 
-The upstream core is Apache-2.0. Its optional TRAWL derivative is AGPL-3.0 and is not bundled or enabled in this integration. Keep upstream `LICENSE`, `NOTICE` and required third-party notices with redistribution. See upstream notices for bundled model and data attributions.
+The pinned `universal-parcel-scraper` core is Apache-2.0. Copies of its upstream `LICENSE` and `NOTICE` at the pinned commit are retained in `third-party-licenses/universal-parcel-scraper/`. The NOTICE records additional model/data attributions, including MIT, CC BY 4.0 and ODbL sources. The optional TRAWL derivative/image is AGPL-3.0; it is not bundled or enabled in this integration.
