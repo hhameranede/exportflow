@@ -60,7 +60,7 @@ function validItem(item) {
 
 function itemValidationError(item) {
   const number = typeof item.number === "string" ? item.number.trim() : "";
-  if (number.length < 4 || number.length > 40 || !/^[a-zA-Z0-9\\s-]+$/.test(number)) {
+  if (number.length < 4 || number.length > 40 || !/^[a-zA-Z0-9\s-]+$/.test(number)) {
     return "invalid_tracking_number";
   }
   if (item.carrier !== undefined &&
