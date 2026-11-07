@@ -233,3 +233,25 @@ The source register now contains **22 external source entries**. These two sourc
 - Current D1 state: `rights_status=pending`, `commercial_use=0`, `redistribution=0`, `ingestion_status=discovery`. No credentials were registered, no terms were accepted, and no data has been downloaded or ingested.
 
 Evidence: [ASIC official source](https://www.asic.gov.au/online-services/search-asic-registers/datagovau), [ASIC dataset portal](https://data.gov.au/data/dataset/asic-companies), [CBE public reuse options and pricing](https://economie.fgov.be/en/themes/enterprises/crossroads-bank-enterprises/services-everyone/public-data-available-reuse), [CBE Open Data access and privacy conditions](https://economie.fgov.be/en/themes/enterprises/crossroads-bank-enterprises/services-everyone/public-data-available-reuse/cbe-open-data).
+
+
+## Japan and New Zealand official-register review — 2026-11-07
+
+The source register now contains **24 external source entries**.
+
+### Japan — National Tax Agency Corporate Number Publication Site
+
+- Official site: [NTA Corporate Number Publication Site](https://www.houjin-bangou.nta.go.jp/en/).
+- Reuse terms: [Japan Public Data License 1.0](https://www.digital.go.jp/en/resources/open_data/public_data_license_v1.0), which is compatible with commercial use and redistribution when attribution/source citation and edited-data notices are preserved, subject to third-party rights and specific source terms.
+- NTA statistics updated 2026-01-13 report 5,729,508 published corporate-number records at end-December 2025. The full Unicode CSV file listed 2026-10-30 was about 256 MB compressed; full datasets are monthly and delta files can be retrieved by date/prefecture.
+- Only the Basic Three Items are considered: 13-digit corporate number, trade name/association name, and head-office/principal-business address. Corporate numbers are not assigned to individual proprietors or branch offices. Association records without juridical personality can be published only with representative/administrator consent; type-level filtering is required.
+- D1 metadata is rights-approved with attribution, but ingestion remains candidate and privacy/schema review pending. No source records have been imported.
+
+### New Zealand — Companies Office Bulk Data
+
+- Official [Bulk Data Access Agreement](https://www.companiesoffice.govt.nz/data-services/ways-to-get-our-data/bulk-data-access-agreement/) and [Bulk Data Help Guide](https://www.companiesoffice.govt.nz/data-services/ways-to-get-our-data/bulk-data-help-guide/).
+- Monthly files are free only after access approval and agreement acceptance. The agreement is non-transferable and non-sublicensable, restricts direct-marketing resale and sharing of bulk data with unauthorised recipients, and is not a licence for unrestricted public database redistribution.
+- Separate director and shareholder datasets and unincorporated sole-trader/partnership entries must not be copied into the public catalogue.
+- This is intentionally **blocked** for ExportFlow's public commercial company directory under the reviewed terms. No account registration or agreement acceptance was attempted; the source remains blocked with both commercial-use and redistribution flags false.
+
+The D1 rights register was re-seeded on Preview after these additions. Latest measured state is 24 source metadata rows: 19 rights-approved at metadata level, 2 pending, 1 quarantined and 2 blocked; there are still zero company entities, source records, snapshots or ingestion runs.
