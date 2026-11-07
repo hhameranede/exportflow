@@ -23,6 +23,10 @@ assert.deepEqual(trackSchema.properties.language.enum, ["en", "ar", "es", "zh", 
 assert.equal(trackSchema.additionalProperties, false);
 assert.equal(trackSchema.properties.carrier.pattern, "^[a-zA-Z0-9-]+$");
 assert.equal(trackSchema.properties.postcode.pattern, "^[a-zA-Z0-9 -]+$");
+const carrierCatalogSchema = document.components.schemas.CarrierCatalog;
+assert.ok(carrierCatalogSchema.properties.carrierRecords);
+assert.ok(carrierCatalogSchema.properties.metadataNotice);
+assert.ok(carrierCatalogSchema.properties.carrierRecords.items.properties.tracking);
 const batchSchema = document.components.schemas.BatchTrackingRequest;
 assert.equal(batchSchema.properties.shipments.maxItems, 5);
 assert.equal(batchSchema.properties.shipments.minItems, 1);
