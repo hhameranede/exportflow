@@ -117,6 +117,7 @@ for (const asset of ["favicon.svg", "favicon-32x32.png", "apple-touch-icon.png",
   assert.ok(build.includes('"' + asset + '"'), "Build must copy the brand asset: " + asset);
 }
 assert.ok(headers.includes("/og-image-20261106.png\n  Cache-Control: public, max-age=31536000, immutable"), "Versioned social preview image must have immutable caching");
+assert.ok(headers.includes("Strict-Transport-Security: max-age=31536000; includeSubDomains"), "Production routes must carry HSTS");
 
 assert.match(html, /href="\/coverage\//, "Homepage must link to the global carrier directory");
 assert.match(html, /styles\.css\?v=ef-ui-refresh-20261106-01/, "Homepage CSS must use a fresh cache-busting release URL");
