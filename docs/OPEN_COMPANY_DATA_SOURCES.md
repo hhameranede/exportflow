@@ -100,3 +100,24 @@ These public repositories were inspected directly. They are not copied into Expo
 | [ncreighton/ce66bdc9-logistics-shipping-directory](https://github.com/ncreighton/ce66bdc9-logistics-shipping-directory) | WordPress plugin source; README claims GPLv2-or-later; no standalone company/carrier dataset identified | **Not a data source** — code licensing does not create a reusable company dataset |
 
 A public repository with no explicit data licence is not treated as CC0, MIT or public domain. No records from the rejected repositories are imported.
+
+
+## Storage and ingestion architecture under the free-first constraint
+
+The source files are not all small. INSEE's current SIRENE snapshots are multi-gigabyte, so they must never be committed to Git or blindly loaded into D1.
+
+Cloudflare's published limits and included usage (checked 2026-11-07):
+- **D1 Free:** 500 MB per database and 5 GB total account storage; 10 databases; 5 million rows read/day and 100,000 rows written/day. A full SIRENE import is not an appropriate D1-first strategy.
+- **R2 Standard:** 10 GB-month free storage, 1 million Class A operations/month and 10 million Class B operations/month; egress is free.
+- **R2 SQL:** 10 GB of compressed data scanned/month included; beyond that $0.0025/GB, with a 10 MB minimum per query. R2 Data Catalog/other service charges are separate and must be checked before enabling.
+
+Recommended split:
+1. R2 stores source snapshots and partitioned Parquet files with immutable source IDs, dates, hashes and licence evidence.
+2. R2 SQL queries/filters large Parquet datasets (e.g. SIRENE) before records are promoted.
+3. D1 stores source rights metadata, ingestion runs, normalized compact legal-entity records and indexed identifiers only; it is not the bulk archive.
+4. Start with smaller daily registry sources (Norway, Finland, Ireland and Estonia basic data), then add UK monthly data and France sector-filtered extracts.
+5. Do not ingest personal identification numbers, private-person contact fields, beneficial-owner/person records or data from non-open source files.
+
+**Account readiness checked 2026-11-07:** Cloudflare R2 is not enabled for the connected account (the R2 bucket-list API returned the account-level message “Please enable R2 through the Cloudflare Dashboard”). Read-only D1 inspection was denied with `SQLITE_AUTH`; no D1 data was read or changed. No R2 bucket was created and no bulk dataset has been uploaded. R2 must be enabled in the dashboard before the R2 pipeline can be deployed. Until then, keep the source register and tests in Git, and do not attempt large bulk imports into the existing D1 databases.
+
+Official limits: [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), [R2 pricing](https://developers.cloudflare.com/r2/pricing/), [R2 SQL pricing](https://developers.cloudflare.com/r2-sql/platform/pricing/).
