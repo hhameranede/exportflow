@@ -318,8 +318,11 @@ export function resolveShipmentTruth({
     ? trustedEvents.filter(event => event.timestampMs === latestTrustedEvent.timestampMs)
     : [];
   const latestTrustedStages = [...new Set(latestTrustedCandidates.map(event => event.stage))];
+  const latestTrustedLocations = [...new Set(latestTrustedCandidates.map(event => event.location.toLowerCase()).filter(Boolean))];
   const latestStatusConflict = latestTrustedStages.length > 1;
-  const selectedEvent = latestStatusConflict ? null : latestTrustedEvent;
+  const latestLocationConflict = latestTrustedLocations.length > 1;
+  const latestEventConflict = latestStatusConflict || latestLocationConflict;
+  const selectedEvent = latestEventConflict ? null : latestTrustedEvent;
 
   // Source-quality metadata is not available, so a single provider cannot
   // produce high confidence. Reserve high for a future calibrated model.
@@ -332,7 +335,7 @@ export function resolveShipmentTruth({
   const expected = normalizeExpectedDelivery(expectedDelivery);
   const timeline = timelineEvents.map(toPublicEvent);
   const latestReceived = latestReceivedEvent ? toPublicEvent(latestReceivedEvent) : null;
-  const latestTrusted = latestTrustedEvent ? toPublicEvent(latestTrustedEvent) : null;
+  const latestTrusted = latestEventConflict ? null : latestTrustedEvent ? toPublicEvent(latestTrustedEvent) : null;
 
   return {
     status: latestStatusConflict ? "unknown" : latestTrustedEvent?.stage || normalizeStage(status),
