@@ -24,7 +24,11 @@ for (const locale of locales) {
   }
 }
 
-const trustPageNames = ["about", "contact", "privacy", "terms", "cookies", "security", "disclaimer"];\nconst developerPage = await readFile("dist/developers/index.html", "utf8");\nassert.ok(developerPage.includes("Developers — ExportFlow Shipment API"));\nassert.ok(developerPage.includes("/api/openapi"));\nassert.ok(developerPage.includes("/exportflow-sdk.mjs"));
+const trustPageNames = ["about", "contact", "privacy", "terms", "cookies", "security", "disclaimer"];
+const developerPage = await readFile("dist/developers/index.html", "utf8");
+assert.ok(developerPage.includes("Developers — ExportFlow Shipment API"));
+assert.ok(developerPage.includes("/api/openapi"));
+assert.ok(developerPage.includes("/exportflow-sdk.mjs"));
 for (const pageName of trustPageNames) {
   const page = await readFile("dist/" + pageName + "/index.html", "utf8");
   assert.ok(page.includes('<link rel="canonical"'), pageName + " page must retain its canonical URL");
@@ -36,7 +40,8 @@ const locations = [...sitemap.matchAll(/<loc>(https:\/\/exportflow\.me\/[^<]*)<\
 assert.equal(locations.length, 24, "Built sitemap must include sixteen localized routes, seven trust pages and the developer guide");
 assert.ok(sitemap.includes('xmlns:xhtml="http://www.w3.org/1999/xhtml"'));
 assert.ok(locations.includes("https://exportflow.me/privacy/"));
-assert.ok(locations.includes("https://exportflow.me/terms/"));\nassert.ok(locations.includes("https://exportflow.me/developers/"));
+assert.ok(locations.includes("https://exportflow.me/terms/"));
+assert.ok(locations.includes("https://exportflow.me/developers/"));
 for (const pageName of trustPageNames) {
   assert.ok(locations.includes("https://exportflow.me/" + pageName + "/"), "Built sitemap must include " + pageName);
 }
