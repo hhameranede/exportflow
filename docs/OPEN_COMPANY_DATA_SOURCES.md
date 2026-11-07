@@ -211,3 +211,25 @@ Implementation:
 - Full import remains blocked: source-level personal-data review is pending, no company records have been imported, and the full 223 MB file does not belong in KV. See [ACRA import specification](ACRA_SINGAPORE_IMPORT_SPEC.md).
 
 Publisher evidence: [ACRA dataset schema and October 2026 record count](https://data.gov.sg/datasets/d_3f960c10fed6145404ca7b821f263b87/view), [Singapore Open Data Licence 1.0](https://developers.data.gov.sg/open-data-licence), [data.gov.sg terms](https://developers.data.gov.sg/privacy-and-terms).
+
+
+## Australia ASIC and Belgium CBE — discovery-only candidates — 2026-11-07
+
+The source register now contains **22 external source entries**. These two sources are recorded for completeness but deliberately remain pending in the rights gate, with commercial-use and redistribution disabled in D1 until the precise current terms are verified.
+
+### Australia — ASIC Company Dataset
+
+- Official publisher access page: [ASIC data.gov.au datasets](https://www.asic.gov.au/online-services/search-asic-registers/datagovau); official portal record: [ASIC Company Dataset](https://data.gov.au/data/dataset/asic-companies).
+- ASIC confirms that selected company-register fields are published as CSV/XLSX and updated weekly. The downloadable company dataset includes current companies and recent deregistrations; the publisher describes it as a point-in-time extract, not a real-time check.
+- A third-party independently versioned mirror reports 4.45M rows and 15 fields for the 2026-11-02 snapshot and reports CC BY 3.0 AU. This is corroboration only; ExportFlow must use the original data.gov.au publisher file and must recapture the exact live dataset licence metadata before marking commercial reuse approved.
+- The record may contain multiple former/current names for the same ACN. A parser must preserve name history as aliases and avoid duplicate legal entities. Do not add other ASIC register datasets (for example officeholder lists) under this record.
+- Current D1 state: `rights_status=pending`, `commercial_use=0`, `redistribution=0`, `ingestion_status=discovery`. No data has been downloaded or ingested.
+
+### Belgium — Crossroads Bank for Enterprises (CBE) Open Data subset
+
+- Official [CBE Open Data](https://economie.fgov.be/en/themes/enterprises/crossroads-bank-enterprises/services-everyone/public-data-available-reuse/cbe-open-data) offers a limited CSV containing active entities and active establishment units. Full files and change files are made available daily and remain accessible for 31 days.
+- The free Open Data route requires registration and acceptance of its terms. The separate, more extensive full reuse file is a different product; the official portal reports a €30,000 annual fee for commercial use of that full file. ExportFlow is not requesting or using that paid full-file product.
+- CBE says personal data relating to natural-person registered entities may not be reused for direct marketing. The exact free Open Data terms, redistributable field scope and attribution wording must be reviewed before commercial ingestion.
+- Current D1 state: `rights_status=pending`, `commercial_use=0`, `redistribution=0`, `ingestion_status=discovery`. No credentials were registered, no terms were accepted, and no data has been downloaded or ingested.
+
+Evidence: [ASIC official source](https://www.asic.gov.au/online-services/search-asic-registers/datagovau), [ASIC dataset portal](https://data.gov.au/data/dataset/asic-companies), [CBE public reuse options and pricing](https://economie.fgov.be/en/themes/enterprises/crossroads-bank-enterprises/services-everyone/public-data-available-reuse), [CBE Open Data access and privacy conditions](https://economie.fgov.be/en/themes/enterprises/crossroads-bank-enterprises/services-everyone/public-data-available-reuse/cbe-open-data).
