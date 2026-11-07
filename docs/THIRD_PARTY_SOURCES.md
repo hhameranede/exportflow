@@ -82,6 +82,19 @@ The pinned Universal Parcel Scraper snapshot under `vendor/sources/universal-par
 
 These values describe source catalog structure and upstream maintainers' carrier-network naming, not 3,500 unique legal entities, successful tracking tests, or ExportFlow permissions. ExportFlow exposes the pinned catalog with a paginated directory endpoint and overlays its separate D1 evidence registry. Only records with their own repeatable live verification and explicit third-party tracking authorization can reach Verified.
 
+## Per-record catalogue provenance and license boundaries
+
+The generator now attaches a provenance object to every one of the 1,339 normalized carrier records:
+- exact upstream repository and pinned commit;
+- exact manifest path (`carriers/{id}/carrier.json`);
+- source-code/catalog-manifest license attribution (`Apache-2.0`) and the retained upstream NOTICE path;
+- the upstream manifest's tracking portal URL, where supplied, explicitly labelled as an unverified candidate;
+- an explicit authority state: `upstream_manifest_candidate_not_independently_verified`;
+- an explicit rights boundary: the software license does not grant commercial tracking rights.
+
+This is a provenance and redistribution record for the copied upstream manifest, **not** a claim that ExportFlow has independently verified the carrier, owns its trademark, has an API agreement, may scrape its portal, or may republish shipment events. A candidate URL must be checked against the carrier's own current website/developer documentation and terms before it can be treated as an official source. Per-provider authorization and live verification remain separate evidence gates in D1.
+
+The root Apache-2.0 license and NOTICE are preserved with the materialized source snapshot. Nested components retain their own licenses; in particular the Correios CAPTCHA model remains MIT and other NOTICE-listed data retains its respective attribution/license. Do not flatten these into a single blanket license.
 ## D1-backed carrier evidence register
 
 The application now has a D1 `carrier_evidence` registry seeded with 22 research records for globally relevant networks. The records deliberately remain at `research`; the registry is distinct from the 3,500+ upstream catalog entries and is not a count of live or commercially authorized integrations.
