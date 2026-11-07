@@ -137,7 +137,6 @@ Three dated source-review batches now cover all 22 records in the seeded D1 evid
 - [Carrier official-source audit — batch 01](CARRIER_OFFICIAL_SOURCE_AUDIT.md): UPS, FedEx, DHL, Aramex, Canada Post, Australia Post, Royal Mail, Correos, La Poste and Japan Post.
 - [Carrier official-source audit — batch 02](CARRIER_OFFICIAL_SOURCE_AUDIT_BATCH_02.md): USPS, PostNL, Geopost/DPD, GLS, Emirates Post, SF Express, India Post, SingPost, Yanwen and Cainiao.
 - [Carrier official-source audit — batch 03](CARRIER_OFFICIAL_SOURCE_AUDIT_BATCH_03.md): China Post and YunExpress.
-- [Carrier official-source audit — batch 03](CARRIER_OFFICIAL_SOURCE_AUDIT_BATCH_03.md): China Post and YunExpress.
 
 All three batches update primary-source URLs and dated research notes while preserving Research status, no verification timestamp, no live test URL and no authorization reference. The 22-record evidence overlay is separate from the 1,338-entry carrier directory; it does not mean all catalog entries have been individually checked against official operator sources.
 
