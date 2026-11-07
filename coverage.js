@@ -284,7 +284,9 @@
       appendEvidenceLine(
         card,
         t("carrierEvidenceCountryLabel"),
-        Array.isArray(record.countries) && record.countries.length ? record.countries.join(", ") : "—"
+        Array.isArray(record.countries) && record.countries.length
+          ? record.countries.join(", ")
+          : (record.countryScope || "—")
       );
       if (Array.isArray(record.aliases) && record.aliases.length) {
         appendEvidenceLine(card, t("carrierEvidenceAliasesLabel"), record.aliases.slice(0, 4).join(" · "));
