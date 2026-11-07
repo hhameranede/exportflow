@@ -86,7 +86,7 @@ jobs:
           set -euo pipefail
           git add -A -- vendor
           git add -u -- .gitmodules
-          git diff --cached --check
+          # Preserve upstream fixtures verbatim; do not reject their original whitespace.
           if git diff --cached --quiet; then
             echo "No vendor changes were produced; source materialization is already up to date."
             exit 0
