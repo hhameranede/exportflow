@@ -664,7 +664,9 @@
     } catch (error) {
       const message = error?.name === "AbortError"
         ? t("errorTimedOut")
-        : error?.message || t("errorGeneric");
+        : error instanceof TypeError
+          ? t("errorUnavailable")
+          : error?.message || t("errorGeneric");
       showTrackingError(message);
     } finally {
       clearTimeout(timeout);
