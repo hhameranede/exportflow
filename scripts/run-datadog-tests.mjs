@@ -21,7 +21,7 @@ const testScripts = [
   "scripts/smoke-test.mjs",
 ];
 
-let failed = false;
+const failures = [];
 
 for (const script of testScripts) {
   const testName = script.split("/").at(-1).replace(/\.mjs$/, "");
@@ -44,16 +44,20 @@ for (const script of testScripts) {
     const error = new Error(`${script}: ${reason}`);
     testFinish.publish({ status: "fail", error });
     console.error(`✗ ${script}: ${reason}`);
-    failed = true;
-    break;
+    failures.push({ script, reason });
+    continue;
   }
 
   testFinish.publish({ status: "pass" });
   console.log(`Datadog test result recorded: ${testName}`);
 }
 
-if (failed) {
+if (failures.length > 0) {
+  console.error(`\n${failures.length} of ${testScripts.length} regression tests failed:`);
+  for (const failure of failures) {
+    console.error(`- ${failure.script}: ${failure.reason}`);
+  }
   process.exitCode = 1;
 } else {
-  console.log("All ExportFlow regression scripts passed.");
+  console.log(`All ${testScripts.length} ExportFlow regression scripts passed.`);
 }
