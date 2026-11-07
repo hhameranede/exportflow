@@ -77,6 +77,29 @@ const OPENAPI = {
         }
       }
     },
+    "/api/carrier-directory": {
+      get: {
+        tags: ["Discovery"],
+        operationId: "getPaginatedCarrierDirectory",
+        summary: "Search the global carrier catalog",
+        description: "Returns a paginated view of the pinned upstream carrier catalog. Each record is catalog metadata, not proof of a live lookup, a distinct legal company, carrier authorization or third-party tracking rights. Evidence details are joined only for the curated D1 research records.",
+        parameters: [
+          { name: "q", in: "query", required: false, schema: { type: "string", maxLength: 120 }, description: "Search carrier names, IDs, aliases or ISO country codes." },
+          { name: "country", in: "query", required: false, schema: { type: "string", pattern: "^[A-Z]{2}$" }, description: "Filter by ISO 3166-1 alpha-2 country code." },
+          { name: "evidence", in: "query", required: false, schema: { type: "string", enum: ["all", "catalogued", "research", "testing", "integrated", "verified", "blocked", "deprecated"] } },
+          { name: "adapter", in: "query", required: false, schema: { type: "string", enum: ["all", "dedicated", "universal-fallback", "link-only", "none"] } },
+          { name: "page", in: "query", required: false, schema: { type: "integer", minimum: 1, default: 1 } },
+          { name: "pageSize", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 100, default: 50 } }
+        ],
+        responses: {
+          "200": {
+            description: "A bounded page of the upstream catalog with separate catalog, adapter and evidence counts.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/CarrierDirectoryResponse" } } }
+          },
+          "400": { description: "Invalid country, evidence or adapter filter.", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } }
+        }
+      }
+    },
     "/api/coverage": {
       get: {
         tags: ["Discovery"],
@@ -191,6 +214,68 @@ const OPENAPI = {
             }
           },
           events: { type: "array", items: { $ref: "#/components/schemas/TrackingEvent" } }
+        }
+      },
+      CarrierDirectoryEvidence: {
+        type: "object",
+        required: ["level", "adapterState", "integrationMethod", "commercialAccess", "trackingRights", "sourceUrl", "disclosure", "verification"],
+        properties: {
+          level: { type: "string", enum: ["catalogued", "research", "testing", "integrated", "verified", "blocked", "deprecated"] },
+          adapterState: { type: "string" },
+          integrationMethod: { type: "string" },
+          commercialAccess: { type: "string" },
+          trackingRights: { type: "string" },
+          sourceUrl: { type: ["string", "null"], format: "uri" },
+          disclosure: { type: "string" },
+          verification: {
+            type: "object",
+            required: ["method", "liveVerified", "verifiedAt"],
+            properties: {
+              method: { type: "string", enum: ["none", "mock", "sandbox", "live"] },
+              liveVerified: { type: "boolean" },
+              verifiedAt: { type: ["string", "null"], format: "date-time" }
+            }
+          }
+        }
+      },
+      CarrierDirectoryRecord: {
+        type: "object",
+        required: ["id", "name", "aliases", "countries", "selectable", "trackingMode", "adapter", "adapterType", "evidence"],
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          aliases: { type: "array", items: { type: "string" } },
+          countries: { type: "array", items: { type: "string", pattern: "^[A-Z]{2}$" } },
+          selectable: { type: "boolean" },
+          trackingMode: { type: "string", enum: ["automatic", "link-only", "not-declared"] },
+          adapter: { type: ["string", "null"] },
+          adapterType: { type: "string", enum: ["dedicated", "universal-fallback", "link-only", "none"] },
+          evidence: { $ref: "#/components/schemas/CarrierDirectoryEvidence" }
+        }
+      },
+      CarrierDirectoryResponse: {
+        type: "object",
+        required: ["source", "upstreamRevision", "upstreamSnapshot", "summary", "pagination", "filters", "records"],
+        properties: {
+          source: { type: "string" },
+          upstreamRevision: { type: "string" },
+          generatedAt: { type: "string", format: "date-time" },
+          upstreamSnapshot: { type: "object" },
+          summary: { type: "object" },
+          pagination: {
+            type: "object",
+            required: ["page", "pageSize", "totalMatches", "totalPages", "hasPrevious", "hasNext"],
+            properties: {
+              page: { type: "integer" },
+              pageSize: { type: "integer", maximum: 100 },
+              totalMatches: { type: "integer" },
+              totalPages: { type: "integer" },
+              hasPrevious: { type: "boolean" },
+              hasNext: { type: "boolean" }
+            }
+          },
+          filters: { type: "object" },
+          records: { type: "array", items: { $ref: "#/components/schemas/CarrierDirectoryRecord" } }
         }
       },
       CarrierCatalog: {
