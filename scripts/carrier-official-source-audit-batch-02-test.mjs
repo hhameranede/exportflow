@@ -22,5 +22,5 @@ for (const [providerId, sourceUrl] of expected) {
 assert.doesNotMatch(migration, /evidence_status\s*=\s*'verified'/i);
 assert.doesNotMatch(migration, /verification_method\s*=\s*'(sandbox|live)'/i);
 assert.match(audit, /All ten remain \*\*Research\*\*/);
-assert.match(audit, /does not grant ExportFlow credentials/);
+assert.match(audit, /No ExportFlow account approval, credential grant, carrier agreement/);
 console.log("Carrier official-source audit batch 02 tests passed: ten primary-source records, all retained at Research with no fabricated authorization or live evidence.");
