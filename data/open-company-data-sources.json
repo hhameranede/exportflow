@@ -828,6 +828,89 @@
         "https://economie.fgov.be/en/themes/enterprises/crossroads-bank-enterprises/cbe-services-everyone",
         "https://kbopub.economie.fgov.be/kbo-open-data/login?lang=en"
       ]
+    },
+    {
+      "id": "japan-national-tax-agency-corporate-number",
+      "name": "Japan National Tax Agency Corporate Number Publication Site — Basic Three Items",
+      "publisher": "National Tax Agency, Japan",
+      "kind": "national_corporate_number_register",
+      "coverage": [
+        "JP"
+      ],
+      "source_url": "https://www.houjin-bangou.nta.go.jp/en/",
+      "download_url": "https://www.houjin-bangou.nta.go.jp/download/zenken/",
+      "license": "JAPAN_PUBLIC_DATA_LICENSE_1.0_CC_BY_COMPATIBLE",
+      "rights_status": "verified_open_with_attribution",
+      "commercial_use": true,
+      "redistribution": true,
+      "attribution_required": true,
+      "attribution_text": "Source: National Tax Agency Corporate Number Publication Site (https://www.houjin-bangou.nta.go.jp/en/). Created by ExportFlow based on National Tax Agency Corporate Number Publication Site data (source snapshot date: [date]). Public Data License 1.0.",
+      "access": "free_monthly_full_CSV_XML_and_daily_delta_downloads; official_web_API",
+      "update_frequency": "monthly_full_daily_deltas",
+      "data_scope": [
+        "13_digit_corporate_number",
+        "trade_name_or_association_name",
+        "head_office_or_principal_business_address",
+        "name_and_address_change_history"
+      ],
+      "limitations": [
+        "Official NTA statistics updated 2026-01-13 report 5,729,508 published corporate-number records at end-December 2025; includes public bodies and foreign corporations as well as companies",
+        "The official full Unicode CSV download for 2026-10-30 was listed as a 256 MB ZIP; full files are monthly and deltas can be downloaded by day/prefecture",
+        "A Corporate Number is not assigned to individual proprietors or branch offices; one number is assigned per corporation",
+        "Associations without juridical personality are published only with representative/administrator consent; source-specific type fields must be reviewed to exclude any ambiguous association records if building a companies-only view",
+        "Only the published Basic Three Items are in scope for the first stage; do not ingest any added optional fields without a separate privacy/rights review",
+        "PDL 1.0 requires source citation and a clear statement when the source is edited; third-party rights must be reviewed where indicated",
+        "Do not use NTA trademarks or make the processed ExportFlow directory appear to be an unedited or official government service"
+      ],
+      "ingestion_status": "candidate_pending_schema_and_field_privacy_review",
+      "verification_sources": [
+        "https://www.houjin-bangou.nta.go.jp/en/setsumei/",
+        "https://www.houjin-bangou.nta.go.jp/en/riyokiyaku/",
+        "https://www.digital.go.jp/en/resources/open_data/public_data_license_v1.0",
+        "https://www.houjin-bangou.nta.go.jp/download/zenken/",
+        "https://www.houjin-bangou.nta.go.jp/setsumei/houjin-bangou_joho/"
+      ]
+    },
+    {
+      "id": "new-zealand-companies-office-bulk",
+      "name": "New Zealand Companies Office Bulk Data",
+      "publisher": "New Zealand Ministry of Business, Innovation and Employment — Companies Office",
+      "kind": "national_company_register_bulk_files",
+      "coverage": [
+        "NZ"
+      ],
+      "source_url": "https://www.companiesoffice.govt.nz/data-services/ways-to-get-our-data/bulk-data-access-agreement/",
+      "download_url": "https://www.companiesoffice.govt.nz/data-services/ways-to-get-our-data/request-access-to-bulk-data/",
+      "license": "NZ_COMPANIES_OFFICE_BULK_DATA_ACCESS_AGREEMENT_NON_TRANSFERABLE",
+      "rights_status": "blocked",
+      "commercial_use": false,
+      "redistribution": false,
+      "attribution_required": false,
+      "access": "free_monthly_files_only_after_access_approval_and_acceptance_of_agreement",
+      "update_frequency": "monthly",
+      "data_scope": [
+        "companies_core_data",
+        "company_status",
+        "company_type",
+        "registration_date",
+        "removal_date",
+        "business_number",
+        "public_company_profile_fields"
+      ],
+      "limitations": [
+        "Bulk files are free after authorised access approval but are governed by a non-transferable, non-sublicensable licence for research/business use",
+        "Agreement prohibits direct-marketing lists for resale and sharing bulk data with unauthorised persons; public dataset redistribution is not authorised by the text reviewed",
+        "The user must have authority to accept the agreement on behalf of the requesting organisation; no registration or agreement acceptance was attempted",
+        "Bulk data includes separate director and shareholder files and unincorporated sole-trader/partnership records; these must not be copied into a public company directory",
+        "The agreement requires timely updates if public information is provided to clients and provides for access suspension/termination",
+        "Not approved for the ExportFlow public commercial company catalogue; do not request or ingest under the current terms"
+      ],
+      "ingestion_status": "blocked_nontransferable_bulk_data_agreement",
+      "verification_sources": [
+        "https://www.companiesoffice.govt.nz/data-services/ways-to-get-our-data/bulk-data-access-agreement/",
+        "https://www.companiesoffice.govt.nz/data-services/ways-to-get-our-data/bulk-data-help-guide/",
+        "https://www.nzbn.govt.nz/using-the-nzbn/nzbn-services/bulk-data/"
+      ]
     }
   ],
   "existing_exportflow_sources": [
