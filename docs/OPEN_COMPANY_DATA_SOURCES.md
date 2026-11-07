@@ -145,3 +145,19 @@ The migrations are committed to PR #49 only and are **not applied** to any remot
 ### Estonia licence conflict — quarantine decision (2026-11-07)
 
 The current RIK download page says downloads require acceptance of the licence terms and links to CC BY 4.0. However, the European Data Portal's 2023 HVD report records CC BY-SA 4.0 for the Estonian public commercial-register dataset. Because these terms impose different downstream database obligations, ExportFlow does not choose the more permissive licence by assumption. The Estonia record is marked `provisional_license_conflict`, redistribution is disabled in the D1 seed, and ingestion remains blocked until the exact file-level terms presented at download are captured. The basic-data file excludes personal identification numbers from 1 November 2024; other person/shareholder/beneficial-owner datasets remain excluded.
+
+
+## Cloudflare execution status — 2026-11-07 18:30 CET
+
+**Applied and verified in Cloudflare D1 preview database** `exportflow-intelligence-preview-db` (UUID `9657dfdc-5b80-4a0b-a982-8865152b2c82`):
+
+- Migration `0005_open_company_data_registry.sql`: all 8 company-data tables, indexes and rights-gating triggers applied successfully.
+- Migration `0006_seed_open_company_data_sources.sql`: all 18 source metadata rows inserted.
+- Verified counts: 18 source metadata rows; 2 rights triggers; 0 company entity rows; 0 source-record rows; 0 snapshots; 0 ingestion runs.
+- Rights states: 16 approved for source metadata/reuse, 1 quarantined and 1 blocked. Source metadata approval is not blanket approval of every field or a go-ahead for ingestion. All 18 remain ingestion candidates/discovery until per-dataset privacy/schema validation.
+- Estonia RIK remains quarantined, redistribution disabled, ingestion blocked due the unresolved CC BY 4.0 / CC BY-SA 4.0 terms discrepancy.
+- **No production D1 database was modified.** The main `exportflow-intelligence-db` was not touched.
+
+### R2 activation blocker
+
+Cloudflare R2 API returned HTTP 403 / error 10042: “Please enable R2 through the Cloudflare Dashboard.” This is account-level service activation, not a missing API permission. The API has no activation operation for this state. Enable R2 in the account dashboard before bucket creation; do not attempt repeated API calls. After activation, create the private bucket `exportflow-company-snapshots` with no public access and bind it only to the ingestion Worker.
