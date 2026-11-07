@@ -72,9 +72,9 @@ The merchant ID passed to this internal boundary must come from a verified serve
 - Returned payloads expose only the requested tracking number, normalized status and a bounded event timeline. Raw carrier payloads, parcel identifiers and credentials are not returned.
 - Event labels are length-limited and email/phone-like strings are redacted.
 - Upstream exceptions are converted to stable error codes; raw provider messages are not exposed.
-- There is no credential persistence, logging, telemetry or network request in this boundary itself.
+- The connector boundary itself performs no credential persistence, logging, telemetry or network request.
 
-The credential vault, merchant authentication, connection management, revocation and audit trail are intentionally not simulated. They must exist before any route invokes this connector.
+A separate encrypted AES-256-GCM credential-vault adapter and D1 schema are added in stacked PR [#44](https://github.com/hhameranede/exportflow/pull/44), with design notes in [MERCHANT_CREDENTIAL_VAULT.md](MERCHANT_CREDENTIAL_VAULT.md). That module is still isolated: no D1 database has been provisioned or bound, no key has been configured, and no route imports it. Merchant authentication/session handling, account ownership verification, consent UI, rate limits and audit trail integration remain outstanding.
 
 ## Test and evidence status
 
