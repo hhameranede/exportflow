@@ -94,6 +94,48 @@ const OPENAPI = {
         responses: { "200": { description: "Process-level liveness only; upstream carrier availability is not tested." } }
       }
     },
+    "/api/mcp": {
+      post: {
+        tags: ["Developer Ecosystem"],
+        operationId: "handleMcpRequest",
+        summary: "Call ExportFlow through the stateless MCP endpoint",
+        description: "Model Context Protocol Streamable HTTP endpoint implementing protocol revision 2026-07-28. POST one JSON-RPC request with MCP-Protocol-Version, Mcp-Method and the required Accept header. Mcp-Name is required for tools/call and must equal params.name. No protocol session or server-side watchlist is created. Tracking numbers may be forwarded to upstream carrier adapters when a tool performs a live lookup.",
+        parameters: [
+          { name: "MCP-Protocol-Version", in: "header", required: true, schema: { type: "string", const: "2026-07-28" } },
+          { name: "Mcp-Method", in: "header", required: true, schema: { type: "string" } },
+          { name: "Mcp-Name", in: "header", required: false, description: "Required for tools/call; must equal params.name.", schema: { type: "string" } },
+          { name: "Accept", in: "header", required: true, description: "Must include application/json and text/event-stream.", schema: { type: "string", example: "application/json, text/event-stream" } }
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/McpJsonRpcRequest" },
+              example: {
+                jsonrpc: "2.0",
+                id: 1,
+                method: "tools/list",
+                params: { _meta: {
+                  "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                  "io.modelcontextprotocol/clientInfo": { name: "example-client", version: "1.0.0" },
+                  "io.modelcontextprotocol/clientCapabilities": {}
+                } }
+              }
+            }
+          }
+        },
+        responses: {
+          "200": { description: "JSON-RPC response, discovery document, tool catalog or tool result." },
+          "400": { description: "Invalid JSON-RPC message, protocol metadata or required routing header." },
+          "403": { description: "Origin is not allowed." },
+          "405": { description: "Only POST is supported." },
+          "406": { description: "Accept must include application/json and text/event-stream." },
+          "413": { description: "Request body exceeds 16 KiB." },
+          "415": { description: "Content-Type must be application/json." },
+          "404": { description: "Unknown JSON-RPC method." }
+        }
+      }
+    },
     "/api/openapi": {
       get: {
         tags: ["System"],
@@ -210,6 +252,32 @@ const OPENAPI = {
         properties: {
           results: { type: "array", items: { type: "object", required: ["id", "status", "data"], properties: { id: { type: "string" }, status: { type: "integer" }, data: { type: "object" } } } },
           summary: { type: "object", required: ["requested", "succeeded", "failed"], properties: { requested: { type: "integer" }, succeeded: { type: "integer" }, failed: { type: "integer" } } }
+        }
+      },
+      McpJsonRpcRequest: {
+        type: "object",
+        additionalProperties: true,
+        required: ["jsonrpc", "id", "method"],
+        properties: {
+          jsonrpc: { type: "string", const: "2.0" },
+          id: { oneOf: [{ type: "string" }, { type: "number" }] },
+          method: { type: "string", enum: ["server/discover", "tools/list", "tools/call"] },
+          params: {
+            type: "object",
+            properties: {
+              name: { type: "string" },
+              arguments: { type: "object" },
+              _meta: {
+                type: "object",
+                required: ["io.modelcontextprotocol/protocolVersion", "io.modelcontextprotocol/clientCapabilities"],
+                properties: {
+                  "io.modelcontextprotocol/protocolVersion": { type: "string", const: "2026-07-28" },
+                  "io.modelcontextprotocol/clientInfo": { type: "object" },
+                  "io.modelcontextprotocol/clientCapabilities": { type: "object" }
+                }
+              }
+            }
+          }
         }
       },
       ApiError: { type: "object", required: ["error"], properties: { error: { type: "string" } } }
