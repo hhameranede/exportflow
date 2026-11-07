@@ -129,28 +129,35 @@
       "coverage": [
         "LV"
       ],
-      "source_url": "https://www.ur.gov.lv/en/registers-open-data-latvian-open-data-portal",
+      "source_url": "https://data.gov.lv/dati/eng/dataset/uz",
       "data_portal": "https://data.gov.lv/",
-      "license": "dataset_specific_open_reuse_terms",
-      "rights_status": "provisional_open_reuse_confirm_exact_dataset_metadata",
+      "license": "CC0-1.0",
+      "rights_status": "verified_open",
       "commercial_use": true,
       "redistribution": true,
-      "attribution_required": "confirm_dataset_metadata",
-      "access": "free_machine_readable_csv_and_xlsx",
-      "update_frequency": "dataset_specific",
+      "attribution_required": false,
+      "access": "free_daily_CSV_and_portal_API",
+      "update_frequency": "daily",
       "data_scope": [
-        "legal_entities",
-        "registration_details",
-        "public_register_fields"
+        "legal_entity_type",
+        "registered_address",
+        "current_legal_name",
+        "registration_number",
+        "EU_payment_recipient_identifier_where_assigned",
+        "registration_date",
+        "deregistration_or_reorganisation_date"
       ],
       "limitations": [
-        "official register confirms commercial and non-commercial reuse; capture exact dataset-level licence and attribution from portal metadata before production",
-        "personal data and special register fields require separate legal review"
+        "official portal marks the base Enterprise Register dataset CC0-1.0 and a high-value dataset for companies and company ownership",
+        "the source includes all registered subjects; filter and separately review natural-person and sole-proprietor records before public display",
+        "do not assume the separate shareholder, sanctions, or annual-report datasets share the same field-level privacy profile even where they are also CC0"
       ],
-      "ingestion_status": "candidate_quarantined_pending_dataset_metadata_capture",
+      "ingestion_status": "candidate_for_country_ingestion_with_personal_data_filter",
       "verification_sources": [
+        "https://data.gov.lv/dati/eng/dataset/uz",
         "https://www.ur.gov.lv/en/registers-open-data-latvian-open-data-portal"
-      ]
+      ],
+      "attribution_text": "Recommended source credit: Latvian Register of Enterprises (LR Uzņēmumu reģistrs), CC0 1.0, dataset snapshot date."
     },
     {
       "id": "us-sec-edgar",
