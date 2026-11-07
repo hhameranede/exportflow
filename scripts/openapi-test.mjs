@@ -29,6 +29,8 @@ assert.deepEqual(trackSchema.properties.language.enum, ["en", "ar", "es", "zh", 
 assert.equal(trackSchema.additionalProperties, false);
 assert.equal(trackSchema.properties.carrier.pattern, "^[a-zA-Z0-9-]+$");
 assert.equal(trackSchema.properties.postcode.pattern, "^[a-zA-Z0-9 -]+$");
+assert.equal(trackSchema.properties.number.maxLength, 64);
+assert.equal(trackSchema.properties.number.pattern, "^[a-zA-Z0-9\\\\s().\\\\/_-]+$");
 const directoryOperation = document.paths["/api/carrier-directory"].get;
 assert.equal(directoryOperation.operationId, "getPaginatedCarrierDirectory");
 assert.ok(directoryOperation.parameters.some(parameter => parameter.name === "pageSize" && parameter.schema.maximum === 100));
@@ -55,6 +57,8 @@ const batchItemSchema = document.components.schemas.BatchTrackingItem;
 assert.equal(batchItemSchema.additionalProperties, false);
 assert.ok(batchItemSchema.properties.id);
 assert.ok(batchItemSchema.properties.number);
+assert.equal(batchItemSchema.properties.number.maxLength, 64);
+assert.equal(batchItemSchema.properties.number.pattern, "^[a-zA-Z0-9\\\\s().\\\\/_-]+$");
 assert.equal(batchItemSchema.properties.carrier.pattern, "^[a-zA-Z0-9-]+$");
 assert.equal(batchItemSchema.properties.postcode.pattern, "^[a-zA-Z0-9 -]+$");
 assert.equal(batchSchema.properties.shipments.uniqueItems, undefined, "Runtime enforces unique item IDs, not entire object equality");
