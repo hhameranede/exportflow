@@ -10,7 +10,7 @@ The reviewed source snapshots below are now ordinary tracked files in this priva
 | --- | --- | --- | ---: | ---: | --- |
 | `vendor/sources/universal-parcel-scraper` | [plhery/universal-parcel-scraper](https://github.com/plhery/universal-parcel-scraper) | `e64a466772ef25ce68e02d9c7c9f1613eec1208b` | 12,618 | 83,629,080 | Apache-2.0 core; upstream NOTICE plus nested MIT, CC BY 4.0, Open Database License, government-data and public-domain attributions preserved |
 | `vendor/sources/shopana-carrier-api` | [shopanaio/carrier-api](https://github.com/shopanaio/carrier-api) | `450ab76612a359b494c5bb7a6bce1d97add130a2` | 219 | 5,738,947 | Apache-2.0 root and package licenses; Nova Poshta API client, MCP server and Fetch transport source |
-| `vendor/sources/reference/karrio-community` | [karrioapi/community](https://github.com/karrioapi/community) | `4d5303d8c66bee2b605f1d9ea35c105cb5725471` | 975 | 12,795,919 | LGPL-3.0; EasyPost plugin has its own nested LGPL-3.0 license |
+| `vendor/sources/reference/karrio-community` | [karrioapi/community](https://github.com/karrioapi/community) | `4d5303d8c66bee2b605f1d9ea35c105cb5725471` | 975 | 12,795,919 | LGPL-3.0; EasyPost plugin has its own nested LGPL-3.0 license |\n| `vendor/sources/algeria/dz-delivery` | [developing-off/dz-delivery](https://github.com/developing-off/dz-delivery) | `45aa32ddf2ba7392da6c696aef187fcc059b3c8d` | Pending workflow inventory | Pending workflow inventory | MIT; full upstream source snapshot, TypeScript SDK at `packages/ts`; reference-only |
 
 **Total stored source:** 13,812 files and 102,163,946 bytes (about 97.43 MiB), excluding the short inventory README.
 
@@ -33,7 +33,7 @@ The machine-readable inventory is in [`vendor/sources/README.md`](../vendor/sour
 
 The upstream Universal Parcel Scraper README at the pinned commit describes more than 3,500 carrier/service entries, 732 dedicated adapters, five universal fallback providers and 156 represented countries. Its published benchmark is a selected 100-carrier European sample (91 histories from dedicated adapters and 95 with all fallbacks enabled); it is not a global live-success guarantee. Carrier websites, API permissions, credentials, anti-bot controls and data freshness still vary.
 
-## Newly reviewed candidates — not materialized
+## Algeria specialization source\n\nThe pinned `developing-off/dz-delivery` repository is being materialized as an ordinary tracked source snapshot under `vendor/sources/algeria/dz-delivery/`. Its MIT-licensed TypeScript SDK (`packages/ts`) documents Yalidine, ZRExpress, Maystro, Ecotrack (including DHD variants), GuepEx, NoEST, E-com Delivery, MDM Express and Elogistia. The SDK also contains parcel creation, fees and location methods; ExportFlow will initially evaluate only its tracking interface.\n\nThis source snapshot is **not yet a runtime integration**. The SDK's provider clients require credentials and may expose methods unrelated to public tracking. Do not call create/cancel/fees APIs from the public tracking route. Before any runtime adapter is enabled, inspect each provider's API terms, credential model, response mapping, timeout behavior and tests. Only tracking with user-authorized provider credentials may be considered. No carrier is claimed live-verified by copying this code.\n\n## Newly reviewed candidates — not materialized
 
 Research checked on 2026-11-07. These projects were reviewed and intentionally not copied because they do not add a suitable self-contained global engine for the current Cloudflare runtime.
 
