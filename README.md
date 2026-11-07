@@ -21,7 +21,8 @@ The upstream catalog documents thousands of carrier names and dedicated adapters
 - `GET /api/health` — a liveness response; it does not prove that upstream carriers are reachable.
 - `POST /api/batch-track` — bounded batch tracking for up to five shipments. Each result includes an individual status and reuses the single-tracking validation and safeguards.
 - `GET /api/openapi` — machine-readable OpenAPI 3.1 contract for the public API.
-- `GET /developers/` — developer quick start and JavaScript SDK guide; the SDK is served as `/exportflow-sdk.mjs`.
+- `POST /api/mcp` — stateless Model Context Protocol Streamable HTTP endpoint (protocol `2026-07-28`) for single/batch tracking, carrier discovery, country coverage and health checks. No MCP session or server-side agent history is stored.
+- `GET /developers/` — developer quick start, JavaScript SDK and MCP agent integration guide; the SDK is served as `/exportflow-sdk.mjs`.
 - `/merchant/` — device-only merchant workspace. It stores up to ten watchlist entries in browser local storage, refreshes them in two sequential batches of at most five and can export a CSV. It is not an account, cloud sync or server-side shipment history.
 
 #### Tracking API Response
@@ -82,6 +83,7 @@ A country appearing in the directory does not mean ExportFlow has a working dire
 
 - Carrier/provider credentials must remain server-side.
 - Do not log full tracking numbers or postcodes.
+- MCP is a stateless public endpoint: each request carries protocol metadata and routing headers. Tracking tools reuse the same underlying validation, rate limits and provider safeguards as the REST API; no API key is currently required and no agent conversation history is stored.
 - The selected carrier receives the tracking number. UPU may receive eligible postal tracking numbers.
 - Tracking responses use `Cache-Control: no-store`.
 - The tracking endpoint applies request-body validation, a bounded lookup deadline, per-isolate request throttling and concurrency limits. The merchant workspace keeps the watchlist and compact result summaries in browser local storage only; a refresh explicitly sends the shipment details to the tracking API. The in-memory limits are per Worker isolate, not global customer quotas.
