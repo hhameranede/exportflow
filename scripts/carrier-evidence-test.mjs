@@ -138,7 +138,9 @@ const forgedVerified = {
   verification_method: "mock",
   verified_at: null,
   verification_evidence_url: null,
-  authorization_evidence_url: null
+  authorization_evidence_url: null,
+  commercial_access_status: "authorized_service_provider",
+  tracking_rights_status: "third_party_authorized"
 };
 const forgedResponse = await onRequestGet({ env: { MERCHANT_DB: fakeDb({ results: [forgedVerified] }) } });
 const forged = await forgedResponse.json();
@@ -152,7 +154,9 @@ const properlyVerified = {
   verification_method: "live",
   verified_at: "2026-11-07T10:00:00Z",
   verification_evidence_url: "https://example.test/redacted-live-test-evidence",
-  authorization_evidence_url: "https://example.test/redacted-authorization-reference"
+  authorization_evidence_url: "https://example.test/redacted-authorization-reference",
+  commercial_access_status: "authorized_service_provider",
+  tracking_rights_status: "third_party_authorized"
 };
 const verifiedResponse = await onRequestGet({ env: { MERCHANT_DB: fakeDb({ results: [properlyVerified] }) } });
 const verified = await verifiedResponse.json();
