@@ -1,4 +1,4 @@
-import { CARRIERS, CARRIER_IDS } from "universal-parcel-scraper";
+import { CARRIERS, CARRIER_IDS } from "../../data/carrier-catalog.generated.mjs";
 
 const SAFE_TRACKING_MODES = new Set(["automatic", "link-only"]);
 const CARRIER_EVIDENCE_SQL = `
