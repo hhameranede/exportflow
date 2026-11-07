@@ -34,6 +34,7 @@ jobs:
           node --check functions/api/track.js
           node --check functions/lib/shipment-truth.mjs
           node --check functions/lib/exportflow-carrier-engine.mjs
+          node --check scripts/carrier-engine-test.mjs
           node --check scripts/shipment-truth-test.mjs
           node --check scripts/prepare-package.mjs
           node --check functions/api/carriers.js
