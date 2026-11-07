@@ -83,6 +83,24 @@ test("explicit receivedAt timestamps override ingestion order when complete", ()
   assert.equal(truth.latestTrusted.description, "Newer scan");
 });
 
+test("duplicate groups preserve incomplete receivedAt evidence", () => {
+  const truth = resolveShipmentTruth({
+    source: "carrier-a",
+    events: [
+      event("2026-11-06T10:00:00Z", "in_transit", "Scan A"),
+      event("2026-11-06T09:00:00Z", "in_transit", "Scan B", {
+        receivedAt: "2026-11-06T10:05:00Z"
+      }),
+      event("2026-11-06T10:00:00Z", "in_transit", "Scan A", {
+        receivedAt: "2026-11-06T10:00:00Z"
+      })
+    ]
+  });
+
+  assert.equal(truth.latestReceived.description, "Scan A", "input order must be used when any original event lacks receivedAt");
+  assert.equal(truth.latestTrusted.description, "Scan A", "event chronology remains independent from receipt completeness");
+});
+
 test("event-level source references are preserved", () => {
   const truth = resolveShipmentTruth({
     source: "fallback-source",
