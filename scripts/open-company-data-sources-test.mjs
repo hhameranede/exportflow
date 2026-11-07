@@ -36,7 +36,7 @@ assert.match(seedMigration, /INSERT OR IGNORE INTO company_data_sources/);
 for (const source of registry.sources) {
   assert.ok(seedMigration.includes("'" + source.id + "'"), source.id + " must be seeded in the D1 source register");
 }
-assert.ok(registry.sources.length >= 22, "Expected the external source register to include the Australia and Belgium candidates");
+assert.ok(registry.sources.length >= 24, "Expected the external source register to include Japan NTA and New Zealand restriction decisions");
 assert.ok(registry.rejected_candidates.length >= 4, "Unlicensed and unsuitable GitHub candidates must remain explicitly rejected");
 assert.ok(registry.existing_exportflow_sources.length >= 4, "Existing pinned sources must remain documented");
 
@@ -79,6 +79,24 @@ assert.equal(belgium.redistribution, false);
 assert.equal(belgium.ingestion_status, "discovery_pending_open_data_terms_and_privacy_review");
 assert.ok(belgium.limitations.some(value => /EUR 30,000 annual commercial fee/i.test(value)));
 assert.ok(belgium.limitations.some(value => /registration and acceptance/i.test(value)));
+
+
+const japan = registry.sources.find(source => source.id === "japan-national-tax-agency-corporate-number");
+assert.equal(japan.license, "JAPAN_PUBLIC_DATA_LICENSE_1.0_CC_BY_COMPATIBLE");
+assert.equal(japan.commercial_use, true);
+assert.equal(japan.redistribution, true);
+assert.equal(japan.attribution_required, true);
+assert.match(japan.ingestion_status, /schema_and_field_privacy_review/);
+assert.ok(japan.limitations.some(value => /not assigned to individual proprietors or branch offices/i.test(value)));
+assert.ok(japan.verification_sources.includes("https://www.digital.go.jp/en/resources/open_data/public_data_license_v1.0"));
+
+const nz = registry.sources.find(source => source.id === "new-zealand-companies-office-bulk");
+assert.equal(nz.rights_status, "blocked");
+assert.equal(nz.commercial_use, false);
+assert.equal(nz.redistribution, false);
+assert.equal(nz.ingestion_status, "blocked_nontransferable_bulk_data_agreement");
+assert.ok(nz.limitations.some(value => /non-transferable and non-sublicensable/i.test(value)));
+assert.ok(nz.limitations.some(value => /sharing bulk data with unauthorised persons/i.test(value)));
 
 const acra = registry.sources.find(source => source.id === "acra-singapore-entities");
 assert.equal(acra.license, "SINGAPORE-OPEN-DATA-LICENCE-1.0");
