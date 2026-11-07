@@ -3489,7 +3489,7 @@ html[dir="rtl"] .page-shell .merchant-notice { border-left: 0; border-right: 3px
 .page-shell .merchant-item-heading input { width: 18px; height: 18px; accent-color: var(--ef-coral); flex: 0 0 auto; }
 .page-shell .merchant-item-heading h3 { overflow-wrap: anywhere; }
 .page-shell .merchant-number { font-weight: 700; color: var(--ef-navy) !important; letter-spacing: .02em; }
-.page-shell .merchant-state { display: inline-flex; margin-top: 8px; padding: 5px 10px; border-radius: 999px; background: var(--ef-paper); color: var(--ef-navy); font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+.page-shell .merchant-state { display: inline-flex; margin-top: 8px; padding: 5px 10px; border-radius: 999px; background: var(--ef-coral-tint); color: var(--ef-navy); font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
 .page-shell .merchant-event, .page-shell .merchant-updated { font-size: 13px; }
 @media (max-width: 820px) { .page-shell .merchant-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 380px) { .page-shell .merchant-stats { grid-template-columns: 1fr 1fr; } }
