@@ -1,3 +1,5 @@
+import { safeEventPoint } from "./coordinates.mjs";
+
 const normalizeText = (value, max = 320) =>
   typeof value === "string"
     ? value.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, max)
@@ -67,11 +69,7 @@ function normalizeEvent(event, originalIndex, fallbackSource) {
   const rawReceivedAt = normalizeText(event?.receivedAt ?? event?.received_at, 80);
   const { iso: receivedAt, timestampMs: receivedAtMs } = parseEventTime(rawReceivedAt);
   const sourceRefs = collectSourceRefs(event, fallbackSource);
-  const point = event?.point &&
-    Number.isFinite(event.point.latitude) &&
-    Number.isFinite(event.point.longitude)
-    ? { latitude: event.point.latitude, longitude: event.point.longitude }
-    : null;
+  const point = safeEventPoint(event?.point);
 
   return {
     stage,
