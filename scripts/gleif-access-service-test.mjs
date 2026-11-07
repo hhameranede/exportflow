@@ -187,11 +187,11 @@ assert.throws(
   () => createGleifAccessService({ timeoutMs: 30_000 }),
   /timeoutMs must be between/
 );
-assert.throws(
+await assert.rejects(
   () => createGleifAccessService({}).collectPilot({ maxPages: 5 }),
   /maxPages must be an integer/
 );
-assert.throws(
+await assert.rejects(
   () => createGleifAccessService({}).collectPilot({ maxAcceptedRecords: 26 }),
   /maxAcceptedRecords must be an integer/
 );
