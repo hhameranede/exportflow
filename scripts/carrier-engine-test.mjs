@@ -30,6 +30,14 @@ assert.match(catalogResponse.headers.get("Cache-Control") || "", /max-age=3600/)
 const catalog = await catalogResponse.json();
 assert.equal(catalog.catalogMetadata.catalogOwner, "ExportFlow");
 assert.equal(catalog.catalogMetadata.upstreamCommit, "e64a466772ef25ce68e02d9c7c9f1613eec1208b");
+assert.equal(catalog.sourceIntegrationSummary.providerApiClients, 3);
+assert.equal(catalog.sourceIntegrationSummary.records, 1339);
+assert.equal(catalog.sourceIntegrationSummary.classes.provider_api_client, 3);
+const upsIntegration = catalog.carrierRecords.find(record => record.id === "ups");
+assert.ok(upsIntegration);
+assert.equal(upsIntegration.sourceIntegration.integrationClass, "provider_api_client");
+assert.deepEqual(upsIntegration.sourceIntegration.requiredEnvironment, ["UPS_CLIENT_ID", "UPS_CLIENT_SECRET"]);
+assert.equal(upsIntegration.sourceIntegration.commercialAuthorization, "not_assessed");
 assert.ok(catalog.catalogEntries >= catalog.carriers.length);
 assert.ok(catalog.selectableCarrierRecords > 0);
 assert.ok(catalog.carrierRecords.length > 0);
