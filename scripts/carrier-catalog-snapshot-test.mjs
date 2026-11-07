@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CARRIER_CATALOG_METADATA, CARRIER_IDS, CARRIERS } from "../data/carrier-catalog.generated.mjs";
+import { CARRIER_CATALOG_METADATA, CARRIER_IDS, CARRIERS, CARRIER_INTEGRATION_MATRIX } from "../data/carrier-catalog.generated.mjs";
 
 assert.equal(CARRIER_IDS.length, 1339);
 assert.equal(Object.keys(CARRIERS).length, 1339);
@@ -12,6 +12,29 @@ assert.equal(CARRIER_CATALOG_METADATA.adapterSourceDirectories, 732);
 assert.equal(CARRIER_CATALOG_METADATA.liveAdapterTestFiles, 727);
 assert.equal(CARRIER_CATALOG_METADATA.providerApiModuleDirectories, 3);
 assert.equal(CARRIER_CATALOG_METADATA.generationUsesNetwork, false);
+assert.equal(Object.keys(CARRIER_INTEGRATION_MATRIX).length, 1339);
+assert.equal(CARRIER_CATALOG_METADATA.integrationMatrixRecords, 1339);
+assert.equal(CARRIER_CATALOG_METADATA.providerApiClientRecords, 3);
+
+for (const id of CARRIER_IDS) {
+  const row = CARRIER_INTEGRATION_MATRIX[id];
+  assert.ok(row, "Every source catalog entry needs an integration matrix row: " + id);
+  assert.equal(row.carrierId, id);
+  assert.ok(["provider_api_client", "dedicated_adapter", "universal_fallback", "link_only", "adapter_reference_only", "catalogue_only"].includes(row.integrationClass));
+  assert.ok(["present", "not_found"].includes(row.adapterSource));
+  assert.ok(["defined", "not_found"].includes(row.fixtureTest));
+  assert.ok(["defined", "not_found"].includes(row.liveTestDefinition));
+  assert.equal(row.commercialAuthorization, "not_assessed");
+  assert.equal(row.thirdPartyTrackingRights, "not_assessed");
+}
+assert.deepEqual(CARRIER_INTEGRATION_MATRIX.ups.requiredEnvironment, ["UPS_CLIENT_ID", "UPS_CLIENT_SECRET"]);
+assert.equal(CARRIER_INTEGRATION_MATRIX.ups.apiAuthentication, "oauth2_client_credentials");
+assert.deepEqual(CARRIER_INTEGRATION_MATRIX.fedex.requiredEnvironment, ["FEDEX_API_KEY", "FEDEX_SECRET_KEY"]);
+assert.equal(CARRIER_INTEGRATION_MATRIX.fedex.apiAuthentication, "oauth2_client_credentials");
+assert.deepEqual(CARRIER_INTEGRATION_MATRIX["dhl-express"].requiredEnvironment, ["DHL_API_KEY"]);
+assert.equal(CARRIER_INTEGRATION_MATRIX["dhl-express"].apiAuthentication, "api_key_header");
+assert.equal(CARRIER_INTEGRATION_MATRIX.aramex.apiClient, "not_assessed");
+assert.equal(CARRIER_INTEGRATION_MATRIX.aramex.commercialAuthorization, "not_assessed");
 
 const records = Object.values(CARRIERS);
 const displayRecords = records.filter(record => record.id !== "unknown");
