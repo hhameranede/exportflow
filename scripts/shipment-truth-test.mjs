@@ -118,12 +118,12 @@ test("invalid calendar timestamps do not become trusted facts", () => {
   assert.equal(truth.latestTrusted.time, "2026-11-06T08:00:00.000Z");
 });
 
-test("explicitly untrusted events are excluded from trusted chronology", () => {
+test("newest received untrusted event is excluded from trusted chronology", () => {
   const truth = resolveShipmentTruth({
     source: "carrier-a",
     events: [
-      event("2026-11-06T10:00:00Z", "delivered", "Unverified imported scan", { trusted: false }),
-      event("2026-11-06T09:00:00Z", "in_transit", "Validated scan")
+      event("2026-11-06T09:00:00Z", "in_transit", "Validated scan"),
+      event("2026-11-06T10:00:00Z", "delivered", "Unverified imported scan", { trusted: false })
     ]
   });
   assert.equal(truth.latestReceived.description, "Unverified imported scan");
