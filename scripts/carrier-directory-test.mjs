@@ -125,7 +125,8 @@ assert.equal(ups.sourceIntegration.sandboxMode, "customer_integration_environmen
 assert.equal(ups.sourceIntegration.sandboxBaseUrl, "https://wwwcie.ups.com");
 assert.deepEqual(ups.sourceIntegration.requiredEnvironment, ["UPS_CLIENT_ID", "UPS_CLIENT_SECRET"]);
 assert.equal(ups.sourceIntegration.mockContractTest, "carrier-official-api-contract-test");
-assert.equal(ups.sourceIntegration.commercialAuthorization, "not_assessed");
+assert.equal(ups.evidence.commercialAccess, "written_permission_required");
+assert.equal(ups.evidence.trackingRights, "third_party_permission_required");
 assert.equal(ups.evidence.level, "research");
 assert.equal(ups.evidence.commercialAccess, "written_permission_required");
 assert.equal(ups.evidence.trackingRights, "third_party_permission_required");
