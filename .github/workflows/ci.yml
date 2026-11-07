@@ -62,6 +62,8 @@ jobs:
           node --check functions/lib/acra-normalizer.mjs
           node --check scripts/acra-normalizer-test.mjs
           node --check functions/lib/gleif-normalizer.mjs
+          node --check functions/lib/gleif-access-service.mjs
+          node --check scripts/gleif-access-service-test.mjs
           node --check scripts/gleif-normalizer-test.mjs
           node --check functions/lib/global-rate-limit-policy.mjs
           node --check functions/lib/global-rate-limiter.mjs
