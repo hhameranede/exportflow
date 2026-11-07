@@ -4,6 +4,14 @@ pages_build_output_dir = "./dist"
 compatibility_date = "2026-11-05"
 compatibility_flags = ["nodejs_compat"]
 
+# Global API abuse control: the namespace is owned by the separate Worker below.
+# Preview and Production share the namespace but use distinct HMAC-derived object
+# names through EXPORTFLOW_ENV, keeping their counters isolated.
+[[durable_objects.bindings]]
+name = "GLOBAL_RATE_LIMITER"
+class_name = "GlobalRateLimiter"
+script_name = "exportflow-global-rate-limiter"
+
 # Merchant identity and encrypted carrier credentials use Cloudflare D1 only.
 # Production and preview are isolated databases in the EU jurisdiction.
 [[d1_databases]]
