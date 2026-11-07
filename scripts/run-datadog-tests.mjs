@@ -10,6 +10,7 @@ const testScripts = [
   "scripts/engine-smoke-test.mjs",
   "scripts/carrier-engine-test.mjs",
   "scripts/algerian-connectors-test.mjs",
+  "scripts/merchant-credential-vault-test.mjs",
   "scripts/cloudflare-fetch-test.mjs",
   "scripts/map-coordinates-test.mjs",
   "scripts/coverage-smoke-test.mjs",
