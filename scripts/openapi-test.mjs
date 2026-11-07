@@ -34,6 +34,7 @@ assert.equal(directoryOperation.operationId, "getPaginatedCarrierDirectory");
 assert.ok(directoryOperation.parameters.some(parameter => parameter.name === "pageSize" && parameter.schema.maximum === 100));
 assert.ok(document.components.schemas.CarrierDirectoryResponse);
 assert.ok(document.components.schemas.CarrierDirectoryRecord);
+assert.ok(document.components.schemas.CarrierDirectoryRecord.properties.isCatalogEntry);
 assert.ok(document.components.schemas.CarrierDirectoryEvidence);
 assert.ok(document.components.schemas.CarrierDirectoryResponse.properties.records);
 const carrierCatalogSchema = document.components.schemas.CarrierCatalog;
