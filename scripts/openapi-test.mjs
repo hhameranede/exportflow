@@ -21,6 +21,8 @@ for (const route of [
 const trackSchema = document.components.schemas.TrackingRequest;
 assert.deepEqual(trackSchema.properties.language.enum, ["en", "ar", "es", "zh", "hi", "pt", "fr", "bn"]);
 assert.equal(trackSchema.additionalProperties, false);
+assert.equal(trackSchema.properties.carrier.pattern, "^[a-zA-Z0-9-]+$");
+assert.equal(trackSchema.properties.postcode.pattern, "^[a-zA-Z0-9 -]+$");
 const batchSchema = document.components.schemas.BatchTrackingRequest;
 assert.equal(batchSchema.properties.shipments.maxItems, 5);
 assert.equal(batchSchema.properties.shipments.minItems, 1);
@@ -28,6 +30,8 @@ const batchItemSchema = document.components.schemas.BatchTrackingItem;
 assert.equal(batchItemSchema.additionalProperties, false);
 assert.ok(batchItemSchema.properties.id);
 assert.ok(batchItemSchema.properties.number);
+assert.equal(batchItemSchema.properties.carrier.pattern, "^[a-zA-Z0-9-]+$");
+assert.equal(batchItemSchema.properties.postcode.pattern, "^[a-zA-Z0-9 -]+$");
 assert.equal(batchSchema.properties.shipments.uniqueItems, undefined, "Runtime enforces unique item IDs, not entire object equality");
 assert.equal(document["x-exportflow-limits"].singleLookup.lookupBudgetMilliseconds, 25000);
 assert.match(document["x-exportflow-privacy"].storage, /does not provide a user account/);
