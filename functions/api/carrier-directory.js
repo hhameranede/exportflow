@@ -149,6 +149,9 @@ function buildCatalogRecords() {
             requiredEnvironment: Array.isArray(matrix.requiredEnvironment)
               ? matrix.requiredEnvironment.filter(value => typeof value === "string" && /^[A-Z0-9_]{2,80}$/.test(value))
               : [],
+            sandboxMode: typeof matrix.sandboxMode === "string" ? matrix.sandboxMode : "not_assessed",
+            sandboxBaseUrl: typeof matrix.sandboxBaseUrl === "string" && matrix.sandboxBaseUrl.startsWith("https://") ? matrix.sandboxBaseUrl : null,
+            onboardingRole: typeof matrix.onboardingRole === "string" ? matrix.onboardingRole : null,
             mockContractTest: typeof matrix.mockContractTest === "string" ? matrix.mockContractTest : null,
             adapterSource: matrix.adapterSource === "present" ? "present" : "not_found",
             fixtureTest: matrix.fixtureTest === "defined" ? "defined" : "not_found",
