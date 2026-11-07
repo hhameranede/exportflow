@@ -544,6 +544,86 @@
         "https://avaandmed.ariregister.rik.ee/en/terms-service",
         "https://creativecommons.org/licenses/by/4.0/"
       ]
+    },
+    {
+      "id": "netherlands-kvk-basic-company-hvds",
+      "name": "Netherlands KVK Business Register Open Dataset — Basic Company Information",
+      "publisher": "Kamer van Koophandel (KVK)",
+      "kind": "national_business_register_hvd_aggregate",
+      "coverage": [
+        "NL"
+      ],
+      "source_url": "https://www.kvk.nl/en/ordering-products/kvk-business-register-open-data-set/",
+      "api_documentation": "https://developers.kvk.nl/documentation/open-dataset-basis-bedrijfsgegevens-api",
+      "license": "CC-BY-4.0",
+      "rights_status": "verified_open_with_attribution_and_non_reidentification",
+      "commercial_use": true,
+      "redistribution": true,
+      "attribution_required": true,
+      "attribution_text": "Source: KVK Business Register Open Dataset Basic Company Information, CC BY 4.0.",
+      "access": "free_bulk_CSV_and_API",
+      "update_frequency": "every_working_day",
+      "data_scope": [
+        "start_date",
+        "active_status",
+        "insolvency_status",
+        "legal_structure",
+        "postcode_region_first_two_digits",
+        "SBI_activities",
+        "main_activities",
+        "member_state"
+      ],
+      "limitations": [
+        "this high-value dataset intentionally excludes company name and KVK number, so it is not suitable for entity-level directory lookup",
+        "it excludes sole proprietorships and full postcode",
+        "do not enrich or combine the dataset in a way that makes records traceable to an individual person",
+        "use for aggregated market intelligence and benchmarking only"
+      ],
+      "ingestion_status": "candidate_for_aggregate_analytics_only",
+      "verification_sources": [
+        "https://www.kvk.nl/en/ordering-products/kvk-business-register-open-data-set/",
+        "https://developers.kvk.nl/documentation/open-dataset-basis-bedrijfsgegevens-api",
+        "https://data.overheid.nl/en/dataset/f085379e-f007-4b90-aa5d-06c159d2845a"
+      ]
+    },
+    {
+      "id": "slovenia-ajpes-prs",
+      "name": "Slovenian Business Register (PRS)",
+      "publisher": "Agency of the Republic of Slovenia for Public Legal Records and Related Services (AJPES)",
+      "kind": "national_company_register_high_value_dataset",
+      "coverage": [
+        "SI"
+      ],
+      "source_url": "https://podatki.gov.si/dataset/poslovni-register-slovenije",
+      "official_registry_url": "https://www.ajpes.si/Registers/Slovenian_Business_Register",
+      "license": "CC-BY-4.0",
+      "rights_status": "verified_open_with_attribution",
+      "commercial_use": true,
+      "redistribution": true,
+      "attribution_required": true,
+      "attribution_text": "Source: Poslovni register Slovenije (PRS), AJPES, CC BY 4.0.",
+      "access": "open_bulk_CSV",
+      "update_frequency": "every_two_weeks",
+      "data_scope": [
+        "business_subjects",
+        "branches",
+        "foreign_business_branches",
+        "registration_numbers",
+        "legal_names",
+        "registered_addresses",
+        "legal_forms",
+        "business_status"
+      ],
+      "limitations": [
+        "the register also contains sole proprietors and natural persons carrying out registered activity; filter these before public company-directory display",
+        "preserve source date and attribution",
+        "do not imply AJPES endorsement or official status for ExportFlow"
+      ],
+      "ingestion_status": "candidate_for_country_ingestion_with_personal_data_filter",
+      "verification_sources": [
+        "https://podatki.gov.si/dataset/poslovni-register-slovenije",
+        "https://www.ajpes.si/Registers/Slovenian_Business_Register"
+      ]
     }
   ],
   "existing_exportflow_sources": [
