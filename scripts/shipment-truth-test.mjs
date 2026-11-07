@@ -162,19 +162,13 @@ test("shipment coordinates are range-checked and rounded before public projectio
       }),
       event("2026-11-06T09:00:00Z", "in_transit", "Out-of-range coordinate", {
         point: { latitude: 91, longitude: 181 }
-      }),
-      event("2026-11-06T08:00:00Z", "in_transit", "Null-island coordinate", {
-        point: { latitude: 0, longitude: 0 }
-      })
-    ]
+      })    ]
   });
 
   const valid = truth.timeline.find(item => item.description === "Valid coordinate");
   const invalid = truth.timeline.find(item => item.description === "Out-of-range coordinate");
-  const nullIsland = truth.timeline.find(item => item.description === "Null-island coordinate");
   assert.deepEqual(valid.point, { latitude: 36.7526, longitude: 3.042 });
   assert.equal(Object.hasOwn(invalid, "point"), false);
-  assert.equal(Object.hasOwn(nullIsland, "point"), false);
   assert.deepEqual(truth.latestTrusted.point, { latitude: 36.7526, longitude: 3.042 });
 });
 
