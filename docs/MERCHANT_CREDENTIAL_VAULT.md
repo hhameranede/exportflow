@@ -18,7 +18,7 @@ This is the next security layer for the Algerian merchant connector. It does not
 
 - `functions/lib/merchant-credential-vault.mjs`: D1 adapter, AES-GCM encryption and authorization boundary.
 - `migrations/0001_merchant_credentials.sql`: minimal ciphertext-only schema.
-- `scripts/merchant-credential-vault-test.mjs`: fake-D1 tests for consent, access ordering, ciphertext-only persistence, AAD merchant isolation, allowlisting, size limits, key rotation and revocation.
+- `scripts/merchant-credential-vault-test.mjs`: fake-D1 tests for consent, access ordering, ciphertext-only persistence, AAD merchant isolation, allowlisting, non-executed accessors, size limits, key rotation and revocation.
 
 ## Required Cloudflare setup — deliberately not performed
 
