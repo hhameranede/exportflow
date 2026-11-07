@@ -2,6 +2,25 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const locales = ["en", "ar", "es", "zh", "hi", "pt", "fr", "bn"];
+const translationSource = await readFile("translations.js", "utf8");
+const translationMatch = translationSource.match(/window\\.EXPORTFLOW_TRANSLATIONS\\s*=\\s*([\\s\\S]*);\\s*$/);
+assert.ok(translationMatch, "Source locale dictionaries must be parseable JSON.");
+const translations = JSON.parse(translationMatch[1]);
+const carrierDirectoryKeys = [
+  "carrierEvidenceCatalogCountLabel", "carrierEvidenceAdapterCountLabel",
+  "carrierEvidenceResearchCountLabel", "carrierEvidenceUpstreamNote",
+  "carrierEvidenceAdapterFilter", "carrierEvidenceAdapterAll",
+  "carrierEvidenceAdapterDedicated", "carrierEvidenceAdapterUniversal",
+  "carrierEvidenceAdapterLinkOnly", "carrierEvidenceAdapterNone",
+  "carrierEvidencePrevious", "carrierEvidenceNext", "carrierEvidencePageInfo",
+  "carrierEvidenceCountryLabel", "carrierEvidenceAliasesLabel"
+];
+for (const locale of locales) {
+  assert.ok(translations[locale], "Missing locale dictionary: " + locale);
+  for (const key of carrierDirectoryKeys) {
+    assert.equal(typeof translations[locale][key], "string", locale + " is missing " + key);
+  }
+}
 const localizedUrl = (locale, route) =>
   "https://exportflow.me/" + (locale === "en" ? "" : locale + "/") +
   (route === "/" ? "" : route.replace(/^\//, ""));
@@ -16,6 +35,8 @@ for (const locale of locales) {
   assert.match(coverage, new RegExp('<html lang="' + locale + '" dir="' + direction + '">'));
   assert.ok(home.includes('<link rel="canonical" href="' + localizedUrl(locale, "/") + '">'));
   assert.ok(coverage.includes('<link rel="canonical" href="' + localizedUrl(locale, "/coverage/") + '">'));
+  assert.ok(coverage.includes('id="carrierEvidenceList"'), locale + " carrier directory container must exist");
+  assert.ok(coverage.includes('id="carrierEvidenceNext"'), locale + " carrier directory pagination must exist");
   for (const html of [home, coverage]) {
     assert.equal((html.match(/rel="alternate" hreflang=/g) || []).length, 9, locale + " page must publish eight languages plus x-default");
     for (const alternate of locales) {
