@@ -71,8 +71,8 @@ const OPENAPI = {
         summary: "List carrier catalog IDs",
         responses: {
           "200": {
-            description: "IDs from the pinned upstream carrier catalog; not a live-availability guarantee.",
-            content: { "application/json": { schema: { type: "object", required: ["catalogEntries", "carriers"], properties: { catalogEntries: { type: "integer", minimum: 0 }, carriers: { type: "array", items: { type: "string" } } } } } }
+            description: "Carrier IDs and sanitized catalog capability metadata from the pinned upstream catalog; this is not a live-availability guarantee or partnership claim.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/CarrierCatalog" } } }
           }
         }
       }
@@ -149,6 +149,39 @@ const OPENAPI = {
             }
           },
           events: { type: "array", items: { $ref: "#/components/schemas/TrackingEvent" } }
+        }
+      },
+      CarrierCatalog: {
+        type: "object",
+        required: ["catalogEntries", "selectableCarrierRecords", "carriers", "carrierRecords", "metadataNotice"],
+        properties: {
+          catalogEntries: { type: "integer", minimum: 0 },
+          selectableCarrierRecords: { type: "integer", minimum: 0 },
+          directAdapterCatalogRecords: { type: "integer", minimum: 0 },
+          universalFallbackCatalogRecords: { type: "integer", minimum: 0 },
+          linkOnlyCatalogRecords: { type: "integer", minimum: 0 },
+          carriers: { type: "array", items: { type: "string" } },
+          carrierRecords: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["id", "name", "countries", "tracking"],
+              properties: {
+                id: { type: "string" },
+                name: { type: "string" },
+                countries: { type: "array", items: { type: "string", pattern: "^[A-Z]{2}$" } },
+                tracking: {
+                  type: "object",
+                  required: ["mode", "adapter"],
+                  properties: {
+                    mode: { type: "string", enum: ["automatic", "link-only", "not-declared"] },
+                    adapter: { type: ["string", "null"] }
+                  }
+                }
+              }
+            }
+          },
+          metadataNotice: { type: "string" }
         }
       },
       BatchTrackingItem: {
