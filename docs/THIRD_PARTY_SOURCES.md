@@ -30,6 +30,8 @@ The pinned `carriers/*/carrier.json` manifests are compiled by `scripts/generate
 
 This gives ExportFlow ownership of the normalized catalogue schema, identifiers, directory API, pagination, search, evidence overlay and customer-facing presentation. It does **not** transfer ownership of carrier names, trademarks, logos, shipment information or the source data's underlying license rights. The upstream repository, pinned commit, Apache-2.0 core license and NOTICE/data attributions remain recorded and must be preserved. The separate tracking engine still uses the pinned runtime package; this change internalizes the directory data path, not the entire tracking implementation.
 
+The pinned snapshot currently contains 1,339 carrier manifests, 732 `adapter.ts` modules, 727 `adapter.live.test.ts` definitions and three provider-specific `api.ts` modules (DHL Express, FedEx and UPS). These are source-file counts, not test pass counts or proof that all three are official, production-approved APIs. Many live test definitions are gated by provider-specific environment variables and are skipped when credentials/test numbers are absent. The current CI pipeline records local regression outcomes in Datadog Test Visibility; it does not automatically call every carrier's API. Only provider-approved sandbox/live test credentials and synthetic or otherwise authorized shipment data may be used for those calls.
+
 ## Runtime and integration status
 
 - **Active tracking engine:** ExportFlow continues to use the pinned npm dependency `universal-parcel-scraper@0.977.1`, fixed to upstream commit `e64a466772ef25ce68e02d9c7c9f1613eec1208b`. The local snapshot is a separately stored source copy; it is not loaded as a second runtime engine.
