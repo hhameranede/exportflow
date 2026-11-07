@@ -18,7 +18,7 @@ async function main() {
   // gate without contacting an external carrier.
   const supportedFormats = [
     "99.34.123456.12345678",
-    "P/1234/LABC/2026",
+    "1234/12345678",
     "(00) 3 7012345 678901234 7",
     "AB_123456789",
     "AB1".repeat(21) + "A"
