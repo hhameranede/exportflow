@@ -37,6 +37,10 @@ async function call(method, params = {}, id = 1, overrides = {}) {
   return onRequestPost({ request, env: {} });
 }
 
+const getOnly = await onRequestPost({ request: new Request(endpoint, { method: "GET" }), env: {} });
+assert.equal(getOnly.status, 405);
+assert.equal(getOnly.headers.get("Allow"), "POST");
+
 const discover = await call("server/discover", {}, "discover-1");
 assert.equal(discover.status, 200);
 assert.equal(discover.headers.get("Content-Type"), "application/json; charset=utf-8");
@@ -187,6 +191,9 @@ const unknownTool = await call("tools/call", {
 }, 15);
 assert.equal(unknownTool.status, 400);
 assert.equal((await unknownTool.json()).error.code, -32602);
+
+const wrongContentType = await call("tools/list", {}, 16, { headers: { "Content-Type": "text/plain" } });
+assert.equal(wrongContentType.status, 415);
 
 const malformed = await onRequestPost({
   request: new Request(endpoint, {
