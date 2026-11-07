@@ -1,5 +1,5 @@
 (() => {
-  const supported = ["en", "ar", "es", "zh", "hi", "pt", "fr", "ru"];
+  const supported = ["en", "ar", "es", "zh", "hi", "pt", "fr", "bn"];
   const html = document.documentElement;
   const translations = window.EXPORTFLOW_TRANSLATIONS || {};
   const languageToggle = document.getElementById("languageToggle");
@@ -16,7 +16,7 @@
   const safeLocale = value => supported.includes(value) ? value : "en";
 
   function localeFromPath() {
-    const match = window.location.pathname.match(/^\/(ar|es|zh|hi|pt|fr|ru)(?=\/|$)/);
+    const match = window.location.pathname.match(/^\/(ar|es|zh|hi|pt|fr|bn)(?=\/|$)/);
     return match ? match[1] : null;
   }
 
@@ -31,7 +31,7 @@
 
   function syncLocalePath(value) {
     const currentPath = window.location.pathname;
-    const match = currentPath.match(/^\/(ar|es|zh|hi|pt|fr|ru)(?=\/|$)/);
+    const match = currentPath.match(/^\/(ar|es|zh|hi|pt|fr|bn)(?=\/|$)/);
     let pagePath = match ? currentPath.slice(match[0].length) || "/" : currentPath;
     if (!pagePath.startsWith("/")) pagePath = "/" + pagePath;
     const nextPath = value === "en"
