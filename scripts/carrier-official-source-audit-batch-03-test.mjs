@@ -21,6 +21,6 @@ for (const [providerId, sourceUrl] of expected) {
 }
 assert.doesNotMatch(migration, /evidence_status\s*=\s*'verified'/i);
 assert.doesNotMatch(migration, /verification_method\s*=\s*'(sandbox|live)'/i);
-assert.match(audit, /all \\*\\*22 of 22 records\\*\\*/);
+assert.match(audit, /all \*\*22 of 22 records\*\*/);
 assert.match(audit, /All 22 remain Research/);
 console.log("Carrier official-source audit batch 03 tests passed: the last two seed records have official source links and remain Research.");
