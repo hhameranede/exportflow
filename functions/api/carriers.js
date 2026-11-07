@@ -1,4 +1,4 @@
-import { CARRIERS, CARRIER_IDS } from "../../data/carrier-catalog.generated.mjs";
+import { CARRIERS, CARRIER_IDS, CARRIER_CATALOG_METADATA } from "../../data/carrier-catalog.generated.mjs";
 
 const SAFE_TRACKING_MODES = new Set(["automatic", "link-only"]);
 const CARRIER_EVIDENCE_SQL = `
@@ -190,6 +190,7 @@ export async function onRequestGet({ env } = {}) {
 
   return new Response(JSON.stringify({
     catalogEntries: CARRIER_IDS.length,
+    catalogMetadata: CARRIER_CATALOG_METADATA,
     selectableCarrierRecords: carrierRecords.length,
     directAdapterCatalogRecords,
     universalFallbackCatalogRecords,
