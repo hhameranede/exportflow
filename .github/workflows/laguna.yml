@@ -23,9 +23,10 @@ on:
 
 permissions:
   actions: read
-  contents: write
-  pull-requests: write
-  issues: write
+  contents: read
+  id-token: write
+  pull-requests: read
+  issues: read
 
 jobs:
   laguna:
@@ -198,10 +199,9 @@ jobs:
         timeout-minutes: 300
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
-          GITHUB_TOKEN: ${{ github.token }}
         with:
           model: nvidia/poolside/laguna-xs-2.1
-          use_github_token: true
+          use_github_token: false
           prompt: |
             You are Laguna XS 2.1, the long-horizon engineering executor authorized by the ExportFlow repository owner.
 
