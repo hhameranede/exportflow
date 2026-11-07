@@ -5,7 +5,9 @@ on:
     paths:
       - .github/workflows/full-743-adapter-audit.yml
       - docs/FULL_743_ADAPTER_AUDIT.md
+      - docs/FULL_743_ADAPTER_REVIEW_MATRIX.md
       - scripts/full-adapter-audit.mjs
+      - scripts/build-743-review-matrix.mjs
 permissions:
   contents: read
 concurrency:
@@ -70,6 +72,8 @@ jobs:
           DD_ENV: audit
           DD_TEST_SESSION_NAME: exportflow-full-743-adapter-audit
           NODE_OPTIONS: ${{ steps.datadog-config.outputs.enabled == 'true' && format('-r {0}', env.DD_TRACE_PACKAGE) || '' }}
+      - name: Build the 743-row review matrix
+        run: node scripts/build-743-review-matrix.mjs artifacts/full-743-adapter-audit/adapter-audit.json artifacts/full-743-adapter-audit/adapter-review-matrix.csv
       - name: Run upstream lint
         working-directory: .audit/upstream
         run: npm run lint
