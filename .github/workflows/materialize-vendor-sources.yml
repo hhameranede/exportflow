@@ -91,6 +91,17 @@ jobs:
       - name: Run ExportFlow regression suite
         run: npm test
 
+      - name: Test the Algerian TypeScript SDK in isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd vendor/sources/algeria/dz-delivery/packages/ts
+          trap 'rm -rf node_modules dist' EXIT
+          npm ci --no-audit --no-fund
+          npm test
+          npm run typecheck
+          npm run build
+
       - name: Build Cloudflare Pages output
         run: npm run build
 
