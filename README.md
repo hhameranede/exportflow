@@ -43,7 +43,7 @@ The `/api/track` endpoint returns a structured response:
   },
   "expectedDelivery": "2026-11-09",
   "service": "Express",
-  "events": [ ... timeline array ... ]
+  "events": []
 }
 ```
 
