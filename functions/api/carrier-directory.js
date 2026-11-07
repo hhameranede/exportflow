@@ -169,6 +169,8 @@ function publicRecord(carrier, evidenceByAdapter) {
     evidence: evidence
       ? {
           level: evidence.level,
+          adapterState: evidence.adapterState,
+          integrationMethod: evidence.integrationMethod,
           commercialAccess: evidence.commercialAccess,
           trackingRights: evidence.trackingRights,
           sourceUrl: evidence.sourceUrl,
@@ -177,6 +179,8 @@ function publicRecord(carrier, evidenceByAdapter) {
         }
       : {
           level: "catalogued",
+          adapterState: "missing",
+          integrationMethod: "not_assessed",
           commercialAccess: "not_assessed",
           trackingRights: "not_assessed",
           sourceUrl: null,
