@@ -244,7 +244,7 @@ export async function onRequestPost({ request, env }) {
   }
 
   const language = input.language === undefined ? undefined : input.language;
-  if (language !== undefined && (typeof language !== "string" || !/^(en|ar|es|zh|hi|pt|fr|ru)$/i.test(language))) {
+  if (language !== undefined && (typeof language !== "string" || !/^(en|ar|es|zh|hi|pt|fr|bn)$/i.test(language))) {
     return json({ error: "invalid_language" }, 400);
   }
 
