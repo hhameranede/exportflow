@@ -26,7 +26,7 @@ const first = await base.json();
 
 assert.equal(CARRIER_IDS.length, 1339, "Pinned Universal Parcel Scraper revision must retain its 1,339 catalog entries.");
 assert.equal(first.summary.catalogEntries, 1339);
-assert.equal(first.summary.catalogRecordObjects, 1339);
+assert.equal(first.summary.catalogRecordObjects, 1338, "The display directory excludes the reserved unknown carrier record.");
 assert.ok(first.summary.selectableRecords > 1_000);
 assert.ok(first.summary.dedicatedAdapterRecords >= 600);
 assert.equal(first.upstreamSnapshot.catalogEntries, 1339);
@@ -45,7 +45,7 @@ assert.ok(first.records.every(record => Array.isArray(record.aliases) && Array.i
 assert.ok(first.records.every(record => ["dedicated", "universal-fallback", "link-only", "none"].includes(record.adapterType)));
 assert.ok(first.records.every(record => record.evidence.verification.liveVerified === false));
 assert.ok(first.records.every(record => record.isCatalogEntry === true));
-assert.equal(first.summary.totalDirectoryRecords, 1339);
+assert.equal(first.summary.totalDirectoryRecords, 1338, "The public catalogue directory excludes the reserved unknown record.");
 
 // Paging is stable, bounded, and does not repeat carrier identifiers.
 const secondResponse = await onRequestGet({ request: request({ page: 2, pageSize: 50 }) });
@@ -82,7 +82,7 @@ assert.ok(fallback.records.every(record => record.adapterType === "universal-fal
 
 const cataloguedOnlyResponse = await onRequestGet({ request: request({ evidence: "catalogued" }) });
 const cataloguedOnly = await cataloguedOnlyResponse.json();
-assert.equal(cataloguedOnly.pagination.totalMatches, 1339);
+assert.equal(cataloguedOnly.pagination.totalMatches, 1338, "Catalogued directory entries exclude the reserved unknown record.");
 
 // D1 remains the curated evidence overlay; it does not replace the 1,339-entry source catalog.
 const evidenceRows = [{
