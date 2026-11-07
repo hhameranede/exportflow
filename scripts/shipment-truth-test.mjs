@@ -194,6 +194,9 @@ test("same-time status and location conflicts reduce confidence", () => {
   assert.ok(truth.conflicts.some(conflict => conflict.type === "status_conflict"));
   assert.ok(truth.conflicts.some(conflict => conflict.type === "location_conflict"));
   assert.equal(truth.confidence, "low");
+  assert.equal(truth.status, "unknown", "a latest-time status conflict must not be resolved by input order");
+  assert.equal(truth.selected, null, "a conflicting latest status must not be exposed as selected truth");
+  assert.equal(truth.insights.delay.level, "insufficient_evidence");
 });
 
 test("generic exception alone is insufficient evidence of delay", () => {
@@ -245,6 +248,22 @@ test("latest customs event supersedes an older hold", () => {
     ]
   });
   assert.equal(truth.insights.customs.state, "released");
+});
+
+test("conflicting customs signals at the same latest time remain insufficient evidence", () => {
+  const truth = resolveShipmentTruth({
+    events: [
+      event("2026-11-06T10:00:00Z", "customs_hold", "Customs hold: inspection required", {
+        source: "carrier-a"
+      }),
+      event("2026-11-06T10:00:00Z", "customs_released", "Released by customs", {
+        source: "carrier-b"
+      })
+    ]
+  });
+  assert.equal(truth.insights.customs.state, "insufficient_evidence");
+  assert.equal(truth.insights.customs.reason, "conflicting_customs_signals");
+  assert.equal(truth.confidence, "low");
 });
 
 test("customs hold and active processing are distinguished", () => {
