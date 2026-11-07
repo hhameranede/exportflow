@@ -41,6 +41,7 @@ jobs:
           node --check scripts/mcp-test.mjs
           node --check exportflow-sdk.mjs
           node --check merchant.js
+          node --check merchant-utils.mjs
           node --check scripts/merchant-workspace-test.mjs
           node --check scripts/batch-track-test.mjs
           node --check scripts/openapi-test.mjs
@@ -74,6 +75,7 @@ jobs:
           test -s dist/developers/index.html
           test -s dist/merchant/index.html
           test -s dist/merchant.js
+          test -s dist/merchant-utils.mjs
           test -s dist/exportflow-sdk.mjs
           test -s dist/about/index.html
           test -s dist/contact/index.html
