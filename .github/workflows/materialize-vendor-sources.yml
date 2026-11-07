@@ -7,6 +7,7 @@ on:
     paths:
       - .github/workflows/materialize-vendor-sources.yml
       - scripts/materialize-vendor-sources.mjs
+      - scripts/materialize-dz-delivery.mjs
   workflow_dispatch:
 
 permissions:
@@ -25,12 +26,20 @@ jobs:
       contents: write
       actions: write
     steps:
-      - name: Check out feature branch and pinned source submodules
+      - name: Check out ExportFlow feature branch and pinned source submodules
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: recursive
           persist-credentials: true
+
+      - name: Check out the pinned Algerian delivery SDK source
+        uses: actions/checkout@v4
+        with:
+          repository: developing-off/dz-delivery
+          ref: 45aa32ddf2ba7392da6c696aef187fcc059b3c8d
+          path: vendor/dz-delivery-upstream
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -39,7 +48,9 @@ jobs:
           cache: npm
 
       - name: Verify and materialize exact upstream source commits
-        run: node scripts/materialize-vendor-sources.mjs
+        run: |
+          node scripts/materialize-vendor-sources.mjs
+          node scripts/materialize-dz-delivery.mjs
 
       - name: Verify no prohibited source component or VCS metadata was copied
         shell: bash
@@ -53,8 +64,12 @@ jobs:
           test -s vendor/sources/shopana-carrier-api/packages/novaposhta-transport-fetch/LICENSE
           test -s vendor/sources/reference/karrio-community/LICENSE
           test -s vendor/sources/reference/karrio-community/plugins/easypost/LICENSE
+          test -s vendor/sources/algeria/dz-delivery/LICENSE
+          test -s vendor/sources/algeria/dz-delivery/packages/ts/package.json
+          test -s vendor/sources/algeria/dz-delivery/packages/ts/README.md
           test ! -e vendor/sources/universal-parcel-scraper/trawl
           test ! -e vendor/sources/shopana-carrier-api/packages/novaposhta-api-client/coverage
+          test ! -e vendor/dz-delivery-upstream
           test ! -e .gitmodules
           if find vendor/sources -name .git -o -name node_modules -o -name .env -o -name .dev.vars | grep -q .; then
             echo "::error::VCS metadata, dependencies or private environment files were copied."
@@ -69,6 +84,7 @@ jobs:
       - name: Check source materializer syntax and project lint
         run: |
           node --check scripts/materialize-vendor-sources.mjs
+          node --check scripts/materialize-dz-delivery.mjs
           npm run lint
 
       - name: Run ExportFlow regression suite
@@ -87,10 +103,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Force-add upstream source files so nested upstream .gitignore rules cannot silently omit them.
           git add -f -A -- vendor
           git add -u
-          # Preserve upstream fixtures verbatim; do not rewrite their original whitespace.
           if git diff --cached --quiet; then
             echo "No vendor changes were produced; source materialization is already up to date."
             exit 0
@@ -107,7 +121,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "vendor: materialize pinned licensed source snapshots"
+          git commit -m "vendor: add pinned Algerian delivery SDK source"
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Trigger full ExportFlow CI for the materialized commit
