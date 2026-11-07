@@ -86,7 +86,7 @@ function parsePagePayload(payload, pageSize) {
 }
 
 function getTimeoutSignal(timeoutMs) {
-  if (typeof AbortSignal?.timeout !== "function") {
+  if (typeof AbortSignal === "undefined" || typeof AbortSignal.timeout !== "function") {
     throw new GleifAccessServiceError("timeout_unavailable", "This runtime does not support bounded GLEIF requests.");
   }
   return AbortSignal.timeout(timeoutMs);
@@ -121,6 +121,7 @@ export function createGleifAccessService(options = {}) {
     positiveInteger(pageSize, defaultPageSize, MAX_PAGE_SIZE, "pageSize");
 
     const url = buildPageUrl(pageNumber, pageSize);
+    const timeoutSignal = getTimeoutSignal(timeoutMs);
     let response;
 
     try {
@@ -128,7 +129,7 @@ export function createGleifAccessService(options = {}) {
         method: "GET",
         headers: { Accept: GLEIF_ACCEPT },
         redirect: "error",
-        signal: getTimeoutSignal(timeoutMs)
+        signal: timeoutSignal
       });
     } catch (error) {
       const timedOut = error?.name === "AbortError" || error?.name === "TimeoutError";
