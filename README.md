@@ -11,14 +11,49 @@ ExportFlow is a mobile-first parcel-tracking website with eight selectable inter
 
 ExportFlow integrates [Universal Parcel Scraper](https://github.com/plhery/universal-parcel-scraper) at the pinned upstream revision `e64a466772ef25ce68e02d9c7c9f1613eec1208b`.
 
-The upstream catalog documents thousands of carrier names and dedicated adapters. Those are catalog/adapter records, **not a count of verified operating companies, live successful lookups, delivery performance or official partnerships**. The homepage reads catalog-entry and direct-country counts from the installed bnntime catalog rather than hard-coding marketing claims.
+The upstream catalog documents thousands of carrier names and dedicated adapters. Those are catalog/adapter records, **not a count of verified operating companies, live successful lookups, delivery performance or official partnerships**. The homepage reads catalog-entry and direct-country counts from the installed runtime catalog rather than hard-coding marketing claims.
 
 ### Implemented routes
 
-- `POST /api/track` — server-side carrier lookup. Accepts a tracking number and optional carrier, postcode and language (`en`, `ar`, `es`, `zh`, `hi`, `pt`, `fr`, `bn`). Tracking numbers are not sent to browser-side third-party APIs.
+- `POST /api/track` — server-side carrier lookup. Accepts a tracking number and optional carrier, postcode and language (`en`, `ar`, `es`, `zh`, `hi`, `pt`, `fr`, `bn`). Tracking numbers are not sent to browser-side third-party APIs. Returns normalized timeline events with deterministic status, confidence, conflict detection, and delay/customs/ETA insights.
 - `GET /api/carriers` — exposes the installed carrier ID catalog.
 - `GET /api/coverage` — returns a live country-by-country classification derived from the installed carrier catalog.
 - `GET /api/health` — a liveness response; it does not prove that upstream carriers are reachable.
+
+#### Tracking API Response
+
+The `/api/track` endpoint returns a structured response:
+
+```json
+{
+  "carrier": "fedex",
+  "source": "fedex",
+  "status": "out_for_delivery",
+  "confidence": "medium",
+  "truth": {
+    "latestReceived": { "stage": "in_transit", "time": "2026-11-06T08:00:00.000Z", "receivedAt": "2026-11-06T10:00:00.000Z" },
+    "latestTrusted": { "stage": "out_for_delivery", "time": "2026-11-06T09:30:00.000Z", "receivedAt": "2026-11-06T09:31:00.000Z" },
+    "selected": { "stage": "out_for_delivery" },
+    "conflicts": [],
+    "insights": {
+      "delay": { "level": "insufficient_evidence", "reason": "no_explicit_delay_signal" },
+      "customs": { "state": "insufficient_evidence", "reason": "no_explicit_customs_signal" },
+      "estimate": { "source": "carrier", "value": "2026-11-09", "confidence": "reported" }
+    }
+  },
+  "expectedDelivery": "2026-11-09",
+  "service": "Express",
+  "events": []
+}
+```
+
+- **status**: Determined chronologically by timestamp, not by stage scoring. If different stages conflict at the latest timestamp, status is `unknown`; if the latest stage or location is ambiguous, `latestTrusted` and `selected` are `null` rather than choosing an event by input order. If all latest stages agree but locations conflict, the shared status remains available while the location remains unresolved.
+- **confidence**: "low" when no trusted timestamp exists or evidence conflicts; "medium" when a source-attributed, timezone-qualified event exists. The engine does not claim "high" confidence until independent source quality can be verified.
+- **latestReceived**: The last event in the resolver's input order, or the event with the latest valid explicit `receivedAt` when every event supplies one. Input order is not treated as carrier event time; it may refer to an older scan.
+- **latestTrusted**: The newest event with a valid timestamp containing an explicit timezone/UTC offset and at least one source reference. Timezone-less timestamps remain visible as raw values but are not trusted for chronology.
+- **conflicts**: Detected when trusted events at the same timestamp have different stages or locations.
+- **insights**: Delay requires an explicit current carrier delay signal; two scans or a generic exception alone are insufficient. Conflicting latest customs signals remain `insufficient_evidence`. Customs states require explicit hold/processing/release evidence. ETA is reported only when supplied by the carrier.
+- **sourceRefs**: Per-event source attribution. Duplicate normalized scans retain all source references found on the original events.
 
 ### Worldwide country directory
 
@@ -63,13 +98,13 @@ Requirements: Node.js 24+ and Python 3.
 ```bash
 npm install
 npm test
-npm bnn build
-npm bnn dev
+npm run build
+npm run dev
 ```
 
-Open http://localhost:4173. Static preview is for layout only; Pages Functions and `/api/*` routes require the Cloudflare Pages bnntime.
+Open http://localhost:4173. Static preview is for layout only; Pages Functions and `/api/*` routes require the Cloudflare Pages runtime.
 
-## Project stbncture
+## Project structure
 
 - `index.html`, `styles.css`, `app.js` — responsive homepage and tracking UI
 - `translations.js` — eight complete interface locale dictionaries
@@ -79,19 +114,23 @@ Open http://localhost:4173. Static preview is for layout only; Pages Functions a
 - `functions/api/coverage.js` — catalog-derived country classification and counts
 - `functions/api/health.js` — liveness endpoint
 - `functions/lib/country-codes.mjs` — ISO 3166-1 alpha-2 country/territory codes
+- `functions/lib/shipment-truth.mjs` — deterministic shipment truth resolution engine (chronology-based, conflict detection, confidence modeling)
+- `functions/lib/exportflow-carrier-engine.mjs` — ExportFlow-owned facade over universal-parcel-scraper
+- `scripts/shipment-truth-test.mjs` — unit tests for the truth engine
 - `scripts/` — build and regression tests
 - `.github/workflows/ci.yml` — CI on pushes and pull requests
+- `docs/roadmaps/` — strategic product roadmaps (2.0 and 3.0)
 
 ## Cloudflare Pages
 
 - Repository: `hhameranede/exportflow`
 - Production branch: `main`
-- Build command: `npm bnn build`
+- Build command: `npm run build`
 - Build output: `dist`
 - Root: `/`
 
-Pages Functions are deployed from the root `functions/` directory. The build prepares the pinned tracking engine for the Workers bnntime.
+Pages Functions are deployed from the root `functions/` directory. The build prepares the pinned tracking engine for the Workers runtime.
 
 ## Licensing
 
-The upstream core is Apache-2.0. Its optional TRAWL derivative is AGPL-3.0 and is not bundled or enabled in this integration. Keep upstream `LICENSE`, `NOTICE` and required third-party notices with redistribution. See upstream notices for bundled model and data attributions.
+The pinned `universal-parcel-scraper` core is Apache-2.0. Copies of its upstream `LICENSE` and `NOTICE` at the pinned commit are retained in `third-party-licenses/universal-parcel-scraper/`. The NOTICE records additional model/data attributions, including MIT, CC BY 4.0 and ODbL sources. The optional TRAWL derivative/image is AGPL-3.0; it is not bundled or enabled in this integration.
