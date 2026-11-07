@@ -66,6 +66,15 @@ export async function consumeGlobalRateLimit(request, env, {
 } = {}) {
   const namespace = env?.GLOBAL_RATE_LIMITER;
   if (!namespace || typeof namespace.idFromName !== "function" || typeof namespace.get !== "function") {
+    const explicitScope = typeof env?.EXPORTFLOW_ENV === "string"
+      ? env.EXPORTFLOW_ENV.trim().toLowerCase()
+      : "";
+    const host = new URL(request.url).hostname.toLowerCase();
+    const production = explicitScope === "production" ||
+      (!explicitScope && (host === "exportflow.me" || host === "www.exportflow.me"));
+    if (production) {
+      throw new GlobalRateLimiterUnavailableError("global_rate_limiter_not_configured");
+    }
     return null;
   }
 
