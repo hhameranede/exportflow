@@ -294,9 +294,9 @@ export function resolveShipmentTruth({
   const timelineEvents = [...deduped].sort(compareEvents);
   const conflicts = findConflicts(timelineEvents);
 
-  // Received means latest ingestion order (or latest explicit receivedAt when
-  // all events provide one). Trusted means structurally eligible for chronology:
-  // valid zoned event time, source reference, and no trusted:false marker.
+  // Received means the last event in resolver input order, unless every event
+  // has a valid explicit receivedAt timestamp. Trusted means structurally eligible
+  // for chronology: a valid zoned event time, a source reference, and no trusted:false marker.
   // It does not imply independently audited carrier reliability.
   const latestReceivedEvent = latestByReceipt(deduped);
   const trustedEvents = deduped.filter(event =>
