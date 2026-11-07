@@ -39,4 +39,4 @@ Preserve each upstream LICENSE, NOTICE, and nested component license when updati
 - Files stored: 910
 - Source bytes stored: 4228323
 - Scope: full upstream repository snapshot; TypeScript SDK is under `packages/ts`; PHP package and documentation are retained as source references
-- Runtime: the merchant-only `/api/merchant/track` feature imports the pinned TypeScript source entrypoint; Wrangler bundle and Preview validation pending
+- Runtime: the merchant-only `/api/merchant/track` feature imports the pinned TypeScript source entrypoint; Wrangler Pages Functions bundle passed in CI #388 and Preview deployment succeeded; direct HTTP canary pending
