@@ -13,7 +13,15 @@ const fetchImpl = async (url, init = {}) => {
   if (url.endsWith("/api/batch-track")) {
     return Response.json({ summary: { requested: 1, succeeded: 1, failed: 0 }, results: [] });
   }
-  if (url.endsWith("/api/carriers")) return Response.json({ catalogEntries: 2, carriers: ["example", "postal"] });
+  if (url.endsWith("/api/carriers")) return Response.json({
+    catalogEntries: 2,
+    selectableCarrierRecords: 1,
+    directAdapterCatalogRecords: 1,
+    universalFallbackCatalogRecords: 0,
+    linkOnlyCatalogRecords: 0,
+    carriers: ["example", "postal"],
+    carrierRecords: [{ id: "example", name: "Example Carrier", countries: ["US"], tracking: { mode: "automatic", adapter: "example" } }]
+  });
   if (url.endsWith("/api/coverage")) return Response.json({ summary: { allCountries: 249 }, countries: [] });
   if (url.endsWith("/api/openapi")) return Response.json({ openapi: "3.1.0" });
   return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
@@ -30,7 +38,9 @@ const batch = await client.batchTrack([{ id: "merchant-order-1", number: "EFGH56
 assert.equal(batch.summary.requested, 1);
 assert.equal(calls[1].url, "https://api.example.test/api/batch-track");
 
-assert.deepEqual((await client.listCarriers()).carriers, ["example", "postal"]);
+const carrierCatalog = await client.listCarriers();
+assert.deepEqual(carrierCatalog.carriers, ["example", "postal"]);
+assert.equal(carrierCatalog.carrierRecords[0].tracking.adapter, "example");
 assert.equal((await client.getCoverage()).summary.allCountries, 249);
 assert.equal((await client.getOpenApi()).openapi, "3.1.0");
 
