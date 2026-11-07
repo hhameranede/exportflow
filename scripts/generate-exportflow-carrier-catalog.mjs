@@ -100,7 +100,7 @@ async function readCarrierDirectory(entry) {
       licenseStatus: "recorded_from_pinned_upstream_repository",
       licenseScope: "upstream_carrier_manifest",
       portalUrlCandidate: portalCandidate,
-      portalCandidateStatus: portalCandidate ? "upstream_declared_unverified" : "not_provided",
+      trackingPageCandidateStatus: portalCandidate ? "upstream_declared_unverified" : "not_provided",
       authorityStatus: "upstream_manifest_candidate_not_independently_verified",
       officialCarrierStatus: "not_independently_verified",
       commercialTrackingRights: "not_granted_by_software_license",
