@@ -37,6 +37,16 @@ const upsIntegration = catalog.carrierRecords.find(record => record.id === "ups"
 assert.ok(upsIntegration);
 assert.equal(upsIntegration.sourceIntegration.integrationClass, "provider_api_client");
 assert.deepEqual(upsIntegration.sourceIntegration.requiredEnvironment, ["UPS_CLIENT_ID", "UPS_CLIENT_SECRET"]);
+assert.equal(upsIntegration.sourceIntegration.sandboxMode, "customer_integration_environment");
+assert.equal(upsIntegration.sourceIntegration.sandboxBaseUrl, "https://wwwcie.ups.com");
+const fedexIntegration = catalog.carrierRecords.find(record => record.id === "fedex");
+assert.ok(fedexIntegration);
+assert.equal(fedexIntegration.sourceIntegration.onboardingRole, "integrator_provider");
+assert.equal(fedexIntegration.sourceIntegration.sandboxBaseUrl, "https://apis-sandbox.fedex.com");
+const dhlIntegration = catalog.carrierRecords.find(record => record.id === "dhl-express");
+assert.ok(dhlIntegration);
+assert.equal(dhlIntegration.sourceIntegration.sandboxMode, "no_external_customer_test_environment");
+assert.equal(dhlIntegration.sourceIntegration.sandboxBaseUrl, null);
 assert.equal(upsIntegration.sourceIntegration.commercialAuthorization, "not_assessed");
 assert.ok(catalog.catalogEntries >= catalog.carriers.length);
 assert.ok(catalog.selectableCarrierRecords > 0);
