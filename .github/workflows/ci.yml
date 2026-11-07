@@ -48,9 +48,38 @@ jobs:
           node --check scripts/sdk-test.mjs
           node --check functions/_middleware.js
           node --check scripts/locale-build-test.mjs
+          node --check scripts/run-datadog-tests.mjs
           node --check functions/lib/country-codes.mjs
+      - name: Detect Datadog Test Optimization configuration
+        id: datadog-config
+        shell: bash
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+        run: |
+          if [[ -n "${DD_API_KEY}" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Datadog Test Optimization is configured."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Datadog API key is not configured; regression tests will run without telemetry."
+          fi
+      - name: Configure Datadog Test Optimization
+        if: steps.datadog-config.outputs.enabled == 'true'
+        uses: datadog/test-visibility-github-action@v3
+        with:
+          languages: js
+          api_key: ${{ secrets.DD_API_KEY }}
+          site: us5.datadoghq.com
       - name: Run regression tests
         run: npm test
+        env:
+          NODE_OPTIONS: ${{ steps.datadog-config.outputs.enabled == 'true' && format('-r {0}', env.DD_TRACE_PACKAGE) || '' }}
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_SITE: us5.datadoghq.com
+          DD_CIVISIBILITY_AGENTLESS_ENABLED: ${{ steps.datadog-config.outputs.enabled }}
+          DD_SERVICE: exportflow
+          DD_ENV: ci
+          DD_TEST_SESSION_NAME: exportflow-regression
       - name: Build Cloudflare Pages output
         run: npm run build
       - name: Verify localized SEO pages and hreflang sitemap
