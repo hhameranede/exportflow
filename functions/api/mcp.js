@@ -160,6 +160,34 @@ function headerMismatch(id, message) {
   return rpcError(id, -32020, "Header mismatch", { reason: message }, 400);
 }
 
+function decodeMcpHeaderValue(value) {
+  if (typeof value !== "string") return null;
+  const prefix = "=?base64?";
+  const suffix = "?=";
+  const hasPrefix = value.startsWith(prefix);
+  const hasSuffix = value.endsWith(suffix);
+  if (!hasPrefix && !hasSuffix) return value;
+  if (!hasPrefix || !hasSuffix) return null;
+
+  const encoded = value.slice(prefix.length, -suffix.length);
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded) || encoded.length === 0) {
+    return null;
+  }
+  try {
+    const binary = atob(encoded);
+    const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+function acceptsMediaType(header, expected) {
+  return typeof header === "string" && header.split(",").some(item =>
+    item.trim().split(";")[0].trim().toLowerCase() === expected
+  );
+}
+
 function jsonResult(id, result) {
   return response({ jsonrpc: "2.0", id, result });
 }
@@ -301,8 +329,8 @@ export async function onRequestPost({ request, env }) {
   if (request.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase() !== "application/json") {
     return rpcError(null, -32600, "Content-Type must be application/json", undefined, 415);
   }
-  const accept = (request.headers.get("Accept") || "").toLowerCase();
-  if (!accept.includes("application/json") || !accept.includes("text/event-stream")) {
+  const accept = request.headers.get("Accept") || "";
+  if (!acceptsMediaType(accept, "application/json") || !acceptsMediaType(accept, "text/event-stream")) {
     return rpcError(null, -32600, "Accept must include application/json and text/event-stream", undefined, 406);
   }
 
@@ -326,6 +354,9 @@ export async function onRequestPost({ request, env }) {
     return rpcError(null, -32600, "Invalid JSON-RPC request", undefined, 400);
   }
 
+  if (message.params !== undefined && !isObject(message.params)) {
+    return rpcError(message.id, -32602, "MCP params must be an object", undefined, 400);
+  }
   const params = isObject(message.params) ? message.params : {};
   const meta = isObject(params._meta) ? params._meta : {};
   const requestedVersion = meta[PROTOCOL_META_KEY];
@@ -349,7 +380,7 @@ export async function onRequestPost({ request, env }) {
   }
   if (message.method === "tools/call") {
     const toolName = params.name;
-    const headerName = request.headers.get("Mcp-Name");
+    const headerName = decodeMcpHeaderValue(request.headers.get("Mcp-Name"));
     if (typeof toolName !== "string" || !headerName || headerName !== toolName) {
       return headerMismatch(message.id, "Mcp-Name must match params.name for tools/call");
     }
