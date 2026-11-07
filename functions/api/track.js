@@ -1,5 +1,5 @@
-import { createTracker, TrackingError } from "../../node_modules/universal-parcel-scraper/dist/facade/index.js";
-import { createCloudflareFetch } from "../lib/cloudflare-fetch.mjs";
+import { createExportFlowCarrierEngine, TrackingError } from "../lib/exportflow-carrier-engine.mjs";
+import { resolveShipmentTruth } from "../lib/shipment-truth.mjs";
 import { safeEventPoint } from "../lib/coordinates.mjs";
 
 const MAX_BODY_CHARS = 4_096;
@@ -62,17 +62,7 @@ function getTracker(env) {
     : "";
   if (!tracker || trackerTrawlUrl !== trawlUrl) {
     trackerTrawlUrl = trawlUrl;
-    tracker = createTracker({
-      userAgent: "ExportFlow/0.1",
-      // Cloudflare Workers rejects redirect: "error" before sending a request.
-      // Preserve carrier-specific "follow"/"manual" modes and emulate error mode
-      // with a visible 3xx response instead of a transport failure.
-      fetcher: createCloudflareFetch(),
-      // Carrier adapters run first. UPU is the only universal fallback enabled
-      // by default; third-party aggregators are deliberately not sent parcel IDs.
-      providers: ["UPU"],
-      ...(trawlUrl ? { trawlUrl } : {})
-    });
+    tracker = createExportFlowCarrierEngine({ trawlUrl });
   }
   return tracker;
 }
@@ -114,26 +104,62 @@ function safeText(value, maxLength = 240) {
 }
 
 function safeStage(value) {
-  return typeof value === "string" && /^[a-z_]{2,40}$/.test(value) ? value : "unknown";
+  if (typeof value !== "string") return "unknown";
+  const stage = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return /^[a-z_]{2,40}$/.test(stage) ? stage : "unknown";
 }
 
 function projectResult(response) {
   const result = response?.result ?? {};
-  const events = Array.isArray(result.events) ? result.events.slice(0, 60).map(event => ({
-    time: safeText(event?.time, 80),
-    location: safeText(event?.location, 180),
-    description: safeText(event?.description, 320),
-    stage: safeStage(event?.stage),
-    ...(safeEventPoint(event?.point) ? { point: safeEventPoint(event.point) } : {})
-  })) : [];
+  const rawSource = safeText(response?.source, 80) || "carrier";
+  const rawCarrier = safeText(response?.carrier, 80) || "unknown";
+  const rawExpectedDelivery = safeText(result.expected_delivery, 80);
+  const rawStatus = safeStage(result.current_stage);
+
+  const rawEvents = Array.isArray(result.events) ? result.events.slice(0, 60) : [];
+  const truth = resolveShipmentTruth({
+    events: rawEvents.map(event => ({
+      time: event?.time,
+      location: event?.location,
+      description: event?.description,
+      stage: event?.stage || event?.state,
+      point: event?.point,
+      source: safeText(event?.source, 80) || null,
+      sourceRefs: Array.isArray(event?.sourceRefs)
+        ? event.sourceRefs.map(value => safeText(value, 80)).filter(Boolean)
+        : undefined,
+      receivedAt: safeText(event?.receivedAt ?? event?.received_at, 80),
+      trusted: event?.trusted !== false
+    })),
+    status: rawStatus,
+    source: rawSource,
+    expectedDelivery: rawExpectedDelivery
+  });
 
   return {
-    carrier: safeText(response?.carrier, 80) || "unknown",
-    source: safeText(response?.source, 80) || "carrier",
-    status: safeStage(result.current_stage),
-    expectedDelivery: safeText(result.expected_delivery, 80),
+    carrier: rawCarrier,
+    source: rawSource,
+    status: truth.status,
+    confidence: truth.confidence,
+    truth: {
+      latestReceived: truth.latestReceived,
+      latestTrusted: truth.latestTrusted,
+      selected: truth.selected,
+      conflicts: truth.conflicts,
+      insights: truth.insights
+    },
+    expectedDelivery: truth.insights.estimate.value,
     service: safeText(result.service_name, 120),
-    events
+    events: truth.timeline.map(event => ({
+      time: event.time || event.rawTime,
+      location: event.location,
+      description: event.description,
+      stage: safeStage(event.stage),
+      source: event.source,
+      sourceRefs: event.sourceRefs,
+      trusted: event.trusted,
+      ...(safeEventPoint(event.point) ? { point: safeEventPoint(event.point) } : {})
+    }))
   };
 }
 
