@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 
 const root = process.cwd();
 const output = resolve(root, "dist");
-const files = ["index.html", "styles.css", "app.js", "translations.js", "coverage.js", "exportflow-sdk.mjs", "robots.txt", "sitemap.xml", "_headers", "favicon.svg", "favicon-32x32.png", "apple-touch-icon.png", "site.webmanifest", "og-image-20261106.png", "404.html"];
+const files = ["index.html", "styles.css", "app.js", "translations.js", "coverage.js", "merchant.js", "exportflow-sdk.mjs", "robots.txt", "sitemap.xml", "_headers", "favicon.svg", "favicon-32x32.png", "apple-touch-icon.png", "site.webmanifest", "og-image-20261106.png", "404.html"];
 const engineDist = resolve(root, "node_modules/universal-parcel-scraper/dist");
 const localeCodes = ["en", "ar", "es", "zh", "hi", "pt", "fr", "bn"];
 const localizedPageSpecs = [
@@ -219,7 +219,7 @@ for (const file of files) {
 }
 
 const publicPageDirectories = [
-  "coverage", "about", "contact", "privacy", "terms", "cookies", "security", "disclaimer", "developers"
+  "coverage", "about", "contact", "privacy", "terms", "cookies", "security", "disclaimer", "developers", "merchant"
 ];
 for (const page of publicPageDirectories) {
   await mkdir(resolve(output, page), { recursive: true });
