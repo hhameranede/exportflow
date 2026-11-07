@@ -18,6 +18,7 @@ const testScripts = [
   "scripts/sdk-test.mjs",
   "scripts/merchant-workspace-test.mjs",
   "scripts/mcp-test.mjs",
+  "scripts/production-smoke-test-unit.mjs",
   "scripts/smoke-test.mjs",
 ];
 
