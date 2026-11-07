@@ -95,7 +95,7 @@ assert.equal(nz.rights_status, "blocked");
 assert.equal(nz.commercial_use, false);
 assert.equal(nz.redistribution, false);
 assert.equal(nz.ingestion_status, "blocked_nontransferable_bulk_data_agreement");
-assert.ok(nz.limitations.some(value => /non-transferable and non-sublicensable/i.test(value)));
+assert.ok(nz.limitations.some(value => /non-transferable, non-sublicensable/i.test(value)));
 assert.ok(nz.limitations.some(value => /sharing bulk data with unauthorised persons/i.test(value)));
 
 const acra = registry.sources.find(source => source.id === "acra-singapore-entities");
