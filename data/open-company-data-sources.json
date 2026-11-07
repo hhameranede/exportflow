@@ -515,12 +515,12 @@
         "EE"
       ],
       "source_url": "https://avaandmed.ariregister.rik.ee/en/downloading-open-data",
-      "license": "CC-BY-4.0",
-      "rights_status": "verified_open_with_attribution",
+      "license": "CC-BY-4.0_CURRENT_RIK_PAGE__CC-BY-SA-4.0_IN_2023_EU_HVD_REPORT",
+      "rights_status": "provisional_license_conflict",
       "commercial_use": true,
-      "redistribution": true,
+      "redistribution": false,
       "attribution_required": true,
-      "attribution_text": "Source: Estonian e-Business Register open data, Centre of Registers and Information Systems (RIK), CC BY 4.0.",
+      "attribution_text": "Do not ingest or redistribute until the exact accepted RIK file terms resolve the CC BY 4.0 / CC BY-SA 4.0 discrepancy.",
       "access": "free_daily_machine_readable_XML_JSON_and_selected_CSV",
       "update_frequency": "daily",
       "data_scope": [
@@ -533,16 +533,18 @@
         "addresses"
       ],
       "limitations": [
-        "accept the current dataset licence terms before download",
-        "use only the public open-data datasets and exclude personal identification numbers",
-        "do not ingest persons, beneficial owners, shareholders or contact data without field-specific GDPR and source-term review",
-        "current bulk files cover registered, liquidation and bankruptcy statuses; they do not represent a complete deleted-history archive"
+        "RIK's current open-data page links to CC BY 4.0, but the European Data Portal's 2023 HVD report records CC BY-SA 4.0 for the Estonian commercial register; treat the exact downloadable file terms as unresolved until the accepted licence text is captured",
+        "downloading open data requires acceptance of the licence terms; do not assume the website's general licence link alone resolves the file-specific terms",
+        "use only public basic legal-person data and exclude personal identification numbers",
+        "do not ingest persons, beneficial owners, shareholders, or contact datasets without field-specific GDPR and source-term review",
+        "current bulk files cover registered, liquidation and bankruptcy statuses and are updated daily; they do not represent a complete deleted-history archive"
       ],
-      "ingestion_status": "candidate_for_basic_data_only",
+      "ingestion_status": "quarantined_pending_exact_file_license_acceptance",
       "verification_sources": [
         "https://avaandmed.ariregister.rik.ee/en/downloading-open-data",
         "https://avaandmed.ariregister.rik.ee/en/terms-service",
-        "https://creativecommons.org/licenses/by/4.0/"
+        "https://creativecommons.org/licenses/by/4.0/",
+        "https://data.europa.eu/sites/default/files/report/Report%20on%20data%20homogenisation%20for%20high-value%20datasets_ENG.pdf"
       ]
     },
     {
