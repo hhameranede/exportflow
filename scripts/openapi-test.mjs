@@ -12,6 +12,7 @@ for (const route of [
   "/api/track",
   "/api/batch-track",
   "/api/carriers",
+  "/api/carrier-directory",
   "/api/coverage",
   "/api/health",
   "/api/openapi",
@@ -28,6 +29,13 @@ assert.deepEqual(trackSchema.properties.language.enum, ["en", "ar", "es", "zh", 
 assert.equal(trackSchema.additionalProperties, false);
 assert.equal(trackSchema.properties.carrier.pattern, "^[a-zA-Z0-9-]+$");
 assert.equal(trackSchema.properties.postcode.pattern, "^[a-zA-Z0-9 -]+$");
+const directoryOperation = document.paths["/api/carrier-directory"].get;
+assert.equal(directoryOperation.operationId, "getPaginatedCarrierDirectory");
+assert.ok(directoryOperation.parameters.some(parameter => parameter.name === "pageSize" && parameter.schema.maximum === 100));
+assert.ok(document.components.schemas.CarrierDirectoryResponse);
+assert.ok(document.components.schemas.CarrierDirectoryRecord);
+assert.ok(document.components.schemas.CarrierDirectoryEvidence);
+assert.ok(document.components.schemas.CarrierDirectoryResponse.properties.records);
 const carrierCatalogSchema = document.components.schemas.CarrierCatalog;
 assert.ok(carrierCatalogSchema.properties.carrierRecords);
 assert.ok(carrierCatalogSchema.properties.metadataNotice);
