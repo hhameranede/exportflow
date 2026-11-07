@@ -41,6 +41,22 @@ const getOnly = await onRequestPost({ request: new Request(endpoint, { method: "
 assert.equal(getOnly.status, 405);
 assert.equal(getOnly.headers.get("Allow"), "POST");
 
+const emptyBody = await onRequestPost({
+  request: new Request(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json, text/event-stream",
+      "MCP-Protocol-Version": protocolVersion,
+      "Mcp-Method": "tools/list"
+    },
+    body: ""
+  }),
+  env: {}
+});
+assert.equal(emptyBody.status, 400);
+assert.equal((await emptyBody.json()).error.code, -32700);
+
 const discover = await call("server/discover", {}, "discover-1");
 assert.equal(discover.status, 200);
 assert.equal(discover.headers.get("Content-Type"), "application/json; charset=utf-8");
@@ -49,6 +65,7 @@ assert.equal(discovery.id, "discover-1");
 assert.equal(discovery.result.resultType, "complete");
 assert.deepEqual(discovery.result.supportedVersions, [protocolVersion]);
 assert.ok(discovery.result.capabilities.tools);
+assert.equal(discovery.result.capabilities.resources, undefined, "The server must not advertise resources that are not implemented");
 assert.equal(discovery.result._meta["io.modelcontextprotocol/serverInfo"].name, "ExportFlow MCP Server");
 assert.equal(discovery.result.cacheScope, "public");
 
