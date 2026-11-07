@@ -1,0 +1,109 @@
+name: Full 743-adapter source audit
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/full-743-adapter-audit.yml
+      - docs/FULL_743_ADAPTER_AUDIT.md
+      - scripts/full-adapter-audit.mjs
+permissions:
+  contents: read
+concurrency:
+  group: full-743-adapter-audit-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  audit:
+    name: Inventory and offline-test all 743 adapters
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out ExportFlow
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check out pinned upstream source
+        uses: actions/checkout@v4
+        with:
+          repository: plhery/universal-parcel-scraper
+          ref: 9c088edaa089135b89658f2b611f8a741d5238c6
+          path: .audit/upstream
+          persist-credentials: false
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: .audit/upstream/package-lock.json
+      - name: Install upstream dependencies
+        working-directory: .audit/upstream
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Generate complete adapter-by-adapter inventory
+        run: node scripts/full-adapter-audit.mjs
+        env:
+          EXPORTFLOW_UPSTREAM_ROOT: .audit/upstream
+          EXPORTFLOW_COMPARE_ROOT: vendor/sources/universal-parcel-scraper
+          EXPORTFLOW_AUDIT_OUTPUT: artifacts/full-743-adapter-audit
+      - name: Detect Datadog Test Optimization configuration
+        id: datadog-config
+        shell: bash
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+        run: |
+          if [[ -n "${DD_API_KEY}" ]]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+            echo "Datadog Test Optimization is configured."
+          else
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+            echo "Datadog is not configured; reports remain in GitHub artifacts."
+          fi
+      - name: Configure one Datadog Test Visibility session
+        if: steps.datadog-config.outputs.enabled == 'true'
+        uses: datadog/test-visibility-github-action@v3
+        with:
+          languages: js
+          api_key: ${{ secrets.DD_API_KEY }}
+          site: us5.datadoghq.com
+      - name: Record one aggregate audit result in Datadog
+        run: node scripts/full-adapter-audit.mjs
+        env:
+          EXPORTFLOW_UPSTREAM_ROOT: .audit/upstream
+          EXPORTFLOW_COMPARE_ROOT: vendor/sources/universal-parcel-scraper
+          EXPORTFLOW_AUDIT_OUTPUT: artifacts/full-743-adapter-audit
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_SITE: us5.datadoghq.com
+          DD_CIVISIBILITY_AGENTLESS_ENABLED: ${{ steps.datadog-config.outputs.enabled }}
+          DD_SERVICE: exportflow-full-adapter-audit
+          DD_ENV: audit
+          DD_TEST_SESSION_NAME: exportflow-full-743-adapter-audit
+          NODE_OPTIONS: ${{ steps.datadog-config.outputs.enabled == 'true' && format('-r {0}', env.DD_TRACE_PACKAGE) || '' }}
+      - name: Run upstream lint
+        working-directory: .audit/upstream
+        run: npm run lint
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+      - name: Run upstream typecheck
+        working-directory: .audit/upstream
+        run: npm run typecheck
+      - name: Build upstream package
+        working-directory: .audit/upstream
+        run: npm run build
+      - name: Run all upstream offline tests
+        working-directory: .audit/upstream
+        run: npm test
+      - name: Run offline source-script tests
+        working-directory: .audit/upstream
+        run: npm run test:scripts
+      - name: Verify generated upstream files
+        working-directory: .audit/upstream
+        run: npm run test:generated
+      - name: Verify packed package
+        working-directory: .audit/upstream
+        run: npm run test:package
+      - name: Upload full adapter audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exportflow-full-743-adapter-audit
+          path: artifacts/full-743-adapter-audit/
+          if-no-files-found: warn
+          retention-days: 30
