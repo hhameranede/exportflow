@@ -2,7 +2,7 @@ name: Verify ExportFlow
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feat/exportflow-global-logistics-1-2-20261107]
   push:
     branches: [main]
   workflow_dispatch:
@@ -52,6 +52,8 @@ jobs:
           node --check scripts/run-datadog-tests.mjs
           node --check scripts/production-smoke-test.mjs
           node --check scripts/production-smoke-test-unit.mjs
+          node --check functions/lib/algerian-carrier-connectors.mjs
+          node --check scripts/algerian-connectors-test.mjs
           node --check functions/lib/country-codes.mjs
           node --check scripts/materialize-vendor-sources.mjs
           node --check scripts/materialize-dz-delivery.mjs
