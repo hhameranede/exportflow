@@ -1,4 +1,4 @@
-import { CARRIERS, CARRIER_IDS, CARRIER_CATALOG_METADATA } from "../../data/carrier-catalog.generated.mjs";
+import { CARRIERS, CARRIER_IDS, CARRIER_CATALOG_METADATA, CARRIER_INTEGRATION_MATRIX } from "../../data/carrier-catalog.generated.mjs";
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 50;
@@ -15,6 +15,10 @@ const EVIDENCE_SQL = `
 
 const EVIDENCE_LEVELS = new Set([
   "catalogued", "research", "testing", "integrated", "verified", "blocked", "deprecated"
+]);
+const INTEGRATION_CLASSES = new Set([
+  "provider_api_client", "dedicated_adapter", "universal_fallback",
+  "link_only", "adapter_reference_only", "catalogue_only"
 ]);
 
 function safeId(value) {
@@ -136,6 +140,39 @@ function buildCatalogRecords() {
             ? "universal-fallback"
             : "none";
 
+      const matrix = CARRIER_INTEGRATION_MATRIX[id] || null;
+      const sourceIntegration = matrix && INTEGRATION_CLASSES.has(matrix.integrationClass)
+        ? {
+            integrationClass: matrix.integrationClass,
+            apiClient: matrix.apiClient === "source_module_present" ? "source_module_present" : "not_assessed",
+            apiAuthentication: typeof matrix.apiAuthentication === "string" ? matrix.apiAuthentication : null,
+            requiredEnvironment: Array.isArray(matrix.requiredEnvironment)
+              ? matrix.requiredEnvironment.filter(value => typeof value === "string" && /^[A-Z0-9_]{2,80}$/.test(value))
+              : [],
+            mockContractTest: typeof matrix.mockContractTest === "string" ? matrix.mockContractTest : null,
+            adapterSource: matrix.adapterSource === "present" ? "present" : "not_found",
+            fixtureTest: matrix.fixtureTest === "defined" ? "defined" : "not_found",
+            liveTestDefinition: matrix.liveTestDefinition === "defined" ? "defined" : "not_found",
+            upstreamTrackingSteps: Array.isArray(matrix.upstreamTrackingSteps)
+              ? matrix.upstreamTrackingSteps.filter(value => typeof value === "string" && /^[a-z0-9_-]{1,40}$/i.test(value))
+              : [],
+            commercialAuthorization: "not_assessed",
+            thirdPartyTrackingRights: "not_assessed"
+          }
+        : {
+            integrationClass: "catalogue_only",
+            apiClient: "not_assessed",
+            apiAuthentication: null,
+            requiredEnvironment: [],
+            mockContractTest: null,
+            adapterSource: "not_found",
+            fixtureTest: "not_found",
+            liveTestDefinition: "not_found",
+            upstreamTrackingSteps: [],
+            commercialAuthorization: "not_assessed",
+            thirdPartyTrackingRights: "not_assessed"
+          };
+
       return {
         id,
         name: safeText(carrier.name || carrier.displayName || id, 120),
@@ -144,7 +181,8 @@ function buildCatalogRecords() {
         selectable: carrier.capabilities?.selectable === true,
         trackingMode: mode,
         adapter,
-        adapterType
+        adapterType,
+        sourceIntegration
       };
     })
     .filter(Boolean)
@@ -210,6 +248,7 @@ export async function onRequestGet({ request, env } = {}) {
   const country = /^[A-Z]{2}$/.test(rawCountry) ? rawCountry : "";
   const evidenceFilter = url.searchParams.get("evidence") || "all";
   const adapterFilter = url.searchParams.get("adapter") || "all";
+  const integrationFilter = url.searchParams.get("integration") || "all";
   const page = Math.max(1, Math.min(100_000, Number.parseInt(url.searchParams.get("page") || "1", 10) || 1));
   const pageSize = Math.max(1, Math.min(MAX_PAGE_SIZE, Number.parseInt(url.searchParams.get("pageSize") || String(DEFAULT_PAGE_SIZE), 10) || DEFAULT_PAGE_SIZE));
 
@@ -221,6 +260,9 @@ export async function onRequestGet({ request, env } = {}) {
   }
   if (!["all", "dedicated", "universal-fallback", "link-only", "none"].includes(adapterFilter)) {
     return json({ error: "invalid_adapter_filter" }, 400);
+  }
+  if (!["all", ...INTEGRATION_CLASSES].includes(integrationFilter)) {
+    return json({ error: "invalid_integration_filter" }, 400);
   }
 
   const evidenceRegistry = await loadEvidence(env);
@@ -262,6 +304,11 @@ export async function onRequestGet({ request, env } = {}) {
   const dedicatedCount = CATALOG_RECORDS.filter(record => record.adapterType === "dedicated").length;
   const universalCount = CATALOG_RECORDS.filter(record => record.adapterType === "universal-fallback").length;
   const linkOnlyCount = CATALOG_RECORDS.filter(record => record.adapterType === "link-only").length;
+  const integrationCounts = Object.fromEntries([...INTEGRATION_CLASSES].map(value => [
+    value,
+    CATALOG_RECORDS.filter(record => record.sourceIntegration?.integrationClass === value).length
+  ]));
+  const apiClientRecords = CATALOG_RECORDS.filter(record => record.sourceIntegration?.apiClient === "source_module_present").length;
   const evidenceCounts = {
     catalogued: directoryRecords.filter(record => record.evidence.level === "catalogued").length,
     research: evidenceRegistry.records.filter(record => record.level === "research").length,
@@ -276,6 +323,7 @@ export async function onRequestGet({ request, env } = {}) {
     if (country && !record.countries.includes(country)) return false;
     if (evidenceFilter !== "all" && record.evidence.level !== evidenceFilter) return false;
     if (adapterFilter !== "all" && record.adapterType !== adapterFilter) return false;
+    if (integrationFilter !== "all" && record.sourceIntegration?.integrationClass !== integrationFilter) return false;
     if (query) {
       const haystack = [record.id, record.name, ...record.aliases, ...record.countries, record.countryScope || ""].join(" ").toLocaleLowerCase("en");
       if (!haystack.includes(query)) return false;
@@ -309,6 +357,9 @@ export async function onRequestGet({ request, env } = {}) {
       linkOnlyRecords: linkOnlyCount,
       evidenceRegistryAvailable: evidenceRegistry.available,
       evidenceRecords: evidenceRegistry.records.length,
+      integrationMatrixRecords: CATALOG_RECORDS.length,
+      apiClientRecords,
+      integrationCounts,
       evidenceCounts
     },
     pagination: {
@@ -319,7 +370,7 @@ export async function onRequestGet({ request, env } = {}) {
       hasPrevious: page > 1,
       hasNext: offset + pageSize < filtered.length
     },
-    filters: { q: query, country: country || null, evidence: evidenceFilter, adapter: adapterFilter },
+    filters: { q: query, country: country || null, evidence: evidenceFilter, adapter: adapterFilter, integration: integrationFilter },
     records
   });
 }
