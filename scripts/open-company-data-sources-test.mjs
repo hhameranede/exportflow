@@ -80,7 +80,7 @@ assert.equal(ireland.redistribution, true);
 
 const uk = registry.sources.find(source => source.id === "uk-companies-house-register");
 assert.equal(uk.license, "STATUTORY_PUBLIC_REGISTER_REUSE_NOT_OGL");
-assert.ok(uk.limitations.some(value => /not OGL/i.test(value)));
+assert.ok(uk.license.endsWith("_NOT_OGL"));
 
 const france = registry.sources.find(source => source.id === "france-insee-sirene");
 assert.equal(france.license, "LICENCE-OUVERTE-2.0");
@@ -92,8 +92,11 @@ assert.equal(norway.license, "NLOD-2.0");
 assert.ok(norway.limitations.some(value => /national identity numbers/i.test(value)));
 
 const estonia = registry.sources.find(source => source.id === "estonia-rik-e-business-register");
-assert.equal(estonia.license, "CC-BY-4.0");
-assert.match(estonia.ingestion_status, /basic_data_only/);
+assert.match(estonia.license, /CC-BY-4.0_CURRENT_RIK_PAGE__CC-BY-SA-4.0_IN_2023_EU_HVD_REPORT/);
+assert.equal(estonia.redistribution, false);
+assert.match(estonia.rights_status, /provisional_license_conflict/);
+assert.match(estonia.ingestion_status, /quarantined/);
+assert.match(seedMigration, /estonia-rik-e-business-register[^\\n]*'quarantined', 1, 0/);
 
 const lithuania = registry.sources.find(source => source.id === "lithuania-centre-of-registers-open-financial-data");
 assert.equal(lithuania.license, "CC-BY-4.0");
