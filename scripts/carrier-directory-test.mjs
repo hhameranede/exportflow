@@ -27,6 +27,10 @@ const first = await base.json();
 assert.equal(CARRIER_IDS.length, 1339, "ExportFlow native catalog must retain its 1,339 snapshot records.");
 assert.equal(CARRIER_CATALOG_METADATA.catalogOwner, "ExportFlow");
 assert.equal(first.summary.catalogEntries, 1339);
+assert.equal(first.summary.integrationMatrixRecords, 1338);
+assert.equal(first.summary.apiClientRecords, 3);
+assert.equal(Object.values(first.summary.integrationCounts).reduce((sum, count) => sum + count, 0), 1338);
+assert.equal(first.filters.integration, "all");
 assert.equal(first.summary.catalogRecordObjects, 1338, "The display directory excludes the reserved unknown carrier record.");
 assert.ok(first.summary.selectableRecords > 1_000);
 assert.ok(first.summary.dedicatedAdapterRecords >= 600);
@@ -71,6 +75,11 @@ const china = await chinaResponse.json();
 assert.ok(china.records.length > 0);
 assert.ok(china.records.every(record => record.countries.includes("CN")));
 
+const apiClientsResponse = await onRequestGet({ request: request({ integration: "provider_api_client", pageSize: 100 }) });
+const apiClients = await apiClientsResponse.json();
+assert.equal(apiClients.pagination.totalMatches, 3);
+assert.ok(apiClients.records.every(record => record.sourceIntegration.integrationClass === "provider_api_client"));
+
 const dedicatedResponse = await onRequestGet({ request: request({ adapter: "dedicated", pageSize: 100 }) });
 const dedicated = await dedicatedResponse.json();
 assert.ok(dedicated.records.length > 0);
@@ -109,6 +118,12 @@ const withEvidence = await (await onRequestGet({
 })).json();
 const ups = withEvidence.records.find(record => record.id === "ups");
 assert.ok(ups);
+assert.equal(ups.sourceIntegration.integrationClass, "provider_api_client");
+assert.equal(ups.sourceIntegration.apiClient, "source_module_present");
+assert.equal(ups.sourceIntegration.apiAuthentication, "oauth2_client_credentials");
+assert.deepEqual(ups.sourceIntegration.requiredEnvironment, ["UPS_CLIENT_ID", "UPS_CLIENT_SECRET"]);
+assert.equal(ups.sourceIntegration.mockContractTest, "carrier-official-api-contract-test");
+assert.equal(ups.sourceIntegration.commercialAuthorization, "not_assessed");
 assert.equal(ups.evidence.level, "research");
 assert.equal(ups.evidence.commercialAccess, "written_permission_required");
 assert.equal(ups.evidence.trackingRights, "third_party_permission_required");
@@ -153,5 +168,6 @@ assert.ok(unavailable.records.every(record => record.evidence.level === "catalog
 assert.equal((await onRequestGet({ request: request({ country: "USA" }) })).status, 400);
 assert.equal((await onRequestGet({ request: request({ evidence: "unverified" }) })).status, 400);
 assert.equal((await onRequestGet({ request: request({ adapter: "browser-scrape" }) })).status, 400);
+assert.equal((await onRequestGet({ request: request({ integration: "unreviewed-api" }) })).status, 400);
 
 console.log("Carrier directory tests passed: 1,339 catalog entries, 50-record pages, filters, search, and D1 evidence overlay.");
