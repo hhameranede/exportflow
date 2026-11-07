@@ -47,7 +47,7 @@ The `/api/track` endpoint returns a structured response:
 }
 ```
 
-- **status**: Determined chronologically by timestamp, not by stage scoring. If different stages conflict at the latest timestamp, status is `unknown` and `selected` is `null` rather than choosing by input order.
+- **status**: Determined chronologically by timestamp, not by stage scoring. If different stages conflict at the latest timestamp, status is `unknown`; if the latest stage or location is ambiguous, `latestTrusted` and `selected` are `null` rather than choosing an event by input order. If all latest stages agree but locations conflict, the shared status remains available while the location remains unresolved.
 - **confidence**: "low" when no trusted timestamp exists or evidence conflicts; "medium" when a source-attributed, timezone-qualified event exists. The engine does not claim "high" confidence until independent source quality can be verified.
 - **latestReceived**: The last event in the resolver's input order, or the event with the latest valid explicit `receivedAt` when every event supplies one. Input order is not treated as carrier event time; it may refer to an older scan.
 - **latestTrusted**: The newest event with a valid timestamp containing an explicit timezone/UTC offset and at least one source reference. Timezone-less timestamps remain visible as raw values but are not trusted for chronology.
