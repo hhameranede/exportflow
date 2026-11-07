@@ -18,6 +18,8 @@
 |---|---|---|---|---|
 | [GLEIF Global LEI Index](https://www.gleif.org/en/lei-data/access-and-use-lei-data) | CC0-1.0; GLEIF says its website data is CC0 | Global LEI-identified legal entities, legal names, registered addresses, status, reference data and parent relationships where reported | Free complete files and Golden Copy/deltas; up to three daily updates | **Priority 1 — ingest** after schema mapping and status handling |
 | [Wikidata structured data](https://www.wikidata.org/wiki/Wikidata:Licensing) | CC0-1.0 for structured data | Global organization/entity enrichment, aliases, websites, countries, industry and relationship claims where present | Public dumps / query services | **Priority 2 — enrichment only**, never sole authority |
+| [Ireland CRO Company Records](https://opendata.cro.ie/dataset/companies) | CC BY 4.0, as listed in the EU data catalogue | Ireland company register, including current and historical dissolved/closed records | Daily snapshot; bulk CSV and API | **Priority 1 — ingest with attribution** |
+| [UK Companies House](https://www.gov.uk/guidance/companies-house-data-products) | Public-register statutory reuse; Companies House says it imposes no use restrictions on register information, but this is not labelled OGL | UK live company names, addresses, SIC, status, filing dates and previous names | Free monthly bulk CSV; free public-register URIs; API credentials required | **Priority 1 — ingest with personal-data review** |
 | [Finland PRH / YTJ open data](https://avoindata.prh.fi/en) | CC BY 4.0 | Finnish Trade Register entities, business IDs, company form, address and tax-register membership; excludes private traders and does not provide email/phone | Free API and bulk JSON; daily | **Priority 1 — ingest with attribution** |
 | [Latvian Enterprise Register open data](https://www.ur.gov.lv/en/registers-open-data-latvian-open-data-portal) | Official register confirms commercial and non-commercial reuse without restriction; capture exact dataset-level portal licence before production | Latvian legal entities and public register details | Machine-readable CSV/XLSX on data.gov.lv; dataset-specific cadence | **Priority 1 — ingest after dataset metadata snapshot** |
 | [US SEC EDGAR APIs](https://data.sec.gov/) | SEC states government-created sec.gov content and EDGAR public filing content are free to access and reuse; follow SEC fair-access/security policies | SEC reporting issuers, company submissions, filing metadata and XBRL company facts; not a complete US business register | Unauthenticated JSON; updated through the day | **Priority 2 — issuer/filing reference** |
@@ -51,6 +53,8 @@ The pinned Universal Parcel Scraper source is the existing catalogue source; do 
 
 - [ ] Capture current GLEIF terms and golden-copy schema; build an idempotent import plan and a small test fixture before full bulk ingestion.
 - [ ] Implement Finland PRH CC BY attribution and API rate/refresh policy.
+- [ ] Capture Ireland CRO CC BY attribution and verify the current daily CSV/API schema.
+- [ ] Capture UK Companies House monthly snapshot versioning and review personal-data fields before public display.
 - [ ] Capture exact Latvia dataset metadata and licence per CSV before importing.
 - [ ] Add SEC issuer metadata as a separate source family and enforce SEC fair-access limits.
 - [ ] Use GovDataHub and Dateno as discovery indexes only; crawl their metadata, then validate each underlying publisher dataset.
@@ -60,9 +64,11 @@ The pinned Universal Parcel Scraper source is the existing catalogue source; do 
 
 ## Evidence
 
-- GLEIF CC0 and full-data access: [Open Data](https://www.gleif.org/en/about/open-data/), [Access and Use](https://www.gleif.org/en/lei-data/access-and-use-lei-data).
+- GLEIF CC0, access-service restrictions and three daily Golden Copy releases: [LEI Data Terms of Use](https://www.gleif.org/en/meta/lei-data-terms-of-use), [Access and Use](https://www.gleif.org/en/lei-data/access-and-use-lei-data), [Golden Copy downloads](https://www.gleif.org/en/lei-data/gleif-golden-copy/download-the-golden-copy). Use only the official Access Service; do not imply GLEIF endorsement or claim rights in LEIs.
 - Wikidata structured data CC0: [Licensing](https://www.wikidata.org/wiki/Wikidata:Licensing).
 - Finland PRH CC BY 4.0 and use in applications: [API information](https://avoindata.prh.fi/en/info/swagger-ui), [open data portal](https://avoindata.prh.fi/en).
+- Ireland CRO Company Records CC BY 4.0: [official CRO dataset](https://opendata.cro.ie/dataset/companies), [EU data catalogue record](https://data.europa.eu/data/datasets/bf6f837d-0946-4c14-9a99-82cd6980c121).
+- UK Companies House free monthly CSV and public-register reuse: [official data products and reuse guidance](https://www.gov.uk/guidance/companies-house-data-products), [API developer hub](https://developer.company-information.service.gov.uk/). The register reuse basis is not labelled OGL; apply separate privacy/copyright review.
 - Latvia official commercial and non-commercial reuse statement: [Enterprise Register open data](https://www.ur.gov.lv/en/registers-open-data-latvian-open-data-portal); confirm exact dataset metadata before ingestion.
 - SEC reuse and APIs: [SEC webmaster FAQ](https://www.sec.gov/about/webmaster-frequently-asked-questions), [Developer resources](https://www.sec.gov/about/developer-resources), [EDGAR APIs](https://www.sec.gov/search-filings/edgar-application-programming-interfaces).
 - GovDataHub allowlisted source licensing: [open-data-index](https://github.com/GovDataHub/open-data-index).
