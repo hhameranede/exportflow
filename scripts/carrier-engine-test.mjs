@@ -47,7 +47,8 @@ const dhlIntegration = catalog.carrierRecords.find(record => record.id === "dhl-
 assert.ok(dhlIntegration);
 assert.equal(dhlIntegration.sourceIntegration.sandboxMode, "no_external_customer_test_environment");
 assert.equal(dhlIntegration.sourceIntegration.sandboxBaseUrl, null);
-assert.equal(upsIntegration.sourceIntegration.commercialAuthorization, "not_assessed");
+assert.equal(upsIntegration.evidence.commercialAccess, "not_assessed");
+assert.equal("commercialAuthorization" in upsIntegration.sourceIntegration, false);
 assert.ok(catalog.catalogEntries >= catalog.carriers.length);
 assert.ok(catalog.selectableCarrierRecords > 0);
 assert.ok(catalog.carrierRecords.length > 0);
