@@ -5,7 +5,7 @@ import { localeForCountry, localeForVisitor, onRequest } from "../functions/_mid
 
 const [
   html, css, js, translationsSource, coverageHtml, coverageJs, trackApi, coverageApi, build,
-  robots, sitemap, headers, carriersApi, privacyHtml, termsHtml, middleware
+  robots, sitemap, headers, carriersApi, privacyHtml, termsHtml, middleware, developersHtml, sdk
 ] = await Promise.all([
   readFile("index.html", "utf8"),
   readFile("styles.css", "utf8"),
@@ -22,7 +22,9 @@ const [
   readFile("functions/api/carriers.js", "utf8"),
   readFile("privacy/index.html", "utf8"),
   readFile("terms/index.html", "utf8"),
-  readFile("functions/_middleware.js", "utf8")
+  readFile("functions/_middleware.js", "utf8"),
+  readFile("developers/index.html", "utf8"),
+  readFile("exportflow-sdk.mjs", "utf8")
 ]);
 
 const trustPageNames = ["about", "contact", "privacy", "terms", "cookies", "security", "disclaimer"];
@@ -31,6 +33,11 @@ const trustPages = await Promise.all(
 );
 
 assert.match(html, /<html[^>]+lang="en"[^>]+dir="ltr"/i, "English LTR homepage should exist");
+assert.match(html, /href="\/developers\//, "Homepage footer must link to the developer API guide");
+assert.match(developersHtml, /canonical" href="https:\/\/exportflow\.me\/developers\//, "Developer guide must have a canonical URL");
+assert.match(developersHtml, /\/api\/openapi/, "Developer guide must link to the OpenAPI contract");
+assert.match(sdk, /createExportFlowClient/, "Public SDK module must be present");
+assert.match(build, /"exportflow-sdk\.mjs"/, "Build must copy the public SDK module");
 for (const id of [
   "trackingForm", "trackingNumber", "postcodeInput", "languageToggle", "resultPanel",
   "shipmentMap", "mapNote", "eventCount", "faq", "catalogEntryCount",
