@@ -125,7 +125,7 @@ assert.ok(headers.includes("/og-image-20261106.png\n  Cache-Control: public, max
 assert.ok(headers.includes("Strict-Transport-Security: max-age=31536000; includeSubDomains"), "Production routes must carry HSTS");
 
 assert.match(html, /href="\/coverage\//, "Homepage must link to the global carrier directory");
-assert.match(html, /styles\.css\?v=ef-ui-refresh-20261106-01/, "Homepage CSS must use a fresh cache-busting release URL");
+assert.match(html, /styles\.css\?v=global-carrier-directory-20261107-01/, "Homepage CSS must use a fresh cache-busting release URL");
 assert.match(html, /translations\.js\?v=ef-ui-refresh-20261106-01/, "Translations must use a fresh cache-busting release URL");
 assert.match(html, /app\.js\?v=ef-ui-refresh-20261106-01/, "Homepage application JS must use fresh locale-routing code");
 assert.ok(headers.includes("/app.js\n  Cache-Control: public, max-age=0, must-revalidate"), "Homepage app JavaScript must be revalidated");
