@@ -47,6 +47,7 @@ export async function runProductionSmoke({
       return await fetchImpl(new URL(path, origin), {
         redirect: "manual",
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        headers: { "User-Agent": "ExportFlowSmokeBot/1.0", ...(init.headers || {}) },
         ...init,
       });
     } catch {
