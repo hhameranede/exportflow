@@ -166,4 +166,15 @@ assert.equal(verified.evidenceRegistry[0].verification.liveVerified, true);
 assert.equal(verified.evidenceRegistry[0].verification.authorizationConfirmed, true);
 assert.equal(verified.evidenceRegistry[0].verification.evidenceUrl, properlyVerified.verification_evidence_url);
 
+const merchantOnlyVerified = {
+  ...properlyVerified,
+  tracking_rights_status: "own_shipments_scope",
+  commercial_access_status: "contracted_account_required"
+};
+const merchantOnlyResponse = await onRequestGet({ env: { MERCHANT_DB: fakeDb({ results: [merchantOnlyVerified] }) } });
+const merchantOnly = await merchantOnlyResponse.json();
+assert.equal(merchantOnly.evidenceRegistry[0].evidenceLevel, "research");
+assert.equal(merchantOnly.evidenceRegistry[0].verification.liveVerified, false);
+assert.equal(merchantOnly.evidenceRegistry[0].verification.authorizationConfirmed, false);
+
 console.log("Carrier evidence registry API tests passed: catalog, research, no-adapter, unavailable-DB and verified-evidence guards.");
