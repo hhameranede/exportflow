@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CARRIER_IDS } from "universal-parcel-scraper";
+import { CARRIER_IDS, CARRIER_CATALOG_METADATA } from "../data/carrier-catalog.generated.mjs";
 import { onRequestGet } from "../functions/api/carrier-directory.js";
 
 function request(params = {}) {
@@ -24,7 +24,8 @@ assert.match(base.headers.get("X-Robots-Tag") || "", /noindex/);
 assert.match(base.headers.get("Cache-Control") || "", /max-age=300/);
 const first = await base.json();
 
-assert.equal(CARRIER_IDS.length, 1339, "Pinned Universal Parcel Scraper revision must retain its 1,339 catalog entries.");
+assert.equal(CARRIER_IDS.length, 1339, "ExportFlow native catalog must retain its 1,339 snapshot records.");
+assert.equal(CARRIER_CATALOG_METADATA.catalogOwner, "ExportFlow");
 assert.equal(first.summary.catalogEntries, 1339);
 assert.equal(first.summary.catalogRecordObjects, 1338, "The display directory excludes the reserved unknown carrier record.");
 assert.ok(first.summary.selectableRecords > 1_000);
