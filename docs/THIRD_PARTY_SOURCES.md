@@ -102,6 +102,8 @@ An upstream software license governs copying, modifying and redistributing that 
 
 Before enabling any individual adapter, verify the carrier's current terms, API agreement, credentials and intended third-party display rights. If a provider requires a merchant/customer account, use that merchant's delegated authorization and isolate its credentials. Never add credentials, real tracking numbers, customer postcodes or shipment PII to this repository.
 
+The provider-specific API inventory, mocked batch-contract test, sandbox/live credential requirements and Datadog CI Visibility boundaries are documented in [`CARRIER_API_TESTING.md`](CARRIER_API_TESTING.md).
+
 ## Evidence labels
 
 - **Catalogued:** a provider appears in an upstream source catalogue.
