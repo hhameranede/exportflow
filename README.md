@@ -49,7 +49,7 @@ The `/api/track` endpoint returns a structured response:
 
 - **status**: Determined chronologically by timestamp (not by arbitrary stage scoring)
 - **confidence**: "low" when no trusted timestamp exists or evidence conflicts; "medium" when a source-attributed, timezone-qualified event exists. The engine does not claim "high" confidence until independent source quality can be verified.
-- **latestReceived**: The event most recently ingested (or the latest explicit `receivedAt` when every event supplies it). It may be older than the newest carrier event.
+- **latestReceived**: The last event in the resolver's input order, or the event with the latest valid explicit `receivedAt` when every event supplies one. Input order is not treated as carrier event time; it may refer to an older scan.
 - **latestTrusted**: The newest event with a valid timestamp containing an explicit timezone/UTC offset and at least one source reference. Timezone-less timestamps remain visible as raw values but are not trusted for chronology.
 - **conflicts**: Detected when trusted events at the same timestamp have different stages or locations.
 - **insights**: Delay requires an explicit carrier delay signal; two scans or a generic exception alone are insufficient. Customs states require explicit hold/processing/release evidence. ETA is reported only when supplied by the carrier.
