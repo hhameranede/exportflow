@@ -81,6 +81,7 @@ const listPayload = await listed.json();
 assert.equal(listPayload.result.resultType, "complete");
 assert.equal(listPayload.result.cacheScope, "public");
 assert.ok(listPayload.result.ttlMs > 0);
+assert.equal(listPayload.result._meta["io.modelcontextprotocol/serverInfo"].name, "ExportFlow MCP Server");
 const names = listPayload.result.tools.map(tool => tool.name);
 assert.deepEqual(names, [...names].sort());
 assert.deepEqual(names, [
@@ -98,6 +99,7 @@ assert.equal(health.status, 200);
 const healthPayload = await health.json();
 assert.equal(healthPayload.result.isError, false);
 assert.equal(healthPayload.result.structuredContent.ok, true);
+assert.equal(healthPayload.result._meta["io.modelcontextprotocol/serverInfo"].name, "ExportFlow MCP Server");
 
 const coverage = await call("tools/call", {
   name: "get_coverage",
