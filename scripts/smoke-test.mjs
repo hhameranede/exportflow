@@ -99,7 +99,7 @@ assert.match(js, /function showTrackingError/, "Tracking failures must use the s
 assert.match(js, /formError\.scrollIntoView/, "Tracking failures must remain visible on mobile viewports");
 assert.match(js, /trackingErrorMessage/, "Tracking API failures must map server errors to readable messages");
 assert.match(js, /global_rate_limiter_not_configured/, "Global rate-limiter setup failures must not be silently hidden");
-assert.ok(js.includes('typeof payload.status === "string"'), "A malformed success response must not open an empty result panel");
+assert.ok(js.includes('typeof payload.status !== "string"'), "A malformed success response must not open an empty result panel");
 assert.ok(js.includes("error instanceof TypeError"), "Network failures must map to a localized unavailable message");
 
 assert.match(js, /postcodeInput\.value\.trim\(\)/, "Optional postcode should be submitted to the API");
@@ -291,4 +291,5 @@ assert.match(js, /IntersectionObserver/, "Counters should animate when visible")
 assert.match(js, /history\.scrollRestoration = "manual"/, "Fresh homepage visits must disable stale scroll restoration");
 assert.match(js, /addEventListener\("pageshow"/, "Homepage must re-check initial scroll position after page display");
 console.log("ExportFlow Hi design, trust pages, counters and scroll restoration verified.");
+
 
