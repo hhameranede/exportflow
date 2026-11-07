@@ -18,8 +18,8 @@ assert.match(migration, /trg_company_source_records_rights_insert/);
 assert.match(migration, /trg_company_source_records_rights_update/);
 assert.match(migration, /commercial_use = 1/);
 assert.match(migration, /redistribution = 1/);
-assert.match(migration, /RAISE\\(ABORT/);
-assert.doesNotMatch(migration, /\\n\\s*(email|phone|personal_id|beneficial_owner)\\s+TEXT/i);
+assert.match(migration, /RAISE\(ABORT/);
+assert.doesNotMatch(migration, /\b(email|phone|personal_id|beneficial_owner)\s+TEXT\b/i);
 
 const registry = JSON.parse(
   await readFile("data/open-company-data-sources.json", "utf8")
