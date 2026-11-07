@@ -76,6 +76,57 @@
 <section class="coverage-intro"><p class="eyebrow" data-i18n="coverageEyebrow">GLOBAL NETWORK / CATALOG DIRECTORY</p><h1 data-i18n="coveragePageTitle">Worldwide carrier directory</h1>
 <p class="coverage-lead" data-i18n="coveragePageDescription">Browse all 249 ISO 3166-1 country and territory codes. Coverage labels come from carrier records in the installed catalog and are not a guarantee that every parcel can be tracked.</p>
 <div class="coverage-metrics"><article><strong id="coverageTotalCountries">249</strong><span data-i18n="coverageTotalCountries">countries and territories in this directory</span></article><article><strong id="coverageCatalogEntries">—</strong><span data-i18n="coverageCatalogEntries">carrier records in the current catalog</span></article><article><strong id="coverageDirectCountries">—</strong><span data-i18n="coverageDirectCountries">countries with at least one direct adapter</span></article></div></section>
+<section class="carrier-evidence-section" aria-labelledby="carrierEvidenceTitle">
+  <div class="carrier-evidence-heading">
+    <p class="eyebrow" data-i18n="carrierEvidenceEyebrow">GLOBAL CARRIER EVIDENCE / ACCESS</p>
+    <h2 id="carrierEvidenceTitle" data-i18n="carrierEvidenceTitle">Carrier evidence register</h2>
+    <p data-i18n="carrierEvidenceDescription">Explore researched carrier networks, adapter status, official sources and the permissions still required. A catalog entry is not a live integration.</p>
+  </div>
+  <div class="carrier-evidence-metrics">
+    <article><strong id="carrierEvidenceCatalogCount">—</strong><span data-i18n="carrierEvidenceCatalogCountLabel">carrier records in the pinned catalog</span></article>
+    <article><strong id="carrierEvidenceAdapterCount">—</strong><span data-i18n="carrierEvidenceAdapterCountLabel">dedicated adapter records</span></article>
+    <article><strong id="carrierEvidenceResearchCount">—</strong><span data-i18n="carrierEvidenceResearchLabel">curated evidence dossiers</span></article>
+    <article><strong id="carrierEvidenceVerifiedCount">—</strong><span data-i18n="carrierEvidenceVerifiedLabel">verified for third-party tracking</span></article>
+  </div>
+  <p class="carrier-evidence-upstream-note" id="carrierEvidenceUpstreamNote" data-i18n="carrierEvidenceUpstreamNote">Upstream network-name figures are source claims, not a count of unique legal entities or verified integrations.</p>
+  <div class="carrier-evidence-controls">
+    <label class="coverage-search">
+      <span data-i18n="carrierEvidenceSearch">Search a carrier, alias or country code</span>
+      <input id="carrierEvidenceSearch" type="search" placeholder="Search a carrier, alias or country code" data-i18n-placeholder="carrierEvidenceSearch" autocomplete="off">
+    </label>
+    <label class="coverage-filter">
+      <span data-i18n="carrierEvidenceFilterAll">All evidence states</span>
+      <select id="carrierEvidenceFilter" aria-label="Evidence state">
+        <option value="all" data-i18n="carrierEvidenceFilterAll">All evidence states</option>
+        <option value="catalogued" data-i18n="carrierEvidenceCatalogued">Catalogued only</option>
+        <option value="research" data-i18n="carrierEvidenceResearch">Research</option>
+        <option value="testing" data-i18n="carrierEvidenceTesting">Testing</option>
+        <option value="integrated" data-i18n="carrierEvidenceIntegrated">Integrated</option>
+        <option value="verified" data-i18n="carrierEvidenceVerified">Verified</option>
+        <option value="blocked" data-i18n="carrierEvidenceBlocked">Blocked</option>
+        <option value="deprecated" data-i18n="carrierEvidenceDeprecated">Deprecated</option>
+      </select>
+    </label>
+    <label class="coverage-filter">
+      <span data-i18n="carrierEvidenceAdapterFilter">Adapter type</span>
+      <select id="carrierEvidenceAdapterFilter" aria-label="Adapter type">
+        <option value="all" data-i18n="carrierEvidenceAdapterAll">All adapter types</option>
+        <option value="dedicated" data-i18n="carrierEvidenceAdapterDedicated">Dedicated adapter</option>
+        <option value="universal-fallback" data-i18n="carrierEvidenceAdapterUniversal">Universal fallback</option>
+        <option value="link-only" data-i18n="carrierEvidenceAdapterLinkOnly">Tracking-page link only</option>
+        <option value="none" data-i18n="carrierEvidenceAdapterNone">No automatic adapter</option>
+      </select>
+    </label>
+  </div>
+  <p class="carrier-evidence-message" id="carrierEvidenceMessage" aria-live="polite" data-i18n="carrierEvidenceLoading">Loading carrier directory…</p>
+  <div class="carrier-evidence-grid" id="carrierEvidenceList"></div>
+  <nav class="carrier-evidence-pagination" id="carrierEvidencePagination" aria-label="Carrier directory pages">
+    <button type="button" id="carrierEvidencePrevious" disabled data-i18n="carrierEvidencePrevious">Previous</button>
+    <span id="carrierEvidencePageInfo" aria-live="polite">—</span>
+    <button type="button" id="carrierEvidenceNext" disabled data-i18n="carrierEvidenceNext">Next</button>
+  </nav>
+  <p class="carrier-evidence-methodology" data-i18n="carrierEvidenceMethod">Verified requires repeatable live tests and documented authorization for third-party tracking. Sandbox tests, catalog entries and merchant-only credentials do not meet that standard.</p>
+</section>
 <section class="coverage-tools" aria-label="Filter country coverage">
 <label class="coverage-search"><span data-i18n="coverageSearchPlaceholder">Search a country, code or carrier</span><input id="coverageSearch" type="search" placeholder="Search a country, code or carrier" data-i18n-placeholder="coverageSearchPlaceholder" autocomplete="off"></label>
 <label class="coverage-filter"><span data-i18n="coverageFilterLabel">Coverage type</span><select id="coverageFilter" aria-label="Coverage type"><option value="all" data-i18n="coverageFilterAll">All coverage types</option><option value="direct" data-i18n="coverageStatusDirect">Direct carrier adapter listed</option><option value="universal-fallback" data-i18n="coverageStatusFallback">Universal / postal fallback entry listed</option><option value="link-only" data-i18n="coverageStatusLink">Tracking-page link only</option><option value="not-listed" data-i18n="coverageStatusNone">No carrier entry in current catalog</option></select></label></section>
@@ -329,57 +380,7 @@
 <li data-country-code="YE" data-status="loading"><div class="country-title-row"><span class="country-flag" aria-hidden="true"><img class="country-flag-img" src="https://flagcdn.com/24x18/ye.png" srcset="https://flagcdn.com/48x36/ye.png 2x" width="22" height="16" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-block'"><span class="country-flag-emoji" style="display:none">🇾🇪</span></span><span class="coverage-country-name">Yemen</span></div><code>YE</code><span data-country-status>Checking catalog…</span><small data-country-carriers></small></li>
 <li data-country-code="ZM" data-status="loading"><div class="country-title-row"><span class="country-flag" aria-hidden="true"><img class="country-flag-img" src="https://flagcdn.com/24x18/zm.png" srcset="https://flagcdn.com/48x36/zm.png 2x" width="22" height="16" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-block'"><span class="country-flag-emoji" style="display:none">🇿🇲</span></span><span class="coverage-country-name">Zambia</span></div><code>ZM</code><span data-country-status>Checking catalog…</span><small data-country-carriers></small></li>
 <li data-country-code="ZW" data-status="loading"><div class="country-title-row"><span class="country-flag" aria-hidden="true"><img class="country-flag-img" src="https://flagcdn.com/24x18/zw.png" srcset="https://flagcdn.com/48x36/zw.png 2x" width="22" height="16" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-block'"><span class="country-flag-emoji" style="display:none">🇿🇼</span></span><span class="coverage-country-name">Zimbabwe</span></div><code>ZW</code><span data-country-status>Checking catalog…</span><small data-country-carriers></small></li></ul>
-<section class="carrier-evidence-section" aria-labelledby="carrierEvidenceTitle">
-  <div class="carrier-evidence-heading">
-    <p class="eyebrow" data-i18n="carrierEvidenceEyebrow">GLOBAL CARRIER EVIDENCE / ACCESS</p>
-    <h2 id="carrierEvidenceTitle" data-i18n="carrierEvidenceTitle">Carrier evidence register</h2>
-    <p data-i18n="carrierEvidenceDescription">Explore researched carrier networks, adapter status, official sources and the permissions still required. A catalog entry is not a live integration.</p>
-  </div>
-  <div class="carrier-evidence-metrics">
-    <article><strong id="carrierEvidenceCatalogCount">—</strong><span data-i18n="carrierEvidenceCatalogCountLabel">carrier records in the pinned catalog</span></article>
-    <article><strong id="carrierEvidenceAdapterCount">—</strong><span data-i18n="carrierEvidenceAdapterCountLabel">dedicated adapter records</span></article>
-    <article><strong id="carrierEvidenceResearchCount">—</strong><span data-i18n="carrierEvidenceResearchLabel">curated evidence dossiers</span></article>
-    <article><strong id="carrierEvidenceVerifiedCount">—</strong><span data-i18n="carrierEvidenceVerifiedLabel">verified for third-party tracking</span></article>
-  </div>
-  <p class="carrier-evidence-upstream-note" id="carrierEvidenceUpstreamNote" data-i18n="carrierEvidenceUpstreamNote">Upstream network-name figures are source claims, not a count of unique legal entities or verified integrations.</p>
-  <div class="carrier-evidence-controls">
-    <label class="coverage-search">
-      <span data-i18n="carrierEvidenceSearch">Search a carrier, alias or country code</span>
-      <input id="carrierEvidenceSearch" type="search" placeholder="Search a carrier, alias or country code" data-i18n-placeholder="carrierEvidenceSearch" autocomplete="off">
-    </label>
-    <label class="coverage-filter">
-      <span data-i18n="carrierEvidenceFilterAll">All evidence states</span>
-      <select id="carrierEvidenceFilter" aria-label="Evidence state">
-        <option value="all" data-i18n="carrierEvidenceFilterAll">All evidence states</option>
-        <option value="catalogued" data-i18n="carrierEvidenceCatalogued">Catalogued only</option>
-        <option value="research" data-i18n="carrierEvidenceResearch">Research</option>
-        <option value="testing" data-i18n="carrierEvidenceTesting">Testing</option>
-        <option value="integrated" data-i18n="carrierEvidenceIntegrated">Integrated</option>
-        <option value="verified" data-i18n="carrierEvidenceVerified">Verified</option>
-        <option value="blocked" data-i18n="carrierEvidenceBlocked">Blocked</option>
-        <option value="deprecated" data-i18n="carrierEvidenceDeprecated">Deprecated</option>
-      </select>
-    </label>
-    <label class="coverage-filter">
-      <span data-i18n="carrierEvidenceAdapterFilter">Adapter type</span>
-      <select id="carrierEvidenceAdapterFilter" aria-label="Adapter type">
-        <option value="all" data-i18n="carrierEvidenceAdapterAll">All adapter types</option>
-        <option value="dedicated" data-i18n="carrierEvidenceAdapterDedicated">Dedicated adapter</option>
-        <option value="universal-fallback" data-i18n="carrierEvidenceAdapterUniversal">Universal fallback</option>
-        <option value="link-only" data-i18n="carrierEvidenceAdapterLinkOnly">Tracking-page link only</option>
-        <option value="none" data-i18n="carrierEvidenceAdapterNone">No automatic adapter</option>
-      </select>
-    </label>
-  </div>
-  <p class="carrier-evidence-message" id="carrierEvidenceMessage" aria-live="polite" data-i18n="carrierEvidenceLoading">Loading carrier directory…</p>
-  <div class="carrier-evidence-grid" id="carrierEvidenceList"></div>
-  <nav class="carrier-evidence-pagination" id="carrierEvidencePagination" aria-label="Carrier directory pages">
-    <button type="button" id="carrierEvidencePrevious" disabled data-i18n="carrierEvidencePrevious">Previous</button>
-    <span id="carrierEvidencePageInfo" aria-live="polite">—</span>
-    <button type="button" id="carrierEvidenceNext" disabled data-i18n="carrierEvidenceNext">Next</button>
-  </nav>
-  <p class="carrier-evidence-methodology" data-i18n="carrierEvidenceMethod">Verified requires repeatable live tests and documented authorization for third-party tracking. Sandbox tests, catalog entries and merchant-only credentials do not meet that standard.</p>
-</section>
+
 <section class="coverage-methodology"><h2 data-i18n="coverageMethodology">How to read this directory</h2>
 <p data-i18n="coverageDirectHint">Direct means a selectable carrier record has an automatic dedicated adapter.</p>
 <p data-i18n="coverageFallbackHint">Fallback entries are separate and may depend on postal number format and the enabled UPU provider.</p>
