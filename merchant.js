@@ -15,6 +15,11 @@ const formStatus = document.getElementById("formStatus");
 const refreshStatus = document.getElementById("refreshStatus");
 const refreshButton = document.getElementById("refreshAll");
 const deleteAllButton = document.getElementById("deleteAll");
+const exportButton = document.getElementById("exportCsv");
+const metricTotal = document.getElementById("metricTotal");
+const metricTracked = document.getElementById("metricTracked");
+const metricDelivered = document.getElementById("metricDelivered");
+const metricAttention = document.getElementById("metricAttention");
 
 let items = [];
 let idCounter = 0;
@@ -37,7 +42,13 @@ function safeStoredItem(value) {
     ...(typeof value.carrier === "string" ? { carrier: value.carrier } : {}),
     ...(typeof value.postcode === "string" ? { postcode: value.postcode } : {}),
     language: ["en", "ar", "es", "zh", "hi", "pt", "fr", "bn"].includes(value.language) ? value.language : "en",
-    ...(value.lastResult && typeof value.lastResult === "object" ? { lastResult: value.lastResult } : {}),
+    ...(value.lastResult && typeof value.lastResult === "object" ? { lastResult: {
+      status: typeof value.lastResult.status === "string" ? value.lastResult.status.slice(0, 64) : "",
+      error: typeof value.lastResult.error === "string" ? value.lastResult.error.slice(0, 64) : "",
+      carrier: typeof value.lastResult.carrier === "string" ? value.lastResult.carrier.slice(0, 80) : "",
+      expectedDelivery: typeof value.lastResult.expectedDelivery === "string" ? value.lastResult.expectedDelivery.slice(0, 80) : "",
+      latestEvent: typeof value.lastResult.latestEvent === "string" ? value.lastResult.latestEvent.slice(0, 240) : ""
+    } } : {}),
     ...(typeof value.updatedAt === "string" ? { updatedAt: value.updatedAt } : {})
   };
 }
@@ -80,7 +91,18 @@ function formatUpdated(value) {
   return Number.isNaN(date.getTime()) ? "Updated time unavailable" : "Updated " + date.toLocaleString();
 }
 
+function updateMetrics() {
+  const refreshed = items.filter(item => item.lastResult);
+  const delivered = refreshed.filter(item => item.lastResult?.status?.toLowerCase().startsWith("delivered"));
+  const attention = refreshed.filter(item => item.lastResult?.error || /exception|failed|hold|delay/i.test(item.lastResult?.status || ""));
+  metricTotal.textContent = String(items.length);
+  metricTracked.textContent = String(refreshed.length);
+  metricDelivered.textContent = String(delivered.length);
+  metricAttention.textContent = String(attention.length);
+}
+
 function render() {
+  updateMetrics();
   watchlist.replaceChildren();
   summary.textContent = items.length + " / " + MAX_WATCHLIST + " shipments saved on this device";
 
@@ -94,7 +116,7 @@ function render() {
     details.append(element("h3", "", item.reference));
     details.append(element("p", "", "Tracking number: " + item.number));
     details.append(element("p", "", "Carrier: " + (item.lastResult?.carrier || item.carrier || "Auto-detect")));
-    details.append(element("p", "", "Status: " + (item.lastResult?.status || item.lastResult?.error || "Not refreshed yet")));
+    details.append(element("p", "", item.lastResult?.error ? "Lookup issue: " + item.lastResult.error : "Status: " + (item.lastResult?.status || "Not refreshed yet")));
     if (item.lastResult?.expectedDelivery) {
       details.append(element("p", "", "Carrier-reported delivery: " + item.lastResult.expectedDelivery));
     }
@@ -120,6 +142,7 @@ function render() {
 
   refreshButton.disabled = items.length === 0;
   deleteAllButton.disabled = items.length === 0;
+  exportButton.disabled = items.length === 0;
 }
 
 function makeId() {
@@ -192,7 +215,7 @@ function compactResult(result) {
     ? [latest.stage, latest.location, latest.description].filter(Boolean).join(" · ").slice(0, 240)
     : "";
   return {
-    status: typeof data.status === "string" ? data.status : "unknown",
+    status: result.status >= 200 && result.status < 300 && typeof data.status === "string" ? data.status : "",
     carrier: typeof data.carrier === "string" ? data.carrier : "",
     expectedDelivery: typeof data.expectedDelivery === "string" ? data.expectedDelivery : "",
     latestEvent,
@@ -245,6 +268,24 @@ async function refreshAll() {
 }
 
 refreshButton.addEventListener("click", refreshAll);
+
+exportButton.addEventListener("click", () => {
+  const columns = ["order_reference", "tracking_number", "carrier", "postcode", "language", "status", "error", "expected_delivery", "latest_event", "updated_at"];
+  const quote = value => '"' + String(value ?? "").replaceAll('"', '""') + '"';
+  const rows = items.map(item => {
+    const result = item.lastResult || {};
+    return [item.reference, item.number, item.carrier || result.carrier, item.postcode, item.language, result.status, result.error, result.expectedDelivery, result.latestEvent, item.updatedAt]
+      .map(quote).join(",");
+  });
+  const blob = new Blob([[columns.join(","), ...rows].join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "exportflow-merchant-watchlist.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+  setStatus(formStatus, "CSV export prepared for " + items.length + " shipment(s).");
+});
 deleteAllButton.addEventListener("click", () => {
   if (!confirm("Remove every saved shipment from this browser? This cannot be undone.")) return;
   items = [];
