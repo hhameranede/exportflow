@@ -34,9 +34,9 @@ const OPENAPI = {
           "413": { description: "Request body exceeds 4 KiB." },
           "415": { description: "Content-Type must be application/json." },
           "422": { description: "The selected carrier requires additional input." },
-          "429": { description: "Per-isolate request limit reached. Retry-After is provided." },
+          "429": { description: "The per-isolate burst guard or globally coordinated per-client quota (12 lookup attempts per 60-second window) was reached. Retry-After and rate-limit headers are provided." },
           "502": { description: "Carrier lookup could not be completed." },
-          "503": { description: "The per-isolate concurrent lookup limit was reached." }
+          "503": { description: "The six-slot per-isolate concurrency cap was reached or the global rate-limit coordinator is unavailable. Production fails closed when the coordinator is missing or unavailable." }
         }
       }
     },
@@ -45,7 +45,7 @@ const OPENAPI = {
         tags: ["Tracking"],
         operationId: "batchTrackShipments",
         summary: "Track up to five shipments",
-        description: "Runs up to five independent single-shipment lookups. Each child lookup reuses /api/track validation, provider budgets, rate limiting, concurrency protection and redaction. Partial failures are returned per item; tracking numbers are never echoed.",
+        description: "Runs up to five independent single-shipment lookups. Each child lookup reuses /api/track validation, provider budgets, the per-isolate burst guard and the globally coordinated per-client quota; each item consumes one lookup allowance. Partial failures are returned per item; tracking numbers are never echoed.",
         requestBody: {
           required: true,
           content: {
@@ -432,7 +432,8 @@ const OPENAPI = {
   },
   "x-exportflow-limits": {
     singleLookup: { requestBodyBytes: 4096, requestsPerMinutePerRuntimeInstance: 12, concurrentLookupsPerRuntimeInstance: 6, lookupBudgetMilliseconds: 25000 },
-    batchLookup: { requestBodyBytes: 12288, maximumItems: 5, eachItemUsesSingleLookupLimits: true }
+    globalRateLimit: { requestsPerClientPerWindow: 12, windowMilliseconds: 60000, coordinator: "Cloudflare Durable Objects", unavailableBehavior: "fail-closed 503" },
+    batchLookup: { requestBodyBytes: 12288, maximumItems: 5, eachItemUsesSingleLookupLimits: true, eachItemConsumesGlobalQuota: true }
   }
 };
 
