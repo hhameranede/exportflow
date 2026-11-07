@@ -261,8 +261,17 @@ async function main() {
   }, { cryptoApi: webcrypto, now: () => now });
   assert.notEqual(otherIp.names[0], first.names[0]);
 
-  // No DO binding is a deliberate staged rollout path; configured failures fail closed.
+  // Preview can be exercised before the DO is provisioned; Production must fail closed.
   assert.equal(await consumeGlobalRateLimit(request, {}, { cryptoApi: webcrypto }), null);
+  const productionRequest = new Request("https://exportflow.me/api/track", {
+    method: "POST",
+    headers: { "CF-Connecting-IP": "203.0.113.77" }
+  });
+  await assert.rejects(
+    () => consumeGlobalRateLimit(productionRequest, {}, { cryptoApi: webcrypto }),
+    error => error instanceof GlobalRateLimiterUnavailableError &&
+      error.code === "global_rate_limiter_not_configured"
+  );
   await assert.rejects(
     () => consumeGlobalRateLimit(request, { GLOBAL_RATE_LIMITER: first.namespace }, { cryptoApi: webcrypto }),
     error => error instanceof GlobalRateLimiterUnavailableError &&
