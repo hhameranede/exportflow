@@ -10,9 +10,10 @@ The reviewed source snapshots below are now ordinary tracked files in this priva
 | --- | --- | --- | ---: | ---: | --- |
 | `vendor/sources/universal-parcel-scraper` | [plhery/universal-parcel-scraper](https://github.com/plhery/universal-parcel-scraper) | `e64a466772ef25ce68e02d9c7c9f1613eec1208b` | 12,618 | 83,629,080 | Apache-2.0 core; upstream NOTICE plus nested MIT, CC BY 4.0, Open Database License, government-data and public-domain attributions preserved |
 | `vendor/sources/shopana-carrier-api` | [shopanaio/carrier-api](https://github.com/shopanaio/carrier-api) | `450ab76612a359b494c5bb7a6bce1d97add130a2` | 219 | 5,738,947 | Apache-2.0 root and package licenses; Nova Poshta API client, MCP server and Fetch transport source |
-| `vendor/sources/reference/karrio-community` | [karrioapi/community](https://github.com/karrioapi/community) | `4d5303d8c66bee2b605f1d9ea35c105cb5725471` | 975 | 12,795,919 | LGPL-3.0; EasyPost plugin has its own nested LGPL-3.0 license |\n| `vendor/sources/algeria/dz-delivery` | [developing-off/dz-delivery](https://github.com/developing-off/dz-delivery) | `45aa32ddf2ba7392da6c696aef187fcc059b3c8d` | Pending workflow inventory | Pending workflow inventory | MIT; full upstream source snapshot, TypeScript SDK at `packages/ts`; reference-only |
+| `vendor/sources/reference/karrio-community` | [karrioapi/community](https://github.com/karrioapi/community) | `4d5303d8c66bee2b605f1d9ea35c105cb5725471` | 975 | 12,795,919 | LGPL-3.0; EasyPost plugin has its own nested LGPL-3.0 license |
+| `vendor/sources/algeria/dz-delivery` | [developing-off/dz-delivery](https://github.com/developing-off/dz-delivery) | `45aa32ddf2ba7392da6c696aef187fcc059b3c8d` | 910 | 4,228,323 | MIT; full upstream source snapshot, TypeScript SDK at `packages/ts`; reference-only |
 
-**Total stored source:** 13,812 files and 102,163,946 bytes (about 97.43 MiB), excluding the short inventory README.
+**Total stored source:** 14,722 files and 106,392,269 bytes (about 101.49 MiB), excluding the short inventory README.
 
 ### Explicit exclusions and license handling
 
@@ -54,6 +55,20 @@ Research checked on 2026-11-07. These projects were reviewed and intentionally n
 - [slince/shipment-tracking-foundation](https://github.com/slince/shipment-tracking-foundation): legacy MIT PHP library, with source activity last seen in 2017 and a narrow set of older carrier packages.
 - [plhery/peek-delivery-tracker](https://github.com/plhery/peek-delivery-tracker): separate end-user tracking application built around Universal Parcel Scraper, not an additional carrier engine.
 - [whereparcel/whereparcel-js](https://github.com/WhereParcel/whereparcel-js): MIT client SDK for WhereParcel's hosted tracking API; the SDK is open source, but the tracking service is not a self-hosted open-source engine.
+
+## D1-backed carrier evidence register
+
+The application now has a D1 `carrier_evidence` registry seeded with 22 research records for globally relevant networks. The records deliberately remain at `research`; the registry is distinct from the 3,500+ upstream catalog entries and is not a count of live or commercially authorized integrations.
+
+Each record stores:
+- the official carrier/developer source URL and a short public disclosure;
+- the research scope and access model (account-linked, merchant/customer-code scoped, partner onboarding, public-tracker-only or written-permission required);
+- exact upstream adapter IDs where the pinned source has a known corresponding adapter, with `country_specific` or `missing` recorded where appropriate;
+- current evidence status and verification method.
+
+The public `GET /api/carriers` response joins these records to matching catalog adapter IDs. Unmatched catalog entries remain `catalogued`. Internal research notes and authorization documents are not exposed.
+
+The database rejects `verified` unless a repeatable live test, verification timestamp, test evidence URL, authorization evidence URL and declared rights scope are present. The API also downgrades malformed or incomplete `verified` records to `research` as defense in depth. No seeded provider is live-verified by this registry.
 
 ## Software license is not carrier authorization
 
