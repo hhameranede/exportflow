@@ -965,6 +965,10 @@ html[dir="rtl"] .hero-copy {
   margin-top: 12px;
 }
 
+.form-error[hidden] {
+  display: none !important;
+}
+
 .hero-meta {
   display: flex;
   align-items: center;
