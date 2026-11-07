@@ -16,7 +16,7 @@ The upstream catalog documents thousands of carrier names and dedicated adapters
 ### Implemented routes
 
 - `POST /api/track` — server-side carrier lookup. Accepts a tracking number and optional carrier, postcode and language (`en`, `ar`, `es`, `zh`, `hi`, `pt`, `fr`, `bn`). Tracking numbers are not sent to browser-side third-party APIs. Returns normalized timeline events with deterministic status, confidence, conflict detection, and delay/customs/ETA insights.
-- `GET /api/carriers` — exposes the installed carrier ID catalog.
+- `GET /api/carriers` — exposes the installed carrier ID list and sanitized selectable carrier records (name, catalog country mappings, tracking mode and adapter metadata). These are catalog capabilities, not live availability or partnership claims.
 - `GET /api/coverage` — returns a live country-by-country classification derived from the installed carrier catalog.
 - `GET /api/health` — a liveness response; it does not prove that upstream carriers are reachable.
 - `POST /api/batch-track` — bounded batch tracking for up to five shipments. Each result includes an individual status and reuses the single-tracking validation and safeguards.
@@ -115,7 +115,7 @@ Open http://localhost:4173. Static preview is for layout only; Pages Functions a
 - `coverage/index.html`, `coverage.js` — searchable country/territory directory
 - `merchant/index.html`, `merchant.js` — browser-local merchant watchlist, bounded batch refresh and CSV export
 - `functions/api/track.js` — server-side tracking lookup
-- `functions/api/carriers.js` — installed carrier ID catalog
+- `functions/api/carriers.js` — installed carrier ID list and sanitized catalog capability records
 - `functions/api/coverage.js` — catalog-derived country classification and counts
 - `functions/api/health.js` — liveness endpoint
 - `functions/lib/country-codes.mjs` — ISO 3166-1 alpha-2 country/territory codes
