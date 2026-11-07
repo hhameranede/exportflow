@@ -144,9 +144,7 @@ function publicCarrierRecord(carrier, evidenceByAdapter) {
     adapterSource: matrix?.adapterSource === "present" ? "present" : "not_found",
     fixtureTest: matrix?.fixtureTest === "defined" ? "defined" : "not_found",
     liveTestDefinition: matrix?.liveTestDefinition === "defined" ? "defined" : "not_found",
-    upstreamTrackingSteps: Array.isArray(matrix?.upstreamTrackingSteps) ? matrix.upstreamTrackingSteps : [],
-    commercialAuthorization: "not_assessed",
-    thirdPartyTrackingRights: "not_assessed"
+    upstreamTrackingSteps: Array.isArray(matrix?.upstreamTrackingSteps) ? matrix.upstreamTrackingSteps : []
   };
   const evidence = adapter ? evidenceByAdapter.get(adapter) : null;
   return {
