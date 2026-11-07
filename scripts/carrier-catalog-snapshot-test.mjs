@@ -44,7 +44,7 @@ assert.equal(CARRIER_INTEGRATION_MATRIX["dhl-express"].sandboxMode, "no_external
 assert.equal(CARRIER_INTEGRATION_MATRIX["dhl-express"].sandboxBaseUrl, null);
 assert.match(CARRIER_INTEGRATION_MATRIX["dhl-express"].apiDocumentationUrl, /^https:\/\//);
 assert.equal(CARRIER_INTEGRATION_MATRIX.aramex.apiClient, "not_assessed");
-assert.equal(CARRIER_INTEGRATION_MATRIX.aramex.commercialAuthorization, "not_assessed");
+assert.equal("commercialAuthorization" in CARRIER_INTEGRATION_MATRIX.aramex, false);
 
 const records = Object.values(CARRIERS);
 const displayRecords = records.filter(record => record.id !== "unknown");
