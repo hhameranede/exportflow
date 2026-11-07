@@ -67,6 +67,7 @@ jobs:
           test -s vendor/sources/algeria/dz-delivery/LICENSE
           test -s vendor/sources/algeria/dz-delivery/packages/ts/package.json
           test -s vendor/sources/algeria/dz-delivery/packages/ts/README.md
+          grep -q '## dz-delivery-algeria' vendor/sources/README.md
           test ! -e vendor/sources/universal-parcel-scraper/trawl
           test ! -e vendor/sources/shopana-carrier-api/packages/novaposhta-api-client/coverage
           test ! -e vendor/dz-delivery-upstream
