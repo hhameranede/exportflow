@@ -6,7 +6,7 @@ const CARRIER_EVIDENCE_SQL = `
     provider_id, display_name, country_scope, integration_method, adapter_state,
     adapter_ids_json, commercial_access_status, tracking_rights_status,
     official_source_url, public_disclosure, evidence_status, verification_method,
-    verified_at, verification_evidence_url
+    verified_at, verification_evidence_url, authorization_evidence_url
   FROM carrier_evidence
   WHERE evidence_status != 'deprecated'
   ORDER BY display_name
@@ -34,6 +34,21 @@ function publicEvidenceRecord(row) {
   const verificationMethod = ["none", "mock", "sandbox", "live"].includes(row?.verification_method)
     ? row.verification_method
     : "none";
+  const verifiedEvidenceUrl = typeof row?.verification_evidence_url === "string" &&
+    row.verification_evidence_url.startsWith("https://")
+    ? row.verification_evidence_url
+    : null;
+  const authorizationEvidenceUrl = typeof row?.authorization_evidence_url === "string" &&
+    row.authorization_evidence_url.startsWith("https://")
+    ? row.authorization_evidence_url
+    : null;
+  const verifiedAt = typeof row?.verified_at === "string" ? row.verified_at : null;
+  const defensibleVerified = evidenceStatus === "verified" &&
+    verificationMethod === "live" &&
+    Boolean(verifiedAt && verifiedEvidenceUrl && authorizationEvidenceUrl);
+  const safeEvidenceStatus = evidenceStatus === "verified" && !defensibleVerified
+    ? "research"
+    : evidenceStatus;
   const adapterState = ["present", "country_specific", "missing"].includes(row?.adapter_state)
     ? row.adapter_state
     : "missing";
@@ -45,15 +60,13 @@ function publicEvidenceRecord(row) {
     integrationMethod: typeof row.integration_method === "string" ? row.integration_method : "manual",
     adapterState,
     adapterIds: parseAdapterIds(row.adapter_ids_json),
-    evidenceLevel: evidenceStatus,
+    evidenceLevel: safeEvidenceStatus,
     verification: {
-      method: verificationMethod,
-      liveVerified: evidenceStatus === "verified" && verificationMethod === "live",
-      verifiedAt: typeof row.verified_at === "string" ? row.verified_at : null,
-      evidenceUrl: typeof row.verification_evidence_url === "string" &&
-        row.verification_evidence_url.startsWith("https://")
-        ? row.verification_evidence_url
-        : null
+      method: defensibleVerified ? verificationMethod : "none",
+      liveVerified: defensibleVerified,
+      verifiedAt: defensibleVerified ? verifiedAt : null,
+      evidenceUrl: defensibleVerified ? verifiedEvidenceUrl : null,
+      authorizationConfirmed: Boolean(authorizationEvidenceUrl)
     },
     commercialAccess: typeof row.commercial_access_status === "string"
       ? row.commercial_access_status
