@@ -6,7 +6,7 @@ const audit = await readFile(new URL("../docs/CARRIER_OFFICIAL_SOURCE_AUDIT_BATC
 const statements = migration.split(/(?=UPDATE carrier_evidence)/g).filter(part => part.startsWith("UPDATE carrier_evidence"));
 assert.equal(statements.length, 2, "The third research batch must update exactly the two remaining seeded providers.");
 
-const expected = [["china-post","https://iframe.chinapost.com.cn/en/category/1408/3925-1.htm"],["yunexpress","https://www.yunexpress.com/"]];
+const expected = [["china-post","https://iframe.chinapost.com.cn/en/category/1408/3925-1.htm"],["yunexpress","https://www.yunexpress.com/resource/shipment-tracking"]];
 for (const [providerId, sourceUrl] of expected) {
   const matches = statements.filter(statement => statement.includes("WHERE provider_id = '" + providerId + "';"));
   assert.equal(matches.length, 1, "Expected one source-evidence update for " + providerId);
