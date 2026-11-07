@@ -143,35 +143,44 @@ function credentialValue(value) {
   return null;
 }
 
-function buildSdkConfig(providerId, config, source) {
+export function sanitizeAlgerianProviderCredentials(provider, source) {
+  const { id, config } = providerConfig(provider);
   if (!isPlainObject(source)) {
-    throw new AlgerianConnectorError("credentials_missing", providerId);
+    throw new AlgerianConnectorError("credentials_missing", id);
   }
 
-  const sdkConfig = {};
+  const credentials = {};
   for (const field of config.credentials) {
-    const value = credentialValue(source[field]);
-    if (value !== null) sdkConfig[field] = value;
+    const descriptor = Object.getOwnPropertyDescriptor(source, field);
+    // Accept only own data properties, never accessors or inherited values.
+    if (!descriptor || !Object.hasOwn(descriptor, "value")) continue;
+    const value = credentialValue(descriptor.value);
+    if (value !== null) credentials[field] = value;
   }
 
   for (const required of config.required) {
-    if (sdkConfig[required] === undefined) {
-      throw new AlgerianConnectorError("credentials_incomplete", providerId);
+    if (credentials[required] === undefined) {
+      throw new AlgerianConnectorError("credentials_incomplete", id);
     }
   }
 
-  if (providerId === "ecotrack") {
-    const courier = String(sdkConfig.courier || "").toLowerCase();
+  if (id === "ecotrack") {
+    const courier = String(credentials.courier || "").toLowerCase();
     if (!ECOTRACK_COURIERS.has(courier)) {
-      throw new AlgerianConnectorError("unsupported_courier", providerId);
+      throw new AlgerianConnectorError("unsupported_courier", id);
     }
-    sdkConfig.courier = courier;
+    credentials.courier = courier;
   }
 
-  // Only the fixed GuepEx endpoint is accepted. In particular, a merchant
-  // credential record can never select an arbitrary outbound host.
-  if (config.baseUrl) sdkConfig.baseUrl = config.baseUrl;
+  return Object.freeze(credentials);
+}
 
+function buildSdkConfig(providerId, config, source) {
+  const sdkConfig = { ...sanitizeAlgerianProviderCredentials(providerId, source) };
+
+  // Only the fixed GuepEx endpoint is accepted. A credential record can never
+  // select an arbitrary outbound host.
+  if (config.baseUrl) sdkConfig.baseUrl = config.baseUrl;
   sdkConfig.timeoutMs = SDK_TIMEOUT_MS;
   sdkConfig.includeRaw = false;
   return sdkConfig;
