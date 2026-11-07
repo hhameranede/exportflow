@@ -62,6 +62,16 @@ Research checked on 2026-11-07. These projects were reviewed and intentionally n
 - [plhery/peek-delivery-tracker](https://github.com/plhery/peek-delivery-tracker): separate end-user tracking application built around Universal Parcel Scraper, not an additional carrier engine.
 - [whereparcel/whereparcel-js](https://github.com/WhereParcel/whereparcel-js): MIT client SDK for WhereParcel's hosted tracking API; the SDK is open source, but the tracking service is not a self-hosted open-source engine.
 
+## Pinned global carrier catalog scale
+
+The pinned Universal Parcel Scraper snapshot under `vendor/sources/universal-parcel-scraper/` contains 1,339 carrier catalog JSON records. Its generated summary at the same pinned revision reports:
+- 3,500+ carrier-network names;
+- 732 dedicated adapters;
+- 5 universal fallbacks;
+- 156 countries represented.
+
+These values describe source catalog structure and upstream maintainers' carrier-network naming, not 3,500 unique legal entities, successful tracking tests, or ExportFlow permissions. ExportFlow exposes the pinned catalog with a paginated directory endpoint and overlays its separate D1 evidence registry. Only records with their own repeatable live verification and explicit third-party tracking authorization can reach Verified.
+
 ## D1-backed carrier evidence register
 
 The application now has a D1 `carrier_evidence` registry seeded with 22 research records for globally relevant networks. The records deliberately remain at `research`; the registry is distinct from the 3,500+ upstream catalog entries and is not a count of live or commercially authorized integrations.
