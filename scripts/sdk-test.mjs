@@ -47,11 +47,11 @@ assert.equal((await client.getOpenApi()).openapi, "3.1.0");
 assert.throws(() => createExportFlowClient({ fetchImpl, baseUrl: "javascript:alert(1)" }), TypeError);
 assert.throws(() => createExportFlowClient({ fetchImpl, baseUrl: "https://user:pass@example.test" }), TypeError);
 assert.throws(() => createExportFlowClient({ fetchImpl, timeoutMs: 100 }), RangeError);
-await assert.rejects(() => client.track({ number: "abc" }), TypeError);
-await assert.rejects(() => client.track({ number: "ABCD1234", unknown: true }), TypeError);
-await assert.rejects(() => client.track({ number: "ABCD1234", language: "ru" }), TypeError);
-await assert.rejects(() => client.batchTrack([]), TypeError);
-await assert.rejects(() => client.batchTrack([
+assert.throws(() => client.track({ number: "abc" }), TypeError);
+assert.throws(() => client.track({ number: "ABCD1234", unknown: true }), TypeError);
+assert.throws(() => client.track({ number: "ABCD1234", language: "ru" }), TypeError);
+assert.throws(() => client.batchTrack([]), TypeError);
+assert.throws(() => client.batchTrack([
   { id: "same", number: "ABCD1234" },
   { id: "same", number: "EFGH5678" }
 ]), TypeError);
