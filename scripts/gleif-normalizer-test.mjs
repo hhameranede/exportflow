@@ -125,6 +125,13 @@ assert.equal(normalizeGleifRecord({
   }
 }).reason, "missing_legal_name");
 
+assert.equal(normalizeGleifRecord({
+  ...validRecord,
+  attributes: {
+    ...validRecord.attributes,
+    entity: { ...validRecord.attributes.entity, category: null }
+  }
+}).reason, "missing_entity_category");
 assert.equal(normalizeGleifRecord(null).reason, "invalid_record");
 assert.equal(normalizeGleifRecord({ data: {} }).reason, "missing_attributes");
 
