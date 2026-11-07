@@ -78,4 +78,12 @@ Datadog Synthetic Monitoring currently has no Synthetic tests configured in the 
 - [FedEx — API best practices](https://www.fedex.com/content/dam/fedex/eu-europe/downloads/FedEx-API-Best-Practices_09_2022.pdf): sandbox and production OAuth endpoints and credential handling.
 - [DHL Developer Portal — Shipment Tracking Unified API](https://developer.dhl.com/tracking): subscription key, endpoint, activation and initial rate limits.
 
+## Provider-specific sandbox decisions
+
+- **UPS Track:** use the official Customer Integration Environment base `https://wwwcie.ups.com` with an application Client ID and Client Secret. UPS explicitly says CIE is for basic validation and not load testing. The provider's docs and Postman collection include sample requests. Keep the default live endpoint disabled in a sandbox workflow unless `UPS_API_URL` is deliberately set to CIE.
+- **FedEx Track:** use the Developer Portal's Test Key credentials and `https://apis-sandbox.fedex.com`. Because ExportFlow is intended to expose carrier services inside a platform, review the **Integrator Provider** onboarding path rather than assuming the ordinary shipper profile covers the use case. FedEx describes an organization/project setup, test-key requests, test API calls and a separate validation process before production.
+- **DHL Shipment Tracking Unified API (pull):** DHL support says an external-customer testing environment is unavailable; external customers are directed to test in production. Therefore the matrix marks this API as `no_external_customer_test_environment` and no unattended Sandbox probe is scheduled. A live call must use an approved key and shipment reference whose owner has authorized the test, while following current rate and data-retention/redisplay conditions. Do not confuse this pull API with DHL's separate Unified Push API, which has its own access/onboarding flow.
+
+The directory API exposes these decisions as `sourceIntegration.sandboxMode`, `sandboxBaseUrl` and (where relevant) `onboardingRole`. These values describe the provider's documented environment and do not mean ExportFlow already has credentials or access.
+
 Provider terms and quotas can change. Reconfirm them in the carrier's current developer portal before enabling a new live connector.
