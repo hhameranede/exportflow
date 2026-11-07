@@ -1,4 +1,5 @@
 import { createExportFlowClient } from "./exportflow-sdk.mjs";
+import { escapeCsvCell } from "./merchant-utils.mjs";
 
 const STORAGE_KEY = "exportflow:merchant-watchlist:v1";
 const MAX_WATCHLIST = 10;
@@ -296,11 +297,7 @@ refreshButton.addEventListener("click", refreshAll);
 
 exportButton.addEventListener("click", () => {
   const columns = ["order_reference", "tracking_number", "carrier", "postcode", "language", "status", "delay_signal", "customs_state", "error", "expected_delivery", "latest_event", "updated_at"];
-  const quote = value => {
-    let text = String(value ?? "");
-    if (/^[=+\-@\t\r]/.test(text)) text = "'" + text;
-    return '"' + text.replaceAll('"', '""') + '"';
-  };
+  const quote = escapeCsvCell;
   const rows = items.map(item => {
     const result = item.lastResult || {};
     return [item.reference, item.number, item.carrier || result.carrier, item.postcode, item.language, result.status, result.delayLevel, result.customsState, result.error, result.expectedDelivery, result.latestEvent, item.updatedAt]
@@ -312,7 +309,7 @@ exportButton.addEventListener("click", () => {
   link.href = url;
   link.download = "exportflow-merchant-watchlist.csv";
   link.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
   setStatus(formStatus, "CSV export prepared for " + items.length + " shipment(s).");
 });
 deleteAllButton.addEventListener("click", () => {
