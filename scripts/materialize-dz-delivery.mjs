@@ -4,7 +4,7 @@
  * The snapshot is reference-only; it is not imported into the Cloudflare runtime.
  */
 import {
-  cpSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync, writeFileSync
+  appendFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, rmSync, writeFileSync
 } from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -73,7 +73,11 @@ if (!existsSync(upstream)) {
   // Idempotent reruns are allowed after the temporary checkout was removed.
   assertFile(DESTINATION + "/LICENSE");
   assertFile(DESTINATION + "/packages/ts/package.json");
-  console.log(JSON.stringify({ alreadyMaterialized: true, ...countTree(destination) }, null, 2));
+  const stats = countTree(destination);
+  const manifest = path.join(ROOT, "vendor/sources/README.md");
+  const current = existsSync(manifest) ? (await import("node:fs")).readFileSync(manifest, "utf8") : "";
+  if (!current.includes("## dz-delivery-algeria")) appendFileSync(manifest, "\\n## dz-delivery-algeria\\n- Upstream: " + REPOSITORY + "\\n- Pinned commit: `" + COMMIT + "`\\n- License: MIT (root LICENSE and @dz-delivery/core package metadata)\\n- Files stored: " + stats.files + "\\n- Source bytes stored: " + stats.bytes + "\\n- Scope: full upstream repository snapshot; TypeScript SDK is under `packages/ts`; PHP package and documentation are retained as source references\\n- Runtime: reference-only; not imported into Cloudflare Pages\\n");
+  console.log(JSON.stringify({ alreadyMaterialized: true, ...stats }, null, 2));
   process.exit(0);
 }
 
@@ -96,6 +100,9 @@ if (existsSync(path.join(destination, ".git")) ||
   throw new Error("VCS metadata or installed dependencies were copied.");
 }
 const stats = countTree(destination);
+const manifest = path.join(ROOT, "vendor/sources/README.md");
+if (!existsSync(manifest)) throw new Error("Global vendor source manifest is missing.");
+appendFileSync(manifest, "\\n## dz-delivery-algeria\\n- Upstream: " + REPOSITORY + "\\n- Pinned commit: `" + COMMIT + "`\\n- License: MIT (root LICENSE and @dz-delivery/core package metadata)\\n- Files stored: " + stats.files + "\\n- Source bytes stored: " + stats.bytes + "\\n- Scope: full upstream repository snapshot; TypeScript SDK is under `packages/ts`; PHP package and documentation are retained as source references\\n- Runtime: reference-only; not imported into Cloudflare Pages\\n");
 rmSync(upstream, { recursive: true, force: true });
 console.log(JSON.stringify({
   repository: REPOSITORY, commit: COMMIT, destination: DESTINATION, ...stats
