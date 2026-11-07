@@ -1,21 +1,20 @@
-# D1 Merchant Identity & Sessions
+# D1 Merchant Identity, Sessions & Credential Vault
 
-**Status: implementation branch / Draft PR. Not enabled in production.**
+**Status: Draft PR implementation deployed to Cloudflare Preview only. Not enabled in Production.**
 
-ExportFlow uses Cloudflare Pages Functions and Cloudflare D1 for merchant identity. Supabase is not part of this design or runtime.
+ExportFlow uses Cloudflare Pages Functions and Cloudflare D1 for merchant identity, sessions and encrypted carrier credentials. Supabase is not part of the architecture.
 
-## Architecture
+## Identity and session design
 
-- Google OpenID Connect is the identity provider. ExportFlow does not store or verify passwords.
-- OAuth uses state, nonce and PKCE (S256). The callback verifies the Google ID-token RS256 signature against Google's JWKS and validates issuer, audience, authorized party when present, expiry, issue time, nonce and verified email.
-- Merchant records are keyed by a server-generated UUID and the immutable Google subject. An email collision with a different Google subject is rejected; account linking is not implemented.
-- Sessions use a cryptographically random opaque bearer token in a `__Host-` Secure, HttpOnly, SameSite=Lax cookie. D1 stores only the SHA-256 token digest, never the browser token.
-- Session resolution checks expiry, revocation and disabled-account state. Logout revokes the row and appends a security event.
-- Security events are append-only at the D1 schema layer. Event metadata is deliberately small and excludes tokens, carrier secrets, tracking numbers and request bodies.
+- Google OpenID Connect is the identity provider; ExportFlow does not store or verify passwords.
+- OAuth uses state, nonce and PKCE S256. The callback verifies Google's RS256 ID-token signature using Google's JWKS and checks issuer, audience, authorized party (when present), expiry, issue time, nonce and verified email.
+- Merchant records use a server-generated UUID and immutable Google subject. An email collision with a different Google subject is rejected; automatic account linking is not implemented.
+- Sessions use a cryptographically random opaque token in a `__Host-` Secure, HttpOnly, SameSite=Lax cookie. D1 stores only its SHA-256 digest, never the browser token.
+- Session resolution enforces expiry, revocation and disabled-account state. Logout revokes the session and appends a security event.
 
-## D1 databases
+## D1 databases and bindings
 
-The Cloudflare account already contains two EU-jurisdiction databases. ExportFlow reuses them rather than creating new infrastructure:
+The Cloudflare account already had two EU-jurisdiction databases. ExportFlow reuses them:
 
 | Environment | Database | Binding |
 | --- | --- | --- |
@@ -23,50 +22,62 @@ The Cloudflare account already contains two EU-jurisdiction databases. ExportFlo
 | Pages Preview | `exportflow-intelligence-preview-db` | `MERCHANT_DB` |
 | Local Pages development | Local Miniflare D1 | `MERCHANT_DB` |
 
-Wrangler config points local Pages development to a local D1 emulator. Cloudflare Pages environment bindings point Preview and Production to their separate remote databases. Never point a Preview deployment at the production database.
+Cloudflare Pages Preview and Production bindings point to separate databases. Local Pages development uses a local D1 emulator (`preview_database_id = "DB"`); it does not point to either remote database. Never point Preview at Production.
 
-## Schema
+## Schema and audit
 
-- `migrations/0001_merchant_credentials.sql`: ciphertext-only provider credential table from the prior vault foundation.
-- `migrations/0002_merchant_identity.sql`: merchant users, revocable sessions and append-only security events.
-- `scripts/d1-migration-test.py`: applies both migrations to in-memory SQLite and checks table, foreign-key, ciphertext-only and append-only constraints.
-- `scripts/merchant-identity-test.mjs`: exercises OAuth state/nonce/PKCE, ID-token verification, session hashing, session lookup and revocation with a fake D1 binding.
+- `migrations/0001_merchant_credentials.sql`: ciphertext-only carrier credential table.
+- `migrations/0002_merchant_identity.sql`: merchant users, revocable sessions and append-only session-security events.
+- `migrations/0003_merchant_provider_audit.sql`: append-only carrier credential lifecycle events. D1 triggers record connect, update and disconnect with provider, merchant ID, timestamp and tracking-only scope. No API key, IV, ciphertext or plaintext value is copied into audit metadata.
+- `scripts/d1-migration-test.py`: applies all three migrations to in-memory SQLite and checks the five required tables, ciphertext-only schema, foreign keys, trigger-generated audit events and append-only constraints.
+- `scripts/merchant-identity-test.mjs`: OAuth state/nonce/PKCE, Google ID-token signature verification, session hashing, lookup and revocation.
+- `scripts/session-bound-merchant-vault-test.mjs`: verifies session-derived merchant isolation, same-origin enforcement, explicit consent, payload size/content-type validation, provider allowlist, no plaintext/API-secret response, and disconnect.
 
-Run migrations using Wrangler by database name after reviewing the exact target:
-- Preview first: `npx wrangler d1 migrations apply exportflow-intelligence-preview-db --remote`
-- Production only after a separately approved release: `npx wrangler d1 migrations apply exportflow-intelligence-db --remote`
+The migration tests run locally in SQLite during CI. **No migration has been applied to either remote D1 database yet.**
 
-Migrations are deliberately not executed against either remote database by CI, and no production schema has been changed in this implementation checkpoint.
+When the preview schema is approved, apply it only to the isolated preview database:
+`npx wrangler d1 migrations apply exportflow-intelligence-preview-db --remote`
 
-## Google OAuth configuration required before login works
+Production migration is a separate release action and must not happen until an independently reviewed production release:
+`npx wrangler d1 migrations apply exportflow-intelligence-db --remote`
 
-Configure these values in Cloudflare Pages project settings, independently for Preview and Production:
+## Cloudflare secrets required before login or credential routes can work
 
-- `MERCHANT_APP_ORIGIN`: the exact origin for that environment (Production: `https://exportflow.me`; Preview: the selected Cloudflare Pages preview origin).
+Configure these in Cloudflare Pages settings separately for Preview and Production. Do not commit secret values:
+
+- `MERCHANT_APP_ORIGIN`: exact HTTPS origin for the environment. The current branch preview alias is `https://feat-d1-merchant-identity-se.exportflow-aja.pages.dev`; verify it still maps to the latest deployment before registering the OAuth callback.
 - `GOOGLE_OAUTH_CLIENT_ID`: Google OAuth client ID.
-- `GOOGLE_OAUTH_CLIENT_SECRET`: secret stored only as an encrypted Cloudflare secret.
+- `GOOGLE_OAUTH_CLIENT_SECRET`: Google OAuth client secret, stored only as a Cloudflare encrypted secret.
+- `MERCHANT_CREDENTIAL_KEYRING_JSON`: Cloudflare encrypted secret containing JSON of the form `{"activeKeyId":"key-v1","keys":{"key-v1":"BASE64_OF_RANDOM_32_BYTE_KEY"}}`. Keep old key IDs in the ring during a rotation window; never log or expose the secret.
 
-Register the exact callback URL with Google:
+Register the exact callback URI with Google:
 `<MERCHANT_APP_ORIGIN>/api/merchant/auth/google/callback`
 
-Do not put the Google client secret in Git, Notion, Datadog, browser JavaScript, Wrangler TOML, workflow logs or a chat message. No OAuth credentials have been created or configured by this PR. Until credentials are supplied and stored in Cloudflare, the auth endpoints fail closed with a configuration error.
+No Google OAuth client, OAuth secret or AES key ring was created or configured by this PR. Until configured, routes fail closed. Never put secrets in Git, Notion, Datadog, browser code, Wrangler TOML, workflow logs or chat.
 
 ## Routes
 
-- `POST /api/merchant/auth/google/start`: same-origin initiation; returns the Google authorization URL and sets short-lived HttpOnly state/nonce/PKCE cookies.
-- `GET /api/merchant/auth/google/callback`: verifies the callback, upserts the merchant identity, creates the D1 session and redirects to the workspace.
-- `GET /api/merchant/session`: returns the current authenticated merchant or 401.
-- `DELETE /api/merchant/session`: same-origin logout, revokes the session and clears its cookie.
+Identity:
+- `POST /api/merchant/auth/google/start`: same-origin OAuth initiation; issues short-lived HttpOnly state, nonce and PKCE cookies.
+- `GET /api/merchant/auth/google/callback`: verifies the provider response, upserts the merchant identity and creates a D1 session.
+- `GET /api/merchant/session`: returns the authenticated merchant or 401.
+- `DELETE /api/merchant/session`: same-origin logout, revokes the D1 session and clears its cookie.
 
-The existing Merchant Workspace remains explicitly device-only. This PR does not add a credential form, merchant provider-connection route, carrier activation, account-linking, password login, MFA, billing or public API access. The credential vault still requires a future server-side authorization adapter that derives merchant identity from the verified session; never accept a merchant ID from request JSON, URL parameters or local storage.
+Merchant carrier credentials:
+- `POST /api/merchant/carriers/{provider}/credentials`: requires a verified D1 session, exact same-origin request, JSON body within 12 KiB, explicit `consent: true`, supported provider and the encrypted key-ring secret. The merchant ID is derived only from the verified session; caller-supplied merchant IDs are rejected. The response never returns credentials.
+- `DELETE /api/merchant/carriers/{provider}/credentials`: same-origin, session-bound revocation. D1 triggers append an immutable lifecycle event.
+- There is intentionally no HTTP route that returns decrypted credentials. Server-side connector code can resolve credentials only through the session-bound adapter; never expose that method to a browser response.
+
+The existing Merchant Workspace UI remains a device-only watchlist. No cloud watchlist sync, account-linking, password login, MFA, billing or live carrier activation is claimed. The login and credential APIs are foundations and remain unavailable until Cloudflare secrets, remote Preview migrations, rate limits and security review are completed.
 
 ## Release gates
 
-1. Review the OAuth implementation and tests; pass Cloudflare Pages Functions bundling.
-2. Apply migrations to the isolated Preview D1 database only after reviewing the preview target.
-3. Add rate limits at Cloudflare edge for OAuth initiation and session endpoints before public launch.
-4. Configure Google OAuth secrets in Cloudflare Dashboard and validate login on a protected Preview.
-5. Connect the credential vault only through a server-side adapter that derives merchant ID from the verified D1 session.
-6. Run independent security review before enabling merchant credentials or any live carrier API calls.
+1. Review OAuth, session-bound vault and D1 audit implementation; pass the Cloudflare Pages Functions bundle and all regression tests.
+2. Apply migrations to isolated Preview D1 only after review; never run remote migrations from CI.
+3. Configure Google OAuth and the AES key-ring only as Cloudflare encrypted secrets.
+4. Add Cloudflare edge rate limits for OAuth, session and credential routes.
+5. Validate the auth flow and credential lifecycle with synthetic values on a protected Preview.
+6. Complete independent security review before merchant credential collection or any live carrier API call.
+7. Only after approval, plan the Production D1 migration and Cloudflare production release separately.
 
-No Vercel build/deploy checks are part of this workflow. GitHub Actions verifies code and Cloudflare compatibility; Cloudflare Pages is the sole deployment platform.
+No Vercel build/test/deploy checks are part of CI. GitHub Actions verifies code, D1 migration integrity, Datadog Test Visibility, Cloudflare Pages build, locale/SEO and Wrangler Functions bundling; Cloudflare Pages is the only deployment platform.

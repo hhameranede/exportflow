@@ -6,7 +6,6 @@ import {
 } from "../functions/api/merchant/carriers/[provider]/credentials.js";
 
 const ORIGIN = "https://exportflow.me";
-const NOW = Date.parse("2026-11-07T12:40:00.000Z");
 const TRUSTED_MERCHANT_ID = "merchant-trusted-001";
 const token = Buffer.from(webcrypto.getRandomValues(new Uint8Array(48))).toString("base64url");
 const key = Buffer.from(webcrypto.getRandomValues(new Uint8Array(32))).toString("base64");
@@ -113,7 +112,7 @@ async function main() {
     merchant_id: TRUSTED_MERCHANT_ID,
     email: "merchant@example.test",
     display_name: "Verified Merchant",
-    expires_at: new Date(NOW + 60_000).toISOString(),
+    expires_at: "2099-01-01T00:00:00.000Z",
     revoked_at: null,
     disabled_at: null
   });
