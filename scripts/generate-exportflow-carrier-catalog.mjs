@@ -270,7 +270,7 @@ const licensingIndex = {
 };
 const licensingFile = resolve(root, "data/carrier-catalog-licensing.json");
 await mkdir(resolve(licensingFile, ".."), { recursive: true });
-await writeFile(licensingFile, JSON.stringify(licensingIndex, null, 2) + "\\n", "utf8");
+await writeFile(licensingFile, JSON.stringify(licensingIndex, null, 2) + "\n", "utf8");
 
 console.log("Generated ExportFlow carrier catalogue: " + parsed.length + " records (" +
   licensingIndex.recordCount + " display carriers); " + adapterDirectories +
