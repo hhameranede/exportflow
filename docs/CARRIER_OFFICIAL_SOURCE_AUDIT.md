@@ -1,4 +1,4 @@
-# Carrier official-source audit — first verified batch
+# Carrier official-source audit — batch 01
 
 **Review date:** 2026-11-07  
 **Scope:** Primary carrier-owned web properties only. This audit verifies that an official company source exists and records what the source supports. It does not grant ExportFlow credentials, API access, a commercial service-provider agreement, trademark permissions, or permission to display or redistribute shipment data.
