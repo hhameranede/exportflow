@@ -274,6 +274,7 @@ function toPublicEvent(event) {
     receivedAt: event.receivedAt,
     source: event.source,
     sourceRefs: event.sourceRefs,
+    trusted: event.trusted,
     ...(event.point ? { point: event.point } : {})
   };
 }
