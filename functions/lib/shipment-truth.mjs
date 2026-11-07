@@ -80,6 +80,7 @@ function normalizeEvent(event, originalIndex, fallbackSource) {
     timestampMs,
     receivedAt,
     receivedAtMs,
+    receivedAtComplete: receivedAtMs !== null,
     source: sourceRefs[0] || "unknown",
     sourceRefs,
     trusted: event?.trusted !== false,
@@ -118,6 +119,7 @@ function dedupeEvents(events) {
     if (event.originalIndex > existing.originalIndex) {
       existing.originalIndex = event.originalIndex;
     }
+    existing.receivedAtComplete = existing.receivedAtComplete && event.receivedAtComplete;
     if (
       event.receivedAtMs !== null &&
       (existing.receivedAtMs === null || event.receivedAtMs > existing.receivedAtMs)
@@ -175,7 +177,7 @@ function findConflicts(events) {
 
 function latestByReceipt(events) {
   if (events.length === 0) return null;
-  const allHaveReceiptTimes = events.every(event => event.receivedAtMs !== null);
+  const allHaveReceiptTimes = events.every(event => event.receivedAtComplete === true);
   return events.reduce((latest, event) => {
     if (!latest) return event;
     if (allHaveReceiptTimes && event.receivedAtMs !== latest.receivedAtMs) {
