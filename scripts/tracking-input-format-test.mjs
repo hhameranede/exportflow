@@ -21,7 +21,7 @@ async function main() {
     "P/1234/LABC/2026",
     "(00) 3 7012345 678901234 7",
     "AB_123456789",
-    "AB".repeat(32)
+    "AB1".repeat(21) + "A"
   ];
 
   for (const number of supportedFormats) {
