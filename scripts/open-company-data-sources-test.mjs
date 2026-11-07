@@ -36,7 +36,7 @@ assert.match(seedMigration, /INSERT OR IGNORE INTO company_data_sources/);
 for (const source of registry.sources) {
   assert.ok(seedMigration.includes("'" + source.id + "'"), source.id + " must be seeded in the D1 source register");
 }
-assert.ok(registry.sources.length >= 20, "Expected the external source register to include the Singapore and Canada official datasets");
+assert.ok(registry.sources.length >= 22, "Expected the external source register to include the Australia and Belgium candidates");
 assert.ok(registry.rejected_candidates.length >= 4, "Unlicensed and unsuitable GitHub candidates must remain explicitly rejected");
 assert.ok(registry.existing_exportflow_sources.length >= 4, "Existing pinned sources must remain documented");
 
@@ -63,6 +63,22 @@ for (const source of registry.sources) {
   }
 }
 
+
+
+const asic = registry.sources.find(source => source.id === "asic-australian-company-register");
+assert.equal(asic.rights_status, "pending_license_verification");
+assert.equal(asic.commercial_use, false);
+assert.equal(asic.redistribution, false);
+assert.equal(asic.ingestion_status, "discovery_pending_official_license_metadata_and_schema_verification");
+assert.ok(asic.verification_sources.includes("https://www.asic.gov.au/online-services/search-asic-registers/datagovau"));
+
+const belgium = registry.sources.find(source => source.id === "belgium-cbe-open-data");
+assert.equal(belgium.rights_status, "pending_reuse_terms_review");
+assert.equal(belgium.commercial_use, false);
+assert.equal(belgium.redistribution, false);
+assert.equal(belgium.ingestion_status, "discovery_pending_open_data_terms_and_privacy_review");
+assert.ok(belgium.limitations.some(value => /EUR 30,000 annual commercial fee/i.test(value)));
+assert.ok(belgium.limitations.some(value => /registration and acceptance/i.test(value)));
 
 const acra = registry.sources.find(source => source.id === "acra-singapore-entities");
 assert.equal(acra.license, "SINGAPORE-OPEN-DATA-LICENCE-1.0");
