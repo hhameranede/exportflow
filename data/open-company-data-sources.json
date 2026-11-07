@@ -660,6 +660,88 @@
         "https://polonepp.registrucentras.lt/en/reports-and-statistics/open-data",
         "https://www.registrucentras.lt/jar/p_en/"
       ]
+    },
+    {
+      "id": "acra-singapore-entities",
+      "name": "ACRA Entities Registered with ACRA",
+      "publisher": "Accounting and Corporate Regulatory Authority (Singapore)",
+      "kind": "national_company_register",
+      "coverage": [
+        "SG"
+      ],
+      "source_url": "https://data.gov.sg/datasets/d_3f960c10fed6145404ca7b821f263b87/view",
+      "download_url": "https://data.gov.sg/datasets/d_3f960c10fed6145404ca7b821f263b87/view",
+      "license": "SINGAPORE-OPEN-DATA-LICENCE-1.0",
+      "rights_status": "verified_open_with_attribution",
+      "commercial_use": true,
+      "redistribution": true,
+      "attribution_required": true,
+      "attribution_text": "Contains information from Entities Registered with ACRA, accessed on [date] from data.gov.sg, made available under the Singapore Open Data Licence version 1.0: https://developers.data.gov.sg/open-data-licence",
+      "access": "free_CSV_download_and_data.gov.sg_API",
+      "update_frequency": "monthly",
+      "data_scope": [
+        "unique_entity_number",
+        "entity_name",
+        "entity_type",
+        "entity_status",
+        "registration_date",
+        "registered_street_name",
+        "registered_postal_code"
+      ],
+      "limitations": [
+        "The October 2026 dataset metadata reports 2.1 million rows and an approximately 223.4 MB CSV; size and row count vary by monthly release",
+        "The dataset includes sole proprietorship and partnership entity types; exclude sole proprietors, natural persons and personal-data-bearing rows before any public or commercial entity ingestion",
+        "The Singapore Open Data Licence does not grant rights over personal data, third-party rights, trademarks, patents or design rights",
+        "Include the source/date and a link to the latest Singapore Open Data Licence; do not imply government endorsement",
+        "The dataset is a public-register snapshot, not an authoritative real-time verification of current status"
+      ],
+      "ingestion_status": "candidate_after_sole_proprietor_and_personal_data_filter",
+      "verification_sources": [
+        "https://data.gov.sg/datasets/d_3f960c10fed6145404ca7b821f263b87/view",
+        "https://developers.data.gov.sg/open-data-licence",
+        "https://developers.data.gov.sg/privacy-and-terms"
+      ]
+    },
+    {
+      "id": "canada-federal-corporations",
+      "name": "Canada Federal Corporations open dataset",
+      "publisher": "Innovation, Science and Economic Development Canada — Corporations Canada",
+      "kind": "federal_company_register",
+      "coverage": [
+        "CA-FEDERAL"
+      ],
+      "source_url": "https://open.canada.ca/data/en/dataset/0032ce54-c5dd-4b66-99a0-320a7b5e99f2",
+      "download_url": "https://open.canada.ca/data/en/dataset/0032ce54-c5dd-4b66-99a0-320a7b5e99f2",
+      "license": "OPEN-GOVERNMENT-LICENCE-CANADA",
+      "rights_status": "verified_open_with_attribution",
+      "commercial_use": true,
+      "redistribution": true,
+      "attribution_required": true,
+      "attribution_text": "Contains information licensed under the Open Government Licence — Canada; identify Corporations Canada as the source and preserve any notices supplied with the dataset.",
+      "access": "free_daily_CSV_download_and_federal_corporation_API",
+      "update_frequency": "typically_daily",
+      "data_scope": [
+        "federal_corporation_identifier",
+        "legal_name",
+        "corporation_type",
+        "corporation_status",
+        "incorporation_or_registration_date",
+        "registered_office_details_where_included"
+      ],
+      "limitations": [
+        "Covers federal corporations under specified federal statutes only; excludes provincial/territorial corporations and corporations created under certain financial legislation",
+        "The April 2026 dataset redesign separates active/inactive business corporations and other federal corporations into four subsets, each in English and French",
+        "Do not ingest director or other natural-person fields from API responses into the public company catalogue without a separate lawful-basis and privacy review",
+        "Preserve the Open Government Licence — Canada attribution and do not imply government endorsement",
+        "A federal register is not a complete directory of every Canadian business"
+      ],
+      "ingestion_status": "candidate_pending_field_level_privacy_and_schema_review",
+      "verification_sources": [
+        "https://open.canada.ca/data/en/dataset/0032ce54-c5dd-4b66-99a0-320a7b5e99f2",
+        "https://ised-isde.canada.ca/site/corporations-canada/en/data-services",
+        "https://ised-isde.canada.ca/site/corporations-canada/en/accessing-federal-corporation-json-datasets",
+        "https://open.canada.ca/en/open-government-licence-canada"
+      ]
     }
   ],
   "existing_exportflow_sources": [
