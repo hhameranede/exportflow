@@ -76,11 +76,27 @@ async function readCarrierDirectory(entry) {
     ? raw.tracking.adapter
     : null;
 
+  const portalCandidate = typeof raw.portal?.searchUrl === "string" && raw.portal.searchUrl.startsWith("https://")
+    ? raw.portal.searchUrl
+    : typeof raw.portal?.url === "string" && raw.portal.url.startsWith("https://")
+      ? raw.portal.url
+      : null;
+
   return {
     id,
     name: displayName,
     aliases,
     countries,
+    provenance: {
+      repository: "https://github.com/plhery/universal-parcel-scraper",
+      commit: upstreamCommit,
+      manifestPath: "carriers/" + id + "/carrier.json",
+      sourceLicense: "Apache-2.0",
+      attributionPath: "vendor/sources/universal-parcel-scraper/NOTICE",
+      portalUrlCandidate: portalCandidate,
+      authorityStatus: "upstream_manifest_candidate_not_independently_verified",
+      commercialTrackingRights: "not_granted_by_software_license"
+    },
     capabilities: {
       selectable: raw.selectable === true,
       tracking: { mode, adapter }
