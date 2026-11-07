@@ -130,6 +130,15 @@ The public `GET /api/carriers` response joins these records to matching catalog 
 
 The database rejects `verified` unless a repeatable live test, verification timestamp, test evidence URL, authorization evidence URL and declared rights scope are present. The API also downgrades malformed or incomplete `verified` records to `research` as defense in depth. No seeded provider is live-verified by this registry.
 
+## Dated official-source audit batches
+
+Two dated source-review batches now cover 20 of the 22 records in the seeded D1 evidence registry:
+
+- [Carrier official-source audit — batch 01](CARRIER_OFFICIAL_SOURCE_AUDIT.md): UPS, FedEx, DHL, Aramex, Canada Post, Australia Post, Royal Mail, Correos, La Poste and Japan Post.
+- [Carrier official-source audit — batch 02](CARRIER_OFFICIAL_SOURCE_AUDIT_BATCH_02.md): USPS, PostNL, Geopost/DPD, GLS, Emirates Post, SF Express, India Post, SingPost, Yanwen and Cainiao.
+
+Both batches update the D1 primary-source URL and dated research notes while preserving Research status, no verification timestamp, no live test URL and no authorization reference. China Post and YunExpress remain the two seeded records awaiting their own source-quality review. This 22-record evidence overlay is separate from the 1,338-entry carrier directory; no claim is made that all catalog entries have been individually checked against official operator sources.
+
 ## Software license is not carrier authorization
 
 An upstream software license governs copying, modifying and redistributing that code. It does **not** grant permission from DHL, UPS, FedEx, postal operators or other carriers to automate their websites, access account-bound APIs, reuse shipment data, or expose tracking results as a public commercial service.
