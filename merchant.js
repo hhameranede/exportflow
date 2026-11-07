@@ -24,6 +24,7 @@ const metricAttention = document.getElementById("metricAttention");
 let items = [];
 let idCounter = 0;
 let storageAvailable = true;
+let refreshing = false;
 
 function setStatus(target, message) {
   target.textContent = message;
@@ -128,6 +129,7 @@ function render() {
     const actions = element("div", "merchant-actions");
     const remove = element("button", "", "Remove");
     remove.type = "button";
+    remove.disabled = refreshing;
     remove.setAttribute("aria-label", "Remove " + item.reference);
     remove.addEventListener("click", () => {
       items = items.filter(entry => entry.id !== item.id);
@@ -140,8 +142,8 @@ function render() {
     watchlist.append(card);
   }
 
-  refreshButton.disabled = items.length === 0;
-  deleteAllButton.disabled = items.length === 0;
+  refreshButton.disabled = refreshing || items.length === 0;
+  deleteAllButton.disabled = refreshing || items.length === 0;
   exportButton.disabled = items.length === 0;
 }
 
@@ -224,9 +226,9 @@ function compactResult(result) {
 }
 
 async function refreshAll() {
-  if (items.length === 0 || refreshButton.disabled) return;
-  refreshButton.disabled = true;
-  deleteAllButton.disabled = true;
+  if (items.length === 0 || refreshing) return;
+  refreshing = true;
+  render();
   const batches = [];
   for (let offset = 0; offset < items.length; offset += 5) {
     batches.push(items.slice(offset, offset + 5));
@@ -262,8 +264,8 @@ async function refreshAll() {
     }
     setStatus(refreshStatus, "Refresh complete. Results are saved only in this browser.");
   } finally {
-    refreshButton.disabled = items.length === 0;
-    deleteAllButton.disabled = items.length === 0;
+    refreshing = false;
+    render();
   }
 }
 
