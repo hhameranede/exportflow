@@ -97,6 +97,16 @@ The eight supported interface languages have crawlable locale routes for the hom
 
 On first visits to the homepage or country directory, Cloudflare Pages middleware uses the visitor's country code to select a supported language. Countries without a configured language use English. A visitor's explicit language choice is stored in a first-party `ef-locale` cookie and local storage and takes precedence over country detection on later visits.
 
+## Additional upstream source repositories
+
+Pinned source repositories are recorded as Git submodules under `vendor/`. To fetch their complete source checkouts after cloning:
+
+```bash
+git submodule update --init --recursive
+```
+
+Only Universal Parcel Scraper is part of the current runtime. The other submodules are reference sources and are not automatically included in the Cloudflare Pages bundle. License details, exact pins and carrier-authorization caveats are documented in [Third-party source registry](docs/THIRD_PARTY_SOURCES.md).
+
 ## Local development
 
 Requirements: Node.js 24+ and Python 3.
