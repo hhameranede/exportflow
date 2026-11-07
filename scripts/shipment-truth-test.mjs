@@ -153,6 +153,31 @@ test("newest received untrusted event is excluded from trusted chronology", () =
   assert.equal(truth.timeline.find(item => item.description === "Unverified imported scan").trusted, false);
 });
 
+test("shipment coordinates are range-checked and rounded before public projection", () => {
+  const truth = resolveShipmentTruth({
+    source: "carrier-a",
+    events: [
+      event("2026-11-06T10:00:00Z", "in_transit", "Valid coordinate", {
+        point: { latitude: 36.75256, longitude: 3.04196 }
+      }),
+      event("2026-11-06T09:00:00Z", "in_transit", "Out-of-range coordinate", {
+        point: { latitude: 91, longitude: 181 }
+      }),
+      event("2026-11-06T08:00:00Z", "in_transit", "Null-island coordinate", {
+        point: { latitude: 0, longitude: 0 }
+      })
+    ]
+  });
+
+  const valid = truth.timeline.find(item => item.description === "Valid coordinate");
+  const invalid = truth.timeline.find(item => item.description === "Out-of-range coordinate");
+  const nullIsland = truth.timeline.find(item => item.description === "Null-island coordinate");
+  assert.deepEqual(valid.point, { latitude: 36.7526, longitude: 3.042 });
+  assert.equal(Object.hasOwn(invalid, "point"), false);
+  assert.equal(Object.hasOwn(nullIsland, "point"), false);
+  assert.deepEqual(truth.latestTrusted.point, { latitude: 36.7526, longitude: 3.042 });
+});
+
 test("single-source timestamp evidence is medium, not high confidence", () => {
   const truth = resolveShipmentTruth({
     source: "carrier-a",
