@@ -86,4 +86,22 @@ Datadog Synthetic Monitoring currently has no Synthetic tests configured in the 
 
 The directory API exposes these decisions as `sourceIntegration.sandboxMode`, `sandboxBaseUrl` and (where relevant) `onboardingRole`. These values describe the provider's documented environment and do not mean ExportFlow already has credentials or access.
 
+## Manual sandbox validation workflow
+
+The repository includes [`.github/workflows/carrier-sandbox-validation.yml`](../.github/workflows/carrier-sandbox-validation.yml), which is **manual-only** (`workflow_dispatch`) and accepts `ups`, `fedex` or `both`.
+
+Configure these repository Actions secrets before using it:
+
+| Provider | Required secret names |
+| --- | --- |
+| UPS CIE | `UPS_SANDBOX_CLIENT_ID`, `UPS_SANDBOX_CLIENT_SECRET` |
+| FedEx Developer Sandbox | `FEDEX_SANDBOX_API_KEY`, `FEDEX_SANDBOX_SECRET_KEY` |
+| Datadog (optional CI Visibility) | Existing `DD_API_KEY` |
+
+The workflow hardcodes the official non-production origins. The runner refuses a production host, checks that all credentials for the selected providers exist **before making any network request**, then makes one synthetic Track API lookup per selected provider. UPS uses the synthetic published-format test reference already used by the upstream live suite; FedEx uses the synthetic test reference in its committed parser fixtures. A valid "not found" outcome is acceptable for a synthetic reference; malformed replies, auth rejection, timeouts and rate limits fail the run.
+
+No shipment response body, test tracking reference, secret, recipient data or address is printed or sent to Datadog. The runner records only provider, Sandbox environment, pass/fail, elapsed milliseconds and a bounded error classification. Datadog CI Visibility is enabled when `DD_API_KEY` is present; otherwise the GitHub Actions summary remains the source of the test result.
+
+This workflow proves only that the selected app credentials and Track endpoint work in that provider's Sandbox for the documented synthetic request. It does not verify production credentials, third-party customer shipment rights, a commercial partnership or permission to redistribute/display tracking data.
+
 Provider terms and quotas can change. Reconfirm them in the carrier's current developer portal before enabling a new live connector.
