@@ -48,7 +48,11 @@ function safeStoredItem(value) {
       error: typeof value.lastResult.error === "string" ? value.lastResult.error.slice(0, 64) : "",
       carrier: typeof value.lastResult.carrier === "string" ? value.lastResult.carrier.slice(0, 80) : "",
       expectedDelivery: typeof value.lastResult.expectedDelivery === "string" ? value.lastResult.expectedDelivery.slice(0, 80) : "",
-      latestEvent: typeof value.lastResult.latestEvent === "string" ? value.lastResult.latestEvent.slice(0, 240) : ""
+      latestEvent: typeof value.lastResult.latestEvent === "string" ? value.lastResult.latestEvent.slice(0, 240) : "",
+      delayLevel: ["possible", "insufficient_evidence"].includes(value.lastResult.delayLevel) ? value.lastResult.delayLevel : "insufficient_evidence",
+      delayReason: typeof value.lastResult.delayReason === "string" ? value.lastResult.delayReason.slice(0, 80) : "",
+      customsState: ["hold", "released", "processing", "insufficient_evidence"].includes(value.lastResult.customsState) ? value.lastResult.customsState : "insufficient_evidence",
+      customsReason: typeof value.lastResult.customsReason === "string" ? value.lastResult.customsReason.slice(0, 80) : ""
     } } : {}),
     ...(typeof value.updatedAt === "string" ? { updatedAt: value.updatedAt } : {})
   };
@@ -95,7 +99,12 @@ function formatUpdated(value) {
 function updateMetrics() {
   const refreshed = items.filter(item => item.lastResult);
   const delivered = refreshed.filter(item => item.lastResult?.status?.toLowerCase().startsWith("delivered"));
-  const attention = refreshed.filter(item => item.lastResult?.error || /exception|failed|hold|delay/i.test(item.lastResult?.status || ""));
+  const attention = refreshed.filter(item =>
+    item.lastResult?.error ||
+    item.lastResult?.delayLevel === "possible" ||
+    item.lastResult?.customsState === "hold" ||
+    /exception|failed|hold|delay/i.test(item.lastResult?.status || "")
+  );
   metricTotal.textContent = String(items.length);
   metricTracked.textContent = String(refreshed.length);
   metricDelivered.textContent = String(delivered.length);
@@ -123,6 +132,16 @@ function render() {
     }
     if (item.lastResult?.latestEvent) {
       details.append(element("p", "", "Latest scan: " + item.lastResult.latestEvent));
+    }
+    if (item.lastResult?.delayLevel === "possible") {
+      details.append(element("p", "merchant-state merchant-intelligence", "Carrier delay signal: " + (item.lastResult.delayReason || "explicit carrier evidence")));
+    }
+    if (item.lastResult?.customsState === "hold") {
+      details.append(element("p", "merchant-state merchant-intelligence", "Customs hold signal: " + (item.lastResult.customsReason || "explicit carrier evidence")));
+    } else if (item.lastResult?.customsState === "processing") {
+      details.append(element("p", "merchant-state", "Customs processing reported by carrier"));
+    } else if (item.lastResult?.customsState === "released") {
+      details.append(element("p", "merchant-state", "Customs release reported by carrier"));
     }
     details.append(element("p", "merchant-status", formatUpdated(item.updatedAt)));
 
@@ -221,6 +240,10 @@ function compactResult(result) {
     carrier: typeof data.carrier === "string" ? data.carrier : "",
     expectedDelivery: typeof data.expectedDelivery === "string" ? data.expectedDelivery : "",
     latestEvent,
+    delayLevel: ["possible", "insufficient_evidence"].includes(data.truth?.insights?.delay?.level) ? data.truth.insights.delay.level : "insufficient_evidence",
+    delayReason: typeof data.truth?.insights?.delay?.reason === "string" ? data.truth.insights.delay.reason : "",
+    customsState: ["hold", "released", "processing", "insufficient_evidence"].includes(data.truth?.insights?.customs?.state) ? data.truth.insights.customs.state : "insufficient_evidence",
+    customsReason: typeof data.truth?.insights?.customs?.reason === "string" ? data.truth.insights.customs.reason : "",
     error: typeof data.error === "string" ? data.error : ""
   };
 }
@@ -272,7 +295,7 @@ async function refreshAll() {
 refreshButton.addEventListener("click", refreshAll);
 
 exportButton.addEventListener("click", () => {
-  const columns = ["order_reference", "tracking_number", "carrier", "postcode", "language", "status", "error", "expected_delivery", "latest_event", "updated_at"];
+  const columns = ["order_reference", "tracking_number", "carrier", "postcode", "language", "status", "delay_signal", "customs_state", "error", "expected_delivery", "latest_event", "updated_at"];
   const quote = value => {
     let text = String(value ?? "");
     if (/^[=+\-@\t\r]/.test(text)) text = "'" + text;
@@ -280,7 +303,7 @@ exportButton.addEventListener("click", () => {
   };
   const rows = items.map(item => {
     const result = item.lastResult || {};
-    return [item.reference, item.number, item.carrier || result.carrier, item.postcode, item.language, result.status, result.error, result.expectedDelivery, result.latestEvent, item.updatedAt]
+    return [item.reference, item.number, item.carrier || result.carrier, item.postcode, item.language, result.status, result.delayLevel, result.customsState, result.error, result.expectedDelivery, result.latestEvent, item.updatedAt]
       .map(quote).join(",");
   });
   const blob = new Blob([[columns.join(","), ...rows].join("\r\n")], { type: "text/csv;charset=utf-8" });
