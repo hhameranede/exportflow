@@ -44,6 +44,8 @@ assert.ok(first.records.every(record => typeof record.id === "string" && typeof 
 assert.ok(first.records.every(record => Array.isArray(record.aliases) && Array.isArray(record.countries)));
 assert.ok(first.records.every(record => ["dedicated", "universal-fallback", "link-only", "none"].includes(record.adapterType)));
 assert.ok(first.records.every(record => record.evidence.verification.liveVerified === false));
+assert.ok(first.records.every(record => record.isCatalogEntry === true));
+assert.equal(first.summary.totalDirectoryRecords, 1339);
 
 // Paging is stable, bounded, and does not repeat carrier identifiers.
 const secondResponse = await onRequestGet({ request: request({ page: 2, pageSize: 50 }) });
@@ -110,6 +112,34 @@ assert.equal(ups.evidence.level, "research");
 assert.equal(ups.evidence.commercialAccess, "written_permission_required");
 assert.equal(ups.evidence.trackingRights, "third_party_permission_required");
 assert.equal(ups.evidence.verification.liveVerified, false);
+
+
+const standaloneResearch = await (await onRequestGet({
+  request: request({ q: "Cainiao" }),
+  env: { MERCHANT_DB: fakeDb([{
+    provider_id: "cainiao",
+    display_name: "Cainiao",
+    country_scope: "Global cross-border e-commerce network",
+    integration_method: "official_api",
+    adapter_state: "missing",
+    adapter_ids_json: "[]",
+    commercial_access_status: "partner_onboarding_required",
+    tracking_rights_status: "not_assessed",
+    official_source_url: "https://open.gfn.cainiao.com/apiInfo/introduce",
+    public_disclosure: "Official logistics APIs exist, but ExportFlow has no standalone adapter or approved application.",
+    evidence_status: "research",
+    verification_method: "none",
+    verified_at: null,
+    verification_evidence_url: null,
+    authorization_evidence_url: null
+  }]) }
+})).json();
+const cainiaoDossier = standaloneResearch.records.find(record => record.id === "cainiao");
+assert.ok(cainiaoDossier, "A researched provider without a catalog adapter must remain discoverable.");
+assert.equal(cainiaoDossier.isCatalogEntry, false);
+assert.equal(cainiaoDossier.adapterType, "none");
+assert.equal(cainiaoDossier.evidence.level, "research");
+assert.equal(cainiaoDossier.countryScope, "Global cross-border e-commerce network");
 
 const unavailable = await (await onRequestGet({
   request: request({ q: "UPS" }),
