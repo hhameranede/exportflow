@@ -48,7 +48,7 @@
     <div class="feature-grid" style="margin-top:24px">
       <article class="feature-card"><p class="field-label">POST</p><h3>/api/track</h3><p>Track one shipment and receive a normalized event timeline, source provenance, conservative confidence and evidence-based insights.</p></article>
       <article class="feature-card"><p class="field-label">POST</p><h3>/api/batch-track</h3><p>Track up to five shipments in one request. Each result carries its own HTTP status so partial failures do not discard successful items.</p></article>
-      <article class="feature-card"><p class="field-label">GET</p><h3>/api/carriers</h3><p>Read the installed carrier ID catalog. Catalog presence is not a live-tracking guarantee.</p></article>
+      <article class="feature-card"><p class="field-label">GET</p><h3>/api/carriers</h3><p>Read carrier IDs plus sanitized names, country mappings and catalog tracking modes (automatic, link-only or not declared). Metadata is not a live-availability check or partnership claim.</p></article>
       <article class="feature-card"><p class="field-label">GET</p><h3>/api/coverage</h3><p>Read catalog-derived country classifications: direct adapter, universal fallback, link-only or not listed.</p></article>
     </div>
   </section>
