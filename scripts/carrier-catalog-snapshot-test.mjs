@@ -29,10 +29,17 @@ for (const id of CARRIER_IDS) {
 }
 assert.deepEqual(CARRIER_INTEGRATION_MATRIX.ups.requiredEnvironment, ["UPS_CLIENT_ID", "UPS_CLIENT_SECRET"]);
 assert.equal(CARRIER_INTEGRATION_MATRIX.ups.apiAuthentication, "oauth2_client_credentials");
+assert.equal(CARRIER_INTEGRATION_MATRIX.ups.sandboxMode, "customer_integration_environment");
+assert.equal(CARRIER_INTEGRATION_MATRIX.ups.sandboxBaseUrl, "https://wwwcie.ups.com");
 assert.deepEqual(CARRIER_INTEGRATION_MATRIX.fedex.requiredEnvironment, ["FEDEX_API_KEY", "FEDEX_SECRET_KEY"]);
 assert.equal(CARRIER_INTEGRATION_MATRIX.fedex.apiAuthentication, "oauth2_client_credentials");
+assert.equal(CARRIER_INTEGRATION_MATRIX.fedex.sandboxMode, "developer_sandbox");
+assert.equal(CARRIER_INTEGRATION_MATRIX.fedex.sandboxBaseUrl, "https://apis-sandbox.fedex.com");
+assert.equal(CARRIER_INTEGRATION_MATRIX.fedex.onboardingRole, "integrator_provider");
 assert.deepEqual(CARRIER_INTEGRATION_MATRIX["dhl-express"].requiredEnvironment, ["DHL_API_KEY"]);
 assert.equal(CARRIER_INTEGRATION_MATRIX["dhl-express"].apiAuthentication, "api_key_header");
+assert.equal(CARRIER_INTEGRATION_MATRIX["dhl-express"].sandboxMode, "no_external_customer_test_environment");
+assert.equal(CARRIER_INTEGRATION_MATRIX["dhl-express"].sandboxBaseUrl, null);
 assert.equal(CARRIER_INTEGRATION_MATRIX.aramex.apiClient, "not_assessed");
 assert.equal(CARRIER_INTEGRATION_MATRIX.aramex.commercialAuthorization, "not_assessed");
 
