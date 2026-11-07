@@ -186,9 +186,11 @@ jobs:
           set -euo pipefail
           archive="$RUNNER_TEMP/laguna-resume/laguna-checkpoint.tar.gz"
           test -s "$archive"
-          tar -tzf "$archive" | grep -Fxq 'metadata.txt'
-          tar -tzf "$archive" | grep -Fxq 'tracked.patch'
-          tar -tzf "$archive" | grep -Fxq 'untracked-files.tar.gz'
+          listing="$RUNNER_TEMP/laguna-checkpoint-files.txt"
+          tar -tzf "$archive" > "$listing"
+          grep -Fxq 'metadata.txt' "$listing"
+          grep -Fxq 'tracked.patch' "$listing"
+          grep -Fxq 'untracked-files.tar.gz' "$listing"
           echo "Prior checkpoint archive is present and structurally valid."
 
       - name: Run Laguna XS 2.1
@@ -207,6 +209,7 @@ jobs:
             Execute ExportFlow issue #${{ github.event.issue.number || inputs.issue_number || 29 }}. Read the full issue and every comment first. The original Issue #29 roadmap remains the active implementation scope. Do not replace unfinished work with planning documents.
 
             OPTIONAL RECOVERED CHECKPOINT
+            An owner can request a restore by posting a comment whose first line is /laguna-run and whose next lines include resume_run_id=RUN_ID and optionally resume_attempt=ATTEMPT, or by using the workflow_dispatch inputs.
             If "$RUNNER_TEMP/laguna-resume/laguna-checkpoint.tar.gz" exists, treat it as a recovery candidate:
             1. Extract it into a new temporary directory outside the repository; inspect metadata.txt, tracked.patch, and untracked-files.tar.gz.
             2. Compare the recorded base/head SHAs and file status with the current repository and the OpenCode-managed branch before applying anything.
@@ -337,6 +340,7 @@ jobs:
 
       - name: Capture recoverable Laguna workspace checkpoint
         if: always()
+        timeout-minutes: 10
         shell: bash
         env:
           BASE_SHA: ${{ github.sha }}
@@ -409,14 +413,32 @@ jobs:
           echo "Checkpoint archive prepared: laguna-checkpoint-$RUN_ID-attempt-$RUN_ATTEMPT" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload recoverable Laguna checkpoint
+        id: checkpoint-upload
         if: always()
+        timeout-minutes: 10
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         continue-on-error: true
         with:
           name: laguna-checkpoint-${{ github.run_id }}-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}/laguna-checkpoint.tar.gz
           retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: error
+
+      - name: Report checkpoint persistence result
+        if: always()
+        shell: bash
+        env:
+          UPLOAD_OUTCOME: ${{ steps.checkpoint-upload.outcome }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          if [[ "$UPLOAD_OUTCOME" == "success" ]]; then
+            echo "Recoverable checkpoint uploaded: laguna-checkpoint-$RUN_ID-attempt-$RUN_ATTEMPT (30-day retention)."
+            echo "Checkpoint artifact uploaded successfully (30-day retention)." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::No recoverable checkpoint artifact was uploaded for this run. Do not assume uncommitted work is durable."
+            echo "WARNING: checkpoint artifact upload failed; uncommitted workspace changes may not be recoverable." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   verify-publication:
     name: Verify Laguna PR publication after OpenCode cleanup
