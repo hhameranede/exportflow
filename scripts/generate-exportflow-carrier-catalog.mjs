@@ -170,9 +170,7 @@ const integrationMatrix = Object.fromEntries(parsed.map(record => {
     sandboxMode: profile?.sandboxMode || "not_assessed",
     sandboxBaseUrl: profile?.sandboxBaseUrl || null,
     onboardingRole: profile?.onboardingRole || null,
-    mockContractTest: profile?.contractTest || null,
-    commercialAuthorization: "not_assessed",
-    thirdPartyTrackingRights: "not_assessed"
+    mockContractTest: profile?.contractTest || null
   }];
 }));
 
