@@ -117,14 +117,6 @@ function projectResult(response) {
   const rawStatus = safeStage(result.current_stage);
 
   const rawEvents = Array.isArray(result.events) ? result.events.slice(0, 60) : [];
-  const events = rawEvents.map(event => ({
-    time: safeText(event?.time, 80),
-    location: safeText(event?.location, 180),
-    description: safeText(event?.description, 320),
-    stage: safeStage(event?.stage),
-    ...(safeEventPoint(event?.point) ? { point: safeEventPoint(event.point) } : {})
-  }));
-
   const truth = resolveShipmentTruth({
     events: rawEvents.map(event => ({
       time: event?.time,
