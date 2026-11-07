@@ -67,7 +67,7 @@ Use `GET /api/carrier-directory?integration=provider_api_client&pageSize=100` to
 
 The per-record metadata includes whether adapter/fixture/live-test source files exist and the transport step names declared by the upstream manifest. The live-test field means a test definition exists; it does not mean it ran or passed. For API client records, required environment variable **names** and authentication pattern are listed, never secret values.
 
-All records start with `commercialAuthorization=not_assessed` and `thirdPartyTrackingRights=not_assessed` in this source matrix. Curated D1 evidence overlays these defaults where a researched provider record exists. The matrix intentionally does not infer "no official API" from the absence of an upstream `api.ts` file: that means only that the pinned snapshot did not include a provider-specific API client.
+Commercial access and third-party tracking rights are deliberately not duplicated in this technical matrix. The curated D1 evidence registry is the single source for those legal/access states, and its reviewed values are shown separately in each carrier record's `evidence` object. The matrix intentionally does not infer "no official API" from the absence of an upstream `api.ts` file: that means only that the pinned snapshot did not include a provider-specific API client.
 
 Datadog Synthetic Monitoring currently has no Synthetic tests configured in the connected account, and test-creation permissions are not available. Do not describe the CI contract suite as a Datadog Synthetic test or production API uptime check. A future live suite can be added as a separate, manually approved workflow after the provider sandbox accounts and permitted inputs exist.
 
