@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { escapeCsvCell } from "../merchant-utils.mjs";
 import { readFile } from "node:fs/promises";
 
-const [html, script, build, headers, sitemap] = await Promise.all([
+const [html, script, utility, build, headers, sitemap] = await Promise.all([
   readFile("merchant/index.html", "utf8"),
   readFile("merchant.js", "utf8"),
+  readFile("merchant-utils.mjs", "utf8"),
   readFile("scripts/build.mjs", "utf8"),
   readFile("_headers", "utf8"),
   readFile("sitemap.xml", "utf8")
@@ -25,14 +26,16 @@ assert.ok(script.includes("let refreshing = false"));
 assert.ok(script.includes("if (items.length === 0 || refreshing) return"));
 assert.ok(script.includes("refreshing || items.length === 0"), "Refresh and clear actions must stay disabled while a batch is running");
 assert.ok(script.includes("createObjectURL"));
-assert.ok(script.includes("setTimeout(() => URL.revokeObjectURL(url), 0)"));
+assert.ok(script.includes("setTimeout(() => URL.revokeObjectURL(url), 0"));
 assert.equal(escapeCsvCell("ordinary value"), '"ordinary value"');
 assert.equal(escapeCsvCell('A "quoted" value'), '"A ""quoted"" value"');
 assert.equal(escapeCsvCell("=1+1"), '"\'=1+1"');
 assert.equal(escapeCsvCell("  =1+1"), '"\'  =1+1"');
-assert.equal(escapeCsvCell("\\t=1+1"), '"\'\\t=1+1"');
-assert.ok(script.includes("replaceAll"));
-assert.ok(script.includes("text = \"'\" + text"), "CSV formula neutralization must be present");
+assert.equal(escapeCsvCell("\t=1+1"), '"\'\t=1+1"');
+assert.equal(escapeCsvCell("\n@SUM(1,1)"), '"\'\n@SUM(1,1)"');
+assert.ok(utility.includes("FORMULA_PREFIX"));
+assert.ok(utility.includes("replaceAll"));
+assert.ok(script.includes("escapeCsvCell"), "Merchant CSV export must use the tested escaping utility");
 assert.ok(script.includes("textContent"));
 assert.ok(script.includes('delayLevel === "possible"'), "Merchant UI must surface only explicit carrier delay signals");
 assert.ok(script.includes('customsState === "hold"'), "Merchant UI must surface explicit customs hold signals");
