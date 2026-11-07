@@ -166,6 +166,7 @@ function publicRecord(carrier, evidenceByAdapter) {
   const evidence = carrier.adapter ? evidenceByAdapter.get(carrier.adapter) : null;
   return {
     ...carrier,
+    isCatalogEntry: true,
     evidence: evidence
       ? {
           level: evidence.level,
@@ -224,7 +225,37 @@ export async function onRequestGet({ request, env } = {}) {
 
   const evidenceRegistry = await loadEvidence(env);
   const evidenceByAdapter = buildEvidenceByAdapter(evidenceRegistry.records);
-  const evidenceByCarrier = CATALOG_RECORDS.map(record => publicRecord(record, evidenceByAdapter));
+  const catalogDirectoryRecords = CATALOG_RECORDS.map(record => publicRecord(record, evidenceByAdapter));
+  const knownAdapters = new Set(CATALOG_RECORDS.map(record => record.adapter).filter(Boolean));
+  const knownCarrierIds = new Set(CATALOG_RECORDS.map(record => record.id));
+  const standaloneResearchRecords = evidenceRegistry.records
+    .filter(record =>
+      !knownCarrierIds.has(record.id) &&
+      !record.adapterIds.some(adapterId => knownAdapters.has(adapterId))
+    )
+    .map(record => ({
+      id: record.id,
+      name: record.name || record.id,
+      aliases: [],
+      countries: [],
+      selectable: false,
+      trackingMode: "not-declared",
+      adapter: null,
+      adapterType: "none",
+      isCatalogEntry: false,
+      countryScope: record.countryScope,
+      evidence: {
+        level: record.level,
+        adapterState: record.adapterState,
+        integrationMethod: record.integrationMethod,
+        commercialAccess: record.commercialAccess,
+        trackingRights: record.trackingRights,
+        sourceUrl: record.sourceUrl,
+        disclosure: record.disclosure,
+        verification: record.verification
+      }
+    }));
+  const directoryRecords = [...catalogDirectoryRecords, ...standaloneResearchRecords];
 
   const totalCatalogue = CATALOG_RECORDS.length;
   const selectableCount = CATALOG_RECORDS.filter(record => record.selectable).length;
@@ -232,7 +263,7 @@ export async function onRequestGet({ request, env } = {}) {
   const universalCount = CATALOG_RECORDS.filter(record => record.adapterType === "universal-fallback").length;
   const linkOnlyCount = CATALOG_RECORDS.filter(record => record.adapterType === "link-only").length;
   const evidenceCounts = {
-    catalogued: evidenceByCarrier.filter(record => record.evidence.level === "catalogued").length,
+    catalogued: directoryRecords.filter(record => record.evidence.level === "catalogued").length,
     research: evidenceRegistry.records.filter(record => record.level === "research").length,
     testing: evidenceRegistry.records.filter(record => record.level === "testing").length,
     integrated: evidenceRegistry.records.filter(record => record.level === "integrated").length,
@@ -241,12 +272,12 @@ export async function onRequestGet({ request, env } = {}) {
     deprecated: evidenceRegistry.records.filter(record => record.level === "deprecated").length
   };
 
-  const filtered = evidenceByCarrier.filter(record => {
+  const filtered = directoryRecords.filter(record => {
     if (country && !record.countries.includes(country)) return false;
     if (evidenceFilter !== "all" && record.evidence.level !== evidenceFilter) return false;
     if (adapterFilter !== "all" && record.adapterType !== adapterFilter) return false;
     if (query) {
-      const haystack = [record.id, record.name, ...record.aliases, ...record.countries].join(" ").toLocaleLowerCase("en");
+      const haystack = [record.id, record.name, ...record.aliases, ...record.countries, record.countryScope || ""].join(" ").toLocaleLowerCase("en");
       if (!haystack.includes(query)) return false;
     }
     return true;
@@ -269,6 +300,8 @@ export async function onRequestGet({ request, env } = {}) {
     summary: {
       catalogEntries: CARRIER_IDS.length,
       catalogRecordObjects: totalCatalogue,
+      totalDirectoryRecords: directoryRecords.length,
+      standaloneResearchRecords: standaloneResearchRecords.length,
       selectableRecords: selectableCount,
       dedicatedAdapterRecords: dedicatedCount,
       universalFallbackRecords: universalCount,
