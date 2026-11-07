@@ -158,9 +158,7 @@ function buildCatalogRecords() {
             liveTestDefinition: matrix.liveTestDefinition === "defined" ? "defined" : "not_found",
             upstreamTrackingSteps: Array.isArray(matrix.upstreamTrackingSteps)
               ? matrix.upstreamTrackingSteps.filter(value => typeof value === "string" && /^[a-z0-9_-]{1,40}$/i.test(value))
-              : [],
-            commercialAuthorization: "not_assessed",
-            thirdPartyTrackingRights: "not_assessed"
+              : []
           }
         : {
             integrationClass: "catalogue_only",
@@ -171,9 +169,7 @@ function buildCatalogRecords() {
             adapterSource: "not_found",
             fixtureTest: "not_found",
             liveTestDefinition: "not_found",
-            upstreamTrackingSteps: [],
-            commercialAuthorization: "not_assessed",
-            thirdPartyTrackingRights: "not_assessed"
+            upstreamTrackingSteps: []
           };
 
       return {
