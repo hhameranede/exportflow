@@ -8,8 +8,8 @@ db = sqlite3.connect(":memory:")
 db.execute("PRAGMA foreign_keys = ON")
 
 migrations = sorted((ROOT / "migrations").glob("*.sql"))
-if len(migrations) < 3:
-    raise SystemExit("Expected credential-vault, merchant-identity and provider-audit migrations.")
+if len(migrations) < 4:
+    raise SystemExit("Expected merchant identity, credential audit and global carrier evidence migrations.")
 
 for migration in migrations:
     db.executescript(migration.read_text(encoding="utf-8"))
@@ -26,6 +26,7 @@ required = {
     "merchant_sessions",
     "merchant_security_events",
     "merchant_provider_audit_events",
+    "carrier_evidence",
 }
 missing = required - tables
 assert not missing, f"Missing D1 tables: {sorted(missing)}"
@@ -147,4 +148,62 @@ for statement in (
     else:
         raise AssertionError("Merchant provider audit events must be append-only.")
 
-print(f"D1 migrations passed ({len(migrations)} files; {len(required)} required tables).")
+
+# Global carrier evidence is explicit and conservative: the seeded provider research
+# set must not silently become an integration or live-verified coverage claim.
+evidence_rows = db.execute(
+    """SELECT provider_id, evidence_status, verification_method,
+              official_source_url, adapter_ids_json, authorization_evidence_url
+       FROM carrier_evidence ORDER BY provider_id"""
+).fetchall()
+assert len(evidence_rows) == 22, f"Expected 22 researched global provider records, got {len(evidence_rows)}"
+assert all(row[1] == "research" for row in evidence_rows), evidence_rows
+assert all(row[2] == "none" for row in evidence_rows), evidence_rows
+assert all(row[3].startswith("https://") for row in evidence_rows), evidence_rows
+assert all(row[5] is None for row in evidence_rows), evidence_rows
+
+import json
+for row in evidence_rows:
+    adapter_ids = json.loads(row[4])
+    assert isinstance(adapter_ids, list)
+    assert all(isinstance(adapter_id, str) for adapter_id in adapter_ids)
+
+# A status-only promotion cannot mark an untested or unauthorized provider Verified.
+try:
+    db.execute(
+        "UPDATE carrier_evidence SET evidence_status = 'verified' WHERE provider_id = 'ups'"
+    )
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("Carrier evidence must reject Verified without live test and authorization evidence.")
+
+try:
+    db.execute(
+        """UPDATE carrier_evidence
+           SET evidence_status = 'verified', verification_method = 'mock',
+               verified_at = '2026-11-07T12:00:00Z',
+               verification_evidence_url = 'https://example.test/mock',
+               authorization_evidence_url = 'https://example.test/authorization'
+           WHERE provider_id = 'ups'"""
+    )
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("Mock evidence must never satisfy the live Verified gate.")
+
+# A complete live-test and authorization trail is the only accepted Verified transition.
+db.execute(
+    """UPDATE carrier_evidence
+       SET evidence_status = 'verified', verification_method = 'live',
+           verified_at = '2026-11-07T12:00:00Z',
+           verification_evidence_url = 'https://example.test/redacted-live-test',
+           authorization_evidence_url = 'https://example.test/redacted-authorization'
+       WHERE provider_id = 'ups'"""
+)
+verified = db.execute(
+    "SELECT evidence_status, verification_method FROM carrier_evidence WHERE provider_id = 'ups'"
+).fetchone()
+assert verified == ("verified", "live"), verified
+
+print(f"D1 migrations passed ({len(migrations)} files; {len(required)} required tables; {len(evidence_rows)} researched carrier records).")
