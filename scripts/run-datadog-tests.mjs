@@ -24,7 +24,6 @@ const testScripts = [
   "scripts/carrier-official-source-audit-test.mjs",
   "scripts/carrier-official-source-audit-batch-02-test.mjs",
   "scripts/carrier-official-source-audit-batch-03-test.mjs",
-  "scripts/carrier-official-source-audit-batch-03-test.mjs",
   "scripts/carrier-directory-test.mjs",
   "scripts/cloudflare-fetch-test.mjs",
   "scripts/map-coordinates-test.mjs",
