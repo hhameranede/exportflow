@@ -92,6 +92,15 @@ assert.equal((translationsSource.match(/"illustrativeRouteLabel":/g) || []).leng
 assert.doesNotMatch(html, /98\.4%|200\+ carriers worldwide/i, "Unverified homepage statistics must be removed");
 
 assert.match(js, /fetch\("\/api\/track"/, "Tracking form must call the server-side tracking API");
+
+assert.match(html, /id="formError" role="alert" hidden/, "Tracking failures must have an accessible live error region");
+assert.match(js, /let trackingRequestInFlight = false/, "Tracking submit must prevent duplicate concurrent requests");
+assert.match(js, /function showTrackingError/, "Tracking failures must use the shared visible error handler");
+assert.match(js, /formError\.scrollIntoView/, "Tracking failures must remain visible on mobile viewports");
+assert.match(js, /trackingErrorMessage/, "Tracking API failures must map server errors to readable messages");
+assert.match(js, /global_rate_limiter_not_configured/, "Global rate-limiter setup failures must not be silently hidden");
+assert.match(js, /typeof payload\.status === "string"/, "A malformed success response must not open an empty result panel");
+
 assert.match(js, /postcodeInput\.value\.trim\(\)/, "Optional postcode should be submitted to the API");
 assert.match(js, /renderTimeline/, "Live scan history should be rendered into the timeline");
 assert.match(trackApi, /createExportFlowCarrierEngine/, "Tracking API must use the ExportFlow carrier engine facade");
