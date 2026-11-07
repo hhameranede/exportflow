@@ -49,7 +49,9 @@ function validLimiterResult(value) {
     value.remaining >= 0 &&
     Number.isInteger(value.retryAfterSeconds) &&
     value.retryAfterSeconds >= 0 &&
-    Number.isInteger(value.resetAt)
+    Number.isInteger(value.resetAt) &&
+    Number.isInteger(value.resetAfterSeconds) &&
+    value.resetAfterSeconds >= 0
   );
 }
 
@@ -118,7 +120,8 @@ export function globalRateLimitHeaders(result) {
   return {
     "RateLimit-Limit": String(result.limit),
     "RateLimit-Remaining": String(result.remaining),
-    "RateLimit-Reset": String(result.resetAt),
+    "RateLimit-Reset": String(result.resetAfterSeconds),
+    "X-RateLimit-Reset": String(result.resetAt),
     "X-RateLimit-Scope": "global-client",
     ...(result.retryAfterSeconds > 0 ? { "Retry-After": String(result.retryAfterSeconds) } : {})
   };
