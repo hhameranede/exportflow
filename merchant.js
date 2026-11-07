@@ -273,7 +273,7 @@ exportButton.addEventListener("click", () => {
   const columns = ["order_reference", "tracking_number", "carrier", "postcode", "language", "status", "error", "expected_delivery", "latest_event", "updated_at"];
   const quote = value => {
     let text = String(value ?? "");
-    if (/^[=+\\-@\\t\\r]/.test(text)) text = "'" + text;
+    if (/^[=+\-@\t\r]/.test(text)) text = "'" + text;
     return '"' + text.replaceAll('"', '""') + '"';
   };
   const rows = items.map(item => {
