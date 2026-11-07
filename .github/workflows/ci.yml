@@ -54,6 +54,10 @@ jobs:
           node --check functions/_middleware.js
           node --check functions/lib/merchant-identity.mjs
           node --check functions/lib/session-bound-merchant-vault.mjs
+          node --check functions/lib/global-rate-limit-policy.mjs
+          node --check functions/lib/global-rate-limiter.mjs
+          node --check workers/global-rate-limiter/src/index.mjs
+          node --check scripts/global-rate-limiter-test.mjs
           node --check scripts/merchant-identity-test.mjs
           node --check scripts/session-bound-merchant-vault-test.mjs
           node --check scripts/locale-build-test.mjs
@@ -95,6 +99,8 @@ jobs:
           DD_SERVICE: exportflow
           DD_ENV: ci
           DD_TEST_SESSION_NAME: exportflow-regression
+      - name: Validate Durable Object Worker bundle
+        run: npx --yes wrangler@4 deploy --dry-run --config workers/global-rate-limiter/wrangler.toml
       - name: Build Cloudflare Pages output
         run: npm run build
       - name: Verify localized SEO pages and hreflang sitemap
