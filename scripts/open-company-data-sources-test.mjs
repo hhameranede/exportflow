@@ -11,7 +11,8 @@ assert.equal(registry.policy.commercial_use_required, true);
 assert.equal(registry.policy.redistribution_required, true);
 assert.equal(registry.policy.repository_publicity_is_not_a_license, true);
 assert.equal(registry.policy.software_license_does_not_license_embedded_data, true);
-assert.ok(registry.sources.length >= 11, "Expected the external source register to keep growing");
+assert.ok(registry.sources.length >= 15, "Expected the external source register to keep growing");
+assert.ok(registry.rejected_candidates.length >= 4, "Unlicensed and unsuitable GitHub candidates must remain explicitly rejected");
 assert.ok(registry.existing_exportflow_sources.length >= 4, "Existing pinned sources must remain documented");
 
 const ids = new Set();
@@ -55,6 +56,23 @@ const uk = registry.sources.find(source => source.id === "uk-companies-house-reg
 assert.equal(uk.license, "STATUTORY_PUBLIC_REGISTER_REUSE_NOT_OGL");
 assert.ok(uk.limitations.some(value => /not OGL/i.test(value)));
 
+const france = registry.sources.find(source => source.id === "france-insee-sirene");
+assert.equal(france.license, "LICENCE-OUVERTE-2.0");
+assert.equal(france.commercial_use, true);
+assert.equal(france.redistribution, true);
+
+const norway = registry.sources.find(source => source.id === "norway-brreg-enhetsregisteret");
+assert.equal(norway.license, "NLOD-2.0");
+assert.ok(norway.limitations.some(value => /national identity numbers/i.test(value)));
+
+const estonia = registry.sources.find(source => source.id === "estonia-rik-e-business-register");
+assert.equal(estonia.license, "CC-BY-4.0");
+assert.match(estonia.ingestion_status, /basic_data_only/);
+
+const worldIndex = registry.sources.find(source => source.id === "world-company-database-github-index");
+assert.equal(worldIndex.license, "CC-BY-4.0");
+assert.match(worldIndex.ingestion_status, /discovery_feed_only/);
+
 const openCorporates = registry.sources.find(source => source.id === "opencorporates-commercial-api");
 assert.equal(openCorporates.commercial_use, false);
 assert.equal(openCorporates.redistribution, false);
@@ -70,4 +88,9 @@ for (const source of registry.existing_exportflow_sources) {
   assert.ok(source.license && source.status && source.rights_boundary, source.id + " needs license/status/rights boundary");
 }
 
-console.log("Open company-data source register passed: " + registry.sources.length + " external sources and " + registry.existing_exportflow_sources.length + " existing ExportFlow sources.");
+for (const candidate of registry.rejected_candidates) {
+  assert.ok(candidate.repository?.startsWith("https://github.com/"), candidate.id + " needs its source repository");
+  assert.ok(candidate.license_status && candidate.data_origin && candidate.decision, candidate.id + " needs explicit rejection evidence");
+}
+
+console.log("Open company-data source register passed: " + registry.sources.length + " external sources, " + registry.existing_exportflow_sources.length + " existing ExportFlow sources and " + registry.rejected_candidates.length + " rejected candidates.");
