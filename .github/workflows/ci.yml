@@ -49,7 +49,7 @@ jobs:
       - name: Verify localized SEO pages and hreflang sitemap
         run: node scripts/locale-build-test.mjs
       - name: Bundle Pages Functions with production Wrangler
-        run: npx --yes wrangler@3.114.17 pages functions build functions --outdir .wrangler/pages-functions
+        run: npx --yes wrangler@3.114.17 pages functions build functions --outdir .wrangler/pages-functions --compatibility-date=2026-11-05 --compatibility-flag=nodejs_compat
       - name: Verify all public build artifacts
         run: |
           test -s dist/index.html
