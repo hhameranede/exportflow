@@ -28,6 +28,8 @@ const catalogResponse = await getCarrierCatalog();
 assert.equal(catalogResponse.status, 200);
 assert.match(catalogResponse.headers.get("Cache-Control") || "", /max-age=3600/);
 const catalog = await catalogResponse.json();
+assert.equal(catalog.catalogMetadata.catalogOwner, "ExportFlow");
+assert.equal(catalog.catalogMetadata.upstreamCommit, "e64a466772ef25ce68e02d9c7c9f1613eec1208b");
 assert.ok(catalog.catalogEntries >= catalog.carriers.length);
 assert.ok(catalog.selectableCarrierRecords > 0);
 assert.ok(catalog.carrierRecords.length > 0);
