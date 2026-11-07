@@ -162,6 +162,18 @@ const algeriaRedirect = await onRequest({
 assert.equal(algeriaRedirect.status, 302);
 assert.equal(algeriaRedirect.headers.get("Location"), "https://exportflow.me/ar/");
 assert.match(algeriaRedirect.headers.get("Set-Cookie") || "", /ef-locale=ar/);
+assert.equal(algeriaRedirect.headers.get("Strict-Transport-Security"), "max-age=31536000; includeSubDomains");
+assert.equal(algeriaRedirect.headers.get("X-Frame-Options"), "DENY");
+
+const apiSecurityHeaders = await onRequest({
+  request: { method: "POST", url: "https://exportflow.me/api/mcp", headers: new Headers() },
+  next: () => new Response("api", { headers: { "Cache-Control": "no-store" } })
+});
+assert.equal(apiSecurityHeaders.headers.get("X-Robots-Tag"), "noindex, nofollow");
+assert.equal(apiSecurityHeaders.headers.get("X-Content-Type-Options"), "nosniff");
+assert.equal(apiSecurityHeaders.headers.get("Referrer-Policy"), "strict-origin-when-cross-origin");
+assert.equal(apiSecurityHeaders.headers.get("Strict-Transport-Security"), "max-age=31536000; includeSubDomains");
+assert.equal(await apiSecurityHeaders.text(), "api");
 
 const franceCoverageRedirect = await onRequest({
   request: { method: "GET", url: "https://exportflow.me/coverage/?source=test", headers: new Headers(), cf: { country: "FR" } },
