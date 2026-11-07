@@ -206,7 +206,7 @@ function classifyCustomsEvent(event) {
   if (!event) return null;
   if (
     ["customs_hold", "held_at_customs"].includes(event.stage) ||
-    /\b(customs hold|held by customs|detained by customs|inspection required|awaiting (customs )?documents)\b/i.test(event.description)
+    /\b(customs hold|held by customs|detained by customs|customs inspection required|awaiting customs documents)\b/i.test(event.description)
   ) return { state: "hold", reason: "explicit_customs_hold_signal" };
 
   if (
