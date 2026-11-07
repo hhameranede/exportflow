@@ -132,7 +132,7 @@ function projectResult(response) {
       description: event?.description,
       stage: event?.stage || event?.state,
       point: event?.point,
-      source: safeText(event?.source, 80) || rawSource,
+      source: safeText(event?.source, 80) || null,
       sourceRefs: Array.isArray(event?.sourceRefs)
         ? event.sourceRefs.map(value => safeText(value, 80)).filter(Boolean)
         : undefined,
@@ -165,6 +165,7 @@ function projectResult(response) {
       stage: safeStage(event.stage),
       source: event.source,
       sourceRefs: event.sourceRefs,
+      trusted: event.trusted,
       ...(safeEventPoint(event.point) ? { point: safeEventPoint(event.point) } : {})
     }))
   };
