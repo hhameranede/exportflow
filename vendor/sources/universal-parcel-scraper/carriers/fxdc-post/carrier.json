@@ -1,0 +1,66 @@
+{
+  "id": "fxdc-post",
+  "displayName": "FXDC Post",
+  "aliases": [
+    "FXDC",
+    "Flamingo Express Dutch Caribbean N.V."
+  ],
+  "region": {
+    "countries": [
+      "BQ"
+    ]
+  },
+  "brand": {
+    "color": "#0077c1"
+  },
+  "selectable": true,
+  "timezone": "America/Kralendijk",
+  "tracking": {
+    "mode": "automatic",
+    "adapter": "fxdc-post",
+    "steps": [
+      "direct",
+      "retry"
+    ],
+    "localClocks": true
+  },
+  "capabilities": [
+    "service_name",
+    "weight_kg"
+  ],
+  "portal": {
+    "url": "https://my.fxdc-post.com/klant/volgen?ref={trackingNumber}",
+    "searchUrl": "https://my.fxdc-post.com/klant/volgen",
+    "canaryUrl": "https://fxdc-post.com/",
+    "shows": [
+      "status",
+      "progress",
+      "service_name",
+      "weight_kg"
+    ],
+    "scraped": [
+      "status",
+      "service_name",
+      "weight_kg"
+    ],
+    "discarded": [
+      "contents",
+      "undated_progress"
+    ],
+    "unavailable": [
+      "eta"
+    ]
+  },
+  "links": [
+    {
+      "domains": [
+        "my.fxdc-post.com"
+      ],
+      "pathPattern": "^/klant/volgen(?:/insluiten)?/?$",
+      "params": [
+        "ref"
+      ]
+    }
+  ],
+  "detection": []
+}

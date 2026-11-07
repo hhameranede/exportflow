@@ -1,0 +1,91 @@
+{
+  "id": "etomars",
+  "displayName": "Etomars",
+  "aliases": [
+    "SHIPNERGY",
+    "쉽너지",
+    "이투마스",
+    "(주)이투마스",
+    "Etomars Co., Ltd."
+  ],
+  "region": {
+    "countries": [
+      "KR",
+      "JP"
+    ]
+  },
+  "brand": {
+    "color": "#1779ec"
+  },
+  "selectable": true,
+  "timezone": "Asia/Seoul",
+  "tracking": {
+    "mode": "automatic",
+    "adapter": "etomars",
+    "steps": [
+      "direct",
+      "retry"
+    ],
+    "recognition": {
+      "rank": 99,
+      "pattern": "^SN\\d{9}JP$"
+    },
+    "localClocks": true
+  },
+  "capabilities": [
+    "history",
+    "location",
+    "provider_code",
+    "destination_country",
+    "delivery_partner",
+    "delivery_tracking_number"
+  ],
+  "portal": {
+    "url": "https://cbt.shipnergy.com/Track/Result?mode=0&ids={trackingNumber}",
+    "searchUrl": "https://cbt.shipnergy.com/Track/Search",
+    "canaryUrl": "https://etomars.com/",
+    "shows": [
+      "status",
+      "history",
+      "location",
+      "provider_code",
+      "destination_country",
+      "delivery_partner",
+      "delivery_tracking_number"
+    ],
+    "scraped": [
+      "status",
+      "history",
+      "location",
+      "provider_code",
+      "destination_country",
+      "delivery_partner",
+      "delivery_tracking_number"
+    ],
+    "discarded": [],
+    "unavailable": [
+      "eta",
+      "weight",
+      "service_name",
+      "sender_name",
+      "receiver_name"
+    ]
+  },
+  "links": [
+    {
+      "domains": [
+        "cbt.shipnergy.com",
+        "track.shipnergy.com"
+      ],
+      "pathPattern": "^/Track/Result/?$",
+      "query": "^(?=(?:.*&)?mode=0(?:&|$))(?:.*&)?ids=([^&]+)(?=&|$)"
+    }
+  ],
+  "detection": [
+    {
+      "id": "etomars-1",
+      "pattern": "^SN\\d{9}JP$",
+      "confidence": "low"
+    }
+  ]
+}

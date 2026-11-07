@@ -1,0 +1,64 @@
+{
+  "id": "quick-fort",
+  "displayName": "Quick Fort",
+  "aliases": [
+    "Quick Fort",
+    "QuickFort",
+    "速丰捷运",
+    "速丰捷运国际物流有限公司"
+  ],
+  "region": {
+    "countries": [
+      "HK",
+      "CN"
+    ]
+  },
+  "brand": {
+    "color": "#0a275f"
+  },
+  "selectable": true,
+  "timezone": "Asia/Hong_Kong",
+  "tracking": {
+    "mode": "automatic",
+    "adapter": "quick-fort",
+    "steps": [
+      "direct"
+    ]
+  },
+  "capabilities": [
+    "history",
+    "location"
+  ],
+  "portal": {
+    "url": "https://www.quick-fort.com/search_kuai_di/search/orderid/{trackingNumber}",
+    "searchUrl": "https://www.quick-fort.com/cms/c/orders",
+    "canaryUrl": "https://www.quick-fort.com/cms/c/orders",
+    "shows": [
+      "status",
+      "history",
+      "location"
+    ],
+    "scraped": [
+      "status",
+      "history",
+      "location"
+    ],
+    "discarded": [],
+    "unavailable": []
+  },
+  "links": [
+    {
+      "domains": [
+        "quick-fort.com"
+      ],
+      "path": "^/search_kuai_di/search/orderid/([^/?#]+)/?$"
+    }
+  ],
+  "detection": [
+    {
+      "id": "quick-fort-1",
+      "pattern": "^QFT\\d{12}$",
+      "confidence": "low"
+    }
+  ]
+}

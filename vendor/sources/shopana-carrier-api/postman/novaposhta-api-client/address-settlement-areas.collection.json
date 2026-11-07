@@ -1,0 +1,61 @@
+{
+  "info": {
+    "name": "Nova Poshta - Settlement Areas",
+    "description": "Get list of settlement areas/regions (Київська область, Львівська область, etc.)",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get All Settlement Areas",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"modelName\": \"Address\",\n  \"calledMethod\": \"getSettlementAreas\",\n  \"methodProperties\": {}\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}",
+          "host": ["{{BASE_URL}}"]
+        },
+        "description": "Get complete list of all settlement areas in Ukraine. Returns areas like Київська область, Львівська область, etc."
+      },
+      "response": []
+    },
+    {
+      "name": "Get Settlement Area by Ref",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"modelName\": \"Address\",\n  \"calledMethod\": \"getSettlementAreas\",\n  \"methodProperties\": {\n    \"Ref\": \"71508128-9b87-11de-822f-000c2965ae0e\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}",
+          "host": ["{{BASE_URL}}"]
+        },
+        "description": "Get specific settlement area by reference. Example: Київська область. Use this to get details about a specific area."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://api.novaposhta.ua/v2.0/json/",
+      "type": "string"
+    }
+  ]
+}

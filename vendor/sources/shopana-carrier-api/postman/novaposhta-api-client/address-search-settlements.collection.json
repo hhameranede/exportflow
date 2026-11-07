@@ -1,0 +1,127 @@
+{
+  "info": {
+    "name": "Nova Poshta - Search Settlements",
+    "description": "Online search for any settlement (cities, towns, villages) - returns SettlementRef AND deliveryCity (CityRef for waybills)",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Search Settlements - Basic",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"modelName\": \"Address\",\n  \"calledMethod\": \"searchSettlements\",\n  \"methodProperties\": {\n    \"CityName\": \"Київ\",\n    \"Limit\": \"50\",\n    \"Page\": \"1\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}",
+          "host": ["{{BASE_URL}}"]
+        },
+        "description": "Search settlements by name. All parameters required: CityName, Limit, Page. Returns SettlementRef + deliveryCity (CityRef) + warehouse count + area/region info."
+      },
+      "response": []
+    },
+    {
+      "name": "Search Settlements - Partial Match",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"modelName\": \"Address\",\n  \"calledMethod\": \"searchSettlements\",\n  \"methodProperties\": {\n    \"CityName\": \"Оде\",\n    \"Limit\": \"30\",\n    \"Page\": \"1\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}",
+          "host": ["{{BASE_URL}}"]
+        },
+        "description": "Fuzzy search with partial name. Will find all matching settlements (Одеса, etc.)."
+      },
+      "response": []
+    },
+    {
+      "name": "Search Settlements - By Postal Code",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"modelName\": \"Address\",\n  \"calledMethod\": \"searchSettlements\",\n  \"methodProperties\": {\n    \"CityName\": \"01001\",\n    \"Limit\": \"50\",\n    \"Page\": \"1\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}",
+          "host": ["{{BASE_URL}}"]
+        },
+        "description": "Search by postal code. Example: 01001 for central Kyiv."
+      },
+      "response": []
+    },
+    {
+      "name": "Search Settlements - With Pagination",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"modelName\": \"Address\",\n  \"calledMethod\": \"searchSettlements\",\n  \"methodProperties\": {\n    \"CityName\": \"Нов\",\n    \"Limit\": \"50\",\n    \"Page\": \"2\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}",
+          "host": ["{{BASE_URL}}"]
+        },
+        "description": "Get second page of results (items 51-100). Useful for common prefixes with many matches."
+      },
+      "response": []
+    },
+    {
+      "name": "Search Settlements - Large Limit",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"modelName\": \"Address\",\n  \"calledMethod\": \"searchSettlements\",\n  \"methodProperties\": {\n    \"CityName\": \"а\",\n    \"Limit\": \"500\",\n    \"Page\": \"1\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}",
+          "host": ["{{BASE_URL}}"]
+        },
+        "description": "Maximum limit per page is 500 records. Use for broad searches."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://api.novaposhta.ua/v2.0/json/",
+      "type": "string"
+    }
+  ]
+}

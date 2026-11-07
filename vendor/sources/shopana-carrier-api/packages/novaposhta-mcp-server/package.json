@@ -1,0 +1,71 @@
+{
+  "name": "@shopana/novaposhta-mcp-server",
+  "version": "0.0.1",
+  "description": "MCP Server for Nova Poshta API integration with AI assistants",
+  "mcpName": "io.github.shopanaio/novaposhta",
+  "type": "module",
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "novaposhta-mcp": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "node build.js",
+    "dev:http": "npm run build && node dist/cli.js --http",
+    "dev:stdio": "npm run build && node dist/cli.js",
+    "start:http": "node dist/cli.js --http",
+    "start:stdio": "node dist/cli.js",
+    "lint": "eslint 'src/**/*.{ts,tsx}'",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "nova-poshta",
+    "novaposhta",
+    "ai",
+    "llm",
+    "assistant",
+    "anthropic",
+    "claude",
+    "chatgpt",
+    "shipping",
+    "logistics",
+    "delivery",
+    "tracking",
+    "carrier",
+    "api-integration",
+    "cli",
+    "server",
+    "ukraine"
+  ],
+  "author": "Shopana.io",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shopanaio/carrier-api.git",
+    "directory": "packages/novaposhta-mcp-server"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.22.0",
+    "@shopana/novaposhta-api-client": "^0.0.1"
+  },
+  "peerDependencies": {
+    "cross-fetch": "^4.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.12"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

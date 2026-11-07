@@ -1,0 +1,57 @@
+{
+  "id": "v-xpress",
+  "displayName": "V-Xpress",
+  "aliases": [
+    "VXpress",
+    "V Xpress",
+    "V-Express"
+  ],
+  "region": {
+    "countries": [
+      "IN"
+    ]
+  },
+  "brand": {
+    "color": "#0d4689"
+  },
+  "selectable": true,
+  "timezone": "Asia/Kolkata",
+  "tracking": {
+    "mode": "automatic",
+    "adapter": "v-xpress",
+    "steps": [
+      "direct",
+      "retry"
+    ],
+    "localClocks": true
+  },
+  "capabilities": [
+    "history"
+  ],
+  "portal": {
+    "searchUrl": "https://vxpress.in/track-result-new/",
+    "canaryUrl": "https://vxpress.in/",
+    "shows": [
+      "status",
+      "history",
+      "eta"
+    ],
+    "scraped": [
+      "status",
+      "history"
+    ],
+    "discarded": [
+      "recipient_details",
+      "shipper_details",
+      "references",
+      "proof_links",
+      "mixed_locations",
+      "administrative_updates",
+      "summary_clocks",
+      "eta"
+    ],
+    "unavailable": []
+  },
+  "links": [],
+  "detection": []
+}

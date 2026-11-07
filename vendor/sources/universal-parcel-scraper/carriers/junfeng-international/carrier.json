@@ -1,0 +1,69 @@
+{
+  "id": "junfeng-international",
+  "displayName": "JunFeng International",
+  "aliases": [
+    "君丰国际",
+    "君丰集运",
+    "BEESPAL",
+    "Guangzhou JunFeng Supply Chain Services Co., Ltd.",
+    "广州市君丰供应链服务有限公司"
+  ],
+  "region": {
+    "countries": [
+      "CN",
+      "GB",
+      "US",
+      "CA"
+    ]
+  },
+  "brand": {
+    "color": "#f3c93a"
+  },
+  "selectable": true,
+  "timezone": "Asia/Shanghai",
+  "tracking": {
+    "mode": "automatic",
+    "adapter": "junfeng-international",
+    "steps": [
+      "direct",
+      "retry"
+    ],
+    "localClocks": true
+  },
+  "capabilities": [
+    "history",
+    "location"
+  ],
+  "portal": {
+    "url": "https://www.junfengfast.com/tracking.html?no={trackingNumber}",
+    "searchUrl": "https://www.junfengfast.com/tracking.html",
+    "canaryUrl": "https://www.junfengfast.com/tracking.html",
+    "shows": [
+      "status",
+      "history",
+      "location"
+    ],
+    "scraped": [
+      "status",
+      "history",
+      "location"
+    ],
+    "discarded": [],
+    "unavailable": [
+      "eta"
+    ]
+  },
+  "links": [
+    {
+      "domains": [
+        "www.junfengfast.com",
+        "junfengfast.com"
+      ],
+      "pathPattern": "^/tracking\\.html$",
+      "params": [
+        "no"
+      ]
+    }
+  ],
+  "detection": []
+}

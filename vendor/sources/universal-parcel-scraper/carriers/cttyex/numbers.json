@@ -1,0 +1,17 @@
+{
+  "carrier": "cttyex",
+  "records": [
+    {
+      "number": "CTTY9999999980CN",
+      "role": "shipment",
+      "evidence": "synthetic",
+      "derivedFrom": "donated_real",
+      "shapeConfirmed": "2026-10-15",
+      "expect": {
+        "carrier": "cttyex",
+        "confidence": "high"
+      },
+      "note": "Made-up number in the shape of the tracking number CTTYEX's own tracker gives a parcel. Its serial sits far beyond the range in use."
+    }
+  ]
+}

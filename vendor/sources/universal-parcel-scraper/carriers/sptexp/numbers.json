@@ -1,0 +1,21 @@
+{
+  "carrier": "sptexp",
+  "gap": "No public page shows a whole SPT Express tracking number.",
+  "records": [
+    {
+      "number": "SPT999999999901YQ",
+      "role": "shipment",
+      "evidence": "synthetic",
+      "derivedFrom": "donated_real",
+      "shapeConfirmed": "2026-10-30",
+      "expect": {
+        "carrier": "unknown",
+        "confidence": "low",
+        "candidates": [
+          "sptexp"
+        ]
+      },
+      "note": "Made-up number in the shape of a parcel the app tracked, which a universal provider filed under SPT. SPT numbers its waybills in sequence, so a made-up number low in the range can be a real waybill: this one is far beyond the range in use."
+    }
+  ]
+}

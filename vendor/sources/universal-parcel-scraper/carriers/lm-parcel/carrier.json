@@ -1,0 +1,87 @@
+{
+  "id": "lm-parcel",
+  "displayName": "LM Parcel",
+  "aliases": [
+    "六脉速运",
+    "六脉小包"
+  ],
+  "region": {
+    "countries": [
+      "CN"
+    ]
+  },
+  "brand": {
+    "color": "#955b99"
+  },
+  "selectable": true,
+  "timezone": "Asia/Shanghai",
+  "tracking": {
+    "mode": "automatic",
+    "adapter": "lm-parcel",
+    "steps": [
+      "direct",
+      "retry"
+    ],
+    "localClocks": true,
+    "recognition": {
+      "rank": 2,
+      "pattern": "^LM\\d{10}$"
+    }
+  },
+  "capabilities": [
+    "history",
+    "provider_code",
+    "delivery_tracking_number",
+    "origin_country",
+    "destination_country"
+  ],
+  "portal": {
+    "url": "https://www.lmparcel.com/search?nums={trackingNumber}",
+    "searchUrl": "https://www.lmparcel.com/search",
+    "canaryUrl": "https://www.lmparcel.com/search",
+    "shows": [
+      "status",
+      "history",
+      "provider_code",
+      "delivery_tracking_number",
+      "origin_country",
+      "destination_country"
+    ],
+    "scraped": [
+      "status",
+      "history",
+      "provider_code",
+      "delivery_tracking_number",
+      "origin_country",
+      "destination_country"
+    ],
+    "discarded": [
+      "recipient",
+      "contact",
+      "address",
+      "internal_metadata"
+    ],
+    "unavailable": [
+      "eta"
+    ]
+  },
+  "links": [
+    {
+      "domains": [
+        "lmparcel.com",
+        "www.lmparcel.com"
+      ],
+      "pathPattern": "^/search/?$",
+      "params": [
+        "nums"
+      ]
+    }
+  ],
+  "detection": [
+    {
+      "id": "lm-parcel-1",
+      "pattern": "^LM\\d{10}$",
+      "confidence": "low"
+    }
+  ]
+}

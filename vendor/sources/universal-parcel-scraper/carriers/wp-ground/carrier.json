@@ -1,0 +1,68 @@
+{
+  "id": "wp-ground",
+  "displayName": "WP Ground",
+  "aliases": [
+    "WPG",
+    "WP Ground"
+  ],
+  "region": {
+    "countries": [
+      "US",
+      "CA"
+    ]
+  },
+  "brand": {
+    "color": "#f7c24e"
+  },
+  "selectable": true,
+  "timezone": "America/Los_Angeles",
+  "tracking": {
+    "mode": "automatic",
+    "adapter": "wp-ground",
+    "steps": [
+      "direct"
+    ],
+    "localClocks": true
+  },
+  "capabilities": [
+    "history",
+    "location"
+  ],
+  "portal": {
+    "url": "https://www.wpglogis.com/tracking/?ext_trackingNumber={trackingNumber}",
+    "searchUrl": "https://www.wpglogis.com/tracking/",
+    "canaryUrl": "https://www.wpglogis.com/tracking/",
+    "shows": [
+      "status",
+      "history",
+      "location",
+      "proof_of_delivery",
+      "weight",
+      "dimensions"
+    ],
+    "scraped": [
+      "status",
+      "history",
+      "location"
+    ],
+    "discarded": [
+      "proof_of_delivery",
+      "weight",
+      "dimensions"
+    ],
+    "unavailable": []
+  },
+  "links": [
+    {
+      "domains": [
+        "wpglogis.com"
+      ],
+      "pathPattern": "^/tracking/?$",
+      "params": [
+        "ext_trackingNumber",
+        "trackingId"
+      ]
+    }
+  ],
+  "detection": []
+}

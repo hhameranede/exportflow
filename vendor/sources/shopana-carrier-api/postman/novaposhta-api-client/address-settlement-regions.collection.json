@@ -1,0 +1,61 @@
+{
+  "info": {
+    "name": "Nova Poshta - Settlement Regions",
+    "description": "Get list of regions (districts) for specific settlement areas",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get Oblast Regions - Kyiv Example",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"modelName\": \"Address\",\n  \"calledMethod\": \"getSettlementCountryRegion\",\n  \"methodProperties\": {\n    \"AreaRef\": \"71508128-9b87-11de-822f-000c2965ae0e\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}",
+          "host": ["{{BASE_URL}}"]
+        },
+        "description": "Get all districts/regions for Kyiv Oblast (Київська область). Returns regions like Бориспільський район, Броварський район, etc. Required parameter: AreaRef from getSettlementAreas."
+      },
+      "response": []
+    },
+    {
+      "name": "Get Oblast Regions - Lviv Example",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"modelName\": \"Address\",\n  \"calledMethod\": \"getSettlementCountryRegion\",\n  \"methodProperties\": {\n    \"AreaRef\": \"e4ade6ea-9b87-11de-822f-000c2965ae0e\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}",
+          "host": ["{{BASE_URL}}"]
+        },
+        "description": "Get all districts/regions for Lviv Oblast (Львівська область). Use any AreaRef from getSettlementAreas response."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://api.novaposhta.ua/v2.0/json/",
+      "type": "string"
+    }
+  ]
+}

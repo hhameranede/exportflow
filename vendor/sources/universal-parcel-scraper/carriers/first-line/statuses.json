@@ -1,0 +1,25 @@
+{
+  "carrier": "first-line",
+  "entries": [
+    {"wording": "Forecast has been received", "language": "en", "stage": "registered", "confirmedBy": "live", "note": "The shipper's order data, before the warehouse has the parcel; the row names no place."},
+    {"wording": "Parcel information received", "language": "en", "stage": "registered", "confirmedBy": "live"},
+    {"wording": "Barcode scanning", "language": "en", "stage": "accepted", "confirmedBy": "live", "note": "The first scan at the Shenzhen warehouse."},
+    {"wording": "Shipment arrived", "language": "en", "stage": "accepted", "confirmedBy": "live", "note": "The first scan at the Shenzhen warehouse; the shared rules would read an arrival as a later transit scan."},
+    {"wording": "Packaged", "language": "en", "stage": "in_transit", "confirmedBy": "live"},
+    {"wording": "Leaving Scan", "language": "en", "stage": "in_transit", "confirmedBy": "live"},
+    {"wording": "Export customs declaration completed", "language": "en", "stage": "in_transit", "confirmedBy": "live", "note": "China's export declaration, written in Shenzhen before the flight; the parcel is not held in customs."},
+    {"wording": "Depart from facility to service provider", "language": "en", "stage": "in_transit", "confirmedBy": "live"},
+    {"wording": "Hand over to airline", "language": "en", "stage": "in_transit", "confirmedBy": "live", "note": "At Hong Kong's airport after the export declaration."},
+    {"wording": "Order received", "language": "en", "stage": "registered", "confirmedBy": "live", "note": "The delivering partner's order data, such as UniUni's: it follows the shipper's parcel information and comes before the Shenzhen warehouse's first scan, days before the flight."},
+    {"wording": "Next stop destination airport", "language": "en", "stage": "in_transit", "confirmedBy": "live", "note": "The flight, after the hand-over to the airline; the row keeps Hong Kong's airport as its place."},
+    {"wording": "Arrived at destination airport", "language": "en", "stage": "in_transit", "confirmedBy": "live", "note": "The flight's landing, before the import clearance."},
+    {"wording": "The package is being submitted for customs clearance", "language": "en", "stage": "customs", "confirmedBy": "live", "note": "Import clearance: it follows the flight, and China's export declaration came before the hand-over to the airline."},
+    {"wording": "The package has been cleared through customs", "language": "en", "stage": "in_transit", "confirmedBy": "live", "firstSeen": "2026-11-03", "note": "The import release, after the landing."},
+    {"wording": "Customs broker picked it up", "language": "en", "stage": "in_transit", "confirmedBy": "live", "firstSeen": "2026-11-03", "note": "The customs broker collecting the parcel after its import release, before the hand-over to the delivery carrier: it is no longer held in customs."},
+    {"wording": "The package has been transferred to the service provider", "language": "en", "stage": "in_transit", "confirmedBy": "live", "firstSeen": "2026-11-03", "note": "The hand-over to the delivery carrier after the broker's collection."},
+    {"wording": "Arrived at GOFO Regional Hub", "language": "en", "stage": "in_transit", "confirmedBy": "live", "firstSeen": "2026-11-04", "note": "The delivering partner GOFO's sorting hub."},
+    {"wording": "Loaded on Vehicle", "language": "en", "stage": "in_transit", "confirmedBy": "live", "firstSeen": "2026-11-05", "note": "GOFO loading the parcel on the truck at its sorting hub, minutes before the hub's departure scan: not the delivery round."},
+    {"wording": "Departed GOFO Regional Hub", "language": "en", "stage": "in_transit", "confirmedBy": "live", "firstSeen": "2026-11-04", "note": "Leaving GOFO's sorting hub for its delivery station."},
+    {"wording": "Arrived at GOFO Delivery Station", "language": "en", "stage": "in_transit", "confirmedBy": "live", "firstSeen": "2026-11-04", "note": "GOFO's last-mile station, before its delivery round."}
+  ]
+}

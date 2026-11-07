@@ -1,0 +1,127 @@
+{
+  "info": {
+    "name": "Nova Poshta - Search Streets",
+    "description": "Online search for streets in settlements - returns GPS coordinates (lat/lon) for precise geolocation",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Search Streets - Basic",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"modelName\": \"Address\",\n  \"calledMethod\": \"searchSettlementStreets\",\n  \"methodProperties\": {\n    \"StreetName\": \"Хрещатик\",\n    \"SettlementRef\": \"e718a680-4b33-11e4-ab6d-005056801329\",\n    \"Limit\": \"50\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}",
+          "host": ["{{BASE_URL}}"]
+        },
+        "description": "Search streets in settlement. Required: StreetName, SettlementRef (from searchSettlements). Returns street with GPS coordinates (lat/lon), UA/RU names, full formatted name, and type."
+      },
+      "response": []
+    },
+    {
+      "name": "Search Streets - Partial Name",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"modelName\": \"Address\",\n  \"calledMethod\": \"searchSettlementStreets\",\n  \"methodProperties\": {\n    \"StreetName\": \"Банк\",\n    \"SettlementRef\": \"e718a680-4b33-11e4-ab6d-005056801329\",\n    \"Limit\": \"20\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}",
+          "host": ["{{BASE_URL}}"]
+        },
+        "description": "Fuzzy search with partial street name. Will find Bankova and similar streets."
+      },
+      "response": []
+    },
+    {
+      "name": "Search Streets - Without Limit",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"modelName\": \"Address\",\n  \"calledMethod\": \"searchSettlementStreets\",\n  \"methodProperties\": {\n    \"StreetName\": \"Грушевського\",\n    \"SettlementRef\": \"e718a680-4b33-11e4-ab6d-005056801329\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}",
+          "host": ["{{BASE_URL}}"]
+        },
+        "description": "Limit is optional. Default limit will be applied by API."
+      },
+      "response": []
+    },
+    {
+      "name": "Search Streets - Different Settlement",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"modelName\": \"Address\",\n  \"calledMethod\": \"searchSettlementStreets\",\n  \"methodProperties\": {\n    \"StreetName\": \"Свободи\",\n    \"SettlementRef\": \"0c41f7f9-4b33-11e4-ab6d-005056801329\",\n    \"Limit\": \"50\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}",
+          "host": ["{{BASE_URL}}"]
+        },
+        "description": "Search in different settlement. Example: Svobody Avenue in Lviv settlement."
+      },
+      "response": []
+    },
+    {
+      "name": "Search Streets - Maximum Limit",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"modelName\": \"Address\",\n  \"calledMethod\": \"searchSettlementStreets\",\n  \"methodProperties\": {\n    \"StreetName\": \"а\",\n    \"SettlementRef\": \"e718a680-4b33-11e4-ab6d-005056801329\",\n    \"Limit\": \"500\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{BASE_URL}}",
+          "host": ["{{BASE_URL}}"]
+        },
+        "description": "Maximum limit is 500 records. Use for broad pattern searches."
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "https://api.novaposhta.ua/v2.0/json/",
+      "type": "string"
+    }
+  ]
+}

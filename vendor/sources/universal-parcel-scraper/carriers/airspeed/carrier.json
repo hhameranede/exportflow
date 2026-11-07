@@ -1,0 +1,67 @@
+{
+  "id": "airspeed",
+  "displayName": "Airspeed",
+  "aliases": [
+    "Airspeed International Corporation",
+    "Airspeed International Corp.",
+    "Airspeed Group",
+    "Airspeed Express",
+    "Airspeed Philippines",
+    "Airspeed Logistics"
+  ],
+  "region": {
+    "countries": [
+      "PH"
+    ]
+  },
+  "brand": {
+    "color": "#005eb8"
+  },
+  "selectable": true,
+  "timezone": "Asia/Manila",
+  "tracking": {
+    "mode": "automatic",
+    "adapter": "airspeed",
+    "steps": [
+      "direct",
+      "retry"
+    ],
+    "localClocks": true
+  },
+  "capabilities": [
+    "history"
+  ],
+  "portal": {
+    "url": "https://logistics.airspeed.com.ph/track/TrackingSearch.aspx?waybill={trackingNumber}",
+    "searchUrl": "https://airspeed.ph/track-cargo/",
+    "canaryUrl": "https://airspeed.ph/track-cargo/",
+    "shows": [
+      "status",
+      "history"
+    ],
+    "scraped": [
+      "status",
+      "history"
+    ],
+    "discarded": [
+      "references",
+      "destination_details",
+      "location_remarks"
+    ],
+    "unavailable": [
+      "eta"
+    ]
+  },
+  "links": [
+    {
+      "domains": [
+        "logistics.airspeed.com.ph"
+      ],
+      "pathPattern": "^/track/TrackingSearch\\.aspx$",
+      "params": [
+        "waybill"
+      ]
+    }
+  ],
+  "detection": []
+}

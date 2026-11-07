@@ -1,0 +1,64 @@
+{
+  "carrier": "spee-dee",
+  "records": [
+    {
+      "number": "SP9999999999999980",
+      "role": "shipment",
+      "evidence": "synthetic",
+      "derivedFrom": "official_shape",
+      "expect": {
+        "carrier": "spee-dee",
+        "confidence": "high"
+      },
+      "note": "Synthetic barcode in the 16-digit form, which Spee-Dee reuses. Its serial sits far beyond the range in use."
+    },
+    {
+      "number": "SP029692450001607639",
+      "role": "shipment",
+      "evidence": "open_source_example",
+      "source": {
+        "url": "https://github.com/jkeen/tracking_number_data/blob/main/couriers/speedee.json"
+      },
+      "context": {
+        "assessment": "confirmed"
+      },
+      "expect": {
+        "carrier": "spee-dee",
+        "confidence": "high"
+      },
+      "note": "Open-source project example; Spee-Dee's package progress page returns a delivered history for it."
+    },
+    {
+      "number": "SP029692510000901479",
+      "role": "shipment",
+      "evidence": "open_source_example",
+      "source": {
+        "url": "https://github.com/jkeen/tracking_number_data/blob/main/couriers/speedee.json"
+      },
+      "context": {
+        "assessment": "confirmed"
+      },
+      "expect": {
+        "carrier": "spee-dee",
+        "confidence": "high"
+      },
+      "note": "Open-source project example; Spee-Dee's package progress page returns a delivered history for it."
+    },
+    {
+      "number": "SP029692510000920746",
+      "role": "shipment",
+      "evidence": "open_source_example",
+      "source": {
+        "url": "https://github.com/jkeen/tracking_number_data/blob/main/couriers/speedee.json"
+      },
+      "context": {
+        "assessment": "confirmed"
+      },
+      "expect": {
+        "carrier": "spee-dee",
+        "confidence": "high"
+      },
+      "note": "Open-source project example; Spee-Dee's package progress page returns a delivered history for it."
+    }
+  ]
+}

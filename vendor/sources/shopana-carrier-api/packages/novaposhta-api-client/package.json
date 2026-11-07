@@ -1,0 +1,83 @@
+{
+  "name": "@shopana/novaposhta-api-client",
+  "version": "0.0.1",
+  "description": "Fully typed Nova Poshta API client for Node.js and browsers with enterprise-grade features",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "npm run clean && tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "dev": "tsc -w -p tsconfig.json",
+    "type-check": "tsc --noEmit",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  },
+  "keywords": [
+    "nova-poshta",
+    "novaposhta",
+    "shipping",
+    "logistics",
+    "delivery",
+    "tracking",
+    "api-client",
+    "sdk",
+    "rest-api",
+    "api-wrapper",
+    "carrier",
+    "carrier-api",
+    "courier",
+    "parcel",
+    "waybill",
+    "package-tracking",
+    "shipping-api",
+    "ecommerce",
+    "ukraine",
+    "typescript",
+    "type-safe",
+    "nodejs",
+    "browser",
+    "esm",
+    "plugin-architecture",
+    "tree-shakeable"
+  ],
+  "author": "Shopana.io",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shopanaio/carrier-api.git",
+    "directory": "packages/novaposhta-api-client"
+  },
+  "bugs": {
+    "url": "https://github.com/shopanaio/carrier-api/issues"
+  },
+  "homepage": "https://github.com/shopanaio/carrier-api/tree/main/packages/novaposhta-api-client#readme",
+  "dependencies": {},
+  "devDependencies": {
+    "@types/jest": "^29.5.8",
+    "@types/node": "^20.9.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.2.2"
+  },
+  "peerDependencies": {
+    "typescript": ">=4.9.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  }
+}

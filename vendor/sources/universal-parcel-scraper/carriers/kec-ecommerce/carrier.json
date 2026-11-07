@@ -1,0 +1,76 @@
+{
+  "id": "kec-ecommerce",
+  "displayName": "KEC eCommerce",
+  "aliases": [
+    "Kerry eCommerce",
+    "Kerry E-Commerce",
+    "Kerry Ecommerce Limited",
+    "KEC嘉顺达",
+    "嘉顺达",
+    "嘉順達"
+  ],
+  "region": {
+    "countries": [
+      "HK",
+      "CN"
+    ]
+  },
+  "brand": {
+    "color": "#f26f20"
+  },
+  "selectable": true,
+  "timezone": "Asia/Hong_Kong",
+  "tracking": {
+    "mode": "automatic",
+    "adapter": "kec-ecommerce",
+    "steps": [
+      "direct",
+      "retry"
+    ]
+  },
+  "capabilities": [
+    "history",
+    "location",
+    "provider_code",
+    "offset_timestamps"
+  ],
+  "portal": {
+    "url": "https://kec.kln.com/en/logistics-tracking/?tracking={trackingNumber}",
+    "searchUrl": "https://kec.kln.com/en/logistics-tracking/",
+    "canaryUrl": "https://kec.kln.com/en/logistics-tracking/",
+    "shows": [
+      "status",
+      "history",
+      "location",
+      "offset_timestamps"
+    ],
+    "scraped": [
+      "status",
+      "history",
+      "location",
+      "provider_code",
+      "offset_timestamps"
+    ],
+    "discarded": [],
+    "unavailable": [
+      "eta",
+      "weight",
+      "service_name",
+      "sender_name",
+      "recipient_name",
+      "proof_of_delivery"
+    ]
+  },
+  "links": [
+    {
+      "domains": [
+        "kec.kln.com"
+      ],
+      "pathPattern": "^/(?:en|cn|hk)/(?:logistics-tracking|track-trace)/?$",
+      "params": [
+        "tracking"
+      ]
+    }
+  ],
+  "detection": []
+}

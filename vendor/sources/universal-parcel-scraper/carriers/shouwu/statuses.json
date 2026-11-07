@@ -1,0 +1,572 @@
+{
+  "carrier": "shouwu",
+  "entries": [
+    {
+      "code": "TRACE_STATUS_READY",
+      "wording": "Preparing",
+      "stage": "registered",
+      "language": "en",
+      "confirmedBy": "bundle",
+      "note": "A parcel's traceStatus, which the page labels Preparing and explains as a parcel handed to the warehouse or handled there. It may come before any scan, so it says no more than registered; a scan staged accepted refines it."
+    },
+    {
+      "code": "TRACE_STATUS_ON_THE_WAY",
+      "wording": "In Transit",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "bundle",
+      "note": "A parcel's traceStatus, which the page labels In Transit and explains as anything from the handover to a carrier to customs and transport in the destination country, so a staged scan refines it."
+    },
+    {
+      "code": "TRACE_STATUS_FAILED",
+      "wording": "Undelivered",
+      "stage": "failed_attempt",
+      "language": "en",
+      "confirmedBy": "bundle",
+      "note": "A parcel's traceStatus, which the page labels Undelivered and explains as a delivery attempt that failed."
+    },
+    {
+      "code": "TRACE_STATUS_SIGNED",
+      "wording": "Delivered",
+      "stage": "delivered",
+      "language": "en",
+      "confirmedBy": "bundle",
+      "note": "A parcel's traceStatus, which the page labels Delivered."
+    },
+    {
+      "wording": "Order information received. We're expecting your parcel to arrive with us.",
+      "stage": "registered",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "An order scan before Shouwu has the parcel."
+    },
+    {
+      "wording": "Shipment information received",
+      "stage": "registered",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "An order scan, the first a parcel gets, before Shouwu has it."
+    },
+    {
+      "wording": "Carrier received the shipment",
+      "stage": "registered",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "Written two hours to the second after the order data on every parcel, days before the first facility scan: no one has the parcel yet, though the page's status turns In Transit with it."
+    },
+    {
+      "wording": "Arrival processing center",
+      "stage": "accepted",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "Shouwu's warehouse taking the parcel in, which the page's Preparing status covers."
+    },
+    {
+      "wording": "Package processing completed",
+      "stage": "accepted",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "The warehouse done with the parcel before its flight, which the page's Preparing status still covers."
+    },
+    {
+      "wording": "Arrived at Shanghai Pudong Airport",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live"
+    },
+    {
+      "wording": "Departed from export airport",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live"
+    },
+    {
+      "wording": "Arrived at airport of Destination",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live"
+    },
+    {
+      "wording": "Shipment started the customs clearance process at destination",
+      "stage": "customs",
+      "language": "en",
+      "confirmedBy": "live"
+    },
+    {
+      "wording": "Custom clearance completed",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "Released by customs in the destination country."
+    },
+    {
+      "wording": "Delivery to local courier",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "A handover to the destination's delivery carrier, not to the recipient."
+    },
+    {
+      "wording": "First parcel scan along Poste Italiane’s logistic network",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "Poste Italiane's first scan after the handover to it as the local courier; the parcel is already on its way."
+    },
+    {
+      "wording": "In transit along Poste Italiane’s logistic network",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live"
+    },
+    {
+      "wording": "Out for delivery",
+      "stage": "out_for_delivery",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "The local courier's delivery round."
+    },
+    {
+      "wording": "Delivered by post man",
+      "stage": "delivered",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "The local post's delivery to the recipient."
+    },
+    {
+      "wording": "Shipment arrived at facility",
+      "stage": "accepted",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "The first scan in the hands of the forwarder that takes the parcel to the flight, after the order data."
+    },
+    {
+      "wording": "Shipment departed from facility",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live"
+    },
+    {
+      "wording": "arrived at the distribution center",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live"
+    },
+    {
+      "wording": "Depart from the sorting center",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live"
+    },
+    {
+      "wording": "Export customs declaration completed",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "China's export declaration done before the flight; the parcel is not held in customs."
+    },
+    {
+      "wording": "Export Released",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "China's export release before the flight; the parcel is not held in customs."
+    },
+    {
+      "wording": "Flight Departed",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live"
+    },
+    {
+      "wording": "Flight departure",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live"
+    },
+    {
+      "wording": "Flight arrival",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live"
+    },
+    {
+      "wording": "Flight arrived",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-05",
+      "note": "The flight landed, a day after it left China; the tracker places it at \"EU\"."
+    },
+    {
+      "wording": "Customs clearance has been completed",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "Released by customs in the destination country."
+    },
+    {
+      "wording": "Shipment in transit",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live"
+    },
+    {
+      "wording": "Shipment in transit-To the airline",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-04",
+      "note": "On the way to the airline, written with the export declaration and before the flight."
+    },
+    {
+      "wording": "Abnormal delivery",
+      "stage": "failed_attempt",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "The local courier's round that did not deliver, after its out-for-delivery scan; the reason follows as its own scan."
+    },
+    {
+      "wording": "<Incorrect address.>",
+      "stage": "failed_attempt",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "The local courier's reason for a failed round, in angle brackets; the parcel went on in transit after it."
+    },
+    {
+      "wording": "<User not at home>",
+      "stage": "failed_attempt",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-04",
+      "note": "iMile's driver's reason for a failed round in Italy, in angle brackets, after its out-for-delivery row."
+    },
+    {
+      "wording": "【Milan center】Received.",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-04",
+      "note": "iMile, the delivering partner in Italy, receiving the parcel at its centre. iMile's sentences read its rows whatever centre they name."
+    },
+    {
+      "wording": "【Milan center】Parcel shipped to【ROM 10】.",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-04",
+      "note": "iMile sending the parcel on to its delivery station."
+    },
+    {
+      "wording": "【ROM 10】Arrived.",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-04"
+    },
+    {
+      "wording": "【ROM 10】Shipment out for delivery.",
+      "stage": "out_for_delivery",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-04"
+    },
+    {
+      "wording": "【ROM 10】 Back To DS.",
+      "stage": "failed_attempt",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-04",
+      "note": "Back at iMile's delivery station after the round failed, as iMile's map reads it."
+    },
+    {
+      "wording": "【ROM 10】Parcel shipped to【Milan Transit Center】.",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-04",
+      "note": "After two failed rounds, the delivery station sends the parcel back to iMile's centre."
+    },
+    {
+      "wording": "【Milan Transit Center】Arrived.",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-04"
+    },
+    {
+      "wording": "【Milan Transit Center】Order Closed.",
+      "stage": "exception",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-04",
+      "note": "iMile closing the delivery order without a delivery, as on its own return rows."
+    },
+    {
+      "wording": "FR, Votre envoi est en transit sur nos plateformes logistiques.,运输途中",
+      "stage": "in_transit",
+      "language": "fr",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-04",
+      "note": "The French delivering partner's transit row, after the sort in the Netherlands, with the country before it and Shouwu's Chinese for in transit after it."
+    },
+    {
+      "wording": "Germany, Die Sendung wurde im Briefzentrum bearbeitet.,运输途中",
+      "stage": "in_transit",
+      "language": "de",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-05",
+      "note": "The German delivering partner's sort at a letter centre, with the country before it and Shouwu's Chinese for in transit after it."
+    },
+    {
+      "wording": "Shipment arrived at a carrier facility",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "After the handover to the carrier that flies the parcel."
+    },
+    {
+      "wording": "Shipment arrived at an air hub",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live"
+    },
+    {
+      "wording": "Shipment started the customs clearance process at origin",
+      "stage": "customs",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "Export clearance in China."
+    },
+    {
+      "wording": "Shipment departed from a carrier facility",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live"
+    },
+    {
+      "wording": "Shipment completed the customs clearance process at destination",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "Released by customs in the destination country."
+    },
+    {
+      "wording": "Shipment arrived in the destination country",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live"
+    },
+    {
+      "wording": "Shipment has been sorted at the carrier facility",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "A sort in the destination country after customs released the parcel."
+    },
+    {
+      "wording": "Your parcel has been prepared by your web merchant. It will soon be delivered to Colis Privé.",
+      "stage": "registered",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "Colis Privé's notice of the parcel's data, relayed before Shouwu's own scans; nothing has moved."
+    },
+    {
+      "wording": "Your parcel arrived at the shipping partner. It will be sent to Colis Privé.",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "Colis Privé's record of the parcel reaching the partner that brings it to France, relayed."
+    },
+    {
+      "wording": "Your package is in transit to Colis Privé",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "Relayed from Colis Privé before it has the parcel."
+    },
+    {
+      "wording": "The shipment has been processed in the parcel center of origin",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "DHL's first scan in Germany, relayed after the sort that follows customs at the destination."
+    },
+    {
+      "wording": "Arrived at hub",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "A hub on the way to the delivering carrier, after customs released the parcel at the gateway airport."
+    },
+    {
+      "wording": "Parcel arrived at branch",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "The delivering carrier's local branch, after the hub: the parcel waits there for its round, not for collection."
+    },
+    {
+      "wording": "Parcel received by distributor",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "The delivering carrier's courier took the parcel at the branch, before its round."
+    },
+    {
+      "wording": "Parcel out for delivery",
+      "stage": "out_for_delivery",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "The delivering carrier's round."
+    },
+    {
+      "wording": "货物电子信息已经收到",
+      "stage": "registered",
+      "language": "zh",
+      "confirmedBy": "live",
+      "note": "The goods' electronic data received, beside the order's own data row."
+    },
+    {
+      "wording": "Shipment information has been received",
+      "stage": "registered",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "A partner's data row; one dated after the parcel moved reads as in transit."
+    },
+    {
+      "wording": "1013C，申报过港中",
+      "stage": "in_transit",
+      "language": "zh",
+      "confirmedBy": "live",
+      "note": "A batch, named by its code, declared for the road to Hong Kong. Its pattern covers any batch code."
+    },
+    {
+      "wording": "已到港，安排航班中",
+      "stage": "in_transit",
+      "language": "zh",
+      "confirmedBy": "live",
+      "note": "Arrived at the port of departure, waiting for a flight."
+    },
+    {
+      "wording": "预计23号的航班",
+      "stage": "in_transit",
+      "language": "zh",
+      "confirmedBy": "live",
+      "note": "The flight booked for a day of the month, here the 23rd. Its pattern covers any day and the second leg's (二程) row."
+    },
+    {
+      "wording": "航班已飞",
+      "stage": "in_transit",
+      "language": "zh",
+      "confirmedBy": "live",
+      "note": "The flight left."
+    },
+    {
+      "wording": "已落地",
+      "stage": "in_transit",
+      "language": "zh",
+      "confirmedBy": "live",
+      "note": "The flight landed."
+    },
+    {
+      "wording": "二程航班已飞",
+      "stage": "in_transit",
+      "language": "zh",
+      "confirmedBy": "live",
+      "note": "The second leg's flight left."
+    },
+    {
+      "wording": "已落地，清关提货中",
+      "stage": "customs",
+      "language": "zh",
+      "confirmedBy": "live",
+      "note": "Landed; the parcel is being cleared and collected from the airline."
+    },
+    {
+      "wording": "清关完成",
+      "stage": "in_transit",
+      "language": "zh",
+      "confirmedBy": "live",
+      "note": "Import clearance done."
+    },
+    {
+      "wording": "已交仓扫描",
+      "stage": "in_transit",
+      "language": "zh",
+      "confirmedBy": "live",
+      "note": "Handed to the delivering partner's depot and scanned there."
+    },
+    {
+      "wording": "Your consignment has been picked up",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "note": "The delivering partner collecting the parcel from Shouwu's depot abroad, after the clearance. Shouwu had the parcel long before, so it is no handover from the sender."
+    },
+    {
+      "wording": "This parcel has been delivered",
+      "stage": "delivered",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-02",
+      "note": "The delivering partner's delivery in the Netherlands, after its out-for-delivery rows."
+    },
+    {
+      "wording": "The goods have been deliverey to the final delivery service provider",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-03",
+      "note": "The hand-over to the last-mile partner after import clearance; \"deliverey\" is Shouwu's spelling."
+    },
+    {
+      "wording": "NOA received",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-03",
+      "note": "The destination agent's receipt of the flight's notice of arrival, after the landing and before clearance."
+    },
+    {
+      "wording": "Customs clearance in progress",
+      "stage": "customs",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-03",
+      "note": "Import clearance under way, before \"Customs clearance has been completed\"."
+    },
+    {
+      "wording": "Delivered to letterbox",
+      "stage": "delivered",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-04",
+      "note": "Colis Privé's delivery to the recipient's letterbox, on the line into France."
+    },
+    {
+      "wording": "Arrival at the processing center",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-05",
+      "note": "A delivering partner's sort centre after the import clearance. Shouwu's own warehouse intake is \"Arrival processing center\"."
+    },
+    {
+      "wording": "Departed the processing center",
+      "stage": "in_transit",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-05",
+      "note": "The parcel leaving a delivering partner's sort centre after the import clearance."
+    },
+    {
+      "wording": "The shipment could not be delivered. Please find more information here.",
+      "stage": "failed_attempt",
+      "language": "en",
+      "confirmedBy": "live",
+      "firstSeen": "2026-11-05",
+      "note": "A delivering partner's failed attempt; another delivery run follows. The link the wording points to is not relayed."
+    }
+  ]
+}

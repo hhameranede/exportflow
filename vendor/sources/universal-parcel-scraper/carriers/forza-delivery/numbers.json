@@ -1,0 +1,55 @@
+{
+  "carrier": "forza-delivery",
+  "records": [
+    {
+      "number": "FD999980",
+      "role": "shipment",
+      "evidence": "synthetic",
+      "derivedFrom": "official_shape",
+      "shapeConfirmed": "2026-10-19",
+      "expect": {
+        "carrier": "unknown",
+        "confidence": "low",
+        "candidates": [
+          "gls-ch",
+          "gls-fr",
+          "gls-de",
+          "forza-delivery",
+          "loggi"
+        ]
+      },
+      "note": "Synthetic guía with six digits, the shortest the tracking page's own check takes. GLS's and Loggi's rules take the same eight characters. Its serial sits far beyond the range in use."
+    },
+    {
+      "number": "FD9999980",
+      "role": "shipment",
+      "evidence": "synthetic",
+      "derivedFrom": "official_shape",
+      "shapeConfirmed": "2026-10-19",
+      "expect": {
+        "carrier": "unknown",
+        "confidence": "low",
+        "candidates": [
+          "forza-delivery"
+        ]
+      },
+      "note": "Synthetic guía in the shape the tracking page's own check takes: FD and six to nine digits. Its serial sits far beyond the range in use."
+    },
+    {
+      "number": "FD99999981",
+      "role": "shipment",
+      "evidence": "synthetic",
+      "derivedFrom": "official_shape",
+      "shapeConfirmed": "2026-10-19",
+      "expect": {
+        "carrier": "unknown",
+        "confidence": "low",
+        "candidates": [
+          "forza-delivery",
+          "tnt-it"
+        ]
+      },
+      "note": "Synthetic guía with eight digits, in the layout TNT Italy's low rule also takes. Its serial sits far beyond the range in use."
+    }
+  ]
+}
