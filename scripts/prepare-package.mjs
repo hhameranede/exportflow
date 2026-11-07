@@ -30,3 +30,4 @@ async function patchJsonImports(dir) {
 
 await patchJsonImports(engineDir);
 console.log('Universal Parcel Scraper prepared for Node 24 ESM compatibility.');
+await import('./generate-exportflow-carrier-catalog.mjs');
