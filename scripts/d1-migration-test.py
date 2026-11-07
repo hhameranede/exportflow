@@ -184,7 +184,9 @@ try:
            SET evidence_status = 'verified', verification_method = 'mock',
                verified_at = '2026-11-07T12:00:00Z',
                verification_evidence_url = 'https://example.test/mock',
-               authorization_evidence_url = 'https://example.test/authorization'
+               authorization_evidence_url = 'https://example.test/authorization',
+               tracking_rights_status = 'third_party_authorized',
+               commercial_access_status = 'authorized_service_provider'
            WHERE provider_id = 'ups'"""
     )
 except sqlite3.IntegrityError:
@@ -192,13 +194,32 @@ except sqlite3.IntegrityError:
 else:
     raise AssertionError("Mock evidence must never satisfy the live Verified gate.")
 
+# A merchant-own-shipments scope is not enough to verify a public third-party service.
+try:
+    db.execute(
+        """UPDATE carrier_evidence
+           SET evidence_status = 'verified', verification_method = 'live',
+               verified_at = '2026-11-07T12:00:00Z',
+               verification_evidence_url = 'https://example.test/live',
+               authorization_evidence_url = 'https://example.test/authorization',
+               tracking_rights_status = 'own_shipments_scope',
+               commercial_access_status = 'authorized_service_provider'
+           WHERE provider_id = 'ups'"""
+    )
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("Own-shipments-only access must not verify a public third-party carrier integration.")
+
 # A complete live-test and authorization trail is the only accepted Verified transition.
 db.execute(
     """UPDATE carrier_evidence
        SET evidence_status = 'verified', verification_method = 'live',
            verified_at = '2026-11-07T12:00:00Z',
            verification_evidence_url = 'https://example.test/redacted-live-test',
-           authorization_evidence_url = 'https://example.test/redacted-authorization'
+           authorization_evidence_url = 'https://example.test/redacted-authorization',
+           tracking_rights_status = 'third_party_authorized',
+           commercial_access_status = 'authorized_service_provider'
        WHERE provider_id = 'ups'"""
 )
 verified = db.execute(
