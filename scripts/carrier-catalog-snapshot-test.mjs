@@ -1,12 +1,25 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { CARRIER_CATALOG_METADATA, CARRIER_IDS, CARRIERS, CARRIER_INTEGRATION_MATRIX } from "../data/carrier-catalog.generated.mjs";
+
+const licensingIndex = JSON.parse(await readFile(new URL("../data/carrier-catalog-licensing.json", import.meta.url), "utf8"));
 
 assert.equal(CARRIER_IDS.length, 1339);
 assert.equal(Object.keys(CARRIERS).length, 1339);
 assert.equal(new Set(CARRIER_IDS).size, CARRIER_IDS.length);
 assert.ok(CARRIER_IDS.includes("unknown"), "The source snapshot should preserve the reserved unknown id.");
-assert.equal(CARRIER_CATALOG_METADATA.catalogOwner, "ExportFlow");
+assert.equal(CARRIER_CATALOG_METADATA.catalogMaintainer, "ExportFlow");
+assert.equal("catalogOwner" in CARRIER_CATALOG_METADATA, false, "Maintainer status must not imply exclusive ownership of third-party carrier data.");
 assert.equal(CARRIER_CATALOG_METADATA.upstreamCommit, "e64a466772ef25ce68e02d9c7c9f1613eec1208b");
+assert.equal(CARRIER_CATALOG_METADATA.upstreamCoreLicense, "Apache-2.0");
+assert.equal(CARRIER_CATALOG_METADATA.sourceLicenseCoverageRecords, 1339);
+assert.equal(CARRIER_CATALOG_METADATA.displayCarrierRecords, 1338);
+assert.equal(CARRIER_CATALOG_METADATA.independentlyVerifiedOfficialCarrierRecords, 0);
+assert.equal(CARRIER_CATALOG_METADATA.carrierAuthorizationRecords, 0);
+assert.equal(licensingIndex.recordCount, 1338);
+assert.equal(licensingIndex.upstream.license, "Apache-2.0");
+assert.equal(licensingIndex.records.length, 1338);
+assert.equal(licensingIndex.rightsPolicy.officialCarrierStatus, "not_independently_verified");
 assert.equal(CARRIER_CATALOG_METADATA.carrierRecords, 1339);
 assert.equal(CARRIER_CATALOG_METADATA.adapterSourceDirectories, 732);
 assert.equal(CARRIER_CATALOG_METADATA.liveAdapterTestFiles, 727);
@@ -25,10 +38,19 @@ for (const id of CARRIER_IDS) {
   assert.equal(carrier.provenance.commit, CARRIER_CATALOG_METADATA.upstreamCommit);
   assert.equal(carrier.provenance.manifestPath, "carriers/" + id + "/carrier.json");
   assert.equal(carrier.provenance.sourceLicense, "Apache-2.0");
+  assert.equal(carrier.provenance.sourceUrl, "https://github.com/plhery/universal-parcel-scraper/blob/" + CARRIER_CATALOG_METADATA.upstreamCommit + "/" + carrier.provenance.manifestPath);
+  assert.equal(carrier.provenance.licenseUrl, "https://www.apache.org/licenses/LICENSE-2.0");
+  assert.equal(carrier.provenance.licensePath, "vendor/sources/universal-parcel-scraper/LICENSE");
   assert.equal(carrier.provenance.attributionPath, "vendor/sources/universal-parcel-scraper/NOTICE");
+  assert.equal(carrier.provenance.licenseStatus, "recorded_from_pinned_upstream_repository");
+  assert.equal(carrier.provenance.licenseScope, "upstream_carrier_manifest");
   assert.equal(carrier.provenance.authorityStatus, "upstream_manifest_candidate_not_independently_verified");
+  assert.equal(carrier.provenance.officialCarrierStatus, "not_independently_verified");
   assert.equal(carrier.provenance.commercialTrackingRights, "not_granted_by_software_license");
-  assert.ok(carrier.provenance.portalUrlCandidate === null || carrier.provenance.portalUrlCandidate.startsWith("https://"));
+  assert.equal(carrier.provenance.carrierTrademarkRights, "not_granted_by_software_license");
+  assert.equal(carrier.provenance.carrierApiAuthorization, "not_granted_by_software_license");
+  assert.equal(carrier.provenance.thirdPartyTrackingDataRights, "not_assessed");
+  assert.equal("portalUrlCandidate" in carrier.provenance, false, "Unreviewed portal candidates must stay out of the public carrier index.");
   assert.ok(["provider_api_client", "dedicated_adapter", "universal_fallback", "link_only", "adapter_reference_only", "catalogue_only"].includes(row.integrationClass));
   assert.ok(["present", "not_found"].includes(row.adapterSource));
   assert.ok(["defined", "not_found"].includes(row.fixtureTest));
@@ -58,6 +80,10 @@ assert.equal("commercialAuthorization" in CARRIER_INTEGRATION_MATRIX.aramex, fal
 const records = Object.values(CARRIERS);
 const displayRecords = records.filter(record => record.id !== "unknown");
 assert.equal(displayRecords.length, 1338);
+assert.equal(new Set(licensingIndex.records.map(record => record.id)).size, 1338);
+assert.ok(licensingIndex.records.every(record => record.provenance.sourceLicense === "Apache-2.0"));
+assert.ok(licensingIndex.records.every(record => record.provenance.officialCarrierStatus === "not_independently_verified"));
+assert.ok(licensingIndex.records.every(record => record.provenance.portalUrlCandidate === null || record.provenance.portalUrlCandidate.startsWith("https://")));
 assert.ok(displayRecords.every(record => typeof record.name === "string" && record.name.length > 0));
 assert.ok(displayRecords.every(record => Array.isArray(record.aliases) && Array.isArray(record.countries)));
 assert.ok(displayRecords.every(record => record.countries.every(code => /^[A-Z]{2}$/.test(code))));
@@ -71,4 +97,4 @@ assert.equal(serialized.includes("apiKey"), false, "The generated directory must
 assert.equal(serialized.includes("portal"), false, "The public index must not expose unreviewed portal URL metadata.");
 assert.equal(serialized.includes("trackingNumber"), false, "The generated index must not contain shipment data.");
 
-console.log("ExportFlow native carrier catalogue snapshot passed: 1,339 records, source provenance, 732 adapter directories and 727 live-test definitions.");
+console.log("ExportFlow native carrier catalogue snapshot passed: 1,338 display records with per-record Apache-2.0 provenance, source links and rights-boundary checks.");
