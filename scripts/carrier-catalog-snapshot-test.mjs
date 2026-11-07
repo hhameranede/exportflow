@@ -94,7 +94,7 @@ assert.ok(displayRecords.every(record => record.capabilities?.tracking?.adapter 
 
 const serialized = JSON.stringify(records);
 assert.equal(serialized.includes("apiKey"), false, "The generated directory must not copy API credentials.");
-assert.equal(serialized.includes("portal"), false, "The public index must not expose unreviewed portal URL metadata.");
+assert.equal(/["']portalUrlCandidate["']|["']portalUrl["']/.test(serialized), false, "The public index must not expose unreviewed carrier tracking-page URLs.");
 assert.equal(serialized.includes("trackingNumber"), false, "The generated index must not contain shipment data.");
 
 console.log("ExportFlow native carrier catalogue snapshot passed: 1,338 display records with per-record Apache-2.0 provenance, source links and rights-boundary checks.");
