@@ -40,13 +40,13 @@ assert.match(html, /href="\/developers\//, "Homepage footer must link to the dev
 assert.match(developersHtml, /canonical" href="https:\/\/exportflow\.me\/developers\//, "Developer guide must have a canonical URL");
 assert.match(developersHtml, /\/api\/openapi/, "Developer guide must link to the OpenAPI contract");
 assert.match(sdk, /createExportFlowClient/, "Public SDK module must be present");
-assert.match(html, /href="\\/merchant\\//, "Homepage must link to the merchant workspace");
+assert.ok(html.includes('href="/merchant/'), "Homepage must link to the merchant workspace");
 assert.match(merchantHtml, /name="robots" content="noindex,nofollow,noarchive"/, "Merchant workspace must not be indexed");
 assert.match(merchantHtml, /Device-only storage/, "Merchant page must disclose local-only storage");
-assert.match(merchantJs, /client\\.batchTrack/, "Merchant workspace must use the bounded batch API");
-assert.match(merchantJs, /localStorage\\.setItem/, "Merchant watchlist must be stored locally");
+assert.ok(merchantJs.includes("client.batchTrack"), "Merchant workspace must use the bounded batch API");
+assert.ok(merchantJs.includes("localStorage.setItem"), "Merchant watchlist must be stored locally");
 assert.match(merchantJs, /createObjectURL/, "Merchant workspace must support CSV export");
-assert.match(build, /"merchant\\.js"/, "Build must copy the merchant runtime");
+assert.ok(build.includes('"merchant.js"'), "Build must copy the merchant runtime");
 assert.match(build, /"merchant"/, "Build must publish the merchant route");
 assert.match(headers, /X-Robots-Tag: noindex, nofollow, noarchive/, "Merchant route must carry a crawler noindex header");
 assert.ok(!sitemap.includes("https://exportflow.me/merchant/"), "Device-only workspace must not enter the public sitemap");
