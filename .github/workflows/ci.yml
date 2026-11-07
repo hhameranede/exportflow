@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: exportflow-ci-\${{ github.ref }}
+  group: exportflow-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -66,9 +66,9 @@ jobs:
         id: datadog-config
         shell: bash
         env:
-          DD_API_KEY: \${{ secrets.DD_API_KEY }}
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
         run: |
-          if [[ -n "\${DD_API_KEY}" ]]; then
+          if [[ -n "${DD_API_KEY}" ]]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
             echo "Datadog Test Optimization is configured."
           else
@@ -80,15 +80,15 @@ jobs:
         uses: datadog/test-visibility-github-action@v3
         with:
           languages: js
-          api_key: \${{ secrets.DD_API_KEY }}
+          api_key: ${{ secrets.DD_API_KEY }}
           site: us5.datadoghq.com
       - name: Run regression tests
         run: npm test
         env:
-          NODE_OPTIONS: \${{ steps.datadog-config.outputs.enabled == 'true' && format('-r {0}', env.DD_TRACE_PACKAGE) || '' }}
-          DD_API_KEY: \${{ secrets.DD_API_KEY }}
+          NODE_OPTIONS: ${{ steps.datadog-config.outputs.enabled == 'true' && format('-r {0}', env.DD_TRACE_PACKAGE) || '' }}
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_SITE: us5.datadoghq.com
-          DD_CIVISIBILITY_AGENTLESS_ENABLED: \${{ steps.datadog-config.outputs.enabled }}
+          DD_CIVISIBILITY_AGENTLESS_ENABLED: ${{ steps.datadog-config.outputs.enabled }}
           DD_SERVICE: exportflow
           DD_ENV: ci
           DD_TEST_SESSION_NAME: exportflow-regression
