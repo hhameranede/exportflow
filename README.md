@@ -22,6 +22,7 @@ The upstream catalog documents thousands of carrier names and dedicated adapters
 - `POST /api/batch-track` — bounded batch tracking for up to five shipments. Each result includes an individual status and reuses the single-tracking validation and safeguards.
 - `GET /api/openapi` — machine-readable OpenAPI 3.1 contract for the public API.
 - `GET /developers/` — developer quick start and JavaScript SDK guide; the SDK is served as `/exportflow-sdk.mjs`.
+- `/merchant/` — device-only merchant workspace. It stores up to ten watchlist entries in browser local storage, refreshes them in two sequential batches of at most five and can export a CSV. It is not an account, cloud sync or server-side shipment history.
 
 #### Tracking API Response
 
@@ -83,7 +84,7 @@ A country appearing in the directory does not mean ExportFlow has a working dire
 - Do not log full tracking numbers or postcodes.
 - The selected carrier receives the tracking number. UPU may receive eligible postal tracking numbers.
 - Tracking responses use `Cache-Control: no-store`.
-- The tracking endpoint applies request-body validation, a bounded lookup deadline, per-isolate request throttling and concurrency limits. The in-memory limits are per Worker isolate, not global customer quotas.
+- The tracking endpoint applies request-body validation, a bounded lookup deadline, per-isolate request throttling and concurrency limits. The merchant workspace keeps the watchlist and compact result summaries in browser local storage only; a refresh explicitly sends the shipment details to the tracking API. The in-memory limits are per Worker isolate, not global customer quotas.
 - Country and carrier listing data is public catalog information; individual tracking results are not public directory content.
 
 ## SEO
@@ -112,6 +113,7 @@ Open http://localhost:4173. Static preview is for layout only; Pages Functions a
 - `index.html`, `styles.css`, `app.js` — responsive homepage and tracking UI
 - `translations.js` — eight complete interface locale dictionaries
 - `coverage/index.html`, `coverage.js` — searchable country/territory directory
+- `merchant/index.html`, `merchant.js` — browser-local merchant watchlist, bounded batch refresh and CSV export
 - `functions/api/track.js` — server-side tracking lookup
 - `functions/api/carriers.js` — installed carrier ID catalog
 - `functions/api/coverage.js` — catalog-derived country classification and counts
