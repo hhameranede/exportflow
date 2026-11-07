@@ -43,7 +43,7 @@ function validateTrackingRequest(input) {
     throw new TypeError("carrier must be a carrier ID");
   }
   if (input.postcode !== undefined &&
-      (typeof input.postcode !== "string" || input.postcode.length > 24 || !/^[a-z0-9 -]*$/i.test(input.postcode))) {
+      (typeof input.postcode !== "string" || input.postcode.length > 24 || !/^[a-z0-9 -]+$/i.test(input.postcode))) {
     throw new TypeError("postcode is invalid");
   }
   if (input.language !== undefined &&
