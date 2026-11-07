@@ -42,7 +42,7 @@ for (const id of [
 const localeMatch = translationsSource.match(/window\.EXPORTFLOW_TRANSLATIONS\s*=\s*([\s\S]*);\s*$/);
 assert.ok(localeMatch, "Translation bundle must expose a JSON-compatible locale dictionary");
 const translations = JSON.parse(localeMatch[1]);
-const locales = ["en", "ar", "es", "zh", "hi", "pt", "fr", "ru"];
+const locales = ["en", "ar", "es", "zh", "hi", "pt", "fr", "bn"];
 assert.deepEqual(Object.keys(translations).sort(), [...locales].sort(), "Exactly eight selectable locales must have translation dictionaries");
 const expectedKeys = Object.keys(translations.en).sort();
 assert.ok(expectedKeys.length >= 90, "The homepage and coverage UI translation bundle should be complete");
@@ -59,8 +59,8 @@ for (const [pageName, pageHtml] of [["homepage", html], ["coverage page", covera
     assert.ok(expectedKeys.includes(key), pageName + " references a missing translation key: " + key);
   }
 }
-assert.match(js, /supportedLocales\s*=\s*\["en", "ar", "es", "zh", "hi", "pt", "fr", "ru"\]/);
-assert.match(trackApi, /\^\(en\|ar\|es\|zh\|hi\|pt\|fr\|ru\)\$/i, "Tracking API must accept exactly the eight supported locales");
+assert.match(js, /supportedLocales\s*=\s*\["en", "ar", "es", "zh", "hi", "pt", "fr", "bn"\]/);
+assert.match(trackApi, /\^\(en\|ar\|es\|zh\|hi\|pt\|fr\|bn\)\$/i, "Tracking API must accept exactly the eight supported locales");
 assert.match(js, /html\.dir\s*=\s*locale === "ar" \? "rtl" : "ltr"/, "Arabic must switch the page to RTL");
 assert.match(js, /localStorage\.setItem\("exportflow-language"/, "Language choice must persist");
 assert.doesNotMatch(js, /EXF-DEMO-001/, "The fake sample parcel flow must not be presented as live tracking");
@@ -127,7 +127,7 @@ assert.equal(localeForCountry("ES"), "es", "Spain must default to Spanish");
 assert.equal(localeForCountry("BR"), "pt", "Brazil must default to Portuguese");
 assert.equal(localeForCountry("CN"), "zh", "China must default to Chinese");
 assert.equal(localeForCountry("IN"), "hi", "India must default to Hindi");
-assert.equal(localeForCountry("RU"), "ru", "Russia must default to Russian");
+assert.equal(localeForCountry("BD"), "bn", "Bangladesh must default to Bengali");\nassert.equal(localeForCountry("RU"), "en", "Countries without a configured locale must fall back to English");
 assert.equal(localeForCountry("US"), "en", "Countries without a supported locale must fall back to English");
 assert.equal(localeForVisitor("CA", "en-CA,en;q=0.9,fr;q=0.8"), "en", "English-preferring visitors in bilingual countries should keep English");
 assert.equal(localeForVisitor("CA", "fr-CA,fr;q=0.9,en;q=0.8"), "fr", "French-preferring visitors in bilingual countries should receive French");
