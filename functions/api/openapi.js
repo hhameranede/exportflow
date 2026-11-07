@@ -111,8 +111,8 @@ const OPENAPI = {
         required: ["number"],
         properties: {
           number: { type: "string", minLength: 4, maxLength: 40, pattern: "^[a-zA-Z0-9\\s-]+$" },
-          carrier: { type: "string", minLength: 2, maxLength: 80, pattern: "^[a-z0-9-]+$" },
-          postcode: { type: "string", minLength: 1, maxLength: 24, pattern: "^[a-z0-9 -]+$" },
+          carrier: { type: "string", minLength: 2, maxLength: 80, pattern: "^[a-zA-Z0-9-]+$" },
+          postcode: { type: "string", minLength: 1, maxLength: 24, pattern: "^[a-zA-Z0-9 -]+$" },
           language: { type: "string", enum: ["en", "ar", "es", "zh", "hi", "pt", "fr", "bn"] }
         }
       },
@@ -158,8 +158,8 @@ const OPENAPI = {
         properties: {
           id: { type: "string", pattern: "^[a-zA-Z0-9_-]{1,40}$" },
           number: { type: "string", minLength: 4, maxLength: 40, pattern: "^[a-zA-Z0-9\\s-]+$" },
-          carrier: { type: "string", minLength: 2, maxLength: 80, pattern: "^[a-z0-9-]+$" },
-          postcode: { type: "string", minLength: 1, maxLength: 24, pattern: "^[a-z0-9 -]+$" },
+          carrier: { type: "string", minLength: 2, maxLength: 80, pattern: "^[a-zA-Z0-9-]+$" },
+          postcode: { type: "string", minLength: 1, maxLength: 24, pattern: "^[a-zA-Z0-9 -]+$" },
           language: { type: "string", enum: ["en", "ar", "es", "zh", "hi", "pt", "fr", "bn"] }
         }
       },
