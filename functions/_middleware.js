@@ -55,17 +55,41 @@ function cookieValue(cookieHeader, name) {
   return "";
 }
 
+function applyResponseSecurityHeaders(response, request) {
+  const headers = new Headers(response.headers);
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  headers.set("X-Frame-Options", "DENY");
+
+  const url = new URL(request.url);
+  if (url.protocol === "https:") {
+    headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  if (url.pathname.startsWith("/api/")) {
+    headers.set("X-Robots-Tag", "noindex, nofollow");
+  }
+
+  const bodylessStatus = [204, 205, 304].includes(response.status);
+  return new Response(bodylessStatus ? null : response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
+}
+
 export async function onRequest({ request, next }) {
-  if (request.method !== "GET" && request.method !== "HEAD") return next();
+  const secureNext = async () => applyResponseSecurityHeaders(await next(), request);
+  if (request.method !== "GET" && request.method !== "HEAD") return secureNext();
 
   // Let search crawlers read the canonical English entry point and discover locale alternates.
   const userAgent = request.headers.get("User-Agent") || "";
-  if (/(bot|crawler|spider|slurp|bingpreview)/i.test(userAgent)) return next();
+  if (/(bot|crawler|spider|slurp|bingpreview)/i.test(userAgent)) return secureNext();
 
   const url = new URL(request.url);
   const isHome = url.pathname === "/";
   const isCoverage = url.pathname === "/coverage/" || url.pathname === "/coverage";
-  if (!isHome && !isCoverage) return next();
+  if (!isHome && !isCoverage) return secureNext();
 
   const savedLocale = cookieValue(request.headers.get("Cookie"), "ef-locale");
   const locale = SUPPORTED_LOCALES.has(savedLocale)
@@ -73,7 +97,7 @@ export async function onRequest({ request, next }) {
     : localeForVisitor(request.cf?.country, request.headers.get("Accept-Language"));
 
   // English is the safe fallback and already lives at the unprefixed canonical URL.
-  if (locale === "en") return next();
+  if (locale === "en") return secureNext();
 
   const target = new URL(url);
   target.pathname = isCoverage ? "/" + locale + "/coverage/" : "/" + locale + "/";
@@ -85,5 +109,5 @@ export async function onRequest({ request, next }) {
   if (!SUPPORTED_LOCALES.has(savedLocale)) {
     headers.append("Set-Cookie", "ef-locale=" + locale + "; Max-Age=31536000; Path=/; Secure; SameSite=Lax");
   }
-  return new Response(null, { status: 302, headers });
+  return applyResponseSecurityHeaders(new Response(null, { status: 302, headers }), request);
 }
