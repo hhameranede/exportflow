@@ -157,6 +157,48 @@ await assert.rejects(
 await assert.rejects(
   () => connector.track({
     merchantId: "merchant_001",
+    provider: "__proto__",
+    trackingNumber: "16-AAA111-ZR"
+  }),
+  error => error instanceof AlgerianConnectorError && error.code === "unsupported_provider"
+);
+
+const validEcotrackCourier = createAlgerianCarrierConnector({
+  authorizeMerchantProvider: async () => true,
+  resolveCredentials: async () => ({ token: "ecotrack-secret", courier: "48hrexpress" }),
+  createClient: (provider, config) => {
+    assert.equal(provider, "ecotrack");
+    assert.equal(config.courier, "48hrexpress");
+    return { track: async number => ({ parcel: { trackingNumber: number, status: "delivered" }, events: [] }) };
+  }
+});
+const ecotrackResult = await validEcotrackCourier.track({
+  merchantId: "merchant_001",
+  provider: "ecotrack",
+  trackingNumber: "DZ-123456"
+});
+assert.equal(ecotrackResult.status, "delivered");
+
+const mdmWithoutStoreId = createAlgerianCarrierConnector({
+  authorizeMerchantProvider: async () => true,
+  resolveCredentials: async () => ({ apiKey: "mdm-secret" }),
+  createClient: (provider, config) => {
+    assert.equal(provider, "mdm");
+    assert.equal(config.apiKey, "mdm-secret");
+    assert.equal("storeId" in config, false, "MDM storeId is optional for tracking");
+    return { track: async number => ({ parcel: { trackingNumber: number, status: "in_transit" }, events: [] }) };
+  }
+});
+const mdmResult = await mdmWithoutStoreId.track({
+  merchantId: "merchant_001",
+  provider: "mdm",
+  trackingNumber: "MDM-123456"
+});
+assert.equal(mdmResult.status, "in_transit");
+
+await assert.rejects(
+  () => connector.track({
+    merchantId: "merchant_001",
     provider: "yalidine",
     trackingNumber: "../not-a-tracking-number"
   }),
