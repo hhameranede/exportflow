@@ -24,8 +24,8 @@ for (const id of CARRIER_IDS) {
   assert.ok(["present", "not_found"].includes(row.adapterSource));
   assert.ok(["defined", "not_found"].includes(row.fixtureTest));
   assert.ok(["defined", "not_found"].includes(row.liveTestDefinition));
-  assert.equal(row.commercialAuthorization, "not_assessed");
-  assert.equal(row.thirdPartyTrackingRights, "not_assessed");
+  assert.equal("commercialAuthorization" in row, false);
+  assert.equal("thirdPartyTrackingRights" in row, false);
 }
 assert.deepEqual(CARRIER_INTEGRATION_MATRIX.ups.requiredEnvironment, ["UPS_CLIENT_ID", "UPS_CLIENT_SECRET"]);
 assert.equal(CARRIER_INTEGRATION_MATRIX.ups.apiAuthentication, "oauth2_client_credentials");
