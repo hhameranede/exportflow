@@ -1,10 +1,15 @@
 import { createExportFlowCarrierEngine, TrackingError } from "../lib/exportflow-carrier-engine.mjs";
 import { resolveShipmentTruth } from "../lib/shipment-truth.mjs";
 import { safeEventPoint } from "../lib/coordinates.mjs";
+import { GLOBAL_RATE_REQUESTS_PER_WINDOW } from "../lib/global-rate-limit-policy.mjs";
+import {
+  consumeGlobalRateLimit,
+  globalRateLimitHeaders
+} from "../lib/global-rate-limiter.mjs";
 
 const MAX_BODY_CHARS = 4_096;
 const MAX_NUMBER_LENGTH = 40;
-const REQUESTS_PER_MINUTE = 12;
+const REQUESTS_PER_MINUTE = GLOBAL_RATE_REQUESTS_PER_WINDOW;
 const MAX_CONCURRENT_LOOKUPS = 6;
 const LOOKUP_BUDGET_MS = 25_000;
 
@@ -248,10 +253,33 @@ export async function onRequestPost({ request, env }) {
     return json({ error: "invalid_language" }, 400);
   }
 
+  // Keep the per-isolate map as an inexpensive burst guard. When the
+  // Cloudflare Durable Object binding is configured, an additional strongly
+  // consistent quota aggregates requests across Worker isolates/locations.
   const retryAfter = await consumeRateLimit(request);
   if (retryAfter > 0) {
-    return json({ error: "rate_limited" }, 429, { "Retry-After": String(retryAfter) });
+    return json({ error: "rate_limited" }, 429, {
+      "Retry-After": String(retryAfter),
+      "X-RateLimit-Scope": "isolate-burst"
+    });
   }
+
+  let globalRateLimit = null;
+  try {
+    globalRateLimit = await consumeGlobalRateLimit(request, env);
+  } catch {
+    // Once the binding is configured, fail closed rather than silently
+    // downgrading a global quota to the per-isolate burst guard.
+    return json({ error: "global_rate_limiter_unavailable" }, 503, { "Retry-After": "10" });
+  }
+  if (globalRateLimit && !globalRateLimit.allowed) {
+    return json(
+      { error: "rate_limited" },
+      429,
+      globalRateLimitHeaders(globalRateLimit)
+    );
+  }
+
   if (activeLookups >= MAX_CONCURRENT_LOOKUPS) {
     return json({ error: "temporarily_busy" }, 503, { "Retry-After": "10" });
   }
@@ -267,7 +295,7 @@ export async function onRequestPost({ request, env }) {
       budgetMs: LOOKUP_BUDGET_MS,
       signal: request.signal
     });
-    return json(projectResult(result), 200);
+    return json(projectResult(result), 200, globalRateLimitHeaders(globalRateLimit) );
   } catch (error) {
     return trackingFailure(error);
   } finally {
