@@ -271,7 +271,11 @@ refreshButton.addEventListener("click", refreshAll);
 
 exportButton.addEventListener("click", () => {
   const columns = ["order_reference", "tracking_number", "carrier", "postcode", "language", "status", "error", "expected_delivery", "latest_event", "updated_at"];
-  const quote = value => '"' + String(value ?? "").replaceAll('"', '""') + '"';
+  const quote = value => {
+    let text = String(value ?? "");
+    if (/^[=+\\-@\\t\\r]/.test(text)) text = "'" + text;
+    return '"' + text.replaceAll('"', '""') + '"';
+  };
   const rows = items.map(item => {
     const result = item.lastResult || {};
     return [item.reference, item.number, item.carrier || result.carrier, item.postcode, item.language, result.status, result.error, result.expectedDelivery, result.latestEvent, item.updatedAt]
