@@ -65,6 +65,8 @@ jobs:
           node --check scripts/generate-exportflow-carrier-catalog.mjs
           node --check scripts/carrier-catalog-snapshot-test.mjs
           node --check scripts/carrier-official-api-contract-test.mjs
+          node --check scripts/carrier-sandbox-validation.mjs
+          node --check scripts/carrier-sandbox-validation-test.mjs
           node --check scripts/merchant-identity-test.mjs
           node --check scripts/session-bound-merchant-vault-test.mjs
           node --check scripts/locale-build-test.mjs
