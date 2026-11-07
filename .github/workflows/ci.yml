@@ -62,6 +62,8 @@ jobs:
           node --check scripts/carrier-evidence-test.mjs
           node --check functions/api/carrier-directory.js
           node --check scripts/carrier-directory-test.mjs
+          node --check scripts/generate-exportflow-carrier-catalog.mjs
+          node --check scripts/carrier-catalog-snapshot-test.mjs
           node --check scripts/merchant-identity-test.mjs
           node --check scripts/session-bound-merchant-vault-test.mjs
           node --check scripts/locale-build-test.mjs
