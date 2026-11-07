@@ -207,7 +207,6 @@ for (const source of SOURCES) {
     filter: candidate => shouldCopy(source.id, sourceRoot, candidate)
   });
 
-  assertSourceLicenses();
   if (existsSync(path.join(destination, "trawl"))) {
     throw new Error("The optional AGPL-3.0 TRAWL source must not be included in this Apache-licensed snapshot.");
   }
@@ -218,6 +217,7 @@ for (const source of SOURCES) {
   materialized.push({ ...source, ...countTree(destination) });
 }
 
+assertSourceLicenses();
 writeSourceManifest(materialized);
 
 // Replace Git submodule gitlinks with the copied ordinary source files.
