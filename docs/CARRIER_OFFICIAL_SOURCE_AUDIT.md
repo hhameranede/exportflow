@@ -6,7 +6,7 @@
 ## Result
 
 - 10 carrier research records received a primary-source review.
-- 8 official developer/API portals or API documentation pages were retrieved or identified.
+- 9 official developer/API portals or API documentation pages were retrieved or identified.
 - Japan Post's official tracking website was confirmed; the public page itself is not API documentation.
 - FedEx's official developer portal was identified in search, but its page was not retrievable during this automated check.
 - Aramex's official page was reached, but a consent layer obscured much of its body; its official search result identifies a Shipment Tracking API.
