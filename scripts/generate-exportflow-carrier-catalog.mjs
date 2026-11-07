@@ -14,16 +14,23 @@ const API_CLIENT_PROFILES = Object.freeze({
   "dhl-express": {
     authentication: "api_key_header",
     requiredEnvironment: ["DHL_API_KEY"],
+    sandboxMode: "no_external_customer_test_environment",
+    sandboxBaseUrl: null,
     contractTest: "carrier-official-api-contract-test"
   },
   fedex: {
     authentication: "oauth2_client_credentials",
     requiredEnvironment: ["FEDEX_API_KEY", "FEDEX_SECRET_KEY"],
-    contractTest: "carrier-official-api-contract-test"
+    sandboxMode: "developer_sandbox",
+    sandboxBaseUrl: "https://apis-sandbox.fedex.com",
+    contractTest: "carrier-official-api-contract-test",
+    onboardingRole: "integrator_provider"
   },
   ups: {
     authentication: "oauth2_client_credentials",
     requiredEnvironment: ["UPS_CLIENT_ID", "UPS_CLIENT_SECRET"],
+    sandboxMode: "customer_integration_environment",
+    sandboxBaseUrl: "https://wwwcie.ups.com",
     contractTest: "carrier-official-api-contract-test"
   }
 });
@@ -160,6 +167,9 @@ const integrationMatrix = Object.fromEntries(parsed.map(record => {
     apiClient: record.sourceArtifacts.apiModule ? "source_module_present" : "not_assessed",
     apiAuthentication: profile?.authentication || null,
     requiredEnvironment: profile?.requiredEnvironment || [],
+    sandboxMode: profile?.sandboxMode || "not_assessed",
+    sandboxBaseUrl: profile?.sandboxBaseUrl || null,
+    onboardingRole: profile?.onboardingRole || null,
     mockContractTest: profile?.contractTest || null,
     commercialAuthorization: "not_assessed",
     thirdPartyTrackingRights: "not_assessed"
