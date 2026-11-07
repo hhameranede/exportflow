@@ -34,7 +34,13 @@ The machine-readable inventory is in [`vendor/sources/README.md`](../vendor/sour
 
 The upstream Universal Parcel Scraper README at the pinned commit describes more than 3,500 carrier/service entries, 732 dedicated adapters, five universal fallback providers and 156 represented countries. Its published benchmark is a selected 100-carrier European sample (91 histories from dedicated adapters and 95 with all fallbacks enabled); it is not a global live-success guarantee. Carrier websites, API permissions, credentials, anti-bot controls and data freshness still vary.
 
-## Algeria specialization source\n\nThe pinned `developing-off/dz-delivery` repository is being materialized as an ordinary tracked source snapshot under `vendor/sources/algeria/dz-delivery/`. Its MIT-licensed TypeScript SDK (`packages/ts`) documents Yalidine, ZRExpress, Maystro, Ecotrack (including DHD variants), GuepEx, NoEST, E-com Delivery, MDM Express and Elogistia. The SDK also contains parcel creation, fees and location methods; ExportFlow will initially evaluate only its tracking interface.\n\nThis source snapshot is **not yet a runtime integration**. The SDK's provider clients require credentials and may expose methods unrelated to public tracking. Do not call create/cancel/fees APIs from the public tracking route. Before any runtime adapter is enabled, inspect each provider's API terms, credential model, response mapping, timeout behavior and tests. Only tracking with user-authorized provider credentials may be considered. No carrier is claimed live-verified by copying this code.\n\n## Newly reviewed candidates — not materialized
+## Algeria specialization source
+
+The pinned `developing-off/dz-delivery` repository is being materialized as an ordinary tracked source snapshot under `vendor/sources/algeria/dz-delivery/`. Its MIT-licensed TypeScript SDK (`packages/ts`) documents Yalidine, ZRExpress, Maystro, Ecotrack (including DHD variants), GuepEx, NoEST, E-com Delivery, MDM Express and Elogistia. The SDK also contains parcel creation, fees and location methods; ExportFlow will initially evaluate only its tracking interface.
+
+This source snapshot is **not yet a runtime integration**. The SDK's provider clients require credentials and may expose methods unrelated to public tracking. Do not call create/cancel/fees APIs from the public tracking route. Before any runtime adapter is enabled, inspect each provider's API terms, credential model, response mapping, timeout behavior and tests. Only tracking with user-authorized provider credentials may be considered. No carrier is claimed live-verified by copying this code.
+
+## Newly reviewed candidates — not materialized
 
 Research checked on 2026-11-07. These projects were reviewed and intentionally not copied because they do not add a suitable self-contained global engine for the current Cloudflare runtime.
 
