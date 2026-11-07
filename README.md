@@ -19,6 +19,9 @@ The upstream catalog documents thousands of carrier names and dedicated adapters
 - `GET /api/carriers` — exposes the installed carrier ID catalog.
 - `GET /api/coverage` — returns a live country-by-country classification derived from the installed carrier catalog.
 - `GET /api/health` — a liveness response; it does not prove that upstream carriers are reachable.
+- `POST /api/batch-track` — bounded batch tracking for up to five shipments. Each result includes an individual status and reuses the single-tracking validation and safeguards.
+- `GET /api/openapi` — machine-readable OpenAPI 3.1 contract for the public API.
+- `GET /developers/` — developer quick start and JavaScript SDK guide; the SDK is served as `/exportflow-sdk.mjs`.
 
 #### Tracking API Response
 
