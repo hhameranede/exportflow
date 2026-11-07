@@ -104,8 +104,9 @@ export function normalizeGleifRecord(record) {
   }
 
   const category = cleanText(entity.category).toUpperCase();
+  if (!category) return skip("missing_entity_category");
   if (EXCLUDED_CATEGORIES.has(category)) return skip("excluded_entity_category");
-  if (category && !ALLOWED_CATEGORIES.has(category)) return skip("unknown_entity_category");
+  if (!ALLOWED_CATEGORIES.has(category)) return skip("unknown_entity_category");
 
   const legalFormId = cleanText(entity.legalForm?.id) || null;
   const sourceUpdatedAt = cleanText(registration.lastUpdateDate) || null;
