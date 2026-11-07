@@ -95,6 +95,25 @@ test("event-level source references are preserved", () => {
   assert.deepEqual(truth.timeline.map(item => item.sourceRefs[0]), ["carrier-a", "carrier-b"]);
 });
 
+test("event source references take precedence over the global provider fallback", () => {
+  const withRefs = resolveShipmentTruth({
+    source: "fallback-provider",
+    events: [
+      event("2026-11-06T10:00:00Z", "in_transit", "Attributed scan", {
+        sourceRefs: ["carrier-a", "carrier-b"]
+      })
+    ]
+  });
+  assert.deepEqual(withRefs.latestTrusted.sourceRefs, ["carrier-a", "carrier-b"]);
+  assert.equal(withRefs.latestTrusted.source, "carrier-a");
+
+  const withoutRefs = resolveShipmentTruth({
+    source: "fallback-provider",
+    events: [event("2026-11-06T10:00:00Z", "in_transit", "Fallback scan")]
+  });
+  assert.deepEqual(withoutRefs.latestTrusted.sourceRefs, ["fallback-provider"]);
+});
+
 test("timezone-less timestamps are retained but not trusted", () => {
   const truth = resolveShipmentTruth({
     source: "carrier-a",
@@ -127,8 +146,11 @@ test("newest received untrusted event is excluded from trusted chronology", () =
     ]
   });
   assert.equal(truth.latestReceived.description, "Unverified imported scan");
+  assert.equal(truth.latestReceived.trusted, false);
   assert.equal(truth.latestTrusted.description, "Validated scan");
+  assert.equal(truth.latestTrusted.trusted, true);
   assert.equal(truth.status, "in_transit");
+  assert.equal(truth.timeline.find(item => item.description === "Unverified imported scan").trusted, false);
 });
 
 test("single-source timestamp evidence is medium, not high confidence", () => {
