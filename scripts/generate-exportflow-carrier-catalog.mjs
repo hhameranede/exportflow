@@ -88,14 +88,26 @@ async function readCarrierDirectory(entry) {
     aliases,
     countries,
     provenance: {
+      sourceType: "upstream_carrier_manifest",
       repository: "https://github.com/plhery/universal-parcel-scraper",
       commit: upstreamCommit,
       manifestPath: "carriers/" + id + "/carrier.json",
+      sourceUrl: "https://github.com/plhery/universal-parcel-scraper/blob/" + upstreamCommit + "/carriers/" + id + "/carrier.json",
       sourceLicense: "Apache-2.0",
+      licenseUrl: "https://www.apache.org/licenses/LICENSE-2.0",
+      licensePath: "vendor/sources/universal-parcel-scraper/LICENSE",
       attributionPath: "vendor/sources/universal-parcel-scraper/NOTICE",
+      licenseStatus: "recorded_from_pinned_upstream_repository",
+      licenseScope: "upstream_carrier_manifest",
       portalUrlCandidate: portalCandidate,
+      portalCandidateStatus: portalCandidate ? "upstream_declared_unverified" : "not_provided",
       authorityStatus: "upstream_manifest_candidate_not_independently_verified",
-      commercialTrackingRights: "not_granted_by_software_license"
+      officialCarrierStatus: "not_independently_verified",
+      commercialTrackingRights: "not_granted_by_software_license",
+      carrierTrademarkRights: "not_granted_by_software_license",
+      carrierApiAuthorization: "not_granted_by_software_license",
+      thirdPartyTrackingDataRights: "not_assessed",
+      rightsNote: "The upstream software license does not grant carrier trademark, API, shipment-data, partnership or endorsement rights."
     },
     capabilities: {
       selectable: raw.selectable === true,
@@ -140,16 +152,25 @@ if (liveTestFiles !== expectedLiveTestFiles) {
 }
 
 const carriers = Object.fromEntries(parsed.map(record => {
-  const { sourceArtifacts, ...publicMetadata } = record;
-  return [record.id, publicMetadata];
+  const { sourceArtifacts, provenance, ...publicMetadata } = record;
+  // Do not leak unreviewed carrier portal candidates into the public API index.
+  const { portalUrlCandidate, ...publicProvenance } = provenance;
+  return [record.id, { ...publicMetadata, provenance: publicProvenance }];
 }));
 const metadata = {
-  catalogOwner: "ExportFlow",
-  catalogKind: "normalized in-repository snapshot",
+  catalogMaintainer: "ExportFlow",
+  catalogKind: "normalized in-repository derivative index",
+  catalogOwnershipNote: "ExportFlow maintains the normalized schema and curation; upstream source material and carrier marks remain with their respective rightsholders. No exclusive ownership is claimed over third-party carrier data or brands.",
   upstreamRepository: "https://github.com/plhery/universal-parcel-scraper",
   upstreamCommit,
   upstreamCoreLicense: "Apache-2.0",
+  upstreamLicenseUrl: "https://www.apache.org/licenses/LICENSE-2.0",
+  upstreamLicensePath: "vendor/sources/universal-parcel-scraper/LICENSE",
   attributionPath: "vendor/sources/universal-parcel-scraper/NOTICE",
+  sourceLicenseCoverageRecords: parsed.length,
+  displayCarrierRecords: parsed.filter(record => record.id !== "unknown").length,
+  independentlyVerifiedOfficialCarrierRecords: 0,
+  carrierAuthorizationRecords: 0,
   carrierRecords: parsed.length,
   selectableCarrierRecords: parsed.filter(record => record.capabilities.selectable).length,
   adapterSourceDirectories: adapterDirectories,
@@ -214,5 +235,43 @@ const output = [
   ""
 ].join("\n");
 await writeFile(outputFile, output, "utf8");
-console.log("Generated ExportFlow carrier catalogue: " + parsed.length + " records; " +
-  adapterDirectories + " local adapter directories; " + liveTestFiles + " live-test files.");
+
+// Keep a complete, machine-readable rights ledger for the private project catalogue.
+// Candidate tracking URLs are retained here only as unverified research leads.
+const licensingIndex = {
+  schemaVersion: 1,
+  catalogMaintainer: "ExportFlow",
+  catalogKind: "per-record source provenance and license register",
+  generatedFrom: "vendor/sources/universal-parcel-scraper/carriers/*/carrier.json",
+  recordCount: parsed.filter(record => record.id !== "unknown").length,
+  upstream: {
+    repository: "https://github.com/plhery/universal-parcel-scraper",
+    commit: upstreamCommit,
+    license: "Apache-2.0",
+    licenseUrl: "https://www.apache.org/licenses/LICENSE-2.0",
+    licenseFile: "vendor/sources/universal-parcel-scraper/LICENSE",
+    noticeFile: "vendor/sources/universal-parcel-scraper/NOTICE"
+  },
+  rightsPolicy: {
+    sourceLicenseStatus: "recorded_from_pinned_upstream_repository",
+    carrierTrademarkRights: "not_granted_by_software_license",
+    carrierApiAuthorization: "not_granted_by_software_license",
+    thirdPartyTrackingDataRights: "not_assessed",
+    officialCarrierStatus: "not_independently_verified",
+    note: "Apache-2.0 is the recorded license for upstream carrier manifest/source material in the pinned snapshot. It does not grant rights from individual carriers to use their trademarks, APIs, tracking pages or shipment data, and does not establish a partnership or official integration. Preserve the upstream LICENSE and NOTICE."
+  },
+  records: parsed
+    .filter(record => record.id !== "unknown")
+    .map(record => ({
+      id: record.id,
+      name: record.name,
+      provenance: record.provenance
+    }))
+};
+const licensingFile = resolve(root, "data/carrier-catalog-licensing.json");
+await mkdir(resolve(licensingFile, ".."), { recursive: true });
+await writeFile(licensingFile, JSON.stringify(licensingIndex, null, 2) + "\\n", "utf8");
+
+console.log("Generated ExportFlow carrier catalogue: " + parsed.length + " records (" +
+  licensingIndex.recordCount + " display carriers); " + adapterDirectories +
+  " local adapter directories; " + liveTestFiles + " live-test files; per-record license ledger.");
