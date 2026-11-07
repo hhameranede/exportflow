@@ -28,7 +28,9 @@ const catalogResponse = await getCarrierCatalog();
 assert.equal(catalogResponse.status, 200);
 assert.match(catalogResponse.headers.get("Cache-Control") || "", /max-age=3600/);
 const catalog = await catalogResponse.json();
-assert.equal(catalog.catalogMetadata.catalogOwner, "ExportFlow");
+assert.equal(catalog.catalogMetadata.catalogMaintainer, "ExportFlow");
+assert.equal("catalogOwner" in catalog.catalogMetadata, false);
+assert.equal(catalog.catalogMetadata.sourceLicenseCoverageRecords, 1339);
 assert.equal(catalog.catalogMetadata.upstreamCommit, "e64a466772ef25ce68e02d9c7c9f1613eec1208b");
 assert.equal(catalog.sourceIntegrationSummary.providerApiClients, 3);
 assert.equal(catalog.sourceIntegrationSummary.records, 1339);
@@ -67,6 +69,12 @@ assert.equal(catalog.linkOnlyCatalogRecords, catalog.carrierRecords.filter(recor
 ).length);
 for (const record of catalog.carrierRecords) {
   assert.match(record.id, /^[a-z0-9-]{2,80}$/i);
+  assert.equal(record.sourceProvenance?.sourceLicense, "Apache-2.0");
+  assert.equal(record.sourceProvenance?.licenseStatus, "recorded_from_pinned_upstream_repository");
+  assert.equal(record.sourceProvenance?.officialCarrierStatus, "not_independently_verified");
+  assert.equal(record.sourceProvenance?.carrierApiAuthorization, "not_granted_by_software_license");
+  assert.ok(record.sourceProvenance?.sourceUrl.startsWith("https://github.com/plhery/universal-parcel-scraper/blob/"));
+  assert.equal("portalUrlCandidate" in record.sourceProvenance, false);
   assert.ok(Array.isArray(record.countries));
   assert.ok(record.countries.every(code => /^[A-Z]{2}$/.test(code)));
   assert.ok(["automatic", "link-only", "not-declared"].includes(record.tracking.mode));
