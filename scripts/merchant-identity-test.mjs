@@ -45,6 +45,8 @@ function createFakeD1() {
 
   function statement(sql, values = []) {
     return {
+      sql,
+      boundValues: values,
       bind(...bound) { return statement(sql, bound); },
       async first() {
         if (sql.includes("FROM merchant_users") && sql.includes("auth_provider = ?")) {
@@ -129,7 +131,14 @@ function createFakeD1() {
     prepare(sql) { return statement(sql); },
     async batch(statements) {
       const results = [];
-      for (const item of statements) results.push(await item.run());
+      for (const item of statements) {
+        try {
+          results.push(await item.run());
+        } catch (error) {
+          console.error("Fake D1 batch statement failed:", item.sql, error?.message || error);
+          throw error;
+        }
+      }
       return results;
     }
   };
@@ -298,7 +307,7 @@ async function main() {
     { MERCHANT_DB: db },
     { cryptoApi: webcrypto, now: () => NOW + 1000 }
   );
-  assert.equal(logoutResponse.status, 200);
+  assert.equal(logoutResponse.status, 200, JSON.stringify(await logoutResponse.clone().json()));
   assert.equal(logoutResponse.headers.get("set-cookie").includes("Max-Age=0"), true);
   assert.equal((await logoutResponse.json()).authenticated, false);
   assert.equal(db.events.length, 2);
