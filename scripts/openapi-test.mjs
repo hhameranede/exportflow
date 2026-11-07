@@ -14,10 +14,15 @@ for (const route of [
   "/api/carriers",
   "/api/coverage",
   "/api/health",
-  "/api/openapi"
+  "/api/openapi",
+  "/api/mcp"
 ]) {
   assert.ok(document.paths[route], "OpenAPI document must describe " + route);
 }
+const mcpOperation = document.paths["/api/mcp"].post;
+assert.equal(mcpOperation.operationId, "handleMcpRequest");
+assert.equal(mcpOperation.parameters.find(parameter => parameter.name === "MCP-Protocol-Version").schema.const, "2026-07-28");
+assert.ok(document.components.schemas.McpJsonRpcRequest);
 const trackSchema = document.components.schemas.TrackingRequest;
 assert.deepEqual(trackSchema.properties.language.enum, ["en", "ar", "es", "zh", "hi", "pt", "fr", "bn"]);
 assert.equal(trackSchema.additionalProperties, false);
