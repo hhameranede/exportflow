@@ -182,7 +182,29 @@ function buildCatalogRecords() {
         trackingMode: mode,
         adapter,
         adapterType,
-        sourceIntegration
+        sourceIntegration,
+        sourceProvenance: carrier.provenance && typeof carrier.provenance === "object"
+          ? {
+              sourceType: carrier.provenance.sourceType || "upstream_carrier_manifest",
+              repository: carrier.provenance.repository,
+              commit: carrier.provenance.commit,
+              manifestPath: carrier.provenance.manifestPath,
+              sourceUrl: carrier.provenance.sourceUrl,
+              sourceLicense: carrier.provenance.sourceLicense,
+              licenseUrl: carrier.provenance.licenseUrl,
+              licensePath: carrier.provenance.licensePath,
+              attributionPath: carrier.provenance.attributionPath,
+              licenseStatus: carrier.provenance.licenseStatus,
+              licenseScope: carrier.provenance.licenseScope,
+              authorityStatus: carrier.provenance.authorityStatus,
+              officialCarrierStatus: carrier.provenance.officialCarrierStatus,
+              commercialTrackingRights: carrier.provenance.commercialTrackingRights,
+              carrierTrademarkRights: carrier.provenance.carrierTrademarkRights,
+              carrierApiAuthorization: carrier.provenance.carrierApiAuthorization,
+              thirdPartyTrackingDataRights: carrier.provenance.thirdPartyTrackingDataRights,
+              rightsNote: carrier.provenance.rightsNote
+            }
+          : null
       };
     })
     .filter(Boolean)
@@ -359,6 +381,9 @@ export async function onRequestGet({ request, env } = {}) {
       evidenceRecords: evidenceRegistry.records.length,
       integrationMatrixRecords: CATALOG_RECORDS.length,
       apiClientRecords,
+      sourceLicenseCoverageRecords: CATALOG_RECORDS.filter(record => record.sourceProvenance?.sourceLicense === "Apache-2.0" && record.sourceProvenance?.licenseStatus === "recorded_from_pinned_upstream_repository").length,
+      officialCarrierIdentityVerifiedRecords: CATALOG_RECORDS.filter(record => record.sourceProvenance?.officialCarrierStatus === "verified").length,
+      carrierAuthorizationRecords: CATALOG_RECORDS.filter(record => record.sourceProvenance?.carrierApiAuthorization === "authorized").length,
       integrationCounts,
       evidenceCounts
     },
