@@ -1,5 +1,14 @@
-# Required by Pages Functions and the universal parcel engine's Node.js built-ins.
+# Cloudflare Pages Functions runtime and Node compatibility.
 name = "exportflow"
 pages_build_output_dir = "./dist"
 compatibility_date = "2026-11-05"
 compatibility_flags = ["nodejs_compat"]
+
+# Merchant identity and encrypted carrier credentials use Cloudflare D1 only.
+# Production and preview are isolated databases in the EU jurisdiction.
+[[d1_databases]]
+binding = "MERCHANT_DB"
+database_name = "exportflow-intelligence-db"
+database_id = "3e91ee40-75f8-45b3-9459-a4c306f52b3b"
+preview_database_id = "9657dfdc-5b80-4a0b-a982-8865152b2c82"
+migrations_dir = "migrations"
