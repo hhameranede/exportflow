@@ -130,3 +130,13 @@ Recommended split:
 **Account readiness checked 2026-11-07:** Cloudflare R2 is not enabled for the connected account (the R2 bucket-list API returned the account-level message “Please enable R2 through the Cloudflare Dashboard”). Read-only D1 inspection was denied with `SQLITE_AUTH`; no D1 data was read or changed. No R2 bucket was created and no bulk dataset has been uploaded. R2 must be enabled in the dashboard before the R2 pipeline can be deployed. Until then, keep the source register and tests in Git, and do not attempt large bulk imports into the existing D1 databases.
 
 Official limits: [D1 limits](https://developers.cloudflare.com/d1/platform/limits/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), [R2 pricing](https://developers.cloudflare.com/r2/pricing/), [R2 SQL pricing](https://developers.cloudflare.com/r2-sql/platform/pricing/).
+
+
+## Repository implementation status — 2026-11-07
+
+- `data/open-company-data-sources.json`: 18 external source entries, 4 existing upstream repository snapshots and 4 rejected/held GitHub candidates.
+- `migrations/0005_open_company_data_registry.sql`: D1 schema for sources, normalized legal entities, immutable source snapshots, source records, field-level provenance, cross-source identity links, ingestion runs and audit history. Insert triggers require approved commercial redistribution and completed personal-data review.
+- `migrations/0006_seed_open_company_data_sources.sql`: seeds all 18 source records with rights status, commercial/redistribution flags, attribution, evidence, privacy review and ingestion state. Discovery indexes remain discovery-only; OpenCorporates remains blocked; Latvia and other privacy-sensitive registers remain candidate until field filters are approved.
+- `scripts/open-company-data-sources-test.mjs`: checks JSON integrity, all 18 source IDs, four rejected repositories, D1 rights triggers, absence of PII columns, and parity between the JSON register and D1 seed migration. Wired into `npm run lint`, `npm run check` and the Datadog manual regression runner.
+
+The migrations are committed to PR #49 only and are **not applied** to any remote database. The connected Cloudflare account has R2 disabled and the D1 API query returned SQLITE_AUTH. No production resource was created or modified.
