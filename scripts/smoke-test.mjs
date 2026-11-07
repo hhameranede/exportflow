@@ -67,6 +67,16 @@ assert.doesNotMatch(js, /EXF-DEMO-001/, "The fake sample parcel flow must not be
 assert.doesNotMatch(html, /98\.4%|200\+ carriers worldwide/i, "Unverified homepage statistics must be removed");
 
 assert.match(js, /fetch\("\/api\/track"/, "Tracking form must call the server-side tracking API");
+
+assert.match(trackApi, /MAX_NUMBER_LENGTH = 64/, "Tracking API must accept supported formatted identifiers before normalization");
+assert.match(trackApi, /a-zA-Z0-9\\\\s\(\)\.\\\\\/_-/, "Tracking API must accept carrier-documented punctuation");
+assert.match(js, /let trackingRequestInFlight = false/, "Tracking requests must be deduplicated");
+assert.match(js, /function showTrackingError/, "Tracking errors must use a visible error handler");
+assert.match(js, /formError\\.scrollIntoView/, "Tracking failures must be brought into view on mobile");
+assert.match(js, /typeof payload\\.status === "string"/, "Malformed success responses must not open an empty result panel");
+assert.match(js, /error instanceof TypeError/, "Network failures must map to a localized unavailable message");
+assert.match(css, /\\.form-error\\[hidden\\]\\s*\\{\\s*display:\\s*none\\s*!important/, "The tracking error element must respect its hidden state");
+
 assert.match(js, /postcodeInput\.value\.trim\(\)/, "Optional postcode should be submitted to the API");
 assert.match(js, /renderTimeline/, "Live scan history should be rendered into the timeline");
 assert.match(trackApi, /createTracker/, "Tracking API must use the upstream parcel engine");
