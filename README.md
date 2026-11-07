@@ -16,7 +16,8 @@ The upstream catalog documents thousands of carrier names and dedicated adapters
 ### Implemented routes
 
 - `POST /api/track` — server-side carrier lookup. Accepts a tracking number and optional carrier, postcode and language (`en`, `ar`, `es`, `zh`, `hi`, `pt`, `fr`, `bn`). Tracking numbers are not sent to browser-side third-party APIs. Returns normalized timeline events with deterministic status, confidence, conflict detection, and delay/customs/ETA insights.
-- `GET /api/carriers` — exposes the installed carrier ID list, sanitized adapter metadata and a D1-backed evidence register for 22 researched global carrier networks. Each record separates catalog/adapter state, official source, account-access requirements, third-party tracking rights and verification level. All seed entries begin at `research`; a carrier catalog or adapter is never presented as a successful live integration.
+- `GET /api/carriers` — exposes the installed carrier ID list, sanitized adapter metadata and the D1-backed evidence register for the curated 22-network research cohort. Every seed remains `research`; a carrier catalog or adapter is never presented as a successful live integration.
+- `GET /api/carrier-directory` — paginated, searchable access to the **complete pinned source catalog** (1,339 records in this revision). Supports `q`, `country`, `evidence`, `adapter`, `page` and `pageSize` (maximum 100). The D1 evidence overlay is joined to matching adapters while all unmatched records remain `catalogued`.
 - `GET /api/coverage` — returns a live country-by-country classification derived from the installed carrier catalog.
 - `GET /api/health` — a liveness response; it does not prove that upstream carriers are reachable.
 - `POST /api/batch-track` — bounded batch tracking for up to five shipments. Each result includes an individual status and reuses the single-tracking validation and safeguards.
@@ -25,7 +26,14 @@ The upstream catalog documents thousands of carrier names and dedicated adapters
 - `GET /developers/` — developer quick start, JavaScript SDK and MCP agent integration guide; the SDK is served as `/exportflow-sdk.mjs`.
 - `/merchant/` — device-only merchant workspace. It stores up to ten watchlist entries in browser local storage, refreshes them in two sequential batches of at most five and can export a CSV. It is not an account, cloud sync or server-side shipment history.
 
-#### Tracking API Response
+#
+### Global carrier directory scale and interpretation
+
+The pinned upstream Universal Parcel Scraper README at revision `e64a466772ef25ce68e02d9c7c9f1613eec1208b` reports **1,339 catalog entries**, **732 dedicated adapters**, **5 universal fallbacks**, **156 countries represented** and **3,500+ carrier-network names**. ExportFlow's carrier directory exposes all catalog records in 50-record pages (API maximum 100), with name/alias/country search and separate adapter/evidence filters. The public page does not download or render thousands of cards at once.
+
+These figures describe the upstream engine's catalog and network naming. They are not a count of 3,500 independently incorporated companies, successful live lookups, commercial permissions or verified ExportFlow integrations. The current curated D1 evidence overlay contains 22 researched network dossiers, all separate from the 1,339 catalog entries. Every other entry remains `catalogued` until source, adapter scope, access terms and test evidence are reviewed. The D1 database is intentionally not bulk-filled with static upstream catalog metadata; the pinned package is the source of truth for that catalogue, while D1 stores the smaller, curated evidence and permission layer.
+
+### Tracking API Response
 
 The `/api/track` endpoint returns a structured response:
 
