@@ -59,6 +59,12 @@ assert.equal(batchItemSchema.properties.carrier.pattern, "^[a-zA-Z0-9-]+$");
 assert.equal(batchItemSchema.properties.postcode.pattern, "^[a-zA-Z0-9 -]+$");
 assert.equal(batchSchema.properties.shipments.uniqueItems, undefined, "Runtime enforces unique item IDs, not entire object equality");
 assert.equal(document["x-exportflow-limits"].singleLookup.lookupBudgetMilliseconds, 25000);
+assert.equal(document["x-exportflow-limits"].globalRateLimit.requestsPerClientPerWindow, 12);
+assert.equal(document["x-exportflow-limits"].globalRateLimit.windowMilliseconds, 60000);
+assert.equal(document["x-exportflow-limits"].globalRateLimit.unavailableBehavior, "fail-closed 503");
+assert.equal(document["x-exportflow-limits"].batchLookup.eachItemConsumesGlobalQuota, true);
+assert.match(document.paths["/api/track"].post.responses["429"].description, /globally coordinated per-client quota/);
+assert.match(document.paths["/api/track"].post.responses["503"].description, /coordinator is unavailable/);
 assert.match(document["x-exportflow-privacy"].storage, /does not provide a user account/);
 
 console.log("OpenAPI 3.1 document routes, schemas, locales, privacy and limits verified.");
