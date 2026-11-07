@@ -36,7 +36,7 @@ assert.match(seedMigration, /INSERT OR IGNORE INTO company_data_sources/);
 for (const source of registry.sources) {
   assert.ok(seedMigration.includes("'" + source.id + "'"), source.id + " must be seeded in the D1 source register");
 }
-assert.ok(registry.sources.length >= 18, "Expected the external source register to keep growing");
+assert.ok(registry.sources.length >= 20, "Expected the external source register to include the Singapore and Canada official datasets");
 assert.ok(registry.rejected_candidates.length >= 4, "Unlicensed and unsuitable GitHub candidates must remain explicitly rejected");
 assert.ok(registry.existing_exportflow_sources.length >= 4, "Existing pinned sources must remain documented");
 
@@ -62,6 +62,25 @@ for (const source of registry.sources) {
     assert.match(source.ingestion_status, /separate/);
   }
 }
+
+
+const acra = registry.sources.find(source => source.id === "acra-singapore-entities");
+assert.equal(acra.license, "SINGAPORE-OPEN-DATA-LICENCE-1.0");
+assert.equal(acra.commercial_use, true);
+assert.equal(acra.redistribution, true);
+assert.equal(acra.attribution_required, true);
+assert.match(acra.ingestion_status, /sole_proprietor_and_personal_data_filter/);
+assert.ok(acra.limitations.some(value => /does not grant rights over personal data/i.test(value)));
+assert.ok(acra.verification_sources.includes("https://developers.data.gov.sg/open-data-licence"));
+
+const canada = registry.sources.find(source => source.id === "canada-federal-corporations");
+assert.equal(canada.license, "OPEN-GOVERNMENT-LICENCE-CANADA");
+assert.equal(canada.commercial_use, true);
+assert.equal(canada.redistribution, true);
+assert.equal(canada.attribution_required, true);
+assert.match(canada.ingestion_status, /field_level_privacy_and_schema_review/);
+assert.ok(canada.limitations.some(value => /provincial\/territorial corporations/i.test(value)));
+assert.ok(canada.verification_sources.includes("https://open.canada.ca/data/en/dataset/0032ce54-c5dd-4b66-99a0-320a7b5e99f2"));
 
 const gleif = registry.sources.find(source => source.id === "gleif-global-lei");
 assert.equal(gleif.license, "CC0-1.0");
