@@ -3,7 +3,7 @@ import { createCloudflareFetch } from "../lib/cloudflare-fetch.mjs";
 import { safeEventPoint } from "../lib/coordinates.mjs";
 
 const MAX_BODY_CHARS = 4_096;
-const MAX_NUMBER_LENGTH = 40;
+const MAX_NUMBER_LENGTH = 64;
 const REQUESTS_PER_MINUTE = 12;
 const MAX_CONCURRENT_LOOKUPS = 6;
 const LOOKUP_BUDGET_MS = 25_000;
@@ -203,7 +203,7 @@ export async function onRequestPost({ request, env }) {
   }
 
   const number = typeof input.number === "string" ? input.number.trim() : "";
-  if (number.length < 4 || number.length > MAX_NUMBER_LENGTH || !/^[a-zA-Z0-9\s-]+$/.test(number)) {
+  if (number.length < 4 || number.length > MAX_NUMBER_LENGTH || !/^[a-zA-Z0-9\s().\/_-]+$/.test(number)) {
     return json({ error: "invalid_tracking_number" }, 400);
   }
 
@@ -248,3 +248,4 @@ export async function onRequestPost({ request, env }) {
     activeLookups = Math.max(0, activeLookups - 1);
   }
 }
+
