@@ -1,4 +1,4 @@
-import { CARRIERS, CARRIER_IDS } from "universal-parcel-scraper";
+import { CARRIERS, CARRIER_IDS, CARRIER_CATALOG_METADATA } from "../../data/carrier-catalog.generated.mjs";
 
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 50;
@@ -286,7 +286,8 @@ export async function onRequestGet({ request, env } = {}) {
   const offset = (page - 1) * pageSize;
   const records = filtered.slice(offset, offset + pageSize);
   return json({
-    source: "pinned-universal-parcel-scraper-catalog",
+    source: "exportflow-native-carrier-catalog",
+    catalogMetadata: CARRIER_CATALOG_METADATA,
     upstreamRevision: SOURCE_REVISION,
     upstreamSnapshot: {
       catalogEntries: CARRIER_IDS.length,
