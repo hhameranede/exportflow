@@ -1,0 +1,69 @@
+{
+    "name": "dz-delivery/sdk",
+    "description": "Unified PHP SDK for Algerian delivery carriers (Yalidine, ZRExpress, Maystro, Ecotrack/DHD, GuepEx, NoEST, E-com, MDM, Elogistia) — SDK livraison Algérie: parcels, tracking, fees, wilayas. Laravel-friendly.",
+    "type": "library",
+    "license": "MIT",
+    "homepage": "https://dz-delivery.younes-sarni.com/",
+    "authors": [
+        {
+            "name": "Younes Sarni",
+            "homepage": "https://github.com/developing-off",
+            "role": "Developer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/developing-off/dz-delivery/issues",
+        "source": "https://github.com/developing-off/dz-delivery-php",
+        "docs": "https://github.com/developing-off/dz-delivery/blob/main/docs/guide-php.md"
+    },
+    "keywords": [
+        "algeria",
+        "algerie",
+        "dz",
+        "delivery",
+        "livraison",
+        "shipping",
+        "colis",
+        "cod",
+        "ecommerce",
+        "wilaya",
+        "sdk",
+        "api",
+        "laravel",
+        "yalidine",
+        "guepex",
+        "zrexpress",
+        "zr-express",
+        "maystro",
+        "ecotrack",
+        "dhd",
+        "anderson",
+        "woocommerce"
+    ],
+    "require": {
+        "php": ">=8.2",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "guzzlehttp/guzzle": "^7.8"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "DzDelivery\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "DzDelivery\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable"
+}

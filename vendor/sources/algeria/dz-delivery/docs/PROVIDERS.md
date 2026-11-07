@@ -1,0 +1,825 @@
+# Provider mapping
+
+How each carrier's native API maps to the unified [`ShippingProvider`](./CONTRACT.md#5-shippingprovider-interface) methods.
+TS and PHP implementations MUST follow these tables. Update this file **before** changing a provider's behavior.
+
+| Provider | Key | Status |
+|----------|-----|--------|
+| ZRExpress | `zrexpress` | mapping from the API reference + live checks (2026-11-01: geo, hubs, fees, create → track → cancel, unknown tracking), implemented in PHP and TS — extras: [`ZREXPRESS.md`](./ZREXPRESS.md) |
+| Yalidine | `yalidine` | mapping checked against the developer docs (2026-10-20) + live read-only checks (2026-11-01: geo, centers, fees, `listParcels`, unknown tracking, errors; creation refused, test account disabled), implemented in PHP and TS, including `listParcels` |
+| Maystro Delivery | `maystro` | public API docs (2026-10-20) + live checks on a test account (2026-11-01: create, `track`, `listParcels`, `cancelParcel`, errors), implemented in PHP and TS |
+| Ecotrack (DHD, Anderson, World Express, 48Hr, …) | `ecotrack` | Postman notes + Delivery tenant hosts (2026-10-20) + live checks on Anderson (2026-11-01: geo, fees, create → track → cancel, unknown tracking); one provider, tenant via `courier` / `baseUrl` |
+| NoEST | `noest` | NOEST Public API docs v2.3 + live checks (2026-10-30: reads and error bodies; creation not tried, account suspended), implemented in PHP and TS; `listParcels` not supported |
+| E-com Delivery | `ecom` | API v2 docs (v2.153) + live checks on a test account (2026-10-30: reads, create then delete, errors), implemented in PHP and TS, including `listParcels` |
+| MDM Express | `mdm` | OpenAPI spec (`/api/docs/swagger`) + live read-only checks on a seller account (2026-10-30: geo, offices, fees, list, track, errors; creation checked up to validation, no parcel created), implemented in PHP and TS; `cancelParcel` not supported |
+| Elogistia | `elogistia` | No public docs: endpoints from the legacy Confirmation-api + live read-only checks (2026-10-30: wilayas, communes, fees, unknown tracking, errors); `getStopDesks`, `listParcels`, `cancelParcel` not supported |
+
+---
+
+## ZRExpress
+
+Official docs (source of truth for native paths):
+
+| | URL |
+|--|-----|
+| API reference index | <https://docs.zrexpress.app/reference> |
+| Guides (auth, webhooks, search body) | <https://docs.zrexpress.app/docs> · [Authentication](https://docs.zrexpress.app/docs/authentication) · [How to use search endpoints](https://docs.zrexpress.app/docs) |
+| Machine-readable index | <https://docs.zrexpress.app/llms.txt> |
+
+- Base URL: `https://api.zrexpress.app`
+- API version: path segment `/api/v1/...` (OpenAPI uses `/api/v{version}/…` with default `1`).
+
+### Auth
+
+Every request sends ([Authentication guide](https://docs.zrexpress.app/docs/authentication)):
+
+| Header | Value | Config key |
+|--------|-------|------------|
+| `X-Api-Key` | Secret API key from the portal | `apiKey` (`ZREXPRESS_API_KEY`) |
+| `X-Tenant` | Tenant ID | `tenant` (`ZREXPRESS_TENANT`) |
+| `Accept` / `Content-Type` | `application/json` | — |
+
+### Method mapping
+
+| Unified method | Native endpoint | Official doc | Notes |
+|----------------|-----------------|--------------|-------|
+| `createParcel` | `POST /api/v1/parcels` | [Creates a parcel](https://docs.zrexpress.app/reference/createparcelendpoint) | Returns `201 { id }` only → follow up with [get by id](https://docs.zrexpress.app/reference/getparcelbyidsupplierendpoint) to fill `trackingNumber` and `status`. `StockType`: `local` \| `warehouse` \| `none` — SDK defaults to `none` (no catalog); set `ParcelInput.stockType` / `ProductItem.stockType` to override (`local`/`warehouse` require `productId` + `sku`). `DeliveryType`: `home` \| `pickup-point`. |
+| `track` | `GET /api/v1/parcels/{idOrTracking}` + `…/state-history` | [Get by id](https://docs.zrexpress.app/reference/getparcelbyidsupplierendpoint) · [Get by trackingNumber](https://docs.zrexpress.app/reference/getparcelbytrackingnumbersupplierendpoint) · [State history](https://docs.zrexpress.app/reference/getparcelstatehistorysupplierendpoint) | Native path is the same for UUID and tracking number (`/parcels/{x}`). First call fills `Parcel`; second builds the event list. Prefer webhooks over polling when possible ([Webhooks vs Polling](https://docs.zrexpress.app/docs/webhooks-vs-polling-a-comparison)). |
+| `getFees` | `GET /api/v1/delivery-pricing/rates/{toTerritoryId}` | [Rate for a territory](https://docs.zrexpress.app/reference/getrateendpoint) · [All rates](https://docs.zrexpress.app/reference/getallratesendpoint) | Pick the `deliveryPrices[]` entry matching `deliveryType` (`home` / `pickup-point`). Supplier-specific prices override price-list prices. |
+| `getWilayas` | `POST /api/v1/territories/search` | [Search territories](https://docs.zrexpress.app/reference/searchterritoriesendpoint) | Filter `level = "wilaya"`. Paginated (`pageSize` ≤ 1000); loop while `hasNext`. Body shape: see [search endpoints guide](https://docs.zrexpress.app/docs). Territories with both `delivery.hasHomeDelivery` and `delivery.hasPickupPoint` false are skipped. |
+| `getCommunes` | `POST /api/v1/territories/search` | [Search territories](https://docs.zrexpress.app/reference/searchterritoriesendpoint) | Filter `level = "commune"` and `parentId = <wilaya id>`. |
+| `getStopDesks` | `POST /api/v1/hubs/search` | [Search hubs](https://docs.zrexpress.app/reference/searchhubsendpoint) · [Get hub by id](https://docs.zrexpress.app/reference/gethubendpoint) | Filter `isPickupPoint = true` and `address.cityTerritoryId` (wilaya UUID); optional `address.districtTerritoryId` when `communeId` is set. **Prefer wilaya-only**: many hubs are not tagged with a district, so a commune filter often returns nothing even when the wilaya has desks — in that case the SDK throws `NOT_FOUND` (`details[].code = EMPTY_COMMUNE_HUBS`) asking to retry without `communeId`. Paginated (`pageSize` ≤ 1000). Hub `id` → `StopDesk.id` / `ParcelInput.stopDeskId` (`hubId` on create); `address.street` → `address`; `districtTerritoryId` → `communeId`; `cityTerritoryId` → `wilayaId`; also maps `phone.number1` → `phone`, `openingHours`, `address.coordinates.lat/lng`, `type`. Hubs with `isPickupPoint: false` are skipped client-side. |
+| `listParcels` | `POST /api/v1/parcels/search` | [Search supplier parcels](https://docs.zrexpress.app/reference/searchsupplierparcelsendpoint) | Paginated (`pageSize` ≤ 1000, default 50). Maps each item → `Parcel` (`state.name` → unified status). `keyword` → body `keyword`; `orderId` → filter `externalId`; `updatedSince` → filter `lastStateUpdateAt` `gte`; `status` filtered client-side after mapping; `allPages: true` follows `hasNext` (cap 100 pages). No event history — use `track()`. |
+| `cancelParcel` | `DELETE /api/v1/parcels/{id}` | [Delete a parcel](https://docs.zrexpress.app/reference/deleteparcelendpoint) | Requires the parcel **UUID**. If given a tracking number, resolve it first. |
+| `healthCheck` | `POST /api/v1/territories/search` (wilayas) | [Search territories](https://docs.zrexpress.app/reference/searchterritoriesendpoint) | Same probe as `getWilayas`, but **always** hits the network (cache bypassed). |
+
+**ZRExpress extras** (on `ZRExpressProvider` + helpers, **not** on `ShippingProvider`): bulk create/delete, labels, webhook verify/parse — full matrix in [`ZREXPRESS.md`](./ZREXPRESS.md).
+
+**Still out of MVP / backlog**: catalog ([create product](https://docs.zrexpress.app/reference/createproductendpoint), categories, stock), exchanges/refunds, pickup bags, claims, treasury, webhook endpoint CRUD. Prefer [webhooks](https://docs.zrexpress.app/docs/webhooks) for live status push; `listParcels` is the pull alternative. See `CONTRACT.md` §7.
+
+### `ParcelInput` → `POST /parcels` body
+
+| Unified field | ZRExpress field | Notes |
+|---------------|-----------------|-------|
+| `recipientName` | `customer.name` | 2–100 chars. |
+| `phone` | `customer.phone.number1` | International format required → normalize `0XXXXXXXXX` to `+213XXXXXXXXX`. |
+| `phone2` | `customer.phone.number2` | Same normalization. |
+| — | `customer.customerId` | Required; send a random UUID v4 (no customer linking in MVP). |
+| `address` | `deliveryAddress.street` | |
+| `wilayaId` / `wilayaName` | `deliveryAddress.cityTerritoryId` | UUID. Resolve code `1`–`58` or name via territories search. A UUID is passed through without lookup. |
+| `communeId` / `communeName` | `deliveryAddress.districtTerritoryId` | UUID. Resolve name (or postal code) via territories search within the wilaya. A UUID is passed through without lookup. |
+| `productName` / `productList` | `orderedProducts[]` (`productName`, `quantity`, `unitPrice`, `productSku`, `productId`, `stockType`) | Default `stockType: "none"`. Override via `ParcelInput.stockType` or per-item `ProductItem.stockType`. `local` / `warehouse` require `productId` + `sku` (ZR catalog). `productName` → one item, `quantity: 1`, `unitPrice: price`. |
+| `stockType` | `orderedProducts[].stockType` | `"none"` (default) \| `"local"` \| `"warehouse"`. ZR rule: products must be all `warehouse`, or a mix of `local` and `none`. |
+| `productName` / joined names (+ `remark`) | `description` | Required, 2–250 chars. When `remark` is set, appended as `" - {remark}"` (then truncated to 250). |
+| `price` | `amount` | ≤ 150 000 DZD, **includes delivery fee**. |
+| `weight` | `weight.weight` | kg. |
+| `length` / `width` / `height` | `orderedProducts[0].length/width/height` | No parcel-level dimensions; applied to the first item. |
+| `isStopDesk` | `deliveryType` | `false` → `"home"`, `true` → `"pickup-point"`. |
+| `stopDeskId` | `hubId` | Required when `deliveryType = "pickup-point"`. |
+| `remark` | → `description` suffix | No dedicated native field; appended to `description` as `" - {remark}"`. |
+| `orderId` | `externalId` | Max 100 chars, must be unique. |
+
+> ⚠️ Without `stateId`, parcels are created in state `OrderReceived` / `commande_recue` and must later be moved to `ReadyToDispatch` before the hub accepts them. MVP: leave default (unified status `pending`). TODO: decide whether to expose a `readyToDispatch` option.
+
+### Response → `Parcel`
+
+| Unified | ZRExpress |
+|---------|-----------|
+| `id` | `id` (UUID) |
+| `trackingNumber` | `trackingNumber` (e.g. `DZ-AL-20251121-00145`) |
+| `status` | `state.name` → mapped (table below) |
+| `provider` | `"zrexpress"` |
+
+### State history → `TrackingEvent`
+
+| Unified | ZRExpress (`state-history[]`) |
+|---------|-------------------------------|
+| `status` | `newState.name` → mapped |
+| `label` | `newState.description` (fallback `newState.name`) |
+| `at` | `createdAt` |
+
+### Territory → `Location`
+
+| Unified | ZRExpress |
+|---------|-----------|
+| `id` | `id` (UUID) |
+| `name` | `name` |
+| `parentId` | `parentId` |
+| `code` | `code` (wilaya number) as string; for communes, `postalCode` when `code` is absent |
+
+### Rate → `FeeQuote`
+
+| Unified | ZRExpress |
+|---------|-----------|
+| `deliveryFee` | `deliveryPrices[deliveryType = home \| pickup-point].price` |
+| `stopDeskFee` | `deliveryPrices[deliveryType = pickup-point].price` |
+| `returnFee` | TODO — not exposed by the rates endpoint as far as we know |
+| `currency` | `"DZD"` |
+
+### Status mapping (draft — to complete with real fixtures)
+
+The docs show both slug-style (`commande_recue`) and PascalCase (`OutForDelivery`) state names. Match **case-insensitively** on both forms.
+
+| Native state (examples) | Unified |
+|-------------------------|---------|
+| `commande_recue`, `OrderReceived` | `pending` |
+| `pret_a_expedier`, `ReadyToDispatch` | `created` |
+| `confirme_au_bureau`, `OutForDelivery`, other hub / transfer states | `in_transit` |
+| `Delivered` / `livre` / `encaisse` | `delivered` |
+| `Returned` / `retour*` | `returned` |
+| `Cancelled` / `annule` / `supprimee` | `cancelled` |
+| anything else | `unknown` |
+
+Implementation detail: names are compared after lowercasing, stripping accents and removing `_`, `-`, spaces. Order: exact pending/created/delivered/cancelled names → `returned` if it starts with `return`/`retour` → `in_transit` if it contains a transit keyword (`outfordelivery`, `transit`, `hub`, `transfer`, `dispatched`, `expedie`, `pickedup`, `attempt`, `echec`, `failed`, …) → `unknown`. Reference cases: [`fixtures/zrexpress/statuses.json`](./fixtures/zrexpress/statuses.json).
+
+`TrackingEvent.at` is normalized to ISO 8601 with second precision and an explicit offset (`2025-12-23T15:23:54.2173951+00:00` → `2025-12-23T15:23:54+00:00`, `…Z` → `…+00:00`).
+
+### Errors
+
+ZRExpress returns RFC 7807 problem details:
+
+```json
+{ "type": "...", "title": "General.Validation", "status": 400, "detail": "...", "errors": [{ "code": "...", "description": "..." }], "traceId": "..." }
+```
+
+- `ShippingError.message` ← `detail` (fallback `title`)
+- `ShippingError.details` ← `errors[]` mapped to `{ message: description, code }`
+- `ShippingError.httpStatus` ← `status`
+- HTTP status → `code` per the default table in `CONTRACT.md` §3.
+
+---
+
+## Yalidine
+
+> Checked against the official developer docs (login required) on 2026-10-20, and against the in-repo `Delivery/YalidineController.php` + `Delivery/GuepExController.php` reference (same API platform). Error bodies are not documented and remain best-effort; contributions with anonymized real responses welcome.
+
+- Docs: <https://yalidine.app/app/dev/docs/api/> (account required)
+- Base URL: `https://api.yalidine.app/v1/` (paths below are relative to it; keep the trailing `/` on collection endpoints)
+
+### GuepEx (same platform)
+
+GuepEx runs the same Yalidine API under a different host. Use the **`yalidine`** provider with credentials from the GuepEx dashboard and:
+
+| | |
+|--|--|
+| TS | `baseUrl: GUEPEX_DEFAULT_BASE_URL` (`https://api.guepex.app/v1`) |
+| PHP | `'baseUrl' => YalidineProvider::GUEPEX_DEFAULT_BASE_URL` (`https://api.guepex.app/v1/`) |
+
+Auth headers, endpoints, status mapping, and parcel fields are identical. GuepEx-only extras in the Delivery app (`economic` tier on create, client fee adjustment) are **not** in the shared `ParcelInput` contract — leave them as remaining / app-level.
+
+### Auth
+
+| Header | Value | Config key |
+|--------|-------|------------|
+| `X-API-ID` | API ID | `apiId` (`YALIDINE_API_ID`) |
+| `X-API-TOKEN` | API token | `apiToken` (`YALIDINE_API_TOKEN`) |
+
+Extra client option: **`fromWilayaId`** (code `1`–`58`) or **`fromWilayaName`** — the merchant's origin wilaya. Yalidine requires it to create parcels (`from_wilaya_name`) and to quote fees (`from_wilaya_id`). `getFees` uses `FeeQuery.fromWilayaId` first, then this option; otherwise `VALIDATION_ERROR`.
+
+### Method mapping
+
+| Unified method | Native endpoint | Notes |
+|----------------|-----------------|-------|
+| `createParcel` | `POST parcels/` | Body is an **array** of parcels (we send one). Response is an object keyed by `order_id`: `{ "<order_id>": { success, order_id, tracking, import_id, label, message } }`. `success: false` → `VALIDATION_ERROR` with `message`. No follow-up read: new parcels are `En préparation` → `pending`. |
+| `track` | `GET parcels/{tracking}` + `GET histories/{tracking}` | Both return `{ has_more, total_data, data: [...], links }`. Empty `data` on the parcel call → `NOT_FOUND`. |
+| `getFees` | `GET fees/?from_wilaya_id=&to_wilaya_id=` | Returns zone-level fees plus `per_commune` map (see below). |
+| `getWilayas` | `GET wilayas/` | Paginated (`page`, `page_size=1000` — the maximum, default is 100 — `has_more`). Wilaya `id` **is** the official code. Items with `is_deliverable = 0` skipped. |
+| `getCommunes` | `GET communes/?wilaya_id=` | Paginated (`page_size=1000`). Items with `is_deliverable = 0` skipped. |
+| `getStopDesks` | `GET centers/?wilaya_id=[&commune_id=]` | Paginated. `center_id` → `StopDesk.id` (Yalidine's `stopdesk_id`), `name`, `address`, `commune_id`, `wilaya_id`. `communeId` is optional (id or name). |
+| `listParcels` | `GET parcels/?page=&page_size=` | `page_size` ≤ 1000 (default 50), `has_more` → `hasNext`, `total_data` → `totalCount`. `keyword` → `tracking` (comma-separated list allowed; Yalidine has no free-text search), `orderId` → `order_id`. `status` and `updatedSince` (on `date_last_status`, Algeria time) are filtered client-side: a filtered page can be short while `hasNext` is `true`. Yalidine also accepts `date_last_status` as a filter, but its range format could not be confirmed on an account with parcels (it accepts any value), so the SDK does not send it. Live (2026-11-01): unknown filters → 400 `"There is one or more invalid filter"`; `tracking`, `order_id`, `last_status`, `date_last_status`, `date_creation`, `order_by` accepted. |
+| `cancelParcel` | `DELETE parcels/{tracking}` | Response `[{ tracking, deleted }]`. Only parcels in `En préparation` can be deleted; `deleted: false` → `VALIDATION_ERROR`. `id` = tracking for Yalidine. |
+| `healthCheck` | `GET wilayas/` | Same probe as `getWilayas`, but **always** hits the network (cache bypassed). |
+
+### `ParcelInput` → `POST parcels/` body
+
+| Unified field | Yalidine field | Notes |
+|---------------|----------------|-------|
+| `recipientName` | `firstname`, `familyname` | Split on the first space; single-word names are sent in both fields. |
+| `phone` (+ `phone2`) | `contact_phone` | Local format `0XXXXXXXXX`; `phone2` appended comma-separated. |
+| `address` | `address` | |
+| `wilayaId` / `wilayaName` | `to_wilaya_name` | Yalidine wants **names**: ids/codes and user names are resolved to the canonical name via `wilayas/`. |
+| `communeId` / `communeName` | `to_commune_name` | Resolved to the canonical name via `communes/?wilaya_id=`. |
+| — | `from_wilaya_name` | From the `fromWilayaId` / `fromWilayaName` client option. |
+| `productName` / `productList` | `product_list` | String; list names joined with `, ` (`Mug x2, Tee`). |
+| `price` | `price` | Amount collected. We always send **`freeshipping: true`** so Yalidine does *not* add its fee on top — `price` is exactly what the recipient pays (fees are deducted from the COD). |
+| — | `declared_value` | `price`; `do_insurance: false`. |
+| `weight`, `length`, `width`, `height` | same names | kg / cm. **Required integers**: always sent, `0` when missing, decimals rounded up. |
+| `isStopDesk` / `stopDeskId` | `is_stopdesk` / `stopdesk_id` | When stop-desk, the SDK loads `centers/?wilaya_id=` and, if the `center_id` matches, sends that center's `commune_name` / `wilaya_name` as `to_*` (avoids API rejection on stopdesk/commune mismatch — same fix as Delivery GuepEx). Unknown `stopDeskId` still posts; the API returns `success: false`. |
+| `orderId` | `order_id` | Required by Yalidine; generated (`dzd-<random>`) when absent. |
+| `remark` | — | Not sent (no known field). |
+| — | `has_exchange` | Always `false` in MVP. |
+
+### Response → `Parcel` / `TrackingEvent`
+
+| Unified | Yalidine |
+|---------|----------|
+| `Parcel.id`, `Parcel.trackingNumber` | `tracking` (e.g. `yal-ABC123`) |
+| `Parcel.status` | `last_status` → mapped |
+| `Parcel.labelUrl` | `label` (bordereau URL, e.g. `https://yalidine.app/app/bordereau.php?tracking=yal-…`), returned by `createParcel`, `track` and `listParcels` |
+| `TrackingEvent.status` | `status` → mapped |
+| `TrackingEvent.label` | `status` (+ ` (reason)` when `reason` is set) |
+| `TrackingEvent.at` | `date_status` (`YYYY-MM-DD HH:MM:SS`, interpreted as `Africa/Algiers`, i.e. `+01:00`) |
+
+### Fees → `FeeQuote`
+
+`GET fees/` response: `{ from_wilaya_name, to_wilaya_name, zone, retour_fee, cod_percentage, insurance_percentage, oversize_fee, per_commune: { "<commune_id>": { commune_id, commune_name, express_home, express_desk, economic_home, economic_desk } } }`.
+
+| Unified | Yalidine |
+|---------|----------|
+| `deliveryFee` | `per_commune[toCommuneId].express_home` (or `express_desk` when `isStopDesk`). Without `toCommuneId`, the first commune entry is used. |
+| `stopDeskFee` | `express_desk` (fallback key `express_stopdesk`) |
+| `returnFee` | `retour_fee` |
+| weight surcharge | Billable weight = `max(weight, length × width × height × 0.0002)` (volumetric only when the 3 dimensions are given). When > 5 kg: `(billable − 5) × oversize_fee`, rounded up to the dinar, added to both fees. |
+
+Missing price for the requested mode → `NOT_FOUND`.
+
+### Status mapping
+
+Compared case/accent-insensitively. Reference cases: [`fixtures/yalidine/statuses.json`](./fixtures/yalidine/statuses.json).
+
+| Native `status` / `last_status` | Unified |
+|---------------------------------|---------|
+| `En préparation`, `A vérifier` | `pending` |
+| `Pas encore expédié`, `Pas encore ramassé`, `Prêt à expédier`, `En passation` | `created` |
+| `Ramassé`, `Expédié`, `Centre`, `En localisation`, `En transit`, `Vers Wilaya`, `Reçu à Wilaya`, `Transfert`, `Vers Station`, `En station`, `Prêt pour livreur`, `Dispatché`, `Sorti en livraison`, `En attente du client`, `En attente`, `Tentative échouée`, `Echèc livraison`, `En alerte`, `Alerte résolue`, `Bloqué`, `Débloqué` | `in_transit` |
+| `Livré` | `delivered` |
+| `Retour …`, `Retourné …`, `Echange échoué`, `Colis abandonné` | `returned` |
+| `Annulé`, `Supprimé` | `cancelled` |
+| anything else | `unknown` |
+
+### Errors / rate limits
+
+- Error bodies (not documented by Yalidine; confirmed live 2026-11-01 on 400, 401 and 429) look like `{ "error": { "code": 400, "message": "...", "description": "Bad Request" } }` → `ShippingError.message` ← `error.message`. HTTP status → `code` per `CONTRACT.md` §3.
+- Yalidine enforces per-second / minute / hour / day quotas (reported in `x-second-quota-left`, `x-minute-quota-left`, `x-hour-quota-left`, `x-day-quota-left` response headers). Defaults: 5/s, 50/min, 1 000/h, 10 000/day. `429` → `RATE_LIMITED`, with `ShippingError.retryAfter` set from the `Retry-After` header. The SDK does not retry automatically.
+
+### Implementation notes (TS + PHP)
+
+Same mapping as above, plus:
+
+- Wilaya ids/codes/names are always resolved through the cached `wilayas/` list (so `getFees` / `getCommunes` / `createParcel` make one extra call on a fresh client). Unknown wilaya or commune → `NOT_FOUND` before the parcel is posted.
+- Phone numbers that are not valid Algerian numbers → `VALIDATION_ERROR` before any HTTP call. Missing `fromWilayaId` / `fromWilayaName` is also checked before any HTTP call.
+- `histories/` pagination is followed when `has_more` is `true` (`page_size=1000`) in both TS and PHP.
+- A parcel lookup that returns empty `data` throws `NOT_FOUND` without `httpStatus` (the HTTP call itself returned `200`).
+- The Delivery sync layer uses client-side quota throttling (5/s, 50/min, 1 000/h, 10 000/day) and `GET parcels/?tracking=`; the SDK maps `429` → `RATE_LIMITED` (with `retryAfter` from `Retry-After`) and tracks via `GET parcels/{tracking}` per the official docs. No automatic retry / client throttle in the SDK.
+- Confirmed by the docs: list endpoints accept `page` / `page_size`; `contact_phone` accepts comma-separated numbers; `freeshipping: true` = the sender pays the delivery fee; `stopdesk_id` is a `center_id` from `centers/`.
+- Live (2026-11-01): a disabled account gets `401 "Your account is disabled and cannot create new parcels"` on create (→ `AUTH_FAILED`) while reads keep working; deleting an unknown tracking answers `deleted: false` (→ `VALIDATION_ERROR`, indistinguishable from an already-shipped parcel); an unknown tracking returns `200 { total_data: 0 }` (→ `NOT_FOUND`).
+- Still to confirm with real responses: whether Yalidine rounds the overweight kg; the status flow of a real parcel.
+
+---
+
+## Maystro Delivery
+
+> Built from the public API docs (saved in [`vendor/maystro/maystro-api-full.md`](./vendor/maystro/maystro-api-full.md)) on 2026-10-20, then aligned with Confirmation-api live fees (`MaystroController::getDeliveryPrice`) on 2026-10-20. `track`, `listParcels` and `cancelParcel` were checked live on a test account on 2026-11-01 (create → track → cancel → track, list, unknown references); their fixtures follow the live response shapes.
+
+- Docs: <https://maystro.gitbook.io/maystro-delivery-documentation/reference/maystro-delivery-api-reference>
+- Orders / locations base URL: `https://orders-management.maystro-delivery.com` (`MAYSTRO_DEFAULT_BASE_URL` / `MaystroProvider::DEFAULT_BASE_URL`; keep the trailing `/` on `api/base/...` and `api/orders/`)
+- Live fees base URL: `https://backend.maystro-delivery.com` (`MAYSTRO_BACKEND_BASE_URL` / `MaystroProvider::BACKEND_BASE_URL`) — Confirmation-api production host for tariffs (and geo sync uses `api/shared/wilayas/` on this host / communes on backend2; SDK locations still use orders-management `api/base/...`)
+
+### Auth
+
+| Header | Value | Config key |
+|--------|-------|------------|
+| `Authorization` | `Token <token>` | `apiToken` (`MAYSTRO_API_TOKEN`) |
+| `Accept` / `Content-Type` | `application/json` | — |
+
+> **Assumption:** the orders page literally says `Authorization: token` ("replace `<token>` with your token"), while the webhook pages say `token <store token>`. The API is Django REST Framework, whose `TokenAuthentication` expects `Token <key>`, so the SDK sends `Authorization: Token <apiToken>`. A token that already starts with `Token ` is sent unchanged.
+
+### Method mapping
+
+| Unified method | Native endpoint | Notes |
+|----------------|-----------------|-------|
+| `createParcel` | `POST /api/orders/` | Body is a **list** of orders (bulk, we send one). Trailing `/` matches the live orders-management URL. Response: `[{ id, external_id, tracking, success, delivery_price, errors: [] }]`. `success: false` or non-empty `errors` → `ShippingError` (see Errors). No follow-up read: status is always `pending`. `tracking` is the order `display_id`. |
+| `track` | `GET {backend}/api/stores/orders/{id}/` then `GET https://b.maystro-delivery.com/api/stores/history_order/{id}` | Takes the order UUID (`Parcel.id`) or the tracking number: a non-UUID numeric reference is resolved with `GET {backend}/api/stores/orders/?display_id=` (no match → `NOT_FOUND`). Unknown UUID → `404` `Pas trouvé.` → `NOT_FOUND`. History rows `[{ status, created_at, comment, agent }]` come newest first live; the SDK sorts them oldest first. `label` = status name (`CREATED`, `ABORTED`, …) + ` (comment)`. Webhooks (`OrderStatusChanged`) remain the push alternative. |
+| `getFees` | **Primary:** `GET {backend}/api/stores/delivery_price/?commune=&delivery_type=&express=false` (home=`1`, stop desk=`2`). **Fallback:** orders-management `GET /api/base/delivery-options/?commune=` then `GET /api/base/delivery-prices/?commune=&delivery_type=` | Matches Confirmation-api live tariffs. Response shape `{ delivery_price: number }`. SDK calls type `1` and `2` to fill `deliveryFee` + `stopDeskFee`. On `NOT_FOUND` / `NETWORK_ERROR` from the backend host, falls back to legacy `delivery-options` (all modes in one call) then `delivery-prices` (`1` home, `2` stop desk, `3` pickup). `createParcel` stays on orders-management. |
+| `getWilayas` | `GET /api/base/wilayas/?language=fr&country=1` | Current response: objects `{ code, display_id, name_lt, name_ar, … }` (`code` → `Location.id`). Legacy `[id, name]` tuples and `{ id, name }` are still accepted. Wilaya id **is** the official code. Not paginated. |
+| `getCommunes` | `GET /api/base/communes/?wilaya=<id>` | Response: `[{ id, wilaya, name, postcode, zone }]`. A DRF page `{ results: [...] }` is also accepted (first page only). |
+| `getStopDesks` | `GET /api/base/pickup-points?commune=<id>` | **`communeId` required** (`VALIDATION_ERROR` otherwise). Response `[{ name_lt, name_ar, commune, pickup_point, delivery_type, active }]`. Stop desk (`delivery_type: 2`, `pickup_point: null`) → `id` = commune id; pickup point (`delivery_type: 3`) → `id` = `pickup_point`. `active: false` skipped. |
+| `listParcels` | `GET {backend}/api/stores/orders/?page=` | Fixed 20 orders per page (`pageSize` is always `20`). Response `{ list: { count, next, previous, results } }` (`next` → `hasNext`). `status`, `orderId` (`external_order_id`), `keyword` (display id, customer name, phone, external id) and `updatedSince` (`updated_at`) filter the fetched page client-side. `allPages` follows `next` (≤ 100 pages). |
+| `cancelParcel` | `PATCH {backend}/api/shared/status/{id}/` with `{ "status": 50, "abort_reason": 21 }` | Takes the order UUID or the tracking number (resolved like `track`). Response `{ order_id, new_status, old_status }`; a `new_status` other than `50` → `VALIDATION_ERROR`. Cancelling an already aborted order succeeds (live). Unknown UUID → `NOT_FOUND`. |
+| `healthCheck` | `GET /api/base/wilayas/` | Same probe as `getWilayas`, but **always** hits the network (cache bypassed). |
+
+**Maystro extra — labels (bordereaux)**, on `MaystroProvider` (not on `ShippingProvider`): `getLabels(references)` → `{ contentType: 'application/pdf', data, labelCount }` (`data`: `Uint8Array` in TS, binary `string` in PHP; class `DzDelivery\Providers\Maystro\MaystroLabels`).
+
+| References | Native endpoint | Notes |
+|------------|-----------------|-------|
+| tracking numbers (`display_id`) | `POST {backend}/api/delivery/starter/starter_bordureau/` `{ "orders_ids": [...] }` | One PDF, one page per order found. |
+| order UUIDs only | `POST {backend}/api/delivery/starter/v2/starter_bordureau/` `{ "orders_ids": [...] }` | Same PDF. A UUID / tracking mix is sent as tracking numbers (one order read per UUID). |
+
+Checked live (2026-11-01): Maystro answers **HTTP 406 to `Accept: application/pdf`**, so the SDK sends `Accept: */*`. Unknown references are dropped silently and repeats deduped (`labelCount` < references ⇒ some not found); with no order found Maystro returns a blank one-page PDF without image → `NOT_FOUND`. Labels are generated for cancelled orders too. At most 100 references per call (SDK limit). `all_created: true` (every `CREATED` order) is not exposed.
+
+### `ParcelInput` → `POST /api/orders/` body
+
+| Unified field | Maystro field | Notes |
+|---------------|---------------|-------|
+| `recipientName` | `customer_name` | |
+| `phone` | `customer_phone` | Local format `0XXXXXXXXX`. |
+| `phone2` | `customer_phone2` | Same normalization; omitted when absent. |
+| `address` | `destination_text` | |
+| `wilayaId` / `wilayaName` | `wilaya` | Maystro wants the wilaya **name**: id/code/name resolved to the canonical name via `wilayas/`. |
+| `communeId` / `communeName` | `commune` | Sent as the integer commune **id**, resolved (and checked) via `communes/?wilaya=`. Unknown wilaya/commune → `NOT_FOUND` before the order is posted. |
+| `productList` | `details[]` | `{ product: sku ?? "", description: name, quantity }`. `sku` is sent as Maystro's `product` (its `id` or your external `product_id`); empty `product` lets Maystro create the product from `description`. |
+| `productName` | `details[]` | One item: `{ product: "", description: productName, quantity: 1 }`. |
+| `price` | `total_price` | **Includes the delivery fee** (Maystro deducts its fee from it). Rounded to an integer (Maystro requires one). |
+| `isStopDesk` / `stopDeskId` | `delivery_type`, `pickup_point` | `false` → `delivery_type: 1` (home). `true` and `stopDeskId` equal to the destination **commune id** → `delivery_type: 2` (that commune's Maystro stop desk, which has no id of its own). `true` with any other `stopDeskId` → `delivery_type: 3` (pickup point) and `pickup_point: stopDeskId` (ids from `GET /api/base/pickup-points?commune=` or `delivery-options` `pickup_point_id`). |
+| `remark` | `note_to_driver` | Omitted when absent. |
+| `orderId` | `external_id` | Max 100 chars (Maystro error `100`). Omitted when absent. |
+| — | `express` | Always `false`. |
+| `weight`, `length`, `width`, `height` | — | Not sent (no such fields). |
+
+> ⚠️ **Duplicate rule:** Maystro rejects (error `55`) an order with the same `customer_name` + `customer_phone` (or + `customer_phone2`) as another order created in the **last 24 hours**. Retrying a create after a timeout can therefore fail with `VALIDATION_ERROR` even though the first order exists.
+
+### Response → `Parcel`
+
+| Unified | Maystro |
+|---------|---------|
+| `id` | `id` (UUID; falls back to `tracking`) |
+| `trackingNumber` | `tracking` (e.g. `172316976800001`; it is the order `display_id`, so read rows map `display_id`) |
+| `status` | always `pending` (the response has no status; new orders start as `4` / `CREATED` → `pending`) |
+| `provider` | `"maystro"` |
+
+### Locations → `Location`
+
+| Unified | Wilaya (`code` / legacy `[id, name]`) | Commune |
+|---------|------------------------|---------|
+| `id` | `code` (fallback `display_id` / `id`) | `id` |
+| `name` | `name_lt` (fallback `name` / `name_ar`) | `name` |
+| `parentId` | — | `wilaya` |
+| `code` | `id` (official code) | `postcode` |
+
+### Fees → `FeeQuote`
+
+`GET /api/base/delivery-options/?commune=` response (legacy / some stores): `[{ type: "home" | "stopdesk" | "pickup", name, price, min_total_price, required_points, current_points, pickup_point_id? }]`.
+
+`GET /api/base/delivery-prices/?commune=&delivery_type=` response (fallback): `{ delivery_price, min_total_price, required_points, current_points }`.
+
+| Unified | Maystro |
+|---------|---------|
+| `deliveryFee` | `price` of `type: "home"`, or of the stop-desk price below when `isStopDesk` |
+| `stopDeskFee` | `price` of `type: "stopdesk"`, falling back to the first `type: "pickup"` entry |
+| `returnFee` | not exposed |
+| `currency` | `"DZD"` |
+
+Prices are **per commune**. Like Yalidine, when `toCommuneId` is missing the **first commune** returned by `communes/?wilaya=` for `toWilayaId` is used (2 extra calls). With `toCommuneId`, it is sent as-is (one call; `toWilayaId` is only checked for presence). `weight` / dimensions are ignored (no documented surcharge). Missing price for the requested mode, or `404 PRICING NOT FOUND` → `NOT_FOUND`.
+
+### Status mapping
+
+Maystro reports numeric codes (webhooks send `payload.status`). The mapper accepts the code (`41`, `"41"`) or the name (`DELIVERED`, `ready to return`; case/separator-insensitive). Reference cases: [`fixtures/maystro/statuses.json`](./fixtures/maystro/statuses.json).
+
+| Code | Native name | Unified | Why |
+|------|-------------|---------|-----|
+| 4 | `CREATED` | `pending` | Registered, not yet handed over / pickup not requested. |
+| 11 | `PENDING` | `pending` | On hold before preparation. |
+| 12 | `OUT_OF_STOCK` | `pending` | Premium stores: cannot be prepared yet. |
+| 5 | `PICK_UP_REQUESTED` | `created` | Ready to be picked up by Maystro. |
+| 6 | `IN_PROCESS` | `created` | Being processed/prepared by Maystro, not moving yet. |
+| 8 | `WAITING_TRANSIT` | `in_transit` | In hub, waiting for transfer. |
+| 9 | `IN_TRANSIT_TO_BE_SHIPPED` | `in_transit` | |
+| 15 | `READY_TO_SHIP` | `in_transit` | Held by Maystro (picked up for Starter, in warehouse for Premium), ready for a driver. |
+| 22 | `ASSIGNED` | `in_transit` | Assigned to a driver. |
+| 31 | `SHIPPED` | `in_transit` | Out for delivery. |
+| 32 | `ALERTED` | `in_transit` | Delivery issue / failed attempt. |
+| 42 | `POSTPONED` | `in_transit` | |
+| 41 | `DELIVERED` | `delivered` | |
+| 50 | `ABORTED` | `cancelled` | Maystro itself calls `50` "CANCELLED" (refund section). If the parcel was already shipped, the following `51` / `10` / `52` map to `returned`. |
+| 10 | `IN_TRANSIT_TO_BE_RETURNED` | `returned` | |
+| 51 | `READY_TO_RETURN` | `returned` | (alias `READY_TO_BE_RETURNED`) |
+| 52 | `TAKEN_BY_STORE` | `returned` | Return handed back to the store. |
+| 53 | `NOT_RECEIVED` | `returned` | Return reported as not received by the store. |
+| other | | `unknown` | |
+
+Name aliases `CANCELLED` / `CANCELED` → `cancelled`.
+
+### Errors
+
+Rejected orders come back as result rows with numeric `errors` codes. Entries may be bare codes (`[40]`) or objects (`[{ code, message }]`) — the docs only show an empty list, so both are accepted. The **first known code** decides `ShippingError.code`; every entry becomes a detail `{ field?, message, code: "<maystro code>" }` (native `message` when present, otherwise the table text). `ShippingError.message` = detail messages joined with `; `. The same parsing applies when the rows come back with an HTTP 4xx (the HTTP status then decides `code`).
+
+| Maystro code | Meaning | `ShippingError.code` | `details[].field` |
+|--------------|---------|----------------------|-------------------|
+| 10 | Price not valid / missing | `VALIDATION_ERROR` | `price` |
+| 20 | Address missing | `VALIDATION_ERROR` | `address` |
+| 30 | Customer name/phone not valid | `VALIDATION_ERROR` | `phone` |
+| 40 | Wilaya or commune does not exist | `NOT_FOUND` | `communeId` |
+| 45 | Delivery type not available for the commune | `VALIDATION_ERROR` | `isStopDesk` |
+| 50 | Products missing / not valid | `VALIDATION_ERROR` | `productList` |
+| 55 | Duplicated order (same name/phone within 24 h) | `VALIDATION_ERROR` | — |
+| 60 | Unexpected error | `PROVIDER_ERROR` | — |
+| 70 | Delivery pricing could not be detected | `PROVIDER_ERROR` | — |
+| 80 | Orders list empty | `VALIDATION_ERROR` | — |
+| 90 | Too many orders (> 1000) | `VALIDATION_ERROR` | — |
+| 100 | External ID > 100 chars | `VALIDATION_ERROR` | `orderId` |
+| 101 | Not enough points to pay the delivery | `VALIDATION_ERROR` | — |
+| other / none | | `VALIDATION_ERROR` | — |
+
+Other error bodies are assumed to follow DRF: `{ "detail": "..." }` → `message`; `{ "<field>": ["..."] }` → `details[{ field, message }]`. HTTP status → `code` per `CONTRACT.md` §3 (`401` → `AUTH_FAILED`, `404` → `NOT_FOUND`, …).
+
+### Limitations and assumptions
+
+- `track` / `cancelParcel` need the order UUID; a tracking number costs one extra lookup (`?display_id=`).
+- `listParcels` filters client-side: with a filter, a page can hold fewer than 20 parcels (or none) while `hasNext` is `true`.
+- `createParcel` always returns `pending`; Premium stores may actually start at `15` (`READY_TO_SHIP`, as in the `orderCreated` webhook example).
+- Auth header format `Token <token>` (see Auth). Same token is sent to every host (orders-management, backend, `b.`).
+- Wilaya ids are assumed to equal the official codes `1`–`58` (true for every id in the docs example), so `code = id`.
+- Error entry shape (`40` vs `{ code, message }`) and non-order error bodies are not documented (see Errors).
+- Bulk create, exchanges, refunds, products/stock, pickup points listing and webhook management are out of MVP scope.
+
+---
+
+## Confirmation-api fees audit (2026-10-20)
+
+Cross-check of live tariff sources in Confirmation-api vs this SDK (orders / create stay on each carrier’s documented host):
+
+| Carrier | Confirmation live fees | SDK |
+|---------|------------------------|-----|
+| **GuepEx** | `GET https://api.guepex.app/v1/fees/` | Same API as Yalidine — use `YalidineProvider` with `GUEPEX_DEFAULT_BASE_URL` ✓ |
+| **ZRExpress** | Tariffs from **DB only** in Confirmation; the guide has **no** fees HTTP endpoint | SDK uses live `GET /api/v1/delivery-pricing/rates/{toTerritoryId}` ✓ |
+| **Ecotrack** (DHD, Anderson, …) | `GET /api/v1/get/fees` | Already in SDK ✓ |
+| **Maystro** | `GET https://backend.maystro-delivery.com/api/stores/delivery_price/?commune=&delivery_type=&express=` | SDK primary path (this change); orders-management options/prices kept as fallback ✓ |
+| **NoEST** | `GET https://app.noest-dz.com/api/public/fees` | SDK uses the live grid ✓ |
+| **Ecom** | — (legacy `Api_v1` adapter: no live fee endpoint) | SDK uses the live `GET https://ecom-dz.com/api_v2/tarifs` grid ✓ |
+| **MDM** | — | Still backlog (see below) |
+
+---
+
+## Ecotrack
+
+> Ecotrack is not a courier but a white-label platform: DHD, Anderson, World Express, 48Hr Express, EcoRapid, Conexlog, MSM Go, Packers and ~80 other couriers expose the **same API** on their own domain. One provider (`ecotrack`) serves all of them; the tenant is chosen with `courier` or `baseUrl`.
+> Built from third-party integration notes on the official Postman collection (`docs/vendor/ecotrack/`, private) and cross-checked against `Delivery/Ecotrack.php` tenant hosts. Needs confirmation with real responses per tenant.
+>
+> **Same API, not separate providers:** Anderson, DHD, World Express, 48Hr Express and EcoRapid in the legacy app are Ecotrack tenants (Bearer + `/api/v1`). Do **not** add `anderson` / `mdm` / `elogistia` as separate SDK providers for that reason — MDM and Elogistia use different APIs (see remaining / out of scope below).
+
+- Base URL: `https://<tenant>/api/v1` (paths below are relative to it). Single-order endpoints take **query parameters**, never a JSON body.
+
+### Auth / tenant
+
+| Option | Value | Notes |
+|--------|-------|-------|
+| `token` | API token from the courier's dashboard | Sent as `Authorization: Bearer <token>` (a `Bearer ` prefix in the value is stripped). |
+| `courier` | built-in tenant key | Exactly one of `courier` / `baseUrl`. Unknown key → `VALIDATION_ERROR`. |
+| `baseUrl` | tenant URL, e.g. `https://xyz.ecotrack.dz` | Must be `https`; a trailing `/api/v1` is stripped. |
+| `autoValidate` | `false` (default) | `true` → `POST valid/order` right after creation, so the courier picks the order up. |
+
+Built-in `courier` keys. Hosts marked **Delivery** match `Delivery/Ecotrack.php` `EntrepriseName` (production). Others are from integration notes — use `baseUrl` if yours differs:
+
+| Key | Host | Source |
+|-----|------|--------|
+| `dhd` | `https://platform.dhd-dz.com` | Delivery |
+| `anderson` | `https://anderson-ecommerce.ecotrack.dz` | Delivery (`andersondelivery` is an alias of the same host) |
+| `worldexpress` | `https://world-express.ecotrack.dz` | Delivery |
+| `48hrexpress` | `https://48hr.ecotrack.dz` | Delivery |
+| `ecorapid` | `https://ecorapide-express.ecotrack.dz` | Delivery |
+| `conexlog` | `https://app.conexlog-dz.com` | notes |
+| `msmgo` | `https://msmgo.ecotrack.dz` | notes |
+| `packers` | `https://packers.ecotrack.dz` | notes |
+| `rocketdelivery` | `https://rocketdelivery.ecotrack.dz` | notes |
+
+### Method mapping
+
+| Unified method | Native endpoint | Notes |
+|----------------|-----------------|-------|
+| `createParcel` | `POST create/order?…` | Query parameters (below). Tracking is read from `tracking` (or `tracking_number` / …) at the root, under `data`, `data.order`, or `order` — some tenants nest it. With `autoValidate`, followed by `POST valid/order?tracking=`; a validation failure says the order *was created*. |
+| `track` | `GET get/tracking/info?tracking=` | Only the entry for this exact tracking number is used (never "the first row"). |
+| `getFees` | `GET get/fees` | All wilayas in one call; the row whose `wilaya_id` matches is used. |
+| `getWilayas` | `GET get/wilayas` | Only the wilayas the tenant delivers to. `wilaya_id` is the official code. |
+| `getCommunes` | `GET get/communes?wilaya_id=` | Answer is an **index-keyed object**, not a list. `Location.id` = `code_postal` (or the name when missing). |
+| `getStopDesks` | `GET get/communes?wilaya_id=` | Communes with `has_stop_desk: 1`; `StopDesk.id` = the commune's `code_postal` (Ecotrack "station code"). |
+| `cancelParcel` | `DELETE delete/order?tracking=` | Only before validation: error `10001` or `delete: "fail"` → `VALIDATION_ERROR`. |
+| `healthCheck` | `GET get/wilayas` | Same probe as `getWilayas`, but **always** hits the network (cache bypassed). |
+
+### `ParcelInput` → `create/order` query
+
+| Unified field | Ecotrack field | Notes |
+|---------------|----------------|-------|
+| `recipientName` | `nom_client` | |
+| `phone` / `phone2` | `telephone` / `telephone_2` | Local format `0XXXXXXXXX`. |
+| `address` | `adresse` | |
+| `wilayaId` / `wilayaName` | `code_wilaya` | Code `1`–`58`; names resolved via `get/wilayas`. |
+| `communeId` / `communeName` | `commune` | Commune **name**, in the tenant's spelling (resolved via `get/communes`). |
+| `productName` / `productList` | `produit` | Joined names (`Mug x2, Tee`). |
+| `price` | `montant` | Rounded. **Includes the delivery fee**: what the recipient pays. |
+| — | `type` | Always `1` (delivery). |
+| `isStopDesk` / `stopDeskId` | `stop_desk` (`0`/`1`) / `code_postal` | `stopDeskId` = a `getStopDesks()` id. |
+| `weight` | `weight` | Only when given. Dimensions are not sent. |
+| `remark` | `remarque` | |
+| `orderId` | `reference` | |
+
+New orders are `pending` (`prête à expédier`) until validated; `created` with `autoValidate`.
+
+### Tracking → `Parcel` / `TrackingEvent`
+
+`activity[]` rows (`status`, `reason`, `date`, `time`) are sorted oldest first. `TrackingEvent.at` = `date` + `time` as `+01:00`; `label` = activity key (+ ` (reason)`). The parcel status is the last mapped activity; `notification_on_order` (a remark) keeps the previous status. No activity → `pending`. Unknown tracking (empty result, or a `422` whose only invalid field is `tracking`) → `NOT_FOUND`.
+
+### Fees → `FeeQuote`
+
+| Unified | Ecotrack |
+|---------|----------|
+| `deliveryFee` | `livraison[wilaya].tarif` (home) or `tarif_stopdesk` (`isStopDesk`) |
+| `stopDeskFee` | `livraison[wilaya].tarif_stopdesk` |
+| `returnFee` | `retours[wilaya].tarif` (or `tarif_stopdesk`) |
+
+A `0` price means the mode is not offered → `NOT_FOUND`. Fees are per wilaya (no per-commune price, no weight surcharge).
+
+### Status mapping
+
+Only the stable **keys** are mapped (activity keys and order status enum keys); French display labels drift per tenant and map to `unknown`. Compared case-insensitively. Reference cases: [`fixtures/ecotrack/statuses.json`](./fixtures/ecotrack/statuses.json).
+
+| Native key | Unified |
+|------------|---------|
+| `prete_a_expedier`, `prete_a_preparer` | `pending` |
+| `order_information_received_by_carrier`, `en_preparation_stock`, `en_ramassage` | `created` |
+| `picked`, `accepted_by_carrier`, `dispatched_to_driver`, `attempt_delivery`, `vers_hub`, `en_hub`, `vers_wilaya`, `en_preparation`, `en_livraison`, `suspendu` | `in_transit` |
+| `livred`, `encaissed`, `payed`, `livre_non_encaisse`, `encaisse_non_paye`, `paiements_prets`, `paye_et_archive` | `delivered` |
+| `return_asked`, `return_in_transit`, `return_received`, `retour_chez_livreur`, `retour_transit_entrepot`, `retour_en_traitement`, `retour_recu`, `retour_archive` | `returned` |
+| `annule` | `cancelled` |
+| anything else (incl. `notification_on_order`, French labels) | `unknown` |
+
+### Errors / rate limits
+
+- Validation failures: HTTP `422` Laravel bodies `{ message, errors: { field: [..] } }` → `VALIDATION_ERROR` with one `details` entry per message.
+- Business failures come back as **HTTP 200** `{ success: false, error: <code> }`:
+
+| Code | Unified | Meaning |
+|------|---------|---------|
+| `10001` | `VALIDATION_ERROR` | Order already validated (cannot be modified / deleted). |
+| `10002` | `VALIDATION_ERROR` (`field: wilayaId`) | No delivery to this wilaya. |
+| `10003` | `VALIDATION_ERROR` | A return cannot be requested for this order. |
+| other | `PROVIDER_ERROR` | `details[0].code` holds the native code. |
+
+- Rate limit: about **50 requests/minute** → `429` (`Too Many Attempts.`) → `RATE_LIMITED` (+ `retryAfter` when sent). `autoValidate` makes 2 calls per order.
+- Field limits (from the notes): phone 9–10 digits, wilaya code `1`–`58`, strings ≤ 255 chars; a misspelled commune name is a `422`.
+
+### Limitations and assumptions
+
+- Updating an order, requesting returns (`ask/for/order/return`) and validating returns are out of MVP scope. Ecotrack silently ignores updates after validation.
+- Tenant hosts other than the built-in keys must be passed as `baseUrl`.
+- Response shapes vary slightly between tenants (lists vs index-keyed objects, `data` wrappers); the provider accepts both.
+- Legacy app price tables (`AndersonPriceController`, `DhdPriceController`) are DB-backed, not Ecotrack `get/fees` — the SDK uses the live API.
+- **Not Ecotrack (do not use this provider):** NoEST (`app.noest-dz.com`, different auth/paths), MDM (JWT / `x-api-key`), Elogistia (`api.elogistia.com`).
+
+---
+
+## NoEST
+
+> Built from the **NOEST Public API documentation v2.3** (May 2026, PDF given to partners, not committed) and checked against live responses (2026-10-30: wilayas, communes, desks, fees, unknown tracking, and the error bodies of create / delete / valid on a suspended account). No order could be created on that account, so the **success** bodies of create, validation and deletion still follow the documentation only.
+
+- Base URL: `https://app.noest-dz.com/api/public` (paths below are relative to it).
+- Rate limit: 60 requests / minute; server timeout 30 s.
+
+### Auth
+
+| Option | Value | Notes |
+|--------|-------|-------|
+| `apiToken` | API token from the NOEST partner dashboard | Sent as `Authorization: Bearer <apiToken>` (a `Bearer ` prefix in the value is stripped). Without it: HTTP 401 `{"error":"Unauthenticated."}`. |
+| `userGuid` | partner GUID from the same dashboard | Sent as `user_guid` in every POST body. GET endpoints do not need it. |
+| `autoValidate` | `false` (default) | `true` → `POST valid/order` right after creation. Unvalidated orders stay editable and deletable but are not picked up. |
+
+> The legacy app (`Confirmation-api`) sent `api_token` in the JSON body, even on GETs. The Bearer header from the v2.3 docs works on every endpoint tested; the SDK uses it.
+
+### Method mapping
+
+| Unified method | Native endpoint | Notes |
+|----------------|-----------------|-------|
+| `createParcel` | `POST create/order` (JSON body) | Commune resolved first through `get/communes/{wilaya}` (NOEST spelling). Response `{ success, tracking, reference, regional_hub_name, wilaya_rank }` → `trackingNumber`; status `pending` (or `created` with `autoValidate`). |
+| `track` | `POST get/trackings/info` `{ user_guid, trackings: [t] }` | Response keyed by tracking: `{ OrderInfo, activity: [...], deliveryAttempts }`. Unknown tracking → HTTP **404** `{"message":"Trackings non trouvés"}` → `NOT_FOUND`. |
+| `getFees` | `GET fees` | `tarifs.delivery` / `tarifs.return`, keyed by wilaya: `tarif` (home), `tarif_stopdesk`. No row (wilayas 50, 54 at test time) → `NOT_FOUND`. Not commune- or weight-dependent. |
+| `getWilayas` | `GET get/wilayas` | `[{ code, nom, is_active }]`; inactive wilayas are skipped. |
+| `getCommunes` | `GET get/communes/{wilaya_id}` | `[{ id, nom, wilaya_id, code_postal, is_active }]`; `Location.id` = `code` = `code_postal` (or the name when `code_postal` is missing, `code` then omitted). |
+| `getStopDesks` | `GET desks` | All stations keyed `"16B"`: `{ code, name, address, commune, phones, horaires, map, email }`. Filtered by wilaya (digits of `code`); with `communeId`, by `commune` (same spelling as `get/communes`). `StopDesk.id` = `code` → `station_code`. |
+| `listParcels` | — | **`NOT_SUPPORTED`**: no list endpoint. |
+| `cancelParcel` | `POST delete/order` `{ user_guid, tracking }` | Only orders **not validated** yet; `{ success: false }` → `VALIDATION_ERROR`. After validation use the NOEST dashboard (`ask/return` is not mapped). |
+| `healthCheck` | `GET get/wilayas` | |
+
+Not mapped yet (documented by NOEST): bulk create / validate (`create/orders`, `valid/orders`, ≤ 100), `update/order`, `update/order/before/expedition`, `add/maj` (remark), `ask/new-tentative`, `ask/return`, `get/order/label` (PDF).
+
+### Field mapping (`createParcel`)
+
+| ParcelInput | NOEST | Notes |
+|-------------|-------|-------|
+| `recipientName` | `client` | ≤ 255 chars |
+| `phone` / `phone2` | `phone` / `phone_2` | Local format `0XXXXXXXXX` (9–10 digits) |
+| `address` | `adresse` | ≤ 255 chars |
+| `wilayaId` / `wilayaName` | `wilaya_id` | Official code `1`–`58` |
+| `communeId` / `communeName` | `commune` | NOEST name, resolved by id, exact name, then spelling-tolerant match (see below) |
+| `price` | `montant` | Amount collected, delivery included |
+| `productName` / `productList` | `produit` | `"Mug x2, T-shirt"` |
+| — | `type_id` | Always `1` (delivery). Exchange (`2`) and pick-up (`3`) are not exposed. |
+| `isStopDesk` / `stopDeskId` | `stop_desk` / `station_code` | `station_code` must belong to the destination wilaya |
+| `weight` | `poids` | Sent only when set |
+| `remark` | `remarque` | ≤ 255 chars |
+| `orderId` | `reference` | ≥ 5 chars, checked before any request (`VALIDATION_ERROR`, `field: orderId`); NOEST rejects duplicates (`duplicate_order`) |
+
+### Commune names
+
+NOEST spells some communes differently from the usual form (`Bab Azzouar` for `Bab Ezzouar`), the same way in `get/communes` and `desks`. `createParcel` and `getStopDesks` resolve `communeId` / `communeName` in this order:
+
+1. exact `Location.id` (postal code, e.g. `16021`);
+2. exact name, case / accent / separator-insensitive;
+3. **spelling-tolerant** name: vowels dropped and doubled letters collapsed (`looseNameKey` / `Text::looseKey`: `Bab Ezzouar` and `Bab Azzouar` → `bzr`). Used only when exactly one commune of the wilaya matches and the key has ≥ 3 letters, so it never picks between two communes; otherwise `NOT_FOUND` as before. Cases: [`fixtures/loose-names.json`](./fixtures/loose-names.json).
+
+Steps 1–2 behave as before; step 3 only turns former `NOT_FOUND` errors into a match.
+
+### Status mapping
+
+From `activity[].event_key`; when a row has no key, from the English `event` label (`Delivered`, …). French display labels (`Validé`) are not mapped. Keys are matched exactly (no prefix rules): an unlisted `verssement_…` or `return_…` key maps to `unknown`. Remark events (`edited_informations`, `edit_price`, `edit_wilaya`, `extra_fee`) keep the previous status. Full table: [`fixtures/noest/statuses.json`](./fixtures/noest/statuses.json).
+
+| Native | Unified |
+|--------|---------|
+| `upload` | `pending` |
+| `customer_validation` | `created` |
+| `validation_collect_colis`, `validation_reception_admin`, `validation_reception`, `fdr_activated`, `sent_to_redispatch`, `nouvel_tentative_asked_by_customer`, `mise_a_jour`, `colis_suspendu`, `return_redispatched_to_livraison`, `pickedup`, `valid_return_pickup` | `in_transit` |
+| `livre`, `livred`, `verssement_admin_cust`, `verssement_admin_cust_canceled`, `verssement_hub_cust_canceled`, `validation_reception_cash_by_partener`, `echange_valide`, `echange_valid_by_hub`, `pickup_picked_recu`, `colis_pickup_transmit_to_partner` | `delivered` |
+| `return_asked_by_customer`, `return_asked_by_hub`, `return_dispatched_to_partenaire`, `return_validated_by_partener`, `return_dispatched_to_warehouse`, `retour_dispatched_to_partenaires`, `colis_retour_transmit_to_partner`, `annulation_dispatch_retour`, `cancel_return_dispatched_to_partenaire`, `livraison_echoue_recu` | `returned` |
+| `ask_to_delete_by_admin`, `ask_to_delete_by_hub` | `cancelled` |
+
+### Errors
+
+| NOEST | Unified |
+|-------|---------|
+| HTTP 401 `{"error":"Unauthenticated."}` (bad / missing token) | `AUTH_FAILED` |
+| HTTP 404 `{"success":false,"message":"Partenaire introuvable"}` (bad `userGuid`, any POST) | `AUTH_FAILED` — *live* |
+| HTTP 422 `{"success":false,"errors":{"account_suspended":"Compte suspendu"}}` | `AUTH_FAILED`, `details[0].code = "account_suspended"` — *live* |
+| HTTP 422 `{ success: false, errors: { <business code>: "<message>" } }` | `VALIDATION_ERROR` for the codes below, `details[].code` = the key |
+| HTTP 422 `{ message, errors: { field: [..] } }` | `VALIDATION_ERROR`, `details[].field` mapped to `ParcelInput` names (`commune` → `communeId`, `client` → `recipientName`, …) |
+| HTTP 422 `errors.tracking` on `delete/order` (unknown tracking) | `NOT_FOUND` — *live* |
+| HTTP 404 `{"message":"Trackings non trouvés"}` on `get/trackings/info` | `NOT_FOUND` — *live* |
+| HTTP 200 `{ success: false, message }` | `PROVIDER_ERROR` (or the mapped code when the body carries a known error code) |
+| `duplicate_order`, `inactive_commune`, `zip_code`, `max_amount_exceeded`, `stopdesk_disabled`, `station_code`, `out_of_stock`, `already_validated`, … | `VALIDATION_ERROR` |
+| HTTP 429 | `RATE_LIMITED` |
+
+### Limitations and assumptions
+
+- No sandbox: the **success** fixtures of `createParcel`, `cancelParcel` and `valid/order` replay the documented examples (the error fixtures marked *live* above are real). Reports with anonymized real responses are welcome.
+- The documented tracking examples mostly omit `event_key`; the SDK falls back to the English label. Real accounts may return French labels, mapped to `unknown` until fixtures exist.
+- `zip_code` (postal code instead of wilaya + commune), `stock` / `quantite`, `remboursement`, `shop_name` and `station_expedition` are not exposed.
+
+---
+
+## Ecom
+
+> Built from the **E-com Delivery API v2** documentation (developer page of the partner dashboard, v2.153, read 2026-10-30). Checked live on a test account (2026-10-30): reads, unvalidated create (home + stop desk) then delete, error bodies; fixtures `track/paid-with-notes`, `track/returned-to-seller`, `createParcel/unknown-stop-desk` and `createParcel/validation-error` use the real response shapes. Replaces the legacy `ecom-dz.net/Api_v1` notes (Confirmation-api `EcomDelivery.php`), which no longer apply.
+
+- Base URL: `https://ecom-dz.com/api_v2`. JSON (UTF-8), dates ISO 8601 (`2026-06-12 20:49:16+00:00`).
+- Rate limits: 50 / min, 2 000 / h, 20 000 / day → HTTP 429 (`X-RateLimit-Remaining-*` headers on every authenticated response).
+
+### Auth
+
+| Option | Value | Notes |
+|--------|-------|-------|
+| `apiKey` | `KEY` from the developer page | Sent as `X-API-Key`. |
+| `apiToken` | `Token` from the same page (regenerable) | Sent as `X-API-Token`. Bad / missing → HTTP 401 `api_non_autorise` / `identifiants_api_manquants`. |
+| `autoValidate` | `false` (default) | `true` → `confirmee: 1` at creation ("En Traitement", picked up). Otherwise parcels stay "En Préparation": editable and deletable. |
+
+### Method mapping
+
+| Unified method | Native endpoint | Notes |
+|----------------|-----------------|-------|
+| `createParcel` | `POST /colis` (array of 1) | Best-effort per line: HTTP **201** even when `resultats[0].ok === false` → `VALIDATION_ERROR` with the line `code` (e.g. `total_insuffisant` → `field: price`). `trackingNumber` = `resultats[0].tracking`. |
+| `track` | `GET /colis/{tracking}` | Parcel status from `situation` + `etat_logistique`, events from `historique[]` (sorted by instant). Note lines keep the previous status, other unmapped labels are `unknown`. 404 `colis_introuvable` → `NOT_FOUND`. |
+| `getFees` | `GET /tarifs` | `wilayas[]`: `domicile`, `stopdesk`, `annuler` (→ `returnFee`). `service` / `emballage` (account-wide, billed on top) stay in `raw`. |
+| `getWilayas` | `GET /wilayas` | `{ id, libelle, domicile, stopdesk }`; wilayas with neither mode are skipped. |
+| `getCommunes` | `GET /communes?id_wilaya=` | `{ id, commune, code_postal, livrable }`; only `livrable: true`. `Location.id` = E-com id, `code` = postal code. |
+| `getStopDesks` | `GET /stopdesks?id_wilaya=` | `StopDesk.id` = `code_stopdesk` (→ `stopDeskId`), first number of `tel_contact` → `phone`. `communeId` filters on the desk `commune`. |
+| `listParcels` | `GET /colis?page&limit` | ≤ 100 per page, newest first. `keyword` → `tracking` filter, `updatedSince` → `type_date=action&date_debut=<day, Algeria time>`, `orderId` / `status` filtered client-side. `total` only on page 1: later pages report a lower bound. Checked live: the *action* date is the last logistic move (dispatch, delivery, return, payment), so parcels never handled yet (still `En Préparation`, or only confirmed through the API) are **not** returned by `updatedSince`. |
+| `cancelParcel` | `DELETE /colis/{tracking}` | Soft delete, only "En Préparation". 409 → `VALIDATION_ERROR`, 404 → `NOT_FOUND`. |
+| `healthCheck` | `GET /wilayas` | (`GET /test` also exists and returns the account flags `stock`, `colis_0da`.) |
+
+Not mapped yet: `PUT /colis/{tracking}`, `POST /colis/confirmer`, bulk create (≤ 100), labels (`/colis/{tracking}/bordereau`, `/colis/bordereaux`, HTML), `/colis/historique`, `/colis/statuts`, `/colis/maj`, payments, products, pick-up requests, claims, webhooks (`PUT /webhook`, HMAC-SHA256 `x-webhook-signature`).
+
+### Field mapping (`createParcel`)
+
+| ParcelInput | E-com | Notes |
+|-------------|-------|-------|
+| `recipientName` | `nom_complet` | 1–60 chars (longer → 422, checked live) |
+| `phone` / `phone2` | `mobile_1` / `mobile_2` | Local format `0XXXXXXXXX` |
+| `address` | `adresse` | ≤ 100 chars (longer → 422, checked live) |
+| `wilayaId` / `wilayaName` | `id_wilaya` | 1–58 |
+| `communeId` / `communeName` | `commune` | Home delivery only. Resolved by id, postal code, name, then spelling-tolerant name (see [NoEST — Commune names](#commune-names)); `livrable: false` → `VALIDATION_ERROR` before sending. |
+| `isStopDesk` / `stopDeskId` | `stopdesk` / `code_stopdesk` | With `stopdesk: 1` E-com ignores `commune` (taken from the desk), so no commune lookup is made. |
+| `productName` / `productList` | `article`, `quantite`, `ref_article` | One product line → its name, its quantity and its `sku` as `ref_article` (stock accounts); several lines → one description, quantity 1. |
+| `price` | `total` | 0–150 000 DA. Accounts with `colis_0da: false` cannot go below the wilaya rate (`total_insuffisant`). |
+| `remark` | `note_fournisseur` | ≤ 255 chars |
+| `orderId` | `id_externe` | ≤ 20 chars |
+
+Unknown fields are refused (422) by E-com: the SDK only sends the fields above.
+
+### Status mapping
+
+Labels of `GET /situations` and `GET /etats-logistiques` (case / accent-insensitive). A parcel's status: a final **situation** (`Livrée`, `Annuler`, `Commande Annuler`, …) wins, then the **état logistique**, then any other situation. Full table: [`fixtures/ecom/statuses.json`](./fixtures/ecom/statuses.json).
+
+| Native | Unified |
+|--------|---------|
+| `En Préparation`, `Attend Confirmation`, `Commande Reporté`, `Commande a Relancé` | `pending` |
+| `En Traitement`, `Commande Confirmée` | `created` |
+| `Au Bureau`, `En livraison`, `Sortir en livraison`, `Dispatcher`, `Ne Réponde pas #1–3`, `En attente du client`, `Reporté`, `Reporté Commune Erronée`, `Reporté Wilaya Erronée`, `Appel Tel`, `SMS Envoyé`, `WhatsApp OK` | `in_transit` |
+| `Livrée`, `Encaisser`, `Recouvert`, `Récupérer` (payment collected) | `delivered` |
+| `Annuler`, `Annuler x3`, `Retour de Dispatche`, `Retour Navette`, `Retour Fournisseur`, `Retour Stock` | `returned` |
+| `Commande Annuler`, `Supprimée` | `cancelled` |
+| `EnCours` (default situation), `BIZ`, `Suivi par E-com` | `unknown` |
+
+`Récupérer`, `Retour Fournisseur` and `Retour Stock` are missing from the docs but returned live (`GET /etats-logistiques`); `Récupérer` follows `Livrée` → `Encaisser` with a payment reference. In `track()` events, history notes (`Information`, `Type de Colis`, `Type de Livraison`, `BIZ`, steps without a situation) keep the previous status.
+
+### Errors
+
+All global errors: `{ "error": { "code", "message", "details"? } }` (the opening-hours refusals nest it under `detail`).
+
+| E-com | Unified |
+|-------|---------|
+| 401 `identifiants_api_manquants`, `api_non_autorise` | `AUTH_FAILED`, `details[0].code` = native code |
+| 404 `colis_introuvable` | `NOT_FOUND` |
+| 409 (delete) | `VALIDATION_ERROR` |
+| 422 `validation` with `details: [{ champ: "0.nom_complet", raison }]` | `VALIDATION_ERROR`, `details[].field` mapped to `ParcelInput` names |
+| 422 `total_insuffisant`, `trop_de_colis` | `VALIDATION_ERROR` (`total_insuffisant` → `field: price`) |
+| 429 `quota_depasse` | `RATE_LIMITED` |
+| 201 with `resultats[0].ok: false` | `VALIDATION_ERROR`, `details[0].code` = line `code` (live: unknown desk → `code: validation`, `stopdesk introuvable (code=…, wilaya=…)` → `field: stopDeskId`) |
+
+---
+
+## MDM
+
+> Built from MDM's **OpenAPI spec** (`https://api.mdm.express/api/docs/swagger`, read 2026-10-30) and checked live (read-only) on a seller account: deliverable states / cities, offices, `calculate-fees`, parcel search, parcel detail, status metadata and error bodies. Creation was checked up to MDM's validation (fake store and product ids, so nothing was created): the success body follows the spec.
+
+- Base URL: `https://api.mdm.express`. MDM is a whole e-commerce platform (stock, call center, finance, ~1 300 endpoints); the SDK only uses the "Shipping - Parcels" and geo endpoints.
+- **Fulfilment model**: a parcel ships products **stocked at MDM**. Every `productList` line needs its MDM product id (`productId`, or `sku`, e.g. `PRD-B5C63A`); free-text products are refused by MDM (`products.0.trackingId must be a string`).
+
+### Auth
+
+| Option | Value | Notes |
+|--------|-------|-------|
+| `apiKey` | API key from the MDM dashboard (`POST /api/auth/api-keys`) | Sent as `x-api-key`. Bad key → HTTP 401 `AUTH.INVALID_API_KEY`. |
+| `storeId` | your store, `STR-…` | Required by `createParcel` (`VALIDATION_ERROR` before any request otherwise). When set, also scopes geo, office and parcel lookups to that store. |
+
+### Method mapping
+
+| Unified method | Native endpoint | Notes |
+|----------------|-----------------|-------|
+| `createParcel` | `POST /api/v2/shipping/parcels` | `{ storeId, destination: { cityId, streetAddress }, client, products: [{ trackingId, quantity, displayName?, price? }], productsPrice, isShippingFree: true, isStopDesk, stopDeskId? }` → `{ trackingId, orderId }`. `price` is sent as `productsPrice` with `isShippingFree: true`, so MDM adds no fee on top. MDM parcels have no merchant reference: `orderId` goes in `notes` as `Ref: <orderId>`. |
+| `track` | `GET /api/v2/shipping/parcels/{trackingId}` | Parcel `status` + `statusHistory[]` (newest first; sorted oldest first). Unknown id → 404 `PARCELS.NOT_FOUND` → `NOT_FOUND`. |
+| `getFees` | `POST /api/v2/shipping/parcels/calculate-fees` | Priced per commune: `toCommuneId`, else the wilaya's first deliverable commune. `fees.shipping` → `deliveryFee` (home or desk per `isStopDesk`), `fees.return` → `returnFee`. Live (Alger Centre): 650 home, 600 desk. |
+| `getWilayas` | `GET /api/geo/countries/DZA/deliverable-states` | Paginated (`pagination.hasMore`). `Location.id` = official code (`16`), sorted by code; MDM id `DZA16` accepted as input. |
+| `getCommunes` | `GET …/deliverable-states/DZA16/deliverable-cities` | `Location.id` = MDM city id (`DZA161601`), `code` = `1601`. |
+| `getStopDesks` | `GET /api/v2/shipping/companies/offices?countryId=DZA&stateId=DZA16[&cityId]` | Offices of MDM's partner couriers (NOEST, Maystro, …). `id` (`16A`) → `stopDeskId`; disabled offices skipped. |
+| `listParcels` | `POST /api/v2/shipping/parcels/search` | `{ filters, sortBy: { createdAt: DESC }, pagination: { page, perPage ≤ 100 } }`. `keyword` → `filters.search`, `updatedSince` → `filters.updatedAt.start`, `status` → `filters.status` (every MDM slug of that unified status, filtered server-side), `orderId` → client-side on `notes`. |
+| `cancelParcel` | — | No cancellation endpoint in the spec → `NOT_SUPPORTED` (cancel from the MDM dashboard). |
+| `healthCheck` | deliverable states | |
+
+### Status mapping
+
+Slugs from `GET /api/v2/shipping/parcels/metadata` (live, 2026-10-30). Full table: [`fixtures/mdm/statuses.json`](./fixtures/mdm/statuses.json).
+
+| MDM | Unified |
+|-----|---------|
+| `out-of-stock` | `pending` |
+| `confirmed`, `preparing`, `packaged`, `ready-for-dispatch` | `created` |
+| `received-by-mdm`, `dispatched`, `received`, `in-transit`, `ready-for-delivery`, `out-for-delivery`, `postponed`, `delivery-attempt-failed`, `exchange-pending`, `refund-pending` | `in_transit` |
+| `delivered`, `delivered-partially`, `exchange-collected` | `delivered` |
+| `delivery-failed`, `returning`, `return-ready`, `return-received`, `return-grouped`, `returned`, `exchange-failed`, `refund-collected`, `refunded`, `refunded-partially` | `returned` |
+| `lost` | `cancelled` (terminal, neither delivered nor returned) |
+
+### Errors
+
+`{ method, path, status, correlationId, error: { code, message, payload? } }`.
+
+| MDM | Unified |
+|-----|---------|
+| 400 `INVALID_REQUEST`, `payload: { "products.0.trackingId": "…" }` | `VALIDATION_ERROR`, one detail per path (`products.*` → `productList`, `destination.cityId` → `communeId`, …) |
+| 401 `AUTH.INVALID_API_KEY` | `AUTH_FAILED` |
+| 403 `AUTH.NOT_AUTHORIZED` "Products not found: PRD-…" | `VALIDATION_ERROR`, `field: productList` |
+| 404 `PARCELS.NOT_FOUND`, `GEO.LOCATION.NOT_FOUND` | `NOT_FOUND` |
+
+---
+
+## Elogistia
+
+> **No public documentation** (none on elogistia.com or the web). Endpoints come from the legacy Confirmation-api (`ElogistiaController.php`) and were checked live (read-only, 2026-10-30): fee grid, communes, unknown tracking and error bodies. Required order parameters were found with an invalid key (Elogistia validates parameters **before** the key, so nothing was created). Tracking labels are not documented: they are matched by keyword.
+
+- Base URL: `https://api.elogistia.com`. Every path ends with `/`.
+- **The API key travels in the query string** (Elogistia's design): `key=` on reference data, `apiKey=` on orders. Keep it out of logged URLs.
+
+### Auth
+
+| Option | Value | Notes |
+|--------|-------|-------|
+| `apiKey` | API key of the Elogistia account | Bad key → 401 `{"Message":"Votre apiKey n'est pas valide"}` (404 `"fee not found.0"` on the fee grid, reported as `AUTH_FAILED`). Inactive account: `{"Message":"Votre compte n'est pas actif."}`. |
+| `email` | default `customer@example.com` | Sent as `mail`, which Elogistia requires on every order (absent from `ParcelInput`). |
+
+### Method mapping
+
+| Unified method | Native endpoint | Notes |
+|----------------|-----------------|-------|
+| `createParcel` | `POST /insertCommande/?apiKey&name&firstname&mail&phone&address&commune&wilaya&product&price&fraisDeLivraison&stop_desk&modeDeLivraison&IdCommande[&remarque]` | All but `remarque` are required (`400 {"error":"Missing parameter: commune"}`). `commune` = Elogistia's spelling of the name (resolved via `getMunicipalities`, spelling-tolerant). `name` / `firstname` from `recipientName` (one word fills both). `stop_desk`: `1` home, `2` desk (Elogistia picks the desk; `stopDeskId` is not sent). `price` = amount to collect, `fraisDeLivraison` = 0. `IdCommande` = `orderId` (generated when absent). Answer `{"success":"ELO--31A-12248690"}`. |
+| `track` | `GET /getTracking/?apiKey&tracking` | `body: [{ Date, Statut, Log }]`. 404 `"Commande not found or no log yet."` → `NOT_FOUND` (a new parcel may have no log yet). |
+| `getFees` | `GET /getShippingCost/?key` | `body: [{ wilayaID, wilayaLabel, home, stopdesk }]` (strings). No return fee. Wilayas without a row (50, 54 live) → `NOT_FOUND`. |
+| `getWilayas` | `GET /getShippingCost/?key` | The fee grid's wilayas (56 live), sorted by code. |
+| `getCommunes` | `GET /getMunicipalities/?key` | Every commune (1 433 live), filtered by wilaya. `Location.id` = Elogistia `Id`. |
+| `getStopDesks`, `listParcels`, `cancelParcel` | — | No endpoint → `NOT_SUPPORTED`. |
+| `healthCheck` | fee grid | |
+
+### Status mapping
+
+Keyword rules on `Statut` (else `Log`), in this order: `retour` / `return` → `returned`; `annul` / `cancel` / `supprim` → `cancelled`; `livreur`, `en livraison`, `sortie`, `transit`, `expédi`, `dispatch`, `vers wilaya`, `en cours`, `échec`, `tentative` → `in_transit`; `livré` / `delivered` → `delivered`; `attente`, `créé`, `nouveau`, `pending` → `pending`. Reference cases: [`fixtures/elogistia/statuses.json`](./fixtures/elogistia/statuses.json). Please report real labels so the table can become exact.
+
+---
+
+## Adding a provider
+
+Copy the ZRExpress section structure (Auth, Method mapping, Field mapping, Status mapping, Errors) and see [`CONTRIBUTING.md`](../CONTRIBUTING.md#how-to-add-a-provider).
+

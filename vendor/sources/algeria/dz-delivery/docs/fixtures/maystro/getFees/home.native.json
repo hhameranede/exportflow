@@ -1,0 +1,12 @@
+[
+  {
+    "status": 200,
+    "headers": {},
+    "body": { "delivery_price": 400 }
+  },
+  {
+    "status": 200,
+    "headers": {},
+    "body": { "delivery_price": 300 }
+  }
+]

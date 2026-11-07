@@ -31,3 +31,12 @@ The active production carrier engine remains the separately pinned npm dependenc
 Do not treat source catalog entries as proof of a working adapter or carrier authorization.
 Do not import LGPL reference code into the deployed bundle without a separate license and architecture review.
 Preserve each upstream LICENSE, NOTICE, and nested component license when updating these snapshots.
+
+## dz-delivery-algeria
+- Upstream: https://github.com/developing-off/dz-delivery
+- Pinned commit: `45aa32ddf2ba7392da6c696aef187fcc059b3c8d`
+- License: MIT (root LICENSE and @dz-delivery/core package metadata)
+- Files stored: 910
+- Source bytes stored: 4228323
+- Scope: full upstream repository snapshot; TypeScript SDK is under `packages/ts`; PHP package and documentation are retained as source references
+- Runtime: reference-only; not imported into Cloudflare Pages

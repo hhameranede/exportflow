@@ -1,0 +1,1194 @@
+<?php
+
+declare(strict_types=1);
+
+namespace DzDelivery\Providers;
+
+use DzDelivery\Contracts\ShippingProviderInterface;
+use DzDelivery\Errors\ShippingError;
+use DzDelivery\Http\HttpClient;
+use DzDelivery\Models\ClientOptions;
+use DzDelivery\Models\FeeQuery;
+use DzDelivery\Models\FeeQuote;
+use DzDelivery\Models\HealthCheckResult;
+use DzDelivery\Models\Location;
+use DzDelivery\Models\Parcel;
+use DzDelivery\Models\ParcelInput;
+use DzDelivery\Models\ParcelListPage;
+use DzDelivery\Models\ParcelListQuery;
+use DzDelivery\Models\StopDesk;
+use DzDelivery\Models\StopDeskQuery;
+use DzDelivery\Models\TrackingEvent;
+use DzDelivery\Models\TrackResult;
+use DzDelivery\Providers\ZRExpress\BulkCreateResult;
+use DzDelivery\Providers\ZRExpress\BulkDeleteResult;
+use DzDelivery\Providers\ZRExpress\LabelResult;
+use DzDelivery\Support\Dates;
+use DzDelivery\Support\Health;
+use DzDelivery\Support\Phone;
+use DzDelivery\Support\StatusMapper;
+use DzDelivery\Support\Text;
+
+/**
+ * ZRExpress (https://docs.zrexpress.app/reference). Mapping: docs/PROVIDERS.md#zrexpress.
+ */
+final class ZRExpressProvider implements ShippingProviderInterface
+{
+    public const NAME = 'zrexpress';
+    public const DEFAULT_BASE_URL = 'https://api.zrexpress.app';
+
+    private const API = '/api/v1';
+    private const PAGE_SIZE = 1000;
+    private const MAX_AMOUNT = 150000;
+    private const BULK_CREATE_MAX = 100;
+    private const BULK_DELETE_MAX = 200;
+    private const LABELS_MULTIPLE_MAX = 250;
+    private const LABELS_INDIVIDUAL_MAX = 100;
+    private const UUID_RE = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+
+    private HttpClient $http;
+    private bool $includeRaw;
+
+    /** @var Location[]|null */
+    private ?array $wilayas = null;
+
+    /** @var array<string, Location[]> keyed by wilaya UUID */
+    private array $communes = [];
+
+    public function __construct(ClientOptions $options, ?HttpClient $http = null)
+    {
+        $apiKey = (string) $options->get('apiKey', '');
+        $tenant = (string) $options->get('tenant', '');
+        if ($apiKey === '' || $tenant === '') {
+            throw new ShippingError(ShippingError::AUTH_FAILED, 'ZRExpress requires "apiKey" and "tenant"', null, null, null, self::NAME);
+        }
+
+        $this->includeRaw = $options->includeRaw;
+        $this->http = $http ?? new HttpClient(
+            baseUrl: $options->baseUrl ?? self::DEFAULT_BASE_URL,
+            provider: self::NAME,
+            headers: [
+                'X-Api-Key' => $apiKey,
+                'X-Tenant' => $tenant,
+                'Content-Type' => 'application/json',
+            ],
+            timeoutMs: $options->timeoutMs,
+            includeRaw: $options->includeRaw,
+            handler: is_callable($options->handler) ? $options->handler : null,
+            errorParser: [self::class, 'parseError'],
+        );
+    }
+
+    public function getName(): string
+    {
+        return self::NAME;
+    }
+
+    public function createParcel(ParcelInput|array $input): Parcel
+    {
+        $body = $this->buildCreateBody(ParcelInput::from($input, self::NAME), requireOrderId: false);
+        $created = $this->http->request('POST', self::API . '/parcels', [], $body);
+        $id = is_array($created) ? ($created['id'] ?? null) : (is_string($created) ? $created : null);
+        if (!is_string($id) || $id === '') {
+            throw ShippingError::providerError('ZRExpress did not return a parcel id', self::NAME, $this->raw($created));
+        }
+
+        return $this->toParcel($this->fetchParcel($id));
+    }
+
+    /**
+     * ZRExpress extra — POST /parcels/bulk (max 100). Each item must include orderId.
+     *
+     * @param list<ParcelInput|array<string, mixed>> $inputs
+     */
+    public function createParcelsBulk(array $inputs): BulkCreateResult
+    {
+        if ($inputs === []) {
+            throw ShippingError::validation('createParcelsBulk requires at least one parcel', self::NAME, 'inputs');
+        }
+        if (count($inputs) > self::BULK_CREATE_MAX) {
+            throw ShippingError::validation(
+                'createParcelsBulk accepts at most ' . self::BULK_CREATE_MAX . ' parcels',
+                self::NAME,
+                'inputs',
+            );
+        }
+
+        $parcels = [];
+        foreach ($inputs as $i => $input) {
+            $parcels[] = $this->buildCreateBody(
+                ParcelInput::from($input, self::NAME),
+                requireOrderId: true,
+                index: is_int($i) ? $i : null,
+            );
+        }
+
+        $body = $this->requestBulkReport('POST', self::API . '/parcels/bulk', ['parcels' => $parcels]);
+
+        return $this->mapBulkCreateResult($body);
+    }
+
+    /**
+     * ZRExpress extra — delete by UUID and/or tracking (max 200).
+     *
+     * @param list<string> $refs
+     */
+    public function deleteParcelsBulk(array $refs): BulkDeleteResult
+    {
+        $cleaned = [];
+        foreach ($refs as $ref) {
+            $value = trim((string) $ref);
+            if ($value !== '') {
+                $cleaned[] = $value;
+            }
+        }
+        if ($cleaned === []) {
+            throw ShippingError::validation(
+                'deleteParcelsBulk requires at least one id or tracking number',
+                self::NAME,
+                'refs',
+            );
+        }
+        if (count($cleaned) > self::BULK_DELETE_MAX) {
+            throw ShippingError::validation(
+                'deleteParcelsBulk accepts at most ' . self::BULK_DELETE_MAX . ' references',
+                self::NAME,
+                'refs',
+            );
+        }
+
+        $uuidEntries = [];
+        $trackingEntries = [];
+        foreach ($cleaned as $index => $value) {
+            if (preg_match(self::UUID_RE, $value) === 1) {
+                $uuidEntries[] = ['index' => $index, 'value' => $value];
+            } else {
+                $trackingEntries[] = ['index' => $index, 'value' => $value];
+            }
+        }
+
+        $successes = [];
+        $failures = [];
+        $rawParts = [];
+
+        if ($uuidEntries !== []) {
+            $body = $this->requestBulkReport('DELETE', self::API . '/parcels/bulk', [
+                'parcelIds' => array_column($uuidEntries, 'value'),
+            ]);
+            $rawParts[] = $body;
+            $this->mergeBulkDelete($body, $uuidEntries, $successes, $failures);
+        }
+        if ($trackingEntries !== []) {
+            $body = $this->requestBulkReport('DELETE', self::API . '/parcels/bulk/by-tracking-number', [
+                'trackingNumbers' => array_column($trackingEntries, 'value'),
+            ]);
+            $rawParts[] = $body;
+            $this->mergeBulkDelete($body, $trackingEntries, $successes, $failures);
+        }
+
+        usort($successes, static fn ($a, $b) => $a['index'] <=> $b['index']);
+        usort($failures, static fn ($a, $b) => $a['index'] <=> $b['index']);
+
+        return new BulkDeleteResult(
+            $successes,
+            $failures,
+            $this->includeRaw ? (count($rawParts) === 1 ? $rawParts[0] : $rawParts) : null,
+        );
+    }
+
+    /**
+     * ZRExpress extra — HTML labels (SAS URL).
+     *
+     * @param list<string> $trackingNumbers
+     * @param array{mode?: 'multiple'|'individual'} $options
+     */
+    public function generateLabels(array $trackingNumbers, array $options = []): LabelResult
+    {
+        $list = [];
+        foreach ($trackingNumbers as $t) {
+            $value = trim((string) $t);
+            if ($value !== '') {
+                $list[] = $value;
+            }
+        }
+        if ($list === []) {
+            throw ShippingError::validation(
+                'generateLabels requires at least one tracking number',
+                self::NAME,
+                'trackingNumbers',
+            );
+        }
+        $mode = $options['mode'] ?? 'multiple';
+        $max = $mode === 'individual' ? self::LABELS_INDIVIDUAL_MAX : self::LABELS_MULTIPLE_MAX;
+        if (count($list) > $max) {
+            throw ShippingError::validation(
+                "generateLabels($mode) accepts at most $max tracking numbers",
+                self::NAME,
+                'trackingNumbers',
+            );
+        }
+
+        $path = $mode === 'individual'
+            ? self::API . '/parcels/labels/individual'
+            : self::API . '/parcels/labels/multiple';
+        $body = $this->http->request('POST', $path, [], ['trackingNumbers' => $list]);
+        $body = is_array($body) ? $body : [];
+        $failed = [];
+        foreach ($body['failedTrackingNumbers'] ?? [] as $t) {
+            $failed[] = (string) $t;
+        }
+
+        if ($mode === 'individual') {
+            $labels = [];
+            foreach ($body['parcelLabelFiles'] ?? [] as $file) {
+                if (!is_array($file)) {
+                    continue;
+                }
+                $tn = isset($file['trackingNumber']) ? (string) $file['trackingNumber'] : '';
+                $url = isset($file['fileUrl']) ? (string) $file['fileUrl'] : '';
+                if ($tn !== '' && $url !== '') {
+                    $labels[] = ['trackingNumber' => $tn, 'fileUrl' => $url];
+                }
+            }
+
+            return new LabelResult(null, $labels, $failed, $this->raw($body));
+        }
+
+        $fileUrl = isset($body['fileUrl']) && is_string($body['fileUrl']) ? $body['fileUrl'] : null;
+
+        return new LabelResult($fileUrl, null, $failed, $this->raw($body));
+    }
+
+    public function track(string $trackingNumber): TrackResult
+    {
+        $native = $this->fetchParcel($trackingNumber);
+        $parcel = $this->toParcel($native);
+
+        $history = $this->http->request('GET', self::API . '/parcels/' . rawurlencode($parcel->id) . '/state-history');
+        $items = self::listItems($history);
+
+        $events = [];
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $state = $item['newState'] ?? $item['state'] ?? [];
+            [$name, $description] = self::stateNameAndLabel($state);
+            $events[] = new TrackingEvent(
+                status: StatusMapper::zrexpress($name),
+                label: $description ?? $name ?? '',
+                at: Dates::toIso($item['createdAt'] ?? $item['date'] ?? null),
+                raw: $this->raw($item),
+            );
+        }
+        usort($events, static fn (TrackingEvent $a, TrackingEvent $b) => self::timestamp($a->at) <=> self::timestamp($b->at));
+
+        return new TrackResult($parcel, $events);
+    }
+
+    public function getFees(FeeQuery|array $query): FeeQuote
+    {
+        $query = FeeQuery::from($query, self::NAME);
+        $wilayaId = $this->resolveWilayaId($query->toWilayaId, false);
+
+        $native = $this->http->request('GET', self::API . '/delivery-pricing/rates/' . rawurlencode($wilayaId));
+        $rate = $native;
+        if (is_array($native) && array_is_list($native)) {
+            $rate = $native[0] ?? null;
+            foreach ($native as $candidate) {
+                if (is_array($candidate) && ($candidate['toTerritoryId'] ?? null) === $wilayaId) {
+                    $rate = $candidate;
+                    break;
+                }
+            }
+        }
+
+        $prices = [];
+        foreach ((is_array($rate) ? ($rate['deliveryPrices'] ?? []) : []) as $entry) {
+            if (!is_array($entry) || !isset($entry['price']) || !is_numeric($entry['price'])) {
+                continue;
+            }
+            $type = $entry['deliveryType'] ?? null;
+            if (is_array($type)) {
+                $type = $type['value'] ?? $type['name'] ?? null;
+            }
+            $prices[Text::key((string) $type)] = $entry['price'] + 0;
+        }
+
+        $home = $prices['home'] ?? null;
+        $pickup = $prices['pickuppoint'] ?? null;
+        $fee = $query->isStopDesk ? $pickup : $home;
+        if ($fee === null) {
+            throw new ShippingError(
+                ShippingError::NOT_FOUND,
+                'No ZRExpress rate for this destination/delivery type',
+                null,
+                null,
+                $this->raw($native),
+                self::NAME,
+            );
+        }
+
+        $returnFee = is_array($rate) ? ($rate['returnPrice'] ?? $rate['returnFee'] ?? null) : null;
+
+        return new FeeQuote(
+            deliveryFee: $fee,
+            returnFee: is_numeric($returnFee) ? $returnFee + 0 : null,
+            stopDeskFee: $pickup,
+            raw: $this->raw($native),
+        );
+    }
+
+    public function getWilayas(): array
+    {
+        if ($this->wilayas === null) {
+            $this->wilayas = array_map(
+                fn (array $t) => $this->toLocation($t),
+                $this->searchTerritories([['field' => 'level', 'operator' => 'eq', 'value' => 'wilaya']]),
+            );
+        }
+
+        return $this->wilayas;
+    }
+
+    public function getCommunes(string|int $wilayaId): array
+    {
+        return $this->communesOf($this->resolveWilayaId($wilayaId, false));
+    }
+
+    /**
+     * POST /api/v1/hubs/search filtered to pickup points of the wilaya (optional commune).
+     * Hub id → StopDesk.id / ParcelInput.stopDeskId (hubId on create).
+     *
+     * Prefer wilaya-only first: many ZR hubs are not tagged with districtTerritoryId,
+     * so communeId often returns no desks even when the wilaya has hubs. In that case
+     * throws NOT_FOUND with an actionable hint to retry without communeId.
+     *
+     * @see https://docs.zrexpress.app/reference/searchhubsendpoint
+     *
+     * @return list<\DzDelivery\Models\StopDesk>
+     */
+    public function getStopDesks(StopDeskQuery|array $query): array
+    {
+        $query = StopDeskQuery::from($query, self::NAME);
+        $wilayaId = $this->resolveWilayaId($query->wilayaId, $this->looksLikeName($query->wilayaId));
+        $communeId = null;
+        if ($query->communeId !== null) {
+            $communeId = $this->resolveCommuneId(
+                $wilayaId,
+                $query->communeId,
+                $this->looksLikeName($query->communeId),
+            );
+        }
+
+        $hubs = $this->searchHubs($wilayaId, $communeId);
+        if ($hubs === [] && $communeId !== null) {
+            $wilayaHubs = $this->searchHubs($wilayaId);
+            if ($wilayaHubs !== []) {
+                $count = count($wilayaHubs);
+                $message = "No ZRExpress stop desks for this commune; {$count} hub(s) exist in the wilaya — "
+                    . 'call getStopDesks({ wilayaId }) without communeId';
+                throw new ShippingError(
+                    ShippingError::NOT_FOUND,
+                    $message,
+                    null,
+                    [['field' => 'communeId', 'message' => $message, 'code' => 'EMPTY_COMMUNE_HUBS']],
+                    null,
+                    self::NAME,
+                );
+            }
+        }
+
+        $desks = [];
+        foreach ($hubs as $hub) {
+            $desks[] = $this->toStopDesk($hub, $wilayaId);
+        }
+
+        return $desks;
+    }
+
+    /**
+     * POST /api/v1/parcels/search — paginated account parcels with current status.
+     * No state-history events (use track() for that).
+     *
+     * @see https://docs.zrexpress.app/reference/searchsupplierparcelsendpoint
+     *
+     * @param ParcelListQuery|array<string, mixed>|null $query
+     */
+    public function listParcels(ParcelListQuery|array|null $query = null): ParcelListPage
+    {
+        $query = ParcelListQuery::from($query, self::NAME);
+        $pageSize = min(max($query->pageSize, 1), self::PAGE_SIZE);
+
+        if ($query->allPages) {
+            $all = [];
+            $totalCount = 0;
+            $lastRaw = null;
+            $pageNumber = 1;
+            $hasNext = true;
+            while ($hasNext && $pageNumber <= 100) {
+                [$parcels, $totalCount, $hasNext, $lastRaw] = $this->searchParcelsPage(
+                    $pageNumber,
+                    $pageSize,
+                    $query,
+                );
+                foreach ($parcels as $parcel) {
+                    $all[] = $parcel;
+                }
+                $pageNumber++;
+            }
+            if ($query->status !== null) {
+                $all = array_values(array_filter(
+                    $all,
+                    static fn (Parcel $p) => $p->status === $query->status,
+                ));
+            }
+
+            return new ParcelListPage($all, 1, $pageSize, $totalCount, false, $this->raw($lastRaw));
+        }
+
+        [$parcels, $totalCount, $hasNext, $raw] = $this->searchParcelsPage(
+            $query->page,
+            $pageSize,
+            $query,
+        );
+        if ($query->status !== null) {
+            $parcels = array_values(array_filter(
+                $parcels,
+                static fn (Parcel $p) => $p->status === $query->status,
+            ));
+        }
+
+        return new ParcelListPage($parcels, $query->page, $pageSize, $totalCount, $hasNext, $this->raw($raw));
+    }
+
+    public function cancelParcel(string $trackingNumberOrId): void
+    {
+        $id = $trackingNumberOrId;
+        if (preg_match(self::UUID_RE, $id) !== 1) {
+            $native = $this->fetchParcel($trackingNumberOrId);
+            $id = (string) ($native['id'] ?? '');
+            if ($id === '') {
+                throw ShippingError::providerError('ZRExpress parcel has no id', self::NAME, $this->raw($native));
+            }
+        }
+
+        $this->http->request('DELETE', self::API . '/parcels/' . rawurlencode($id));
+    }
+
+    /** Probes territories search for wilayas (bypasses cache). */
+    public function healthCheck(): HealthCheckResult
+    {
+        return Health::probeWilayas(
+            self::NAME,
+            function (): void {
+                $this->wilayas = null;
+            },
+            fn () => $this->getWilayas(),
+        );
+    }
+
+    /**
+     * RFC 7807 problem details → [message, details].
+     *
+     * @return array{0: ?string, 1: ?array}
+     */
+    public static function parseError(int $status, mixed $body): array
+    {
+        if (!is_array($body)) {
+            return HttpClient::defaultErrorParser($status, $body);
+        }
+
+        $message = $body['detail'] ?? $body['title'] ?? null;
+        $details = null;
+        $errors = $body['errors'] ?? null;
+        if (is_array($errors) && $errors !== []) {
+            $details = [];
+            if (array_is_list($errors)) {
+                foreach ($errors as $error) {
+                    if (is_array($error)) {
+                        $details[] = array_filter([
+                            'message' => (string) ($error['description'] ?? $error['message'] ?? ''),
+                            'code' => $error['code'] ?? null,
+                            'field' => $error['field'] ?? $error['name'] ?? null,
+                        ], static fn ($v) => $v !== null);
+                    } elseif (is_string($error)) {
+                        $details[] = ['message' => $error];
+                    }
+                }
+            } else {
+                foreach ($errors as $field => $messages) {
+                    foreach ((array) $messages as $msg) {
+                        $details[] = ['field' => (string) $field, 'message' => (string) $msg];
+                    }
+                }
+            }
+        }
+
+        return [is_string($message) ? $message : null, $details];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildCreateBody(ParcelInput $input, bool $requireOrderId, ?int $index = null): array
+    {
+        $field = static fn (string $name): string => $index !== null ? "inputs[$index].$name" : $name;
+
+        if ($input->price > self::MAX_AMOUNT) {
+            throw ShippingError::validation(
+                'price must be <= ' . self::MAX_AMOUNT . ' DZD for ZRExpress',
+                self::NAME,
+                $field('price'),
+            );
+        }
+        if ($requireOrderId && ($input->orderId === null || trim($input->orderId) === '')) {
+            throw ShippingError::validation(
+                'orderId is required for bulk create (ZRExpress externalId)',
+                self::NAME,
+                $field('orderId'),
+            );
+        }
+        if ($input->orderId !== null && strlen($input->orderId) > 100) {
+            throw ShippingError::validation('orderId must be at most 100 characters', self::NAME, $field('orderId'));
+        }
+        $description = $this->parcelDescription($input);
+        if (strlen(trim($description)) < 2) {
+            throw ShippingError::validation(
+                'Product description must be at least 2 characters',
+                self::NAME,
+                $field('productName'),
+            );
+        }
+
+        $phone = Phone::toInternational($input->phone, self::NAME, $field('phone'));
+        $phone2 = $input->phone2 !== null
+            ? Phone::toInternational($input->phone2, self::NAME, $field('phone2'))
+            : null;
+
+        $wilayaId = $this->resolveWilayaId($input->wilayaId ?? $input->wilayaName, $input->wilayaId === null);
+        $communeId = $this->resolveCommuneId(
+            $wilayaId,
+            $input->communeId ?? $input->communeName,
+            $input->communeId === null,
+        );
+
+        $products = [];
+        $defaultStock = $this->resolveStockType($input->stockType, $field('stockType'));
+        foreach ($input->products() as $i => $item) {
+            $fieldPrefix = $input->productList !== null && $input->productList !== []
+                ? $field("productList.$i")
+                : $field('productName');
+            $stockType = $this->resolveStockType($item->stockType ?? $defaultStock, "$fieldPrefix.stockType");
+            $this->assertCatalogFields($stockType, $item->productId, $item->sku, $fieldPrefix);
+            $product = array_filter([
+                'productName' => $item->name,
+                'quantity' => $item->quantity,
+                'unitPrice' => $item->unitPrice ?? 0,
+                'productSku' => $item->sku,
+                'productId' => $item->productId,
+                'stockType' => $stockType,
+            ], static fn ($v) => $v !== null);
+            if ($i === 0) {
+                $product += array_filter([
+                    'length' => $input->length,
+                    'width' => $input->width,
+                    'height' => $input->height,
+                ], static fn ($v) => $v !== null);
+            }
+            $products[] = $product;
+        }
+
+        $body = [
+            'customer' => [
+                'customerId' => self::uuid4(),
+                'name' => $input->recipientName,
+                'phone' => array_filter(['number1' => $phone, 'number2' => $phone2], static fn ($v) => $v !== null),
+            ],
+            'deliveryAddress' => [
+                'street' => $input->address,
+                'cityTerritoryId' => $wilayaId,
+                'districtTerritoryId' => $communeId,
+            ],
+            'orderedProducts' => $products,
+            'description' => $description,
+            'amount' => $input->price,
+            'deliveryType' => $input->isStopDesk ? 'pickup-point' : 'home',
+        ];
+        if ($input->isStopDesk) {
+            $body['hubId'] = $input->stopDeskId;
+        }
+        if ($input->weight !== null) {
+            $body['weight'] = ['weight' => $input->weight];
+        }
+        if ($input->orderId !== null) {
+            $body['externalId'] = $input->orderId;
+        }
+
+        return $body;
+    }
+
+    /** @param array<string, mixed> $json */
+    private function requestBulkReport(string $method, string $path, array $json): array
+    {
+        try {
+            $body = $this->http->request($method, $path, [], $json);
+
+            return is_array($body) ? $body : [];
+        } catch (ShippingError $e) {
+            if ($e->httpStatus === 400 && is_array($e->raw) && self::isBulkReport($e->raw)) {
+                return $e->raw;
+            }
+            throw $e;
+        }
+    }
+
+    /** @param array<string, mixed> $body */
+    private function mapBulkCreateResult(array $body): BulkCreateResult
+    {
+        $successes = [];
+        foreach ($body['successes'] ?? [] as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $id = isset($item['parcelId']) ? (string) $item['parcelId'] : '';
+            if ($id === '') {
+                continue;
+            }
+            $successes[] = new Parcel(
+                id: $id,
+                trackingNumber: (string) ($item['trackingNumber'] ?? $id),
+                status: 'pending',
+                provider: self::NAME,
+                raw: $this->raw($item),
+            );
+        }
+
+        $failures = [];
+        foreach ($body['failures'] ?? [] as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $error = [
+                'code' => ShippingError::PROVIDER_ERROR,
+                'message' => (string) ($item['errorMessage'] ?? $item['errorCode'] ?? 'Bulk create failed'),
+            ];
+            if (isset($item['errorCode']) && is_string($item['errorCode'])) {
+                $error['errorCode'] = $item['errorCode'];
+            }
+            $failure = [
+                'index' => isset($item['index']) ? (int) $item['index'] : -1,
+                'error' => $error,
+            ];
+            if (isset($item['externalId']) && is_string($item['externalId'])) {
+                $failure['orderId'] = $item['externalId'];
+            }
+            $failures[] = $failure;
+        }
+
+        return new BulkCreateResult($successes, $failures, $this->includeRaw ? $body : null);
+    }
+
+    /**
+     * @param array<string, mixed> $body
+     * @param list<array{index: int, value: string}> $indexMap
+     * @param list<array<string, mixed>> $successes
+     * @param list<array<string, mixed>> $failures
+     */
+    private function mergeBulkDelete(array $body, array $indexMap, array &$successes, array &$failures): void
+    {
+        foreach ($body['successes'] ?? [] as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $localIndex = isset($item['index']) ? (int) $item['index'] : -1;
+            $mapped = $indexMap[$localIndex] ?? null;
+            $entry = ['index' => $mapped['index'] ?? $localIndex];
+            if (isset($item['parcelId'])) {
+                $entry['parcelId'] = (string) $item['parcelId'];
+            }
+            if (isset($item['trackingNumber'])) {
+                $entry['trackingNumber'] = (string) $item['trackingNumber'];
+            }
+            $successes[] = $entry;
+        }
+        foreach ($body['failures'] ?? [] as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $localIndex = isset($item['index']) ? (int) $item['index'] : -1;
+            $mapped = $indexMap[$localIndex] ?? null;
+            $error = [
+                'code' => ShippingError::PROVIDER_ERROR,
+                'message' => (string) ($item['errorMessage'] ?? $item['errorCode'] ?? 'Bulk delete failed'),
+            ];
+            if (isset($item['errorCode']) && is_string($item['errorCode'])) {
+                $error['errorCode'] = $item['errorCode'];
+            }
+            $failures[] = [
+                'index' => $mapped['index'] ?? $localIndex,
+                'error' => $error,
+            ];
+        }
+    }
+
+    /** @param array<string, mixed> $body */
+    private static function isBulkReport(array $body): bool
+    {
+        return array_key_exists('successes', $body) || array_key_exists('failures', $body);
+    }
+
+    /**
+     * @return array{0: list<Parcel>, 1: int, 2: bool, 3: mixed}
+     */
+    private function searchParcelsPage(int $page, int $pageSize, ParcelListQuery $query): array
+    {
+        $filters = [];
+        if ($query->orderId !== null) {
+            $filters[] = ['field' => 'externalId', 'operator' => 'eq', 'value' => $query->orderId];
+        }
+        if ($query->updatedSince !== null) {
+            $filters[] = ['field' => 'lastStateUpdateAt', 'operator' => 'gte', 'value' => $query->updatedSince];
+        }
+
+        $body = [
+            'pageNumber' => $page,
+            'pageSize' => $pageSize,
+            'orderBy' => ['createdAt desc'],
+        ];
+        if ($query->keyword !== null) {
+            $body['keyword'] = $query->keyword;
+        }
+        if ($filters !== []) {
+            $body['advancedFilter'] = ['logic' => 'and', 'filters' => $filters];
+        }
+
+        $response = $this->http->request('POST', self::API . '/parcels/search', [], $body);
+        if (!is_array($response) || !isset($response['items']) || !is_array($response['items'])) {
+            throw ShippingError::providerError(
+                'Unexpected ZRExpress parcels search response',
+                self::NAME,
+                $this->raw($response),
+            );
+        }
+
+        $parcels = [];
+        foreach ($response['items'] as $item) {
+            if (is_array($item) && ($item['id'] ?? '') !== '') {
+                $parcels[] = $this->toParcel($item);
+            }
+        }
+
+        $totalCount = isset($response['totalCount']) ? (int) $response['totalCount'] : count($parcels);
+        $hasNext = (bool) ($response['hasNext'] ?? false);
+
+        return [$parcels, $totalCount, $hasNext, $response];
+    }
+
+    /** @return array<string, mixed> */
+    private function fetchParcel(string $idOrTracking): array
+    {
+        $native = $this->http->request('GET', self::API . '/parcels/' . rawurlencode($idOrTracking));
+        if (!is_array($native)) {
+            throw ShippingError::providerError('Unexpected ZRExpress parcel response', self::NAME, $this->raw($native));
+        }
+
+        return $native;
+    }
+
+    /** @param array<string, mixed> $native */
+    private function toParcel(array $native): Parcel
+    {
+        [$stateName] = self::stateNameAndLabel($native['state'] ?? $native['stateName'] ?? null);
+        $id = (string) ($native['id'] ?? '');
+        if ($id === '') {
+            throw ShippingError::providerError('ZRExpress parcel has no id', self::NAME, $this->raw($native));
+        }
+
+        return new Parcel(
+            id: $id,
+            trackingNumber: (string) ($native['trackingNumber'] ?? $id),
+            status: StatusMapper::zrexpress($stateName),
+            provider: self::NAME,
+            raw: $this->raw($native),
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $t
+     */
+    private function toLocation(array $t): Location
+    {
+        $code = $t['code'] ?? null;
+        if (($code === null || $code === '' || $code === 0) && ($t['level'] ?? null) === 'commune') {
+            $code = $t['postalCode'] ?? $t['PostalCode'] ?? null;
+        }
+
+        return new Location(
+            id: (string) ($t['id'] ?? ''),
+            name: (string) ($t['name'] ?? ''),
+            parentId: isset($t['parentId']) && $t['parentId'] !== '' ? (string) $t['parentId'] : null,
+            code: $code === null || $code === '' ? null : (string) $code,
+            raw: $this->raw($t),
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $hub
+     */
+    private function toStopDesk(array $hub, string $wilayaId): StopDesk
+    {
+        $address = is_array($hub['address'] ?? null) ? $hub['address'] : [];
+        $street = trim((string) ($address['street'] ?? ''));
+        $phone = is_array($hub['phone'] ?? null) ? $hub['phone'] : [];
+        $number1 = trim((string) ($phone['number1'] ?? ''));
+        $openingHours = trim((string) ($hub['openingHours'] ?? ''));
+        $coords = is_array($address['coordinates'] ?? null) ? $address['coordinates'] : [];
+        $lat = isset($coords['lat']) && is_numeric($coords['lat']) ? $coords['lat'] + 0 : null;
+        $lng = isset($coords['lng']) && is_numeric($coords['lng']) ? $coords['lng'] + 0 : null;
+        $type = trim((string) ($hub['type'] ?? ''));
+
+        return new StopDesk(
+            id: (string) ($hub['id'] ?? ''),
+            name: (string) ($hub['name'] ?? ''),
+            address: $street !== '' ? $street : null,
+            communeId: isset($address['districtTerritoryId']) && $address['districtTerritoryId'] !== ''
+                ? (string) $address['districtTerritoryId']
+                : null,
+            wilayaId: isset($address['cityTerritoryId']) && $address['cityTerritoryId'] !== ''
+                ? (string) $address['cityTerritoryId']
+                : $wilayaId,
+            phone: $number1 !== '' ? $number1 : null,
+            openingHours: $openingHours !== '' ? $openingHours : null,
+            lat: $lat,
+            lng: $lng,
+            type: $type !== '' ? $type : null,
+            raw: $this->raw($hub),
+        );
+    }
+
+    private function resolveStockType(?string $value, string $field): string
+    {
+        $stockType = $value ?? 'none';
+        if (!in_array($stockType, ['none', 'local', 'warehouse'], true)) {
+            throw ShippingError::validation(
+                'stockType must be one of: none, local, warehouse',
+                self::NAME,
+                $field,
+            );
+        }
+
+        return $stockType;
+    }
+
+    private function assertCatalogFields(string $stockType, ?string $productId, ?string $sku, string $fieldPrefix): void
+    {
+        if ($stockType === 'none') {
+            return;
+        }
+        $details = [];
+        if ($productId === null || trim($productId) === '') {
+            $details[] = [
+                'field' => "$fieldPrefix.productId",
+                'message' => "productId is required when stockType is \"{$stockType}\"",
+            ];
+        }
+        if ($sku === null || trim($sku) === '') {
+            $details[] = [
+                'field' => "$fieldPrefix.sku",
+                'message' => "sku is required when stockType is \"{$stockType}\"",
+            ];
+        }
+        if ($details !== []) {
+            throw new ShippingError(
+                ShippingError::VALIDATION_ERROR,
+                "productId and sku are required when stockType is \"{$stockType}\"",
+                null,
+                $details,
+                null,
+                self::NAME,
+            );
+        }
+    }
+
+    /**
+     * Assumption: same advancedFilter shape as territories (operator "eq").
+     * Client-side filter keeps the method correct if the server ignores nested fields.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function searchHubs(string $wilayaTerritoryId, ?string $communeTerritoryId = null): array
+    {
+        $filters = [
+            ['field' => 'isPickupPoint', 'operator' => 'eq', 'value' => true],
+            ['field' => 'address.cityTerritoryId', 'operator' => 'eq', 'value' => $wilayaTerritoryId],
+        ];
+        if ($communeTerritoryId !== null) {
+            $filters[] = [
+                'field' => 'address.districtTerritoryId',
+                'operator' => 'eq',
+                'value' => $communeTerritoryId,
+            ];
+        }
+
+        $all = [];
+        $page = 1;
+        do {
+            $response = $this->http->request('POST', self::API . '/hubs/search', [], [
+                'pageNumber' => $page,
+                'pageSize' => self::PAGE_SIZE,
+                'orderBy' => ['name asc'],
+                'advancedFilter' => ['logic' => 'and', 'filters' => $filters],
+            ]);
+            if (!is_array($response)) {
+                throw ShippingError::providerError('Unexpected ZRExpress hubs response', self::NAME, $this->raw($response));
+            }
+            foreach (self::listItems($response) as $item) {
+                if (is_array($item) && self::isPickupHub($item, $wilayaTerritoryId, $communeTerritoryId)) {
+                    $all[] = $item;
+                }
+            }
+            $hasNext = (bool) ($response['hasNext'] ?? false);
+            $page++;
+        } while ($hasNext && $page <= 100);
+
+        return $all;
+    }
+
+    /** @param array<string, mixed> $hub */
+    private static function isPickupHub(array $hub, string $wilayaTerritoryId, ?string $communeTerritoryId): bool
+    {
+        $id = $hub['id'] ?? null;
+        if (!is_string($id) && !is_int($id)) {
+            return false;
+        }
+        if ((string) $id === '') {
+            return false;
+        }
+
+        $pickup = $hub['isPickupPoint'] ?? $hub['IsPickupPoint'] ?? null;
+        if ($pickup === false) {
+            return false;
+        }
+
+        $address = is_array($hub['address'] ?? null) ? $hub['address'] : [];
+        $cityId = isset($address['cityTerritoryId']) ? (string) $address['cityTerritoryId'] : '';
+        if ($cityId !== '' && $cityId !== $wilayaTerritoryId) {
+            return false;
+        }
+        $districtId = isset($address['districtTerritoryId']) ? (string) $address['districtTerritoryId'] : '';
+        if ($communeTerritoryId !== null && $districtId !== '' && $districtId !== $communeTerritoryId) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /** UUID or digits → id/code; otherwise treat as a display name. */
+    private function looksLikeName(string|int $value): bool
+    {
+        $value = trim((string) $value);
+        if ($value === '' || preg_match(self::UUID_RE, $value) === 1 || ctype_digit($value)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /** @return Location[] */
+    private function communesOf(string $wilayaUuid): array
+    {
+        if (!isset($this->communes[$wilayaUuid])) {
+            $this->communes[$wilayaUuid] = array_map(
+                fn (array $t) => $this->toLocation($t),
+                $this->searchTerritories([
+                    ['field' => 'level', 'operator' => 'eq', 'value' => 'commune'],
+                    ['field' => 'parentId', 'operator' => 'eq', 'value' => $wilayaUuid],
+                ]),
+            );
+        }
+
+        return $this->communes[$wilayaUuid];
+    }
+
+    /**
+     * @param list<array{field: string, operator: string, value: mixed}> $filters
+     * @return list<array<string, mixed>> Deliverable territories only.
+     */
+    private function searchTerritories(array $filters): array
+    {
+        $level = null;
+        $parentId = null;
+        foreach ($filters as $filter) {
+            if (($filter['field'] ?? null) === 'level') {
+                $level = is_string($filter['value'] ?? null) ? strtolower((string) $filter['value']) : null;
+            }
+            if (($filter['field'] ?? null) === 'parentId') {
+                $parentId = isset($filter['value']) ? (string) $filter['value'] : null;
+            }
+        }
+
+        $all = [];
+        $page = 1;
+        do {
+            $response = $this->http->request('POST', self::API . '/territories/search', [], [
+                'pageNumber' => $page,
+                'pageSize' => self::PAGE_SIZE,
+                'orderBy' => ['code asc'],
+                'advancedFilter' => ['logic' => 'and', 'filters' => $filters],
+            ]);
+            if (!is_array($response)) {
+                throw ShippingError::providerError('Unexpected ZRExpress territories response', self::NAME, $this->raw($response));
+            }
+            foreach (self::listItems($response) as $item) {
+                if (!is_array($item) || !self::isDeliverable($item)) {
+                    continue;
+                }
+                // Client-side filter keeps the method correct if the server ignores advancedFilter.
+                $itemLevel = isset($item['level']) ? strtolower((string) $item['level']) : '';
+                if ($level !== null && $itemLevel !== '' && $itemLevel !== $level) {
+                    continue;
+                }
+                $itemParent = isset($item['parentId']) ? (string) $item['parentId'] : '';
+                if ($parentId !== null && $itemParent !== '' && $itemParent !== $parentId) {
+                    continue;
+                }
+                $all[] = $item;
+            }
+            $hasNext = (bool) ($response['hasNext'] ?? false);
+            $page++;
+        } while ($hasNext && $page <= 100);
+
+        return $all;
+    }
+
+    /** Product text (+ optional remark), capped at 250 chars for the API. */
+    private function parcelDescription(ParcelInput $input): string
+    {
+        $base = $input->productDescription();
+        $remark = $input->remark !== null ? trim($input->remark) : '';
+        $full = $remark !== '' ? $base . ' - ' . $remark : $base;
+
+        return substr($full, 0, 250);
+    }
+
+    /** @param array<string, mixed> $territory */
+    private static function isDeliverable(array $territory): bool
+    {
+        $delivery = $territory['delivery'] ?? $territory['deliveryCapability'] ?? $territory['DeliveryCapability'] ?? null;
+        if (!is_array($delivery)) {
+            return true;
+        }
+        $home = $delivery['hasHomeDelivery'] ?? $delivery['HasHomeDelivery'] ?? null;
+        $pickup = $delivery['hasPickupPoint'] ?? $delivery['HasPickupPoint'] ?? null;
+        if ($home === null && $pickup === null) {
+            return true;
+        }
+
+        return (bool) $home || (bool) $pickup;
+    }
+
+    /**
+     * Accepts a wilaya UUID (returned as-is), an official code 1–58, or (when $byName) a name.
+     */
+    private function resolveWilayaId(string|int|null $value, bool $byName): string
+    {
+        $value = trim((string) $value);
+        if (!$byName && preg_match(self::UUID_RE, $value) === 1) {
+            return $value;
+        }
+
+        foreach ($this->getWilayas() as $w) {
+            if ($byName) {
+                if (Text::key($w->name) === Text::key($value)) {
+                    return $w->id;
+                }
+            } elseif ($w->id === $value || (ctype_digit($value) && $w->code !== null && (int) $w->code === (int) $value)) {
+                return $w->id;
+            }
+        }
+
+        throw ShippingError::notFound(($byName ? 'Unknown wilaya name: ' : 'Unknown wilaya: ') . $value, self::NAME);
+    }
+
+    /**
+     * Accepts a commune UUID (returned as-is), a code/postal code, or (when $byName) a name.
+     */
+    private function resolveCommuneId(string $wilayaUuid, string|int|null $value, bool $byName): string
+    {
+        $value = trim((string) $value);
+        if (!$byName && preg_match(self::UUID_RE, $value) === 1) {
+            return $value;
+        }
+
+        foreach ($this->communesOf($wilayaUuid) as $c) {
+            if ($byName ? Text::key($c->name) === Text::key($value) : ($c->id === $value || $c->code === $value)) {
+                return $c->id;
+            }
+        }
+
+        throw ShippingError::notFound(
+            ($byName ? 'Unknown commune name: ' : 'Unknown commune: ') . $value . ' in wilaya ' . $wilayaUuid,
+            self::NAME,
+        );
+    }
+
+    /**
+     * @return array{0: ?string, 1: ?string} [name, description]
+     */
+    private static function stateNameAndLabel(mixed $state): array
+    {
+        if (is_string($state)) {
+            return [$state, null];
+        }
+        if (!is_array($state)) {
+            return [null, null];
+        }
+        $name = $state['name'] ?? $state['code'] ?? null;
+        $description = $state['description'] ?? $state['label'] ?? null;
+
+        return [
+            is_string($name) ? $name : null,
+            is_string($description) && $description !== '' ? $description : null,
+        ];
+    }
+
+    /** @return list<mixed> */
+    private static function listItems(mixed $response): array
+    {
+        if (!is_array($response)) {
+            return [];
+        }
+        if (array_is_list($response)) {
+            return $response;
+        }
+        foreach (['items', 'data', 'history', 'stateHistory'] as $key) {
+            if (isset($response[$key]) && is_array($response[$key])) {
+                return array_values($response[$key]);
+            }
+        }
+
+        return [];
+    }
+
+    private static function timestamp(string $iso): int
+    {
+        $t = strtotime($iso);
+
+        return $t === false ? 0 : $t;
+    }
+
+    private function raw(mixed $value): mixed
+    {
+        return $this->includeRaw ? $value : null;
+    }
+
+    private static function uuid4(): string
+    {
+        $bytes = random_bytes(16);
+        $bytes[6] = chr((ord($bytes[6]) & 0x0f) | 0x40);
+        $bytes[8] = chr((ord($bytes[8]) & 0x3f) | 0x80);
+
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
+    }
+}

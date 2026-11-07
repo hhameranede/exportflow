@@ -1,0 +1,711 @@
+# Using dz-delivery in a PHP project
+
+A practical guide to calling Yalidine, ZRExpress, Maystro, Ecotrack (DHD, …), NoEST, E-com Delivery, MDM and Elogistia from your own PHP application through one API.
+For the full contract see [`CONTRACT.md`](./CONTRACT.md); for carrier-specific details see [`PROVIDERS.md`](./PROVIDERS.md).
+ZRExpress extras (bulk, labels, webhook verify): [`ZREXPRESS.md`](./ZREXPRESS.md).
+
+- [1. Install](#1-install)
+- [2. Configure a carrier](#2-configure-a-carrier)
+- [3. Methods](#3-methods)
+- [4. Statuses](#4-statuses)
+- [5. Error handling](#5-error-handling)
+- [6. Laravel example](#6-laravel-example)
+- [7. Maystro webhooks](#7-maystro-webhooks)
+- [8. Testing your integration](#8-testing-your-integration)
+- [9. ZRExpress extras](#9-zrexpress-extras)
+
+---
+
+## 1. Install
+
+Requirements: **PHP ≥ 8.2**, **Guzzle 7** (pulled in by Composer).
+
+The package is published on [Packagist](https://packagist.org/packages/dz-delivery/sdk):
+
+```bash
+composer require dz-delivery/sdk
+```
+
+**Working on the SDK itself?** Point your app at a local checkout with a `path` repository (changes in the SDK are visible immediately):
+
+```json
+{
+  "repositories": [
+    { "type": "path", "url": "../dz-delivery/packages/php" }
+  ],
+  "require": {
+    "dz-delivery/sdk": "*@dev"
+  }
+}
+```
+
+Everything lives under the `DzDelivery\` namespace (PSR-4).
+
+---
+
+## 2. Configure a carrier
+
+Create one client per carrier with `ClientFactory::create($provider, $options)`. Keep the credentials in environment variables or `.env` (see [`.env.example`](../.env.example)) and never hard-code them or commit them.
+
+```php
+use DzDelivery\ClientFactory;
+
+$zr = ClientFactory::create('zrexpress', [
+    'apiKey' => getenv('ZREXPRESS_API_KEY'),   // sent as X-Api-Key
+    'tenant' => getenv('ZREXPRESS_TENANT'),    // sent as X-Tenant
+]);
+
+$yalidine = ClientFactory::create('yalidine', [
+    'apiId'        => getenv('YALIDINE_API_ID'),     // sent as X-API-ID
+    'apiToken'     => getenv('YALIDINE_API_TOKEN'),  // sent as X-API-TOKEN
+    'fromWilayaId' => 16,                            // or 'fromWilayaName' => 'Alger'
+]);
+
+$maystro = ClientFactory::create('maystro', [
+    'apiToken' => getenv('MAYSTRO_API_TOKEN'),  // sent as Authorization: Token <apiToken>
+]);
+
+$dhd = ClientFactory::create('ecotrack', [
+    'token'   => getenv('ECOTRACK_TOKEN'),  // sent as Authorization: Bearer <token>
+    'courier' => 'dhd',                     // or 'baseUrl' => 'https://<tenant>.ecotrack.dz'
+    // 'autoValidate' => true,              // hand each order to the courier right after creation
+]);
+
+$noest = ClientFactory::create('noest', [
+    'apiToken' => getenv('NOEST_API_TOKEN'),  // sent as Authorization: Bearer <apiToken>
+    'userGuid' => getenv('NOEST_USER_GUID'),  // partner GUID, sent as user_guid
+    // 'autoValidate' => true,                // hand each order to NOEST right after creation
+]);
+
+$ecom = ClientFactory::create('ecom', [
+    'apiKey'   => getenv('ECOM_API_KEY'),    // KEY, sent as X-API-Key
+    'apiToken' => getenv('ECOM_API_TOKEN'),  // Token, sent as X-API-Token
+    // 'autoValidate' => true,               // create parcels already confirmed
+]);
+
+$mdm = ClientFactory::create('mdm', [
+    'apiKey'  => getenv('MDM_API_KEY'),   // sent as x-api-key
+    'storeId' => getenv('MDM_STORE_ID'),  // STR-…, required to create parcels
+]);
+
+$elogistia = ClientFactory::create('elogistia', [
+    'apiKey' => getenv('ELOGISTIA_API_KEY'),  // sent in the query string (Elogistia's design)
+]);
+```
+
+| Carrier | Required keys | Notes |
+|---------|---------------|-------|
+| `zrexpress` | `apiKey`, `tenant` | |
+| `yalidine` | `apiId`, `apiToken` | Plus `fromWilayaId` (code `1`–`58`) **or** `fromWilayaName`: your origin wilaya, needed by `createParcel` and `getFees`. GuepEx (same API): set `'baseUrl' => YalidineProvider::GUEPEX_DEFAULT_BASE_URL`. |
+| `maystro` | `apiToken` | Store token. A value already starting with `Token ` is sent unchanged. |
+| `ecotrack` | `token` + exactly one of `courier` / `baseUrl` | One provider for every courier on the Ecotrack platform. `courier`: `dhd`, `anderson`, `worldexpress`, `48hrexpress`, `ecorapid`, `conexlog`, `msmgo`, `packers`, `rocketdelivery` (plus alias `andersondelivery`). Any other tenant: `baseUrl` (`https` only). `autoValidate` (default `false`): without it, orders stay `pending` until you validate them in the courier's dashboard. |
+| `noest` | `apiToken`, `userGuid` | Both from the NOEST partner dashboard. `autoValidate` (default `false`): without it, orders stay `pending` (still editable) until validated. Commune names follow NOEST spelling (`Bab Azzouar`): use `getCommunes()` ids. |
+| `ecom` | `apiKey`, `apiToken` | `KEY` and `Token` from the E-com developer page. `autoValidate` (default `false`): without it, parcels stay `pending` ("En Préparation", still editable) until confirmed. |
+| `mdm` | `apiKey` (+ `storeId` to create) | MDM ships products **stocked at MDM**: every `productList` line needs its MDM product id (`productId` or `sku`, `PRD-…`). No `cancelParcel`. |
+| `elogistia` | `apiKey` | Optional `email` (sent as `mail`, required by Elogistia; default `customer@example.com`). No stop-desk list, `listParcels` or `cancelParcel`. |
+
+Missing credentials throw `ShippingError` with code `AUTH_FAILED` when the client is created.
+
+Common options (all carriers):
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `baseUrl` | `string` | carrier production URL | Override the API URL (proxy, staging). |
+| `timeoutMs` | `int` | `15000` | Connect + request timeout. |
+| `includeRaw` | `bool` | `true` | Attach the native carrier payload as `->raw` on returned models. Set `false` to keep objects small. |
+| `handler` | `callable` | — | Guzzle handler/HandlerStack, mainly for tests (see [§8](#8-testing-your-integration)). |
+
+`ClientFactory::providers()` returns the supported keys (`['zrexpress', 'yalidine', 'maystro', 'ecotrack', 'noest', 'ecom', 'mdm', 'elogistia']`). An unknown key throws `NOT_SUPPORTED`.
+
+Every client implements `DzDelivery\Contracts\ShippingProviderInterface`, so you can type-hint against the interface and swap carriers.
+
+---
+
+## 3. Methods
+
+All methods accept either an **array** or the matching model object (`ParcelInput`, `FeeQuery`, `StopDeskQuery`). All returned models expose **public readonly camelCase properties**. Every failure throws `DzDelivery\Errors\ShippingError` (see [§5](#5-error-handling)).
+
+### Which methods each carrier supports
+
+| Method | ZRExpress | Yalidine | Maystro | Ecotrack | NoEST | E-com | MDM | Elogistia |
+|--------|-----------|----------|---------|----------|-------|-------|-----|-----------|
+| `createParcel` | yes | yes | yes | yes (`pending` until validated, see `autoValidate`) | yes (same, `autoValidate`) | yes (same, `autoValidate`) | yes (MDM catalog products, `storeId`) | yes |
+| `track` | yes | yes | yes (or [webhooks](#7-maystro-webhooks)) | yes | yes | yes | yes | yes |
+| `getFees` | yes | yes | yes | yes (per wilaya) | yes (per wilaya) | yes (per wilaya) | yes (per commune) | yes (per wilaya) |
+| `getWilayas` / `getCommunes` | yes | yes | yes | yes | yes | yes | yes | yes |
+| `getStopDesks` | yes (hubs / pickup points) | yes (centers) | yes (needs `communeId`) | yes (communes with a stop desk) | yes (stations) | yes (bureaux) | yes (partner offices) | `NOT_SUPPORTED` (Elogistia picks the desk) |
+| `listParcels` | yes (`parcels/search`) | yes (`GET parcels/`, `status` / `updatedSince` client-side) | yes (20 per page, filters client-side) | `NOT_SUPPORTED` (soon) | `NOT_SUPPORTED` | yes (`GET /colis`) | yes (`parcels/search`) | `NOT_SUPPORTED` |
+| `cancelParcel` | yes | yes (only parcels still `En préparation`) | yes (`PATCH` status `50`) | yes (only orders not validated yet) | yes (only orders not validated yet) | yes (only parcels "En Préparation") | `NOT_SUPPORTED` | `NOT_SUPPORTED` |
+| `healthCheck` | yes | yes | yes | yes | yes | yes | yes | yes |
+
+### 3.1 `createParcel(ParcelInput|array $input): Parcel`
+
+Home delivery:
+
+```php
+$parcel = $client->createParcel([
+    'recipientName' => 'Client Test',
+    'phone'         => '0550123456',
+    'address'       => '12 rue des Tests',
+    'wilayaId'      => 16,               // or 'wilayaName' => 'Alger'
+    'communeName'   => 'Bab Ezzouar',    // or 'communeId' => ...
+    'productList'   => [
+        ['name' => 'Mug', 'quantity' => 2],
+        ['name' => 'T-shirt', 'quantity' => 1],
+    ],                                   // or 'productName' => 'T-shirt'
+    'price'         => 3200,             // what the recipient pays, in DZD
+    'weight'        => 1.5,
+    'orderId'       => 'ORD-1001',
+]);
+
+echo $parcel->trackingNumber;  // store it with your order
+echo $parcel->status;          // usually 'pending' right after creation
+```
+
+Stop-desk delivery: get the desk id from [`getStopDesks`](#36-getstopdesksstopdeskqueryarray-query-array) and pass it as `stopDeskId`.
+
+```php
+$desks = $yalidine->getStopDesks(['wilayaId' => 16, 'communeId' => 1630]);
+
+$parcel = $yalidine->createParcel([
+    'recipientName' => 'Client Test',
+    'phone'         => '0550123456',
+    'address'       => 'Retrait au bureau',
+    'wilayaId'      => 16,
+    'communeId'     => 1630,
+    'productName'   => 'T-shirt',
+    'price'         => 2500,
+    'isStopDesk'    => true,
+    'stopDeskId'    => $desks[0]->id,
+]);
+```
+
+Input (`ParcelInput`):
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `recipientName` | `string` | **yes** | Full name. Yalidine splits it on the first space into first/family name. |
+| `phone` | `string` | **yes** | Any common Algerian format (`0550…`, `+213 550…`). Normalized per carrier (ZRExpress gets `+213…`, the others `0…`). Invalid numbers → `VALIDATION_ERROR` before any HTTP call. |
+| `phone2` | `string` | no | Second number. |
+| `address` | `string` | **yes** | Free text. |
+| `wilayaId` | `int\|string` | one of | Official code `1`–`58` or the carrier's `Location->id`. |
+| `wilayaName` | `string` | one of | Resolved case/accent-insensitively. |
+| `communeId` | `int\|string` | one of | Carrier `Location->id` from `getCommunes`. |
+| `communeName` | `string` | one of | Resolved within the wilaya. |
+| `productName` | `string` | one of | Single product description. |
+| `productList` | `array` | one of | `[['name' => string, 'quantity' => int ≥ 1, 'unitPrice' => ?number, 'sku' => ?string], …]`. |
+| `price` | `number` | **yes** | Amount collected from the recipient (COD), in DZD. `0` for prepaid. It is the total the recipient pays: carriers deduct their fee from it. |
+| `weight` | `number` | no | kg. |
+| `length`, `width`, `height` | `number` | no | cm. **Yalidine** always receives these four fields as integers: `0` when missing, decimals rounded up. ZRExpress puts the dimensions on the first product. Maystro ignores weight and dimensions. |
+| `isStopDesk` | `bool` | no | Default `false` (home delivery). |
+| `stopDeskId` | `string` | if `isStopDesk` | Desk id from `getStopDesks` (ZRExpress: the hub UUID). |
+| `stockType` | `?string` | no | ZRExpress only: `"none"` (default) \| `"local"` \| `"warehouse"`. Per-item override via `productList[].stockType`; `local`/`warehouse` need `productId` + `sku`. |
+| `remark` | `string` | no | Note for the driver (sent to Maystro only; not sent to ZRExpress or Yalidine). |
+| `orderId` | `string` | no | Your order reference. Yalidine requires one and generates `dzd-…` when absent. |
+
+Unknown wilaya/commune names or ids → `NOT_FOUND` before the parcel is posted.
+
+Output (`Parcel`):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `string` | Carrier id (ZRExpress/Maystro UUID; Yalidine: the tracking number). Use it for `cancelParcel`. |
+| `trackingNumber` | `string` | Tracking number to show to customers and pass to `track`. |
+| `status` | `string` | Unified status (see [§4](#4-statuses)). |
+| `provider` | `string` | `zrexpress` / `yalidine` / `maystro`. |
+| `raw` | `mixed` | Native response (when `includeRaw`). |
+
+> Maystro rejects an order with the same customer name + phone as another order created in the last 24 hours. Retrying after a timeout can therefore fail with `VALIDATION_ERROR` even though the first order was created.
+
+### 3.2 `track(string $trackingNumber): TrackResult`
+
+```php
+$result = $client->track('yal-ABC123');
+
+echo $result->parcel->status;               // current unified status
+foreach ($result->events as $event) {        // oldest first
+    echo "{$event->at}  {$event->status}  {$event->label}\n";
+}
+```
+
+Output (`TrackResult`):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `parcel` | `Parcel` | Current state (see above). |
+| `events` | `TrackingEvent[]` | History, oldest first. May be empty. |
+
+`TrackingEvent`:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `status` | `string` | Unified status. |
+| `label` | `string` | Native label, e.g. `Tentative échouée (Client ne répond pas)`. |
+| `at` | `string` | ISO 8601 date with offset, e.g. `2025-12-30T13:24:34+01:00`. |
+| `raw` | `mixed` | Native event. |
+
+An unknown tracking number throws `NOT_FOUND`. Maystro accepts the order id (`$parcel->id`) or the tracking number.
+
+### 3.3 `getFees(FeeQuery|array $query): FeeQuote`
+
+```php
+$quote = $yalidine->getFees([
+    'toWilayaId'  => 31,
+    'toCommuneId' => 3101,   // prices are per commune on Yalidine and Maystro
+    'weight'      => 2,
+    'length'      => 50,     // cm: Yalidine bills the volumetric weight when it is higher
+    'width'       => 40,
+    'height'      => 30,
+]);
+
+echo $quote->deliveryFee;   // 950 when oversize_fee = 50 DA/kg (see below)
+echo $quote->stopDeskFee;
+echo $quote->returnFee;
+```
+
+Input (`FeeQuery`):
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `toWilayaId` | `int\|string` | **yes** | Code `1`–`58` or carrier id. |
+| `toCommuneId` | `int\|string` | no | Yalidine/Maystro: without it, the first commune of the wilaya is used. |
+| `fromWilayaId` | `int\|string` | no | Yalidine: overrides the client's `fromWilayaId`. |
+| `weight` | `number` | no | kg. |
+| `length`, `width`, `height` | `number` | no | cm. Used by Yalidine only. |
+| `isStopDesk` | `bool` | no | `true`: `deliveryFee` is the stop-desk price. |
+
+Output (`FeeQuote`):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `deliveryFee` | `int\|float` | Price for the requested mode (home or stop desk). |
+| `stopDeskFee` | `int\|float\|null` | Stop-desk price, when the carrier gives it. |
+| `returnFee` | `int\|float\|null` | Return fee (Yalidine only today). |
+| `currency` | `string` | Always `DZD`. |
+| `raw` | `mixed` | Native response. |
+
+**Yalidine overweight.** Billable weight = max(`weight`, `length × width × height × 0.0002`); the volumetric weight is only used when all three dimensions are given. Above 5 kg, `(billable − 5) × oversize_fee` (rounded up to the dinar) is added to both fees. In the example: 50 × 40 × 30 × 0.0002 = 12 kg → (12 − 5) × 50 = 350 DA, on top of a 600 DA home price.
+
+ZRExpress and Maystro ignore weight and dimensions. No price for the requested mode → `NOT_FOUND`.
+
+### 3.4 `getWilayas(): Location[]`
+
+```php
+foreach ($client->getWilayas() as $wilaya) {
+    echo "{$wilaya->code} {$wilaya->name} ({$wilaya->id})\n";
+}
+```
+
+### 3.5 `getCommunes(int|string $wilayaId): Location[]`
+
+```php
+$communes = $client->getCommunes(16);       // code, carrier id or (Yalidine/Maystro) name
+```
+
+Output (`Location`, for both methods):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `string` | Carrier id: pass it as `wilayaId` / `communeId`. ZRExpress uses UUIDs; Yalidine and Maystro use numbers (wilaya id = official code). |
+| `name` | `string` | Name (French/Latin). |
+| `parentId` | `?string` | Communes: the wilaya id. |
+| `code` | `?string` | Wilayas: official code `1`–`58`. Communes: postal code when known (Maystro). |
+| `raw` | `mixed` | Native item. |
+
+Undeliverable wilayas/communes are skipped. Results are cached for the lifetime of the client object, so reuse one client instead of creating one per request.
+
+### 3.6 `getStopDesks(StopDeskQuery|array $query): array`
+
+New. Lists the stop desks / pickup points where a parcel can be collected. Use the returned `id` as `stopDeskId` in `createParcel`.
+
+```php
+// ZRExpress: start with wilaya only — commune filter often returns no hubs.
+$desks = $client->getStopDesks(['wilayaId' => 16]);
+
+foreach ($desks as $desk) {
+    echo "{$desk->id}  {$desk->name}  {$desk->address}\n";
+}
+```
+
+Input (`StopDeskQuery`):
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `wilayaId` | `int\|string` | **yes** | Code `1`–`58`, carrier id or name. |
+| `communeId` | `int\|string` | Maystro: **yes**; others: no | Carrier id or name. Optional filter for Yalidine / ZRExpress / Ecotrack. |
+
+Output (`StopDesk[]`):
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | `string` | Pass as `stopDeskId`. |
+| `name` | `string` | Desk name. |
+| `address` | `?string` | When the carrier gives it. |
+| `communeId` | `?string` | Commune of the desk. |
+| `wilayaId` | `?string` | Wilaya of the desk. |
+| `phone` | `?string` | Primary phone when available. |
+| `openingHours` | `?string` | Opening hours text when available. |
+| `lat` / `lng` | `?float` | Coordinates when available. |
+| `type` | `?string` | Carrier hub type (e.g. ZRExpress `"stopdesk"`). |
+| `raw` | `mixed` | Native item. |
+
+Carrier differences:
+
+- **Yalidine**: Yalidine "centers". `communeId` is an optional filter.
+- **Maystro**: `communeId` is required. The commune's own Maystro stop desk has the **commune id** as its `id`; partner pickup points have their pickup-point id.
+- **ZRExpress**: [`POST /api/v1/hubs/search`](https://docs.zrexpress.app/reference/searchhubsendpoint) with `isPickupPoint = true`. Prefer **wilaya-only** listing; if `communeId` yields no desks but the wilaya has hubs, throws `NOT_FOUND` with `EMPTY_COMMUNE_HUBS`. Use the returned hub UUID as `stopDeskId`.
+
+### 3.7 `listParcels(ParcelListQuery|array|null $query = null): ParcelListPage`
+
+Paginated list of account parcels with current unified `status` (no event history — use `track()` for that).
+
+```php
+$page = $zr->listParcels(['page' => 1, 'pageSize' => 50]);
+foreach ($page->parcels as $parcel) {
+    echo "{$parcel->trackingNumber} {$parcel->status}\n";
+}
+
+// Sync helpers:
+// $zr->listParcels(['orderId' => 'ORD-1001']);
+// $zr->listParcels(['keyword' => '0550', 'status' => 'pending']);
+// $zr->listParcels(['updatedSince' => '2026-10-01T00:00:00+00:00', 'allPages' => true]);
+```
+
+| Field | Notes |
+|-------|-------|
+| `page` / `pageSize` | Default `1` / `50` (ZRExpress clamps ≤ 1000). |
+| `keyword` | Free-text (tracking, name, phone…). |
+| `orderId` | Merchant reference (`externalId` on ZRExpress). |
+| `status` | Unified status; filtered after mapping. |
+| `updatedSince` | ISO 8601 — ZRExpress filters `lastStateUpdateAt`. |
+| `allPages` | Follow pagination (safety-capped). |
+
+- **ZRExpress**: [`POST /api/v1/parcels/search`](https://docs.zrexpress.app/reference/searchsupplierparcelsendpoint).
+- **Maystro**: `GET /api/stores/orders/` (fixed 20 per page); `status`, `orderId`, `keyword` and `updatedSince` filter each page client-side.
+- **Yalidine**: `GET parcels/` (≤ 1000 per page); `keyword` → `tracking` (comma-separated trackings allowed), `orderId` → `order_id`; `status` and `updatedSince` (`date_last_status`) filter each page client-side, so a short page can still have `hasNext` true: follow `hasNext`, not the page size.
+- **Ecotrack**: `NOT_SUPPORTED` for now.
+
+### 3.8 `cancelParcel(string $trackingNumberOrId): void`
+
+```php
+$client->cancelParcel($parcel->trackingNumber);
+```
+
+- **ZRExpress**: accepts the UUID or the tracking number.
+- **Yalidine**: only parcels still in `En préparation` can be deleted; otherwise `VALIDATION_ERROR`.
+- **Maystro**: accepts the order id or the tracking number; aborts the order (`PATCH /api/shared/status/{id}/`, status `50`).
+
+### 3.9 `healthCheck(): HealthCheckResult`
+
+Lightweight authenticated probe (wilayas listing). **Always hits the network** (bypasses the in-memory cache). On success returns `{ ok: true, provider, latencyMs }`; on failure throws `ShippingError` (`AUTH_FAILED`, `NETWORK_ERROR`, …).
+
+```php
+$health = $client->healthCheck();
+// $health->ok === true
+// $health->provider  // 'yalidine' | ...
+// $health->latencyMs // milliseconds
+```
+
+---
+
+## 4. Statuses
+
+Every carrier status is mapped to one of:
+
+| Status | Meaning |
+|--------|---------|
+| `pending` | Registered but not yet confirmed / ready for pickup. |
+| `created` | Confirmed, ready to be picked up or dispatched. |
+| `in_transit` | Picked up and moving: hub, transfer, out for delivery, failed attempt… |
+| `delivered` | Delivered (COD collected). |
+| `returned` | Returned or being returned to the sender. |
+| `cancelled` | Cancelled / deleted before delivery. |
+| `unknown` | Not mapped yet. Never an error: check `$event->label` / `->raw`. |
+
+Constants are in `DzDelivery\Models\ParcelStatus` (`ParcelStatus::DELIVERED`, …, `ParcelStatus::ALL`).
+
+To map a native status yourself (e.g. from a webhook), use `DzDelivery\Support\StatusMapper`:
+
+```php
+use DzDelivery\Support\StatusMapper;
+
+StatusMapper::map('yalidine', 'Sorti en livraison');  // 'in_transit'
+StatusMapper::maystro(41);                             // 'delivered' (code or name)
+```
+
+The full native → unified tables are in [`PROVIDERS.md`](./PROVIDERS.md).
+
+---
+
+## 5. Error handling
+
+Everything throws `DzDelivery\Errors\ShippingError` (extends `\RuntimeException`).
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `code` | `string` | One of the codes below (string, not an int). |
+| `getMessage()` | `string` | Carrier message when available. |
+| `httpStatus` | `?int` | HTTP status of the failed call. |
+| `details` | `?array` | E.g. validation errors `[['field' => 'phone', 'message' => '…'], …]`. |
+| `raw` | `mixed` | Native error body. |
+| `provider` | `?string` | Carrier key. |
+| `retryAfter` | `?int` | `RATE_LIMITED` only: seconds to wait, from the `Retry-After` header when sent. |
+
+| Code | When |
+|------|------|
+| `AUTH_FAILED` | Missing/invalid credentials (401/403). |
+| `VALIDATION_ERROR` | Bad input (checked before the call), 400/422, or the carrier rejected the parcel. |
+| `NOT_FOUND` | 404, unknown parcel, wilaya or commune. |
+| `RATE_LIMITED` | 429. Yalidine defaults: 5 req/s, 50/min, 1 000/h, 10 000/day. |
+| `NOT_SUPPORTED` | The carrier has no such operation. |
+| `PROVIDER_ERROR` | 5xx or unexpected response. |
+| `NETWORK_ERROR` | Timeout, DNS, connection refused. |
+| `UNKNOWN` | Anything else. |
+
+The SDK never retries by itself. A simple retry for rate limits:
+
+```php
+use DzDelivery\Errors\ShippingError;
+
+function withRetry(callable $call, int $attempts = 3): mixed
+{
+    for ($i = 1; ; $i++) {
+        try {
+            return $call();
+        } catch (ShippingError $e) {
+            if ($e->code !== ShippingError::RATE_LIMITED || $i >= $attempts) {
+                throw $e;
+            }
+            sleep($e->retryAfter ?? 2 ** $i);
+        }
+    }
+}
+
+$wilayas = withRetry(fn () => $client->getWilayas());
+```
+
+Do **not** blindly retry `createParcel` on `NETWORK_ERROR`: the parcel may already exist. Check first, or rely on your `orderId`.
+
+Showing validation errors to a user:
+
+```php
+try {
+    $client->createParcel($input);
+} catch (ShippingError $e) {
+    if ($e->code === ShippingError::VALIDATION_ERROR) {
+        foreach ($e->details ?? [] as $d) {
+            $errors[$d['field'] ?? 'general'][] = $d['message'];
+        }
+    } else {
+        error_log("[{$e->provider}] {$e->code}: {$e->getMessage()}");
+        throw $e;
+    }
+}
+```
+
+---
+
+## 6. Laravel example
+
+`config/services.php`:
+
+```php
+'dz_delivery' => [
+    'default' => env('DZ_DELIVERY_PROVIDER', 'yalidine'),
+    'zrexpress' => ['apiKey' => env('ZREXPRESS_API_KEY'), 'tenant' => env('ZREXPRESS_TENANT')],
+    'yalidine' => [
+        'apiId' => env('YALIDINE_API_ID'),
+        'apiToken' => env('YALIDINE_API_TOKEN'),
+        'fromWilayaId' => (int) env('YALIDINE_FROM_WILAYA_ID', 16),
+    ],
+    'maystro' => ['apiToken' => env('MAYSTRO_API_TOKEN')],
+],
+```
+
+`app/Providers/ShippingServiceProvider.php` (register it in `bootstrap/providers.php` or `config/app.php`):
+
+```php
+namespace App\Providers;
+
+use DzDelivery\ClientFactory;
+use DzDelivery\Contracts\ShippingProviderInterface;
+use Illuminate\Support\ServiceProvider;
+
+final class ShippingServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        // Default carrier, injectable anywhere. One instance per app = location caches are shared.
+        $this->app->singleton(ShippingProviderInterface::class, function () {
+            $provider = config('services.dz_delivery.default');
+
+            // [] when the carrier has no config block: the SDK then fails with AUTH_FAILED, not a TypeError.
+            return ClientFactory::create($provider, config("services.dz_delivery.$provider", []));
+        });
+    }
+}
+```
+
+Controller:
+
+```php
+use DzDelivery\Contracts\ShippingProviderInterface;
+use DzDelivery\Errors\ShippingError;
+
+final class ShipmentController
+{
+    public function store(Order $order, ShippingProviderInterface $shipping)
+    {
+        try {
+            $parcel = $shipping->createParcel([
+                'recipientName' => $order->customer_name,
+                'phone' => $order->phone,
+                'address' => $order->address,
+                'wilayaId' => $order->wilaya_code,
+                'communeName' => $order->commune,
+                'productName' => $order->summary(),
+                'price' => $order->total,
+                'orderId' => (string) $order->id,
+            ]);
+        } catch (ShippingError $e) {
+            return back()->withErrors(['shipping' => $e->getMessage()]);
+        }
+
+        $order->update(['tracking' => $parcel->trackingNumber, 'carrier' => $parcel->provider]);
+
+        return back();
+    }
+}
+```
+
+Several carriers at once? Bind a small factory instead (e.g. `fn (string $p) => ClientFactory::create($p, config("services.dz_delivery.$p", []))`) and keep one client per carrier.
+
+---
+
+## 7. Maystro webhooks
+
+`track()` reads a Maystro order and its history on demand. To be notified instead of polling, Maystro also **pushes** status changes to an HTTPS URL you configure in the Maystro web app (Settings → Webhooks). The event that matters is `OrderStatusChanged`, whose `payload` is `{ "id": "<order uuid>", "status": <numeric code> }`. `payload.id` is the order id returned as `$parcel->id` by `createParcel`.
+
+What the Maystro docs say about the request body (we have not captured a real request yet, so treat this as unverified):
+
+- the JSON event is base64-encoded and sent in `message.data`;
+- the text says to decode it "twice using base64", while their Django example decodes it once. The example below handles both.
+
+```php
+<?php
+// public/maystro-webhook.php
+
+require __DIR__ . '/../vendor/autoload.php';
+
+use DzDelivery\ClientFactory;
+use DzDelivery\Errors\ShippingError;
+
+// Shared secret: register the URL as /maystro-webhook.php?key=<MAYSTRO_WEBHOOK_SECRET>
+$secret = (string) getenv('MAYSTRO_WEBHOOK_SECRET');
+$given  = (string) ($_GET['key'] ?? '');
+if ($secret === '' || !hash_equals($secret, $given)) {
+    http_response_code(401);
+    exit;
+}
+
+$body = json_decode(file_get_contents('php://input') ?: '', true);
+$data = $body['message']['data'] ?? null;
+
+$event = null;
+if (is_string($data)) {
+    $decoded = base64_decode($data, true);
+    $event = json_decode((string) $decoded, true);
+    if (!is_array($event)) {                       // decoded once is still base64
+        $event = json_decode((string) base64_decode((string) $decoded, true), true);
+    }
+}
+
+if (!is_array($event)) {
+    http_response_code(400);
+    exit;
+}
+
+if (($event['event'] ?? null) === 'OrderStatusChanged') {
+    $orderId = trim((string) ($event['payload']['id'] ?? ''));
+    if ($orderId === '') {
+        http_response_code(400);
+        exit;
+    }
+
+    // Do not trust the pushed status: read the order back from Maystro.
+    $maystro = ClientFactory::create('maystro', ['apiToken' => getenv('MAYSTRO_API_TOKEN')]);
+    try {
+        $parcel = $maystro->track($orderId)->parcel;  // accepts the order UUID
+    } catch (ShippingError $e) {  // unknown order or Maystro unavailable
+        http_response_code(502);  // non-2xx answer: the event is not acknowledged
+        exit;
+    }
+
+    // update your order where carrier_id = $orderId with $parcel->status ...
+}
+
+http_response_code(201);
+```
+
+The docs describe no signature for webhook requests, so the SDK has no verification helper for Maystro: protect the endpoint yourself. The example puts a long random secret in the URL (`/maystro-webhook.php?key=…`) and compares it with `hash_equals` before reading the body. A secret in the URL can end up in server or proxy logs: exclude the query string from logs for this route and rotate the secret if it leaks. Above all, the example does not trust the pushed status: it only uses the event as a signal and reads the order back with `track()`, so a forged event cannot set a status. `StatusMapper::maystro()` is still available to convert a pushed code without a network call (e.g. 41 → `delivered`).
+
+---
+
+## 8. Testing your integration
+
+Pass a Guzzle handler through the `handler` option to replace the network with canned responses:
+
+```php
+use DzDelivery\ClientFactory;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response;
+
+$mock = new MockHandler([
+    new Response(200, ['Content-Type' => 'application/json'], json_encode([
+        'has_more' => false,
+        'data' => [['id' => 16, 'name' => 'Alger', 'zone' => 1, 'is_deliverable' => 1]],
+    ])),
+]);
+
+$client = ClientFactory::create('yalidine', [
+    'apiId' => 'test', 'apiToken' => 'test', 'fromWilayaId' => 16,
+    'handler' => HandlerStack::create($mock),
+]);
+
+$wilayas = $client->getWilayas();   // served by the mock, no HTTP call
+```
+
+Add `GuzzleHttp\Middleware::history($container)` to the stack to assert on the requests sent. Realistic native responses for every carrier are in [`docs/fixtures/`](./fixtures/).
+
+In application code, type-hint `ShippingProviderInterface`: you can then swap in your own fake implementation in tests instead of mocking HTTP.
+
+---
+
+## 9. ZRExpress extras
+
+Bulk create/delete, shipping labels, and signed webhook verification live on `ZRExpressProvider` (and `DzDelivery\Providers\ZRExpress\Webhook`), **not** on `ShippingProviderInterface`.
+
+Full matrix and examples: [`ZREXPRESS.md`](./ZREXPRESS.md).
+
+```php
+use DzDelivery\Models\ClientOptions;
+use DzDelivery\Providers\ZRExpressProvider;
+use DzDelivery\Providers\ZRExpress\Webhook;
+
+$zr = new ZRExpressProvider(ClientOptions::fromArray([
+    'apiKey' => getenv('ZREXPRESS_API_KEY'),
+    'tenant' => getenv('ZREXPRESS_TENANT'),
+]));
+
+$bulk = $zr->createParcelsBulk([
+    // each item MUST include orderId (externalId)
+    [...$parcelInput, 'orderId' => 'ORD-1'],
+]);
+$labels = $zr->generateLabels(['16-AAA111-ZR']);
+
+// Webhooks: use the raw request body (before JSON decode)
+$raw = file_get_contents('php://input');
+$event = Webhook::verify($raw, getallheaders(), getenv('ZREXPRESS_WEBHOOK_SECRET'));
+// $event->type, $event->parcelId, $event->trackingNumber, $event->status
+```

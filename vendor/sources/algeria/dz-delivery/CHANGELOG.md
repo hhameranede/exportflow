@@ -1,0 +1,99 @@
+# Changelog
+
+All notable changes to `@dz-delivery/core` (npm) and `dz-delivery/sdk` (Composer).
+The project follows [Semantic Versioning](https://semver.org/); while in `0.x`, minor versions may change the API.
+
+## [Unreleased]
+
+## [0.1.12] — 2026-11-01
+
+### Added
+- Yalidine `listParcels` (`GET /parcels/`, ≤ 1000 per page), in TypeScript and PHP: `keyword` → `tracking`, `orderId` → `order_id`; `status` and `updatedSince` (`date_last_status`) filtered client-side. It used to throw `NOT_SUPPORTED`. Checked live (read-only).
+- `Parcel.labelUrl` (optional): the shipping label (bordereau) URL when the carrier returns it with the parcel. Filled by Yalidine on `createParcel`, `track` and `listParcels` (its `label` field), in TypeScript and PHP (`Parcel::$labelUrl`, last constructor argument).
+
+### Changed
+- `docs/PROVIDERS.md`: live checks of 2026-11-01 on ZRExpress and Ecotrack (Anderson): create → track → cancel; Yalidine read-only, with its error body format now confirmed.
+
+## [0.1.11] — 2026-11-01
+
+### Added
+- Maystro: `track` (order + status history from `history_order`), `listParcels` (`GET /api/stores/orders/`, 20 per page, `status` / `orderId` / `keyword` / `updatedSince` filtered client-side) and `cancelParcel` (`PATCH /api/shared/status/{id}/`, status `50`), in TypeScript and PHP. `track` and `cancelParcel` take the order id (`Parcel.id`) or the tracking number (the order `display_id`). They used to throw `NOT_SUPPORTED`: these endpoints are in Maystro's docs. Checked live on a test account (create → track → cancel → track, list, unknown references).
+- Maystro extra `getLabels(references)` on `MaystroProvider`: the shipping labels (bordereaux) of up to 100 orders as one PDF (`starter_bordureau`, by tracking number or by order id), with `labelCount`; no order found → `NOT_FOUND`. Checked live.
+- `HttpClient` can return a binary body: `responseType: 'binary'` (TS) and `requestBinary()` (PHP).
+- README: feature matrix (which function each carrier supports).
+
+## [0.1.10] — 2026-10-30
+
+### Added
+- MDM Express provider (`mdm`) in TypeScript and PHP, built from MDM's OpenAPI spec: create (products from the MDM catalog, `storeId`), track, fees (`calculate-fees`), wilayas, communes, stop desks (partner offices), **`listParcels`** (server-side `status` / `updatedSince` filters) and health check. `cancelParcel` throws `NOT_SUPPORTED`. Checked live, read-only. See [`docs/PROVIDERS.md`](./docs/PROVIDERS.md#mdm).
+- Elogistia provider (`elogistia`) in TypeScript and PHP: create, track, fees, wilayas, communes and health check; `getStopDesks`, `listParcels` and `cancelParcel` throw `NOT_SUPPORTED`. Elogistia publishes no docs: endpoints follow the legacy Confirmation-api, checked live (read-only). See [`docs/PROVIDERS.md`](./docs/PROVIDERS.md#elogistia).
+- Guide pages `mdm/` and `elogistia/` on the docs site; MDM and Elogistia logos in the READMEs.
+
+## [0.1.9] — 2026-10-30
+
+### Added
+- NoEST provider (`noest`) in TypeScript and PHP: create (optional `autoValidate`), track, fees, wilayas, communes, stop desks (stations), cancel (orders not validated yet) and health check. `listParcels` throws `NOT_SUPPORTED`. Built from the NOEST Public API docs v2.3 and checked against live responses (reads, unknown tracking, and the error bodies of create / validate / delete); creation itself could not be tried, the test account being suspended. See [`docs/PROVIDERS.md`](./docs/PROVIDERS.md#noest).
+- Spelling-tolerant commune matching for NoEST (`Bab Ezzouar` → NOEST's `Bab Azzouar`): exported helpers `looseNameKey` / `findLocationLoosely` (TS) and `Text::looseKey` / `Text::findLoosely` (PHP). Only used after the exact id / name lookup fails, and only for an unambiguous match.
+- E-com Delivery provider (`ecom`, API v2) in TypeScript and PHP: create (optional `autoValidate` → `confirmee`), track, fees, wilayas, communes (deliverable only), stop desks, **`listParcels`** (`GET /colis`, `updatedSince` via `type_date=action`), cancel (parcels still "En Préparation") and health check. See [`docs/PROVIDERS.md`](./docs/PROVIDERS.md#ecom). Checked live on a test account: reads, unvalidated create (home + stop desk) then delete, and error bodies; live-only states `Récupérer` (payment collected → `delivered`), `Retour Fournisseur` / `Retour Stock` (→ `returned`) are mapped, and history notes keep the previous status.
+
+### Changed
+- Composer metadata: `authors` filled in.
+- READMEs: logos of the supported carriers; NoEST and E-com added to the package descriptions.
+- NoEST and E-com reject a non-`https` `baseUrl` (`VALIDATION_ERROR`), like Ecotrack.
+- `.env.example` and `docs/CONTRACT.md` list the NoEST and E-com credentials.
+
+## [0.1.8] — 2026-10-24
+
+### Changed
+- npm / Composer metadata: richer description and keywords (French + English), homepage now points to the docs site.
+- READMEs: badges, install for both languages, FAQ; removed outdated "not published yet" notes (the packages are on npm and Packagist).
+
+### Added
+- Docs site: one guide per carrier (Yalidine / GuepEx, ZRExpress, Maystro, Ecotrack), FAQ, `sitemap.xml`, Open Graph image and structured data.
+- CI workflow running the TypeScript (Node 18 / 20 / 22) and PHP (8.2 / 8.3 / 8.4) test suites.
+
+### Fixed
+- ZRExpress webhook test fixture no longer stores a `whsec_`-prefixed fake key, which secret scanners flagged as a leaked Stripe secret.
+
+## [0.1.7] — 2026-10-21
+
+### Added
+- ZRExpress extras: signed webhook verification (`verifyZRExpressWebhook` / `Webhook::verify`), PDF labels (`generateLabels`), bulk create / delete (`createParcelsBulk`, `deleteParcelsBulk`), `createZRExpress()` typed factory. See [`docs/ZREXPRESS.md`](./docs/ZREXPRESS.md).
+
+## [0.1.6] — 2026-10-21
+
+### Added
+- `listParcels(query?)` on the contract for account-wide status sync (ZRExpress via `parcels/search`; other carriers `NOT_SUPPORTED` for now).
+
+## [0.1.5] — 2026-10-21
+
+### Changed
+- ZRExpress: better stop desk lookup (hubs search) and `stockType` support on parcels and products.
+
+## [0.1.4] — 2026-10-20
+
+### Changed
+- Carrier fixes aligned with production integrations: Maystro live fees host with orders-management fallback, Ecotrack tenant hosts.
+- GuepEx support through the Yalidine provider (`GUEPEX_DEFAULT_BASE_URL`).
+
+## [0.1.2] — 2026-10-20
+
+### Added
+- `healthCheck()` on every provider (TS + PHP): authenticated connectivity probe.
+
+## [0.1.1] — 2026-10-20
+
+### Added
+- First public release: unified `createParcel`, `track`, `getFees`, `getWilayas`, `getCommunes`, `getStopDesks`, `cancelParcel` for ZRExpress, Yalidine, Maystro and Ecotrack, in TypeScript and PHP.
+
+[Unreleased]: https://github.com/developing-off/dz-delivery/compare/v0.1.12...HEAD
+[0.1.12]: https://github.com/developing-off/dz-delivery/compare/v0.1.11...v0.1.12
+[0.1.11]: https://github.com/developing-off/dz-delivery/compare/v0.1.10...v0.1.11
+[0.1.10]: https://github.com/developing-off/dz-delivery/compare/v0.1.9...v0.1.10
+[0.1.9]: https://github.com/developing-off/dz-delivery/compare/v0.1.8...v0.1.9
+[0.1.8]: https://github.com/developing-off/dz-delivery/compare/v0.1.7...v0.1.8
+[0.1.7]: https://github.com/developing-off/dz-delivery/compare/v0.1.6...v0.1.7
+[0.1.6]: https://github.com/developing-off/dz-delivery/compare/v0.1.5...v0.1.6
+[0.1.5]: https://github.com/developing-off/dz-delivery/compare/v0.1.3...v0.1.5
+[0.1.2]: https://github.com/developing-off/dz-delivery/releases/tag/v0.1.2
+[0.1.1]: https://github.com/developing-off/dz-delivery/releases/tag/v0.1.1

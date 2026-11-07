@@ -1,0 +1,57 @@
+# Trusted Publisher (OIDC) — configure on npmjs.com:
+#   Organization or user: developing-off
+#   Repository:           dz-delivery
+#   Workflow filename:    publish.yml
+#   Allowed actions:      allow npm publish (+ dist-tag if desired)
+#
+# Requires npm CLI >= 11.5.1 and Node >= 22.14.
+# First successful publish must happen within 2 days of creating the connection.
+
+name: Publish Package
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # required for OIDC → npm
+      contents: read
+    defaults:
+      run:
+        working-directory: packages/ts
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          # Do NOT set registry-url: it injects a fake NODE_AUTH_TOKEN that
+          # shadows OIDC Trusted Publisher auth.
+          package-manager-cache: false
+
+      # Trusted publishing needs npm >= 11.5.1
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # OIDC Trusted Publisher — stage publish (approve on npmjs.com), then
+      # promote. If Trusted Publisher allows direct `npm publish`, you can
+      # switch this step back to `npm publish --access public`.
+      - name: Stage publish to npm
+        run: |
+          unset NODE_AUTH_TOKEN || true
+          npm --version
+          npm stage publish --access public

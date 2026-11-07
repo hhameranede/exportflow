@@ -1,0 +1,90 @@
+{
+  "name": "@dz-delivery/core",
+  "version": "0.1.12",
+  "description": "Unified SDK for Algerian delivery carriers (Yalidine, ZRExpress, Maystro, Ecotrack/DHD, GuepEx, NoEST, E-com, MDM, Elogistia) — SDK livraison Algérie : créer, suivre et tarifer des colis, wilayas et communes. TypeScript, Node.js.",
+  "license": "MIT",
+  "author": "developing-off",
+  "homepage": "https://dz-delivery.younes-sarni.com/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/developing-off/dz-delivery.git",
+    "directory": "packages/ts"
+  },
+  "bugs": {
+    "url": "https://github.com/developing-off/dz-delivery/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "algeria",
+    "algerie",
+    "dz",
+    "delivery",
+    "livraison",
+    "shipping",
+    "colis",
+    "cod",
+    "ecommerce",
+    "wilaya",
+    "commune",
+    "stop-desk",
+    "sdk",
+    "api",
+    "typescript",
+    "nodejs",
+    "yalidine",
+    "yalidine-api",
+    "guepex",
+    "zrexpress",
+    "zr-express",
+    "maystro",
+    "maystro-delivery",
+    "ecotrack",
+    "dhd",
+    "anderson",
+    "world-express",
+    "conexlog",
+    "woocommerce",
+    "shopify"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

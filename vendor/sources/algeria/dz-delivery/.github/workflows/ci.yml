@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/ts
+    strategy:
+      matrix:
+        node-version: ["18", "20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: packages/ts/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+  php:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/php
+    strategy:
+      matrix:
+        php-version: ["8.2", "8.3", "8.4"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          coverage: none
+
+      - name: Install
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Test
+        run: composer test
+
+  site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build site
+        run: sh scripts/build-site.sh
+
+      - name: Check output
+        run: |
+          for f in sitemap.xml robots.txt _headers index.html 404.html; do
+            if [ ! -f "_site/$f" ]; then
+              echo "Missing _site/$f" >&2
+              exit 1
+            fi
+          done
+          if grep -rl 'developing-off.github.io' _site; then
+            echo "Old GitHub Pages URL found in the site output" >&2
+            exit 1
+          fi
+
+      - name: Check canonicals, hreflang, images and links
+        run: node scripts/check-site.mjs

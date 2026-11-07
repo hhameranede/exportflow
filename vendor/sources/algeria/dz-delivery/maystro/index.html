@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>API Maystro Delivery en Node.js et PHP — SDK dz-delivery</title>
+  <meta name="description" content="Intégrer l’API Maystro Delivery en TypeScript ou PHP : créer des commandes, calculer les frais, lister wilayas, communes et points relais, suivre, lister et annuler les commandes. Exemple complet avec dz-delivery." />
+  <meta name="theme-color" content="#f4f5f2" />
+  <link rel="canonical" href="https://dz-delivery.younes-sarni.com/maystro/" />
+  <link rel="alternate" hreflang="fr" href="https://dz-delivery.younes-sarni.com/maystro/" />
+  <link rel="alternate" hreflang="en" href="https://dz-delivery.younes-sarni.com/en/maystro/" />
+  <link rel="alternate" hreflang="x-default" href="https://dz-delivery.younes-sarni.com/maystro/" />
+  <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml" />
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="dz-delivery" />
+  <meta property="og:locale" content="fr_FR" />
+  <meta property="og:locale:alternate" content="en_US" />
+  <meta property="og:url" content="https://dz-delivery.younes-sarni.com/maystro/" />
+  <meta property="og:title" content="API Maystro Delivery en Node.js et PHP — SDK dz-delivery" />
+  <meta property="og:description" content="Intégrer l’API Maystro Delivery en TypeScript ou PHP : créer des commandes, calculer les frais, lister wilayas, communes et points relais, suivre, lister et annuler les commandes. Exemple complet avec dz-delivery." />
+  <meta property="og:image" content="https://dz-delivery.younes-sarni.com/assets/og/maystro.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="https://dz-delivery.younes-sarni.com/assets/og/maystro.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@450;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/site.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "TechArticle",
+        "headline": "API Maystro Delivery en Node.js et PHP",
+        "description": "Intégrer l’API Maystro Delivery en TypeScript ou PHP : créer des commandes, calculer les frais, lister wilayas, communes et points relais, suivre, lister et annuler les commandes. Exemple complet avec dz-delivery.",
+        "inLanguage": "fr",
+        "url": "https://dz-delivery.younes-sarni.com/maystro/",
+        "about": [
+          "Maystro",
+          "dz-delivery"
+        ],
+        "isPartOf": {
+          "@id": "https://dz-delivery.younes-sarni.com/#website"
+        },
+        "mainEntityOfPage": "https://dz-delivery.younes-sarni.com/maystro/"
+      },
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "dz-delivery",
+            "item": "https://dz-delivery.younes-sarni.com/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Maystro",
+            "item": "https://dz-delivery.younes-sarni.com/maystro/"
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <header class="nav">
+      <a class="nav-brand" href="../">dz-delivery</a>
+      <nav class="nav-links" aria-label="Transporteurs">
+        <a href="../yalidine/">Yalidine</a>
+        <a href="../zrexpress/">ZRExpress</a>
+        <a href="../maystro/" aria-current="page">Maystro</a>
+        <a href="../ecotrack/">Ecotrack</a>
+        <a href="../noest/">NoEST</a>
+        <a href="../ecom/">E-com</a>
+        <a href="../mdm/">MDM</a>
+        <a href="../elogistia/">Elogistia</a>
+        <a href="https://github.com/developing-off/dz-delivery">GitHub</a>
+        <a class="nav-lang" href="../en/maystro/" hreflang="en" lang="en" title="English version">EN</a>
+      </nav>
+    </header>
+
+    <main>
+      <nav class="crumbs" aria-label="Fil d’Ariane">
+        <ol>
+          <li><a href="../">dz-delivery</a></li>
+          <li><a href="../#matrix">Transporteurs</a></li>
+          <li aria-current="page">Maystro</li>
+        </ol>
+      </nav>
+
+      <h1>API Maystro Delivery en Node.js et PHP</h1>
+      <p class="lead">Créez vos commandes Maystro, calculez les frais et listez les points relais avec le SDK dz-delivery. Suivez, listez et annulez les commandes par API, ou recevez les statuts par webhook.</p>
+
+      <section id="install" aria-labelledby="install-title">
+        <h2 id="install-title">Installer</h2>
+        <div class="install-grid">
+          <div class="panel"><div class="panel-head"><span>TypeScript · npm</span><button type="button" class="copy" data-copy="npm install @dz-delivery/core">Copier</button></div><pre>npm install @dz-delivery/core</pre></div>
+          <div class="panel"><div class="panel-head"><span>PHP · Composer</span><button type="button" class="copy" data-copy="composer require dz-delivery/sdk">Copier</button></div><pre>composer require dz-delivery/sdk</pre></div>
+        </div>
+        <p>Node.js ≥ 18 (aucune dépendance) ou PHP ≥ 8.2 (Guzzle 7). Tous les transporteurs implémentent la même interface&nbsp;: le même code fonctionne avec les autres une fois le client configuré, mais certaines opérations n’existent pas chez tous et lèvent <code>NOT_SUPPORTED</code> (voir la <a href="../#matrix">matrice de compatibilité</a>).</p>
+      </section>
+
+      <section id="credentials" aria-labelledby="cred-title">
+        <h2 id="cred-title">Identifiants Maystro</h2>
+        <div class="table-wrap"><table><thead><tr><th>Option</th><th>Header envoyé</th><th>Où la trouver</th></tr></thead><tbody><tr><td><code>apiToken</code></td><td><code>Authorization: Token &lt;apiToken&gt;</code></td><td>Token de votre boutique dans l’application Maystro</td></tr></tbody></table></div><p>Documentation officielle&nbsp;: <a href="https://maystro.gitbook.io/maystro-delivery-documentation/reference/maystro-delivery-api-reference">Maystro Delivery API</a>.</p>
+      </section>
+
+      <section id="typescript" aria-labelledby="ts-title">
+        <h2 id="ts-title">Maystro en TypeScript / Node.js</h2>
+        <div class="panel"><div class="panel-head"><span>TypeScript</span></div><pre><span class="c-key">import</span> { createClient, isShippingError } <span class="c-key">from</span> <span class="c-str">&#x27;@dz-delivery/core&#x27;</span>;
+
+<span class="c-key">const</span> maystro = <span class="c-fn">createClient</span>(<span class="c-str">&#x27;maystro&#x27;</span>, {
+  apiToken: process.env.<span class="c-type">MAYSTRO_API_TOKEN</span>!,
+});
+
+<span class="c-key">try</span> {
+  <span class="c-key">const</span> wilayas = <span class="c-key">await</span> maystro.<span class="c-fn">getWilayas</span>();
+  <span class="c-key">const</span> communes = <span class="c-key">await</span> maystro.<span class="c-fn">getCommunes</span>(<span class="c-num">16</span>);
+
+  <span class="c-cmt">// Stop desks / points relais : communeId obligatoire chez Maystro</span>
+  <span class="c-key">const</span> desks = <span class="c-key">await</span> maystro.<span class="c-fn">getStopDesks</span>({ wilayaId: <span class="c-num">16</span>, communeId: communes[<span class="c-num">0</span>].id });
+
+  <span class="c-key">const</span> quote = <span class="c-key">await</span> maystro.<span class="c-fn">getFees</span>({ toWilayaId: <span class="c-num">16</span>, toCommuneId: communes[<span class="c-num">0</span>].id });
+
+  <span class="c-key">const</span> parcel = <span class="c-key">await</span> maystro.<span class="c-fn">createParcel</span>({
+    recipientName: <span class="c-str">&#x27;Mohamed Amine&#x27;</span>,
+    phone: <span class="c-str">&#x27;0550123456&#x27;</span>,
+    address: <span class="c-str">&#x27;Cité 221 lots, n°98&#x27;</span>,
+    wilayaId: <span class="c-num">16</span>,
+    communeName: <span class="c-str">&#x27;Bab Ezzouar&#x27;</span>,
+    productName: <span class="c-str">&#x27;T-shirt&#x27;</span>,
+    price: <span class="c-num">2500</span>,
+    orderId: <span class="c-str">&#x27;ORDER-1001&#x27;</span>,
+  });
+  <span class="c-cmt">// parcel.trackingNumber (ou parcel.id) sert pour track / cancelParcel</span>
+  <span class="c-key">const</span> { events } = <span class="c-key">await</span> maystro.<span class="c-fn">track</span>(parcel.trackingNumber);
+} <span class="c-key">catch </span>(err) {
+  <span class="c-key">if </span>(<span class="c-fn">isShippingError</span>(err)) console.<span class="c-fn">error</span>(err.code, err.message);
+}</pre></div>
+      </section>
+
+      <section id="php" aria-labelledby="php-title">
+        <h2 id="php-title">Maystro en PHP / Laravel</h2>
+        <div class="panel"><div class="panel-head"><span>PHP</span></div><pre><span class="c-key">use</span> <span class="c-type">DzDelivery</span>\<span class="c-type">ClientFactory</span>;
+
+<span class="c-var">$maystro</span> = <span class="c-type">ClientFactory</span>::<span class="c-fn">create</span>(<span class="c-str">&#x27;maystro&#x27;</span>, [
+    <span class="c-str">&#x27;apiToken&#x27;</span> =&gt; <span class="c-fn">getenv</span>(<span class="c-str">&#x27;MAYSTRO_API_TOKEN&#x27;</span>),
+]);
+
+<span class="c-var">$communes</span> = <span class="c-var">$maystro</span>-&gt;<span class="c-fn">getCommunes</span>(<span class="c-num">16</span>);
+<span class="c-var">$desks</span>    = <span class="c-var">$maystro</span>-&gt;<span class="c-fn">getStopDesks</span>([<span class="c-str">&#x27;wilayaId&#x27;</span> =&gt; <span class="c-num">16</span>, <span class="c-str">&#x27;communeId&#x27;</span> =&gt; <span class="c-var">$communes</span>[<span class="c-num">0</span>]-&gt;id]);
+<span class="c-var">$quote</span>    = <span class="c-var">$maystro</span>-&gt;<span class="c-fn">getFees</span>([<span class="c-str">&#x27;toWilayaId&#x27;</span> =&gt; <span class="c-num">16</span>, <span class="c-str">&#x27;toCommuneId&#x27;</span> =&gt; <span class="c-var">$communes</span>[<span class="c-num">0</span>]-&gt;id]);
+
+<span class="c-var">$parcel</span> = <span class="c-var">$maystro</span>-&gt;<span class="c-fn">createParcel</span>([
+    <span class="c-str">&#x27;recipientName&#x27;</span> =&gt; <span class="c-str">&#x27;Mohamed Amine&#x27;</span>,
+    <span class="c-str">&#x27;phone&#x27;</span>         =&gt; <span class="c-str">&#x27;0550123456&#x27;</span>,
+    <span class="c-str">&#x27;address&#x27;</span>       =&gt; <span class="c-str">&#x27;Cité 221 lots, n°98&#x27;</span>,
+    <span class="c-str">&#x27;wilayaId&#x27;</span>      =&gt; <span class="c-num">16</span>,
+    <span class="c-str">&#x27;communeName&#x27;</span>   =&gt; <span class="c-str">&#x27;Bab Ezzouar&#x27;</span>,
+    <span class="c-str">&#x27;productName&#x27;</span>   =&gt; <span class="c-str">&#x27;T-shirt&#x27;</span>,
+    <span class="c-str">&#x27;price&#x27;</span>         =&gt; <span class="c-num">2500</span>,
+    <span class="c-str">&#x27;orderId&#x27;</span>       =&gt; <span class="c-str">&#x27;ORDER-1001&#x27;</span>,
+]);
+<span class="c-var">$tracked</span> = <span class="c-var">$maystro</span>-&gt;<span class="c-fn">track</span>(<span class="c-var">$parcel</span>-&gt;trackingNumber); <span class="c-cmt">// ou $parcel-&gt;id</span></pre></div>
+        <p>Installation, Laravel, erreurs et tests&nbsp;: consultez le <a href="../php/">guide PHP complet</a>.</p>
+      </section>
+
+      <section id="support" aria-labelledby="support-title">
+        <h2 id="support-title">Méthodes supportées</h2>
+        <div class="table-wrap"><table><thead><tr><th>Méthode</th><th>Support</th><th>Notes</th></tr></thead><tbody><tr><td><code>createParcel</code></td><td class="ok">oui</td><td>Statut renvoyé&nbsp;: <code>pending</code>.</td></tr><tr><td><code>track</code></td><td class="ok">oui</td><td>Commande + historique des statuts. Id de commande ou numéro de suivi.</td></tr><tr><td><code>getFees</code></td><td class="ok">oui</td><td>Tarifs domicile et stop desk.</td></tr><tr><td><code>getWilayas / getCommunes</code></td><td class="ok">oui</td><td>Le <code>id</code> de wilaya est le code officiel.</td></tr><tr><td><code>getStopDesks</code></td><td class="ok">oui</td><td>Stop desks et points relais, <code>communeId</code> obligatoire.</td></tr><tr><td><code>listParcels</code></td><td class="ok">oui</td><td>20 commandes par page&nbsp;; filtres statut, orderId, mot-clé et date appliqués côté SDK.</td></tr><tr><td><code>cancelParcel</code></td><td class="ok">oui</td><td>Annule la commande (statut 50). Id de commande ou numéro de suivi.</td></tr><tr><td><code>healthCheck</code></td><td class="ok">oui</td><td>Vérifie le token (appel réel).</td></tr><tr><td><code>getLabels</code> (extra)</td><td class="ok">oui</td><td>Bordereaux en PDF, une page par commande. Sur <code>MaystroProvider</code>.</td></tr></tbody></table></div>
+        <h3>Imprimer les bordereaux (PDF)</h3>
+        <div class="panel"><div class="panel-head"><span>TypeScript</span></div><pre><span class="c-key">import</span> { MaystroProvider } <span class="c-key">from</span> <span class="c-str">&#x27;@dz-delivery/core&#x27;</span>;
+<span class="c-key">import</span> { writeFileSync } <span class="c-key">from</span> <span class="c-str">&#x27;node:fs&#x27;</span>;
+
+<span class="c-key">const</span> maystro = <span class="c-key">new</span> <span class="c-fn">MaystroProvider</span>({ apiToken: process.env.MAYSTRO_API_TOKEN! });
+<span class="c-key">const</span> { data, labelCount } = <span class="c-key">await</span> maystro.<span class="c-fn">getLabels</span>([<span class="c-str">&#x27;172316976800001&#x27;</span>]); <span class="c-cmt">// numéros de suivi ou parcel.id</span>
+<span class="c-fn">writeFileSync</span>(<span class="c-str">&#x27;bordereaux.pdf&#x27;</span>, data); <span class="c-cmt">// une page par commande trouvée</span></pre></div>
+        <div class="panel"><div class="panel-head"><span>PHP</span></div><pre><span class="c-key">use</span> DzDelivery\Models\ClientOptions;
+<span class="c-key">use</span> DzDelivery\Providers\MaystroProvider;
+
+<span class="c-var">$maystro</span> = <span class="c-key">new</span> <span class="c-fn">MaystroProvider</span>(<span class="c-fn">ClientOptions::fromArray</span>([<span class="c-str">&#x27;apiToken&#x27;</span> =&gt; <span class="c-fn">getenv</span>(<span class="c-str">&#x27;MAYSTRO_API_TOKEN&#x27;</span>)]));
+<span class="c-var">$labels</span>  = <span class="c-var">$maystro</span>-&gt;<span class="c-fn">getLabels</span>([<span class="c-str">&#x27;172316976800001&#x27;</span>]); <span class="c-cmt">// numéros de suivi ou $parcel-&gt;id</span>
+<span class="c-key">return</span> <span class="c-fn">response</span>(<span class="c-var">$labels</span>-&gt;data, <span class="c-num">200</span>, [<span class="c-str">&#x27;Content-Type&#x27;</span> =&gt; <span class="c-str">&#x27;application/pdf&#x27;</span>]); <span class="c-cmt">// Laravel</span></pre></div>
+      </section>
+
+      <section id="webhooks" aria-labelledby="webhooks-title">
+        <h2 id="webhooks-title">Suivre les colis Maystro avec les webhooks</h2>
+        <p>Configurez une URL HTTPS dans l’application Maystro (Paramètres → Webhooks). L’événement <code>OrderStatusChanged</code> contient <code>payload.id</code> (l’id de commande) et <code>payload.status</code> (code numérique) que le SDK convertit en statut unifié.</p>
+        <div class="panel"><div class="panel-head"><span>TypeScript</span></div><pre><span class="c-key">import</span> { mapMaystroStatus } <span class="c-key">from</span> <span class="c-str">&#x27;@dz-delivery/core&#x27;</span>;
+
+<span class="c-cmt">// vérifier d&#x27;abord le secret de l&#x27;URL (non signé), puis : event = JSON décodé depuis message.data (base64)</span>
+<span class="c-key">if </span>(event.event === <span class="c-str">&#x27;OrderStatusChanged&#x27;</span>) {
+  <span class="c-key">const</span> status = <span class="c-fn">mapMaystroStatus</span>(event.payload.status); <span class="c-cmt">// 41 → &#x27;delivered&#x27;</span>
+  <span class="c-cmt">// mettre à jour la commande dont carrier_id = event.payload.id</span>
+}</pre></div>
+        <div class="panel"><div class="panel-head"><span>PHP</span></div><pre><span class="c-key">use</span> <span class="c-type">DzDelivery</span>\<span class="c-type">Support</span>\<span class="c-type">StatusMapper</span>;
+
+<span class="c-cmt">// $event = JSON décodé depuis message.data, après vérification du secret de l&#x27;URL</span>
+<span class="c-key">if </span>((<span class="c-var">$event</span>[<span class="c-str">&#x27;event&#x27;</span>] ?? <span class="c-key">null</span>) === <span class="c-str">&#x27;OrderStatusChanged&#x27;</span>) {
+    <span class="c-var">$status</span> = <span class="c-type">StatusMapper</span>::<span class="c-fn">maystro</span>(<span class="c-var">$event</span>[<span class="c-str">&#x27;payload&#x27;</span>][<span class="c-str">&#x27;status&#x27;</span>] ?? <span class="c-key">null</span>); <span class="c-cmt">// 41 → &#x27;delivered&#x27;</span>
+}</pre></div>
+        <p>Exemple complet (décodage base64, sécurisation de l’URL)&nbsp;: <a href="../php/#maystro-webhooks">guide PHP, section webhooks Maystro</a>.</p>
+      </section>
+
+      <section id="statuses" aria-labelledby="statuses-title">
+        <h2 id="statuses-title">Statuts Maystro → statuts unifiés</h2>
+        <p>Maystro utilise des codes numériques, y compris dans les webhooks (<code>payload.status</code>). <code>mapMaystroStatus</code> / <code>StatusMapper::maystro()</code> acceptent le code (<code>41</code>, <code>"41"</code>) ou le nom (<code>DELIVERED</code>, <code>ready to return</code>), sans tenir compte de la casse ni des séparateurs.</p>
+        <div class="table-wrap"><table><thead><tr><th>Code</th><th>Statut Maystro</th><th>Statut unifié</th><th>Notes</th></tr></thead><tbody><tr><td><code>4</code></td><td><code>CREATED</code></td><td><code>pending</code></td><td>Enregistrée, pas encore remise, enlèvement non demandé.</td></tr><tr><td><code>11</code></td><td><code>PENDING</code></td><td><code>pending</code></td><td>En attente avant préparation.</td></tr><tr><td><code>12</code></td><td><code>OUT_OF_STOCK</code></td><td><code>pending</code></td><td>Boutiques Premium&nbsp;: ne peut pas encore être préparée.</td></tr><tr><td><code>5</code></td><td><code>PICK_UP_REQUESTED</code></td><td><code>created</code></td><td>Prête à être enlevée par Maystro.</td></tr><tr><td><code>6</code></td><td><code>IN_PROCESS</code></td><td><code>created</code></td><td>En traitement / préparation chez Maystro, pas encore en route.</td></tr><tr><td><code>8</code></td><td><code>WAITING_TRANSIT</code></td><td><code>in_transit</code></td><td>Au hub, en attente de transfert.</td></tr><tr><td><code>9</code></td><td><code>IN_TRANSIT_TO_BE_SHIPPED</code></td><td><code>in_transit</code></td><td></td></tr><tr><td><code>15</code></td><td><code>READY_TO_SHIP</code></td><td><code>in_transit</code></td><td>Détenue par Maystro (enlevée pour Starter, en entrepôt pour Premium), prête pour un livreur.</td></tr><tr><td><code>22</code></td><td><code>ASSIGNED</code></td><td><code>in_transit</code></td><td>Attribuée à un livreur.</td></tr><tr><td><code>31</code></td><td><code>SHIPPED</code></td><td><code>in_transit</code></td><td>En cours de livraison.</td></tr><tr><td><code>32</code></td><td><code>ALERTED</code></td><td><code>in_transit</code></td><td>Problème de livraison / tentative échouée.</td></tr><tr><td><code>42</code></td><td><code>POSTPONED</code></td><td><code>in_transit</code></td><td></td></tr><tr><td><code>41</code></td><td><code>DELIVERED</code></td><td><code>delivered</code></td><td></td></tr><tr><td><code>50</code></td><td><code>ABORTED</code></td><td><code>cancelled</code></td><td>Maystro l’appelle aussi «&nbsp;CANCELLED&nbsp;». Si le colis était déjà expédié, les statuts <code>51</code> / <code>10</code> / <code>52</code> qui suivent donnent <code>returned</code>.</td></tr><tr><td><code>10</code></td><td><code>IN_TRANSIT_TO_BE_RETURNED</code></td><td><code>returned</code></td><td></td></tr><tr><td><code>51</code></td><td><code>READY_TO_RETURN</code></td><td><code>returned</code></td><td>Alias <code>READY_TO_BE_RETURNED</code>.</td></tr><tr><td><code>52</code></td><td><code>TAKEN_BY_STORE</code></td><td><code>returned</code></td><td>Retour remis à la boutique.</td></tr><tr><td><code>53</code></td><td><code>NOT_RECEIVED</code></td><td><code>returned</code></td><td>Retour déclaré non reçu par la boutique.</td></tr><tr><td>Autre</td><td>—</td><td><code>unknown</code></td><td></td></tr></tbody></table></div>
+        <p>Les alias de nom <code>CANCELLED</code> / <code>CANCELED</code> donnent aussi <code>cancelled</code>. Signification de chaque statut unifié&nbsp;: <a href="../statuts/">liste complète des statuts unifiés</a>.</p>
+      </section>
+
+      <section id="notes" aria-labelledby="notes-title">
+        <h2 id="notes-title">À savoir sur l’API Maystro</h2>
+        <ul class="notes">
+          <li><code>track</code> et <code>cancelParcel</code> acceptent l’id de commande (<code>parcel.id</code>) ou le numéro de suivi (le <code>display_id</code> Maystro, une requête de plus).</li>
+          <li><code>listParcels</code>&nbsp;: Maystro renvoie 20 commandes par page, sans filtre&nbsp;; le SDK filtre chaque page (statut, orderId, mot-clé, <code>updatedSince</code>).</li>
+          <li><code>getStopDesks</code> exige un <code>communeId</code>&nbsp;; l’<code>id</code> renvoyé s’utilise comme <code>stopDeskId</code> à la création.</li>
+          <li>Les frais viennent de l’API tarifaire Maystro, avec repli automatique sur l’ancienne API d’options de livraison.</li>
+          <li>Les webhooks Maystro ne sont pas signés&nbsp;: protégez l’URL (par exemple avec un secret long dans la query string).</li>
+        </ul>
+        <p>Mapping natif détaillé (endpoints, champs, statuts)&nbsp;: <a href="https://github.com/developing-off/dz-delivery/blob/main/docs/PROVIDERS.md#maystro-delivery">PROVIDERS.md</a>.</p>
+      </section>
+
+      <section id="faq" aria-labelledby="faq-title">
+        <h2 id="faq-title">FAQ Maystro</h2>
+        <div class="faq">
+          <details>
+            <summary>Comment suivre un colis Maystro par API&nbsp;?</summary>
+            <p>Avec <code>track()</code>&nbsp;: le SDK lit la commande et son historique (<code>history_order</code>) et renvoie des statuts unifiés. Pour être notifié sans interroger l’API, utilisez les webhooks&nbsp;: le SDK fournit <code>mapMaystroStatus</code> / <code>StatusMapper::maystro()</code> pour les convertir en statuts unifiés.</p>
+          </details>
+          <details>
+            <summary>Où trouver le token API Maystro&nbsp;?</summary>
+            <p>C’est le token de votre boutique dans l’application Maystro&nbsp;; passez-le tel quel en <code>apiToken</code>.</p>
+          </details>
+          <details>
+            <summary>Comment calculer les frais Maystro&nbsp;?</summary>
+            <p><code>getFees({ toWilayaId, toCommuneId })</code> renvoie le tarif domicile (<code>deliveryFee</code>) et stop desk (<code>stopDeskFee</code>) en DZD.</p>
+          </details>
+        </div>
+      </section>
+
+      <section id="others" aria-labelledby="others-title">
+        <h2 id="others-title">Autres transporteurs</h2>
+        <p>Même interface, mêmes statuts normalisés (<code>pending</code>, <code>in_transit</code>, <code>delivered</code>…).</p>
+        <ul class="doc-links">
+          <li><a href="../yalidine/">API Yalidine</a></li>
+          <li><a href="../zrexpress/">API ZRExpress</a></li>
+          <li><a href="../ecotrack/">API Ecotrack</a></li>
+          <li><a href="../noest/">API NoEST</a></li>
+          <li><a href="../ecom/">API E-com Delivery</a></li>
+          <li><a href="../mdm/">API MDM Express</a></li>
+          <li><a href="../elogistia/">API Elogistia</a></li>
+          <li><a href="../">Documentation complète</a></li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      <div class="row">
+        <div><strong>dz-delivery</strong> · MIT · <a href="https://github.com/developing-off/dz-delivery">developing-off</a></div>
+        <div>
+          <a href="https://www.npmjs.com/package/@dz-delivery/core">npm</a>
+          ·
+          <a href="https://packagist.org/packages/dz-delivery/sdk">Packagist</a>
+          ·
+          <a href="https://github.com/developing-off/dz-delivery/blob/main/CHANGELOG.md">Changelog</a>
+        </div>
+      </div>
+    </footer>
+  </div>
+  <script>
+    document.querySelectorAll(".copy").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var text = btn.getAttribute("data-copy") || "";
+        if (!navigator.clipboard) return;
+        navigator.clipboard.writeText(text).then(function () {
+          btn.textContent = "Copié";
+          btn.classList.add("ok");
+          setTimeout(function () { btn.textContent = "Copier"; btn.classList.remove("ok"); }, 1400);
+        });
+      });
+    });
+  </script>
+</body>
+</html>

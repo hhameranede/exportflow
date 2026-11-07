@@ -1,0 +1,17 @@
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "httpStatus": 422,
+    "message": "Données invalides",
+    "details": [
+      {
+        "field": "recipientName",
+        "message": "String should have at most 60 characters"
+      },
+      {
+        "field": "address",
+        "message": "String should have at most 100 characters"
+      }
+    ]
+  }
+}
