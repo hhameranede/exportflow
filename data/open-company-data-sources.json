@@ -742,6 +742,92 @@
         "https://ised-isde.canada.ca/site/corporations-canada/en/accessing-federal-corporation-json-datasets",
         "https://open.canada.ca/en/open-government-licence-canada"
       ]
+    },
+    {
+      "id": "asic-australian-company-register",
+      "name": "ASIC Company Dataset — Australian company register extract",
+      "publisher": "Australian Securities and Investments Commission (ASIC)",
+      "kind": "national_company_register",
+      "coverage": [
+        "AU"
+      ],
+      "source_url": "https://data.gov.au/data/dataset/asic-companies",
+      "download_url": "https://data.gov.au/data/api/3/action/package_show?id=asic-companies",
+      "license": "CC-BY-3.0-AU_REPORTED_OFFICIAL_METADATA_PENDING_RECHECK",
+      "rights_status": "pending_license_verification",
+      "commercial_use": false,
+      "redistribution": false,
+      "attribution_required": true,
+      "attribution_text": "Provisional attribution pending direct confirmation of the current publisher metadata: Australian Securities and Investments Commission, Australian Government, ASIC Company Dataset, sourced [snapshot date], https://data.gov.au/data/dataset/asic-companies.",
+      "access": "free_weekly_public_snapshot_via_data.gov.au",
+      "update_frequency": "weekly",
+      "data_scope": [
+        "company_names",
+        "Australian_company_numbers",
+        "company_type",
+        "company_class",
+        "company_subclass",
+        "registration_status",
+        "registration_date",
+        "deregistration_date",
+        "previous_state_registration",
+        "ABN_where_present",
+        "current_name_indicator",
+        "historical_names"
+      ],
+      "limitations": [
+        "The official ASIC page says selected company-register data are published via data.gov.au weekly; the file is a snapshot, not real-time verification",
+        "The source is a tab-delimited company-register extract distributed as CSV/ZIP; confirm the current official header and file hash before parsing",
+        "The 15-field schema and roughly 4.45 million row count are corroborated by an independently versioned mirror for the 2026-11-02 snapshot; use only the publisher's original data.gov.au file, never the mirror as the source",
+        "One row per historical company name may exist for the same ACN; current-name indicator and dated former names must be modelled as aliases, not duplicate legal entities",
+        "Do not ingest officeholder, director or personal fields from any other ASIC register dataset; this entry is only the Company Dataset",
+        "CC BY 3.0 AU is reported in the catalogue mirror, but the exact current official data.gov.au licence metadata must be captured before commercial redistribution approval"
+      ],
+      "ingestion_status": "discovery_pending_official_license_metadata_and_schema_verification",
+      "verification_sources": [
+        "https://www.asic.gov.au/online-services/search-asic-registers/datagovau",
+        "https://data.gov.au/data/dataset/asic-companies",
+        "https://publicdata.au/d/asic-companies/"
+      ]
+    },
+    {
+      "id": "belgium-cbe-open-data",
+      "name": "Belgium Crossroads Bank for Enterprises — Open Data file",
+      "publisher": "FPS Economy, Belgium",
+      "kind": "national_company_register_open_subset",
+      "coverage": [
+        "BE"
+      ],
+      "source_url": "https://economie.fgov.be/en/themes/enterprises/crossroads-bank-enterprises/services-everyone/public-data-available-reuse/cbe-open-data",
+      "download_url": "https://kbopub.economie.fgov.be/kbo-open-data/login?lang=en",
+      "license": "CBE-OPEN-DATA-TERMS-OF-USE_PENDING_COMMERCIAL_SCOPE_REVIEW",
+      "rights_status": "pending_reuse_terms_review",
+      "commercial_use": false,
+      "redistribution": false,
+      "attribution_required": true,
+      "attribution_text": "Provisional attribution pending review of the accepted Open Data terms: Source: Belgian Crossroads Bank for Enterprises (CBE), FPS Economy, extract date [date].",
+      "access": "free_daily_CSV_after_registration_and_acceptance_of_open_data_terms",
+      "update_frequency": "daily_complete_and_delta_files",
+      "data_scope": [
+        "active_registered_entities",
+        "active_establishment_units",
+        "public_reusable_cbe_fields_only"
+      ],
+      "limitations": [
+        "The free Open Data CSV is a limited active-entity and establishment-unit subset, not the extensive full reuse file",
+        "Access requires registration and acceptance of the Open Data terms; no credentials or terms have been accepted by ExportFlow",
+        "The separate complete reuse file covers active and discontinued entities and has a reported EUR 30,000 annual commercial fee; do not request or use that paid product",
+        "The Open Data files are refreshed daily and remain accessible for 31 days",
+        "Personal data concerning registered natural-person entities may not be reused for direct marketing; filter natural-person entities and field-level personal data pending review",
+        "Do not enable commercial ingestion until the exact free Open Data terms, redistribution scope and attribution wording are reviewed"
+      ],
+      "ingestion_status": "discovery_pending_open_data_terms_and_privacy_review",
+      "verification_sources": [
+        "https://economie.fgov.be/en/themes/enterprises/crossroads-bank-enterprises/services-everyone/public-data-available-reuse",
+        "https://economie.fgov.be/en/themes/enterprises/crossroads-bank-enterprises/services-everyone/public-data-available-reuse/cbe-open-data",
+        "https://economie.fgov.be/en/themes/enterprises/crossroads-bank-enterprises/cbe-services-everyone",
+        "https://kbopub.economie.fgov.be/kbo-open-data/login?lang=en"
+      ]
     }
   ],
   "existing_exportflow_sources": [
