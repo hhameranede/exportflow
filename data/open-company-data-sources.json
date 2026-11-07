@@ -624,6 +624,40 @@
         "https://podatki.gov.si/dataset/poslovni-register-slovenije",
         "https://www.ajpes.si/Registers/Slovenian_Business_Register"
       ]
+    },
+    {
+      "id": "lithuania-centre-of-registers-open-financial-data",
+      "name": "Lithuania Centre of Registers open company data and financial reports",
+      "publisher": "State Enterprise Centre of Registers (Registrų centras)",
+      "kind": "national_company_financial_statement_dataset",
+      "coverage": [
+        "LT"
+      ],
+      "source_url": "https://polonepp.registrucentras.lt/en/reports-and-statistics/open-data",
+      "registry_search_url": "https://www.registrucentras.lt/jar/p_en/",
+      "license": "CC-BY-4.0",
+      "rights_status": "verified_open_with_attribution_for_published_open_datasets",
+      "commercial_use": true,
+      "redistribution": true,
+      "attribution_required": true,
+      "attribution_text": "Source: State Enterprise Centre of Registers (Registrų centras), Lithuania open data, CC BY 4.0.",
+      "access": "published_open_datasets; detailed_registry_records_require_registered_service_agreement",
+      "update_frequency": "dataset_specific",
+      "data_scope": [
+        "selected_open_register_data",
+        "published_company_financial_reports_where_designated_open"
+      ],
+      "limitations": [
+        "CC BY 4.0 applies to the Centre's published open-data datasets, not automatically to every legal-entity register record or document",
+        "detailed company register data are restricted to registered users with a service agreement and a 100-search/day public-search limit",
+        "do not scrape the restricted public-search interface or ingest paid document copies as if they were open data",
+        "capture each dataset's exact scope and schema before importing"
+      ],
+      "ingestion_status": "candidate_for_open_financial_datasets_only",
+      "verification_sources": [
+        "https://polonepp.registrucentras.lt/en/reports-and-statistics/open-data",
+        "https://www.registrucentras.lt/jar/p_en/"
+      ]
     }
   ],
   "existing_exportflow_sources": [
