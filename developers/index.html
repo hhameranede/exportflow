@@ -50,6 +50,7 @@
       <article class="feature-card"><p class="field-label">POST</p><h3>/api/batch-track</h3><p>Track up to five shipments in one request. Each result carries its own HTTP status so partial failures do not discard successful items.</p></article>
       <article class="feature-card"><p class="field-label">GET</p><h3>/api/carriers</h3><p>Read carrier IDs plus sanitized names, country mappings and catalog tracking modes (automatic, link-only or not declared). Metadata is not a live-availability check or partnership claim.</p></article>
       <article class="feature-card"><p class="field-label">GET</p><h3>/api/coverage</h3><p>Read catalog-derived country classifications: direct adapter, universal fallback, link-only or not listed.</p></article>
+      <article class="feature-card"><p class="field-label">POST · MCP</p><h3>/api/mcp</h3><p>Connect MCP-compatible agents to shipment tracking, batch lookup, carrier catalog, coverage and service health over stateless Streamable HTTP.</p></article>
     </div>
   </section>
 
@@ -88,8 +89,49 @@ for (const item of batch.results) {
     </div>
   </section>
 
+  <section id="mcp" aria-labelledby="mcpTitle" style="margin-top:60px">
+    <p class="eyebrow">03 / AI AGENT INTEGRATION</p>
+    <h2 id="mcpTitle">Connect through the Model Context Protocol.</h2>
+    <p class="body-copy">ExportFlow exposes a stateless MCP Streamable HTTP endpoint at <code>https://exportflow.me/api/mcp</code>, using protocol revision <code>2026-07-28</code>. Each call is a separate POST request; there is no initialize handshake, session ID or server-side conversation state.</p>
+    <div class="table-wrap" style="margin-top:20px">
+      <table>
+        <tbody>
+          <tr><th scope="row">Endpoint</th><td><code>https://exportflow.me/api/mcp</code></td></tr>
+          <tr><th scope="row">Transport</th><td>Streamable HTTP · JSON-RPC 2.0 · stateless POST</td></tr>
+          <tr><th scope="row">Protocol version</th><td>2026-07-28</td></tr>
+          <tr><th scope="row">Authentication</th><td>No API key on the current public endpoint; per-runtime tracking safeguards still apply</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="code-panel" style="margin-top:20px">
+      <div class="code-panel-head"><strong>Discover ExportFlow MCP capabilities</strong><span>curl</span></div>
+      <pre><code>curl --request POST https://exportflow.me/api/mcp \
+  --header "Content-Type: application/json" \
+  --header "Accept: application/json, text/event-stream" \
+  --header "MCP-Protocol-Version: 2026-07-28" \
+  --header "Mcp-Method: server/discover" \
+  --data '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "server/discover",
+    "params": {
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {
+          "name": "my-agent",
+          "version": "1.0.0"
+        },
+        "io.modelcontextprotocol/clientCapabilities": {}
+      }
+    }
+  }'</code></pre>
+    </div>
+    <p class="body-copy" style="margin-top:18px">Available tools: <code>track_shipment</code>, <code>batch_track_shipments</code>, <code>list_carriers</code>, <code>get_coverage</code> and <code>check_service_health</code>. Each request must include the protocol metadata and matching routing headers. For <code>tools/call</code>, <code>Mcp-Name</code> must equal <code>params.name</code>.</p>
+    <p class="body-copy">A shipment lookup sends the supplied tracking number to ExportFlow and may forward it to the selected upstream carrier. Carrier catalogue data is not proof of live availability. The endpoint does not create an account, persistent agent memory or merchant cloud history.</p>
+  </section>
+
   <section aria-labelledby="limitsTitle" style="margin-top:60px">
-    <p class="eyebrow">03 / OPERATIONAL CONTRACT</p>
+    <p class="eyebrow">04 / OPERATIONAL CONTRACT</p>
     <h2 id="limitsTitle">Know the boundaries.</h2>
     <div class="table-wrap" style="margin-top:20px">
       <table>
@@ -108,14 +150,14 @@ for (const item of batch.results) {
   </section>
 
   <section aria-labelledby="privacyTitle" style="margin-top:60px">
-    <p class="eyebrow">04 / PRIVACY & EVIDENCE</p>
+    <p class="eyebrow">05 / PRIVACY & EVIDENCE</p>
     <h2 id="privacyTitle">Do not confuse a catalog with a verified network.</h2>
     <p class="body-copy">ExportFlow does not provide account-backed server-side shipment history in this version. A lookup sends the tracking number to ExportFlow's server and, when the selected carrier adapter requires it, to that upstream carrier. API responses do not echo the submitted number. Do not submit someone else's tracking number without authorization.</p>
     <p class="body-copy">Carrier catalog entries, country mappings and adapter metadata are discovery information—not proof of a successful live lookup, an official partnership, or delivery coverage. Shipment confidence remains conservative when source-quality evidence is unavailable. ETAs are shown only when reported by the carrier.</p>
   </section>
 
   <section aria-labelledby="specTitle" style="margin-top:60px">
-    <p class="eyebrow">05 / MACHINE-READABLE CONTRACT</p>
+    <p class="eyebrow">06 / MACHINE-READABLE CONTRACT</p>
     <h2 id="specTitle">Integrate against the schema.</h2>
     <p class="body-copy">The OpenAPI document describes routes, inputs, result types, limits and privacy boundaries. Use it to generate typed clients or validate your own integration.</p>
     <p style="margin-top:20px"><a class="primary-button" href="/api/openapi">Open the OpenAPI 3.1 JSON</a></p>
