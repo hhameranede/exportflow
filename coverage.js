@@ -10,6 +10,18 @@
   const list = document.getElementById("coverageCountryList");
   const rows = [...list.querySelectorAll("[data-country-code]")];
   const resultCount = document.getElementById("coverageResultCount");
+  const evidenceSearch = document.getElementById("carrierEvidenceSearch");
+  const evidenceFilter = document.getElementById("carrierEvidenceFilter");
+  const adapterFilter = document.getElementById("carrierEvidenceAdapterFilter");
+  const evidenceList = document.getElementById("carrierEvidenceList");
+  const evidenceMessage = document.getElementById("carrierEvidenceMessage");
+  const evidencePrevious = document.getElementById("carrierEvidencePrevious");
+  const evidenceNext = document.getElementById("carrierEvidenceNext");
+  const evidencePageInfo = document.getElementById("carrierEvidencePageInfo");
+  let directoryPayload = null;
+  let directoryPage = 1;
+  let directoryRequestId = 0;
+  let directoryDebounce = null;
   let locale = "en";
 
   const t = key => translations[locale]?.[key] || translations.en?.[key] || key;
@@ -92,6 +104,7 @@
       updateStatusLabel(row);
     });
     updateList();
+    renderCarrierDirectory(directoryPayload);
     syncLocalePath(locale);
     persistLocale(locale);
   }
@@ -153,6 +166,204 @@
     updateList();
   }
 
+  function translateEvidenceStatus(level) {
+    const keys = {
+      catalogued: "carrierEvidenceCatalogued",
+      research: "carrierEvidenceResearch",
+      testing: "carrierEvidenceTesting",
+      integrated: "carrierEvidenceIntegrated",
+      verified: "carrierEvidenceVerified",
+      blocked: "carrierEvidenceBlocked",
+      deprecated: "carrierEvidenceDeprecated"
+    };
+    return t(keys[level] || "carrierEvidenceCatalogued");
+  }
+
+  function evidenceAccessLabel(value) {
+    const keys = {
+      not_assessed: "carrierEvidenceAccessNone",
+      contracted_account_required: "carrierEvidenceAccessAccount",
+      account_and_eula_required: "carrierEvidenceAccessAccount",
+      partner_onboarding_required: "carrierEvidenceAccessPartner",
+      developer_onboarding_required: "carrierEvidenceAccessPartner",
+      business_account_onboarding_required: "carrierEvidenceAccessAccount",
+      country_specific_approval_required: "carrierEvidenceAccessPartner",
+      third_party_provider_approval_required: "carrierEvidenceAccessPartner",
+      written_permission_required: "carrierEvidenceAccessWritten",
+      third_party_service_unverified: "carrierEvidenceAccessReview",
+      public_tracker_unverified: "carrierEvidenceAccessReview",
+      api_offer_access_unconfirmed: "carrierEvidenceAccessReview",
+      customer_code_scoped: "carrierEvidenceAccessMerchant",
+      merchant_account_scoped: "carrierEvidenceAccessMerchant",
+      authorized_service_provider: "carrierEvidenceAccessAuthorized"
+    };
+    return t(keys[value] || "carrierEvidenceAccessNone");
+  }
+
+  function evidenceRightsLabel(value) {
+    const keys = {
+      not_assessed: "carrierEvidenceRightsNone",
+      own_shipments_scope: "carrierEvidenceRightsOwn",
+      third_party_permission_required: "carrierEvidenceRightsPending",
+      third_party_authorized: "carrierEvidenceRightsAuthorized"
+    };
+    return t(keys[value] || "carrierEvidenceRightsNone");
+  }
+
+  function evidenceAdapterLabel(record) {
+    if (record.evidence?.adapterState === "country_specific") return t("carrierEvidenceAdapterCountry");
+    const keys = {
+      dedicated: "carrierEvidenceAdapterPresent",
+      "universal-fallback": "carrierEvidenceAdapterUniversal",
+      "link-only": "carrierEvidenceAdapterLinkOnly",
+      none: "carrierEvidenceAdapterNone"
+    };
+    return t(keys[record.adapterType] || "carrierEvidenceAdapterNone");
+  }
+
+  function appendEvidenceLine(card, label, value, className) {
+    if (!value) return;
+    const line = document.createElement("p");
+    line.className = className || "carrier-evidence-meta";
+    const heading = document.createElement("strong");
+    heading.textContent = label + ": ";
+    const text = document.createElement("span");
+    text.textContent = value;
+    line.append(heading, text);
+    card.append(line);
+  }
+
+  function renderCarrierDirectory(payload) {
+    if (!payload || !evidenceList) return;
+    const summary = payload.summary || {};
+    const snapshot = payload.upstreamSnapshot || {};
+    const catalogCount = document.getElementById("carrierEvidenceCatalogCount");
+    const adapterCount = document.getElementById("carrierEvidenceAdapterCount");
+    const researchCount = document.getElementById("carrierEvidenceResearchCount");
+    const verifiedCount = document.getElementById("carrierEvidenceVerifiedCount");
+    if (catalogCount) catalogCount.textContent = Number(summary.catalogEntries || 0).toLocaleString(locale);
+    if (adapterCount) adapterCount.textContent = Number(summary.dedicatedAdapterRecords || 0).toLocaleString(locale);
+    if (researchCount) researchCount.textContent = Number(summary.evidenceRecords || 0).toLocaleString(locale);
+    if (verifiedCount) verifiedCount.textContent = Number(summary.evidenceCounts?.verified || 0).toLocaleString(locale);
+
+    const sourceNote = document.getElementById("carrierEvidenceUpstreamNote");
+    if (sourceNote) {
+      sourceNote.textContent = t("carrierEvidenceUpstreamNote")
+        .replace("{networks}", String(snapshot.carrierNetworkClaim || "—"))
+        .replace("{entries}", Number(snapshot.catalogEntries || 0).toLocaleString(locale))
+        .replace("{adapters}", Number(snapshot.dedicatedAdapters || 0).toLocaleString(locale))
+        .replace("{countries}", Number(snapshot.countriesRepresented || 0).toLocaleString(locale));
+    }
+
+    evidenceList.replaceChildren();
+    const records = Array.isArray(payload.records) ? payload.records : [];
+    if (records.length === 0) {
+      if (evidenceMessage) evidenceMessage.textContent = t("carrierEvidenceNoResults");
+    } else if (evidenceMessage) {
+      evidenceMessage.textContent = "";
+    }
+
+    for (const record of records) {
+      const card = document.createElement("article");
+      card.className = "carrier-evidence-card";
+      const header = document.createElement("div");
+      header.className = "carrier-evidence-card-header";
+      const nameGroup = document.createElement("div");
+      nameGroup.className = "carrier-evidence-name-group";
+      const name = document.createElement("h3");
+      name.textContent = record.name || record.id;
+      const id = document.createElement("code");
+      id.textContent = record.id;
+      nameGroup.append(name, id);
+      const badge = document.createElement("span");
+      badge.className = "carrier-evidence-status status-" + String(record.evidence?.level || "catalogued").replace(/[^a-z-]/g, "");
+      badge.textContent = translateEvidenceStatus(record.evidence?.level || "catalogued");
+      header.append(nameGroup, badge);
+      card.append(header);
+
+      appendEvidenceLine(
+        card,
+        t("carrierEvidenceCountryLabel"),
+        Array.isArray(record.countries) && record.countries.length ? record.countries.join(", ") : "—"
+      );
+      if (Array.isArray(record.aliases) && record.aliases.length) {
+        appendEvidenceLine(card, t("carrierEvidenceAliasesLabel"), record.aliases.slice(0, 4).join(" · "));
+      }
+      appendEvidenceLine(
+        card,
+        t("carrierEvidenceAdapterLabel"),
+        (record.adapter || "—") + " · " + evidenceAdapterLabel(record)
+      );
+      appendEvidenceLine(
+        card,
+        t("carrierEvidenceAccessLabel"),
+        evidenceAccessLabel(record.evidence?.commercialAccess)
+      );
+      appendEvidenceLine(
+        card,
+        t("carrierEvidenceRightsLabel"),
+        evidenceRightsLabel(record.evidence?.trackingRights)
+      );
+
+      if (record.evidence?.sourceUrl) {
+        const source = document.createElement("a");
+        source.className = "carrier-evidence-source";
+        source.href = record.evidence.sourceUrl;
+        source.target = "_blank";
+        source.rel = "noopener noreferrer";
+        source.textContent = t("carrierEvidenceSource");
+        card.append(source);
+      }
+      evidenceList.append(card);
+    }
+
+    const pagination = payload.pagination || {};
+    if (evidencePrevious) evidencePrevious.disabled = !pagination.hasPrevious;
+    if (evidenceNext) evidenceNext.disabled = !pagination.hasNext;
+    if (evidencePageInfo) {
+      evidencePageInfo.textContent = t("carrierEvidencePageInfo")
+        .replace("{page}", Number(pagination.page || 1).toLocaleString(locale))
+        .replace("{total}", Number(pagination.totalPages || 1).toLocaleString(locale))
+        .replace("{matches}", Number(pagination.totalMatches || 0).toLocaleString(locale));
+    }
+  }
+
+  async function loadCarrierDirectory(page = 1) {
+    if (!evidenceList || !evidenceMessage) return;
+    const requestId = ++directoryRequestId;
+    directoryPage = Math.max(1, page);
+    evidenceMessage.textContent = t("carrierEvidenceLoading");
+    const params = new URLSearchParams({
+      page: String(directoryPage),
+      pageSize: "50",
+      q: evidenceSearch?.value || "",
+      evidence: evidenceFilter?.value || "all",
+      adapter: adapterFilter?.value || "all"
+    });
+
+    try {
+      const response = await fetch("/api/carrier-directory?" + params.toString(), {
+        cache: "default",
+        headers: { "Accept": "application/json" }
+      });
+      if (!response.ok) throw new Error("carrier_directory_http_" + response.status);
+      const payload = await response.json();
+      if (requestId !== directoryRequestId) return;
+      if (!Array.isArray(payload.records) || !payload.summary || !payload.pagination) {
+        throw new Error("carrier_directory_shape_invalid");
+      }
+      directoryPayload = payload;
+      renderCarrierDirectory(payload);
+    } catch {
+      if (requestId !== directoryRequestId) return;
+      evidenceList.replaceChildren();
+      evidenceMessage.textContent = t("carrierEvidenceUnavailable");
+      if (evidencePageInfo) evidencePageInfo.textContent = "—";
+      if (evidencePrevious) evidencePrevious.disabled = true;
+      if (evidenceNext) evidenceNext.disabled = true;
+    }
+  }
+
   async function loadCatalog() {
     try {
       const response = await fetch("/api/coverage", { cache: "no-store", headers: { "Accept": "application/json" } });
@@ -171,6 +382,20 @@
   }
 
   searchInput.addEventListener("input", updateList);
+  if (evidenceSearch) {
+    evidenceSearch.addEventListener("input", () => {
+      window.clearTimeout(directoryDebounce);
+      directoryDebounce = window.setTimeout(() => loadCarrierDirectory(1), 220);
+    });
+  }
+  if (evidenceFilter) evidenceFilter.addEventListener("change", () => loadCarrierDirectory(1));
+  if (adapterFilter) adapterFilter.addEventListener("change", () => loadCarrierDirectory(1));
+  if (evidencePrevious) evidencePrevious.addEventListener("click", () => {
+    loadCarrierDirectory(Math.max(1, directoryPage - 1));
+  });
+  if (evidenceNext) evidenceNext.addEventListener("click", () => {
+    loadCarrierDirectory(directoryPage + 1);
+  });
   filterSelect.addEventListener("change", updateList);
   if (languageToggle) {
     languageToggle.addEventListener("change", event => setLanguage(event.target.value));
@@ -199,4 +424,5 @@
   try { saved = localStorage.getItem("exportflow-language") || ""; } catch {}
   setLanguage(localeFromPath() || saved || html.lang || "en");
   loadCatalog();
+  loadCarrierDirectory(1);
 })();
