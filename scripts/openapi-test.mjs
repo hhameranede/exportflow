@@ -24,8 +24,11 @@ assert.equal(trackSchema.additionalProperties, false);
 const batchSchema = document.components.schemas.BatchTrackingRequest;
 assert.equal(batchSchema.properties.shipments.maxItems, 5);
 assert.equal(batchSchema.properties.shipments.minItems, 1);
-assert.ok(batchSchema.properties.shipments.items.properties.id);
-assert.ok(batchSchema.properties.shipments.items.properties.number);
+const batchItemSchema = document.components.schemas.BatchTrackingItem;
+assert.equal(batchItemSchema.additionalProperties, false);
+assert.ok(batchItemSchema.properties.id);
+assert.ok(batchItemSchema.properties.number);
+assert.equal(batchSchema.properties.shipments.uniqueItems, undefined, "Runtime enforces unique item IDs, not entire object equality");
 assert.equal(document["x-exportflow-limits"].singleLookup.lookupBudgetMilliseconds, 25000);
 assert.match(document["x-exportflow-privacy"].storage, /does not provide a user account/);
 
