@@ -59,6 +59,7 @@ jobs:
           node --check workers/global-rate-limiter/src/index.mjs
           node --check scripts/global-rate-limiter-test.mjs
           node --check scripts/global-rate-limit-route-test.mjs
+          node --check scripts/carrier-evidence-test.mjs
           node --check scripts/merchant-identity-test.mjs
           node --check scripts/session-bound-merchant-vault-test.mjs
           node --check scripts/locale-build-test.mjs
