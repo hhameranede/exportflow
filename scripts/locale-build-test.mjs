@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const locales = ["en", "ar", "es", "zh", "hi", "pt", "fr", "ru"];
+const locales = ["en", "ar", "es", "zh", "hi", "pt", "fr", "bn"];
 const localizedUrl = (locale, route) =>
   "https://exportflow.me/" + (locale === "en" ? "" : locale + "/") +
   (route === "/" ? "" : route.replace(/^\//, ""));
