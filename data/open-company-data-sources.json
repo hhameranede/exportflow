@@ -576,5 +576,35 @@
       "rights_boundary": "SDK code reuse does not grant carrier API rights; initially evaluate only merchant-authorized tracking",
       "inventory_path": "vendor/sources/algeria/dz-delivery"
     }
+  ],
+  "rejected_candidates": [
+    {
+      "id": "india-ambitionbox-scrape",
+      "repository": "https://github.com/mratanusarkar/Dataset-Indian-Companies",
+      "license_status": "no_LICENSE_file_found",
+      "data_origin": "README says 452,520 company rows were scraped from AmbitionBox in April 2020",
+      "decision": "blocked_no_dataset_license_and_third_party_scrape_rights_unverified"
+    },
+    {
+      "id": "german-company-name-dataset-fork",
+      "repository": "https://github.com/saqibcare/German-Company-Name-Dataset",
+      "license_status": "no_LICENSE_file_found",
+      "data_origin": "README attributes data to Hasso-Plattner-Institute company-name dataset",
+      "decision": "blocked_until_original_HPI_dataset_license_and_terms_are_verified"
+    },
+    {
+      "id": "logistics-company-sample-dataset",
+      "repository": "https://github.com/aashok30/Logistic-Company-s-Dataset",
+      "license_status": "no_LICENSE_file_found",
+      "data_origin": "README describes employee, customer, payment, shipment and delivery details",
+      "decision": "blocked_no_license_and_personal_or_confidential_data_risk"
+    },
+    {
+      "id": "logistics-directory-wordpress-plugin",
+      "repository": "https://github.com/ncreighton/ce66bdc9-logistics-shipping-directory",
+      "license_status": "README_claims_GPLv2_or_later_but_no_standalone_dataset_license_file_found",
+      "data_origin": "WordPress directory plugin source; no reusable company/carrier dataset identified",
+      "decision": "not_a_data_source_do_not_ingest_as_company_records"
+    }
   ]
 }
