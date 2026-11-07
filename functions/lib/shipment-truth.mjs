@@ -233,21 +233,30 @@ function normalizeExpectedDelivery(value) {
   return parseEventTime(raw).iso ? raw : null;
 }
 
-function buildInsights(trustedEvents, latestTrusted, expectedDelivery) {
-  const delay = latestTrusted && hasExplicitDelaySignal(latestTrusted)
+function buildInsights(trustedEvents, selectedEvent, expectedDelivery) {
+  const delay = selectedEvent && hasExplicitDelaySignal(selectedEvent)
     ? { level: "possible", reason: "explicit_carrier_delay_signal" }
     : {
         level: "insufficient_evidence",
-        reason: latestTrusted?.stage === "delivered"
+        reason: selectedEvent?.stage === "delivered"
           ? "shipment_delivered"
-          : "no_current_explicit_delay_signal"
+          : selectedEvent
+            ? "no_current_explicit_delay_signal"
+            : "conflicting_latest_status_evidence"
       };
 
-  const latestCustomsEvent = trustedEvents
-    .filter(event => classifyCustomsEvent(event) !== null)
-    .sort(compareEvents)[0] || null;
-  const customs = classifyCustomsEvent(latestCustomsEvent) ||
-    { state: "insufficient_evidence", reason: "no_explicit_customs_signal" };
+  const customsEvents = trustedEvents
+    .map(event => ({ event, signal: classifyCustomsEvent(event) }))
+    .filter(item => item.signal !== null);
+  let customs = { state: "insufficient_evidence", reason: "no_explicit_customs_signal" };
+  if (customsEvents.length > 0) {
+    const latestCustomsTime = Math.max(...customsEvents.map(item => item.event.timestampMs));
+    const latestCustomsEvents = customsEvents.filter(item => item.event.timestampMs === latestCustomsTime);
+    const latestCustomsStates = [...new Set(latestCustomsEvents.map(item => item.signal.state))];
+    customs = latestCustomsStates.length > 1
+      ? { state: "insufficient_evidence", reason: "conflicting_customs_signals" }
+      : latestCustomsEvents[0].signal;
+  }
 
   const estimate = expectedDelivery
     ? { source: "carrier", value: expectedDelivery, confidence: "reported" }
@@ -257,7 +266,7 @@ function buildInsights(trustedEvents, latestTrusted, expectedDelivery) {
     delay,
     customs,
     estimate,
-    latestTrustedTime: latestTrusted?.time || null
+    latestTrustedTime: selectedEvent?.time || null
   };
 }
 
@@ -305,6 +314,12 @@ export function resolveShipmentTruth({
     event.sourceRefs.length > 0
   );
   const latestTrustedEvent = [...trustedEvents].sort(compareEvents)[0] || null;
+  const latestTrustedCandidates = latestTrustedEvent
+    ? trustedEvents.filter(event => event.timestampMs === latestTrustedEvent.timestampMs)
+    : [];
+  const latestTrustedStages = [...new Set(latestTrustedCandidates.map(event => event.stage))];
+  const latestStatusConflict = latestTrustedStages.length > 1;
+  const selectedEvent = latestStatusConflict ? null : latestTrustedEvent;
 
   // Source-quality metadata is not available, so a single provider cannot
   // produce high confidence. Reserve high for a future calibrated model.
@@ -320,13 +335,13 @@ export function resolveShipmentTruth({
   const latestTrusted = latestTrustedEvent ? toPublicEvent(latestTrustedEvent) : null;
 
   return {
-    status: latestTrustedEvent?.stage || normalizeStage(status),
+    status: latestStatusConflict ? "unknown" : latestTrustedEvent?.stage || normalizeStage(status),
     confidence,
     latestReceived,
     latestTrusted,
-    selected: latestTrusted,
+    selected: selectedEvent ? toPublicEvent(selectedEvent) : null,
     conflicts,
     timeline,
-    insights: buildInsights(trustedEvents, latestTrustedEvent, expected)
+    insights: buildInsights(trustedEvents, selectedEvent, expected)
   };
 }
