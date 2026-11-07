@@ -23,14 +23,15 @@ on:
 
 permissions:
   actions: read
-  contents: read
-  id-token: write
-  pull-requests: read
-  issues: read
+  contents: write
+  pull-requests: write
+  issues: write
 
 jobs:
   laguna:
     name: Laguna XS 2.1 resumable engineering run
+    outputs:
+      opencode_outcome: ${{ steps.opencode.outcome }}
     runs-on: ubuntu-latest
     timeout-minutes: 330
     env:
@@ -195,13 +196,18 @@ jobs:
           echo "Prior checkpoint archive is present and structurally valid."
 
       - name: Run Laguna XS 2.1
+        id: opencode
         uses: anomalyco/opencode/github@17b79f4e0c16dcff200b0417567ed22aeb2d7166 # github-v1.2.28
         timeout-minutes: 300
+        # Run #30 proved GITHUB_TOKEN can publish the managed branch. If GitHub
+        # blocks only the final PR-creation call, continue to checkpoint the code.
+        continue-on-error: true
         env:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           model: nvidia/poolside/laguna-xs-2.1
-          use_github_token: false
+          use_github_token: true
           prompt: |
             You are Laguna XS 2.1, the long-horizon engineering executor authorized by the ExportFlow repository owner.
 
@@ -225,9 +231,9 @@ jobs:
             4. CRITICAL — BRANCH OWNERSHIP: The OpenCode GitHub action owns branch and PR lifecycle. Remain on the branch managed by this action. Never create or switch branches yourself.
             5. Never run git branch, git checkout, git switch, git worktree, or any command/script that changes HEAD. Never manually push, force-push, run gh pr create, or call GitHub PR APIs. These actions can change HEAD away from the action-managed branch and cause PR publication to be skipped.
             6. Existing work on other branches may be inspected read-only with git fetch, git log, git show, and git diff. Do not check out those branches. Selectively apply useful changes onto the current managed branch without switching HEAD; resolve conflicts carefully.
-            7. Maintain docs/engineering/laguna-progress.md as a concise checkpoint: completed, remaining, blocked, exact commands/results, and next action. Let the OpenCode integration publish the branch and create the PR; do not claim persistence until the PR or branch is visible on GitHub.
+            7. Maintain docs/engineering/laguna-progress.md as a concise checkpoint: completed, remaining, blocked, exact commands/results, and next action. Let the OpenCode integration publish the managed branch. It may attempt PR creation; if GitHub returns a permission denial, do not loop or spend time retrying permissions. Record the exact branch name and commit SHA, continue finishing independent work, and let the workflow preserve a checkpoint so an authorized repository integration can open the PR after the run. Do not claim a PR exists unless it is visible on GitHub.
             8. Work in bounded milestones. Diagnose a repeated blocker once, record the evidence, then continue independent tasks. Do not loop indefinitely or spend the run on one dependency.
-            9. Before finishing, verify the intended changes are on the current managed branch, no unrelated changes were made, and the OpenCode integration has an open PR. Report its URL only if it actually exists.
+            9. Before finishing, verify the intended changes are on the current managed branch, no unrelated changes were made, and the managed branch is visible on GitHub. If PR creation is denied by GitHub policy, record the exact branch name and commit SHA, do not retry the permission operation, and rely on the workflow checkpoint plus an authorized repository integration for PR creation. Report a PR URL only if it actually exists.
 
             GIT DEPENDENCY UNBLOCKING — STRICTLY BOUNDED
             The last visible reasoning was: "The git dependency seems to be checking out a commit that already has the patch. Let me check the raw git source."
@@ -336,7 +342,21 @@ jobs:
             - Preserve the existing stack, architecture, design direction and working behavior unless a justified change is required.
 
             DEFINITION OF DONE
-            Materially improve the actual ExportFlow application; preserve and repair useful work from feat/issue29-complete-roadmap; include the two roadmap documents only after checking factual accuracy; run and report actual checks; and allow the OpenCode GitHub integration to publish the managed branch and create one reviewable PR. The PR must remain open and unmerged. If nearing the runner limit, write an exact checkpoint and finish cleanly without changing branches. Never report success if publication failed or if tests were not actually run.
+            Materially improve the actual ExportFlow application; preserve and repair useful work from feat/issue29-complete-roadmap; include the two roadmap documents only after checking factual accuracy; run and report actual checks; and publish the managed branch. GitHub policy may block automatic PR creation even after the branch is pushed; in that case preserve the branch and checkpoint, record the blocker, and allow an authorized repository integration to create one reviewable PR after the run. Any PR must remain open and unmerged. If nearing the runner limit, write an exact checkpoint and finish cleanly without changing branches. Never report success if the branch was not published or if tests were not actually run.
+
+      - name: Report Laguna action outcome
+        if: always()
+        shell: bash
+        env:
+          OPENCODE_OUTCOME: ${{ steps.opencode.outcome }}
+        run: |
+          if [[ "$OPENCODE_OUTCOME" == "success" ]]; then
+            echo "OpenCode action completed successfully."
+            echo "OpenCode action outcome: success." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::OpenCode reported an error. The workflow will still capture a recovery checkpoint and verify whether the managed branch was published."
+            echo "OpenCode action outcome: $OPENCODE_OUTCOME. See the action log; checkpoint capture will still run." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Capture recoverable Laguna workspace checkpoint
         if: always()
@@ -441,7 +461,7 @@ jobs:
           fi
 
   verify-publication:
-    name: Verify Laguna PR publication after OpenCode cleanup
+    name: Verify Laguna branch or PR publication
     needs: laguna
     if: always() && needs.laguna.result == 'success'
     runs-on: ubuntu-latest
@@ -449,14 +469,18 @@ jobs:
     permissions:
       pull-requests: read
       actions: read
+      contents: read
     steps:
-      - name: Verify a new Issue PR was published
+      - name: Verify PR or identify the pushed managed branch
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number || 29 }}
           RUN_ID: ${{ github.run_id }}
+          OPENCODE_OUTCOME: ${{ needs.laguna.outputs.opencode_outcome }}
         run: |
+          set -euo pipefail
           run_started="$(gh run view "${RUN_ID}" --json createdAt --jq '.createdAt')"
           prs="$(gh pr list --limit 100 --base main --state open --json url,title,body,headRefName,createdAt,updatedAt)"
           pr_url="$(jq -r --arg started "${run_started}" --arg issue "${ISSUE_NUMBER}" '
@@ -467,8 +491,30 @@ jobs:
               or ((.body // "") | contains("/issues/" + $issue)))
             | .url
           ' <<< "${prs}" | head -n 1)"
-          if [[ -z "${pr_url}" ]]; then
-            echo "::error::OpenCode finished successfully but no new open PR for Issue #${ISSUE_NUMBER} was found after its post-action."
-            exit 1
+          if [[ -n "${pr_url}" ]]; then
+            echo "Verified published PR: ${pr_url}"
+            echo "Verified published PR: ${pr_url}" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
-          echo "Verified published PR: ${pr_url}"
+
+          candidate="$(gh api "repos/${REPO}/branches?per_page=100" --paginate --jq '.[] | [.name, .commit.sha] | @tsv' \
+            | grep -E "^opencode/issue${ISSUE_NUMBER}-" | sort | tail -n 1 || true)"
+          if [[ -n "${candidate}" ]]; then
+            IFS=$'\t' read -r branch sha <<< "${candidate}"
+            commit_date="$(gh api "repos/${REPO}/commits/${sha}" --jq '.commit.committer.date')"
+            if [[ "${commit_date}" > "${run_started}" || "${commit_date}" == "${run_started}" ]]; then
+              echo "::warning::Laguna published ${branch} (${sha}) but GitHub did not expose a new PR. Open the PR through an authorized repository integration; do not rerun the engineering task just to publish it."
+              {
+                echo "Laguna published managed branch: ${branch}"
+                echo "Commit: ${sha}"
+                echo "Commit date: ${commit_date}"
+                echo "OpenCode action outcome: ${OPENCODE_OUTCOME}"
+                echo "Automatic PR creation was unavailable; branch is preserved for manual PR creation."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          fi
+
+          echo "::error::No new PR or newly published OpenCode managed branch was found. Check the OpenCode logs and the uploaded recovery artifact before retrying."
+          echo "No new PR or branch was verified. OpenCode outcome: ${OPENCODE_OUTCOME}. Check checkpoint upload and action logs." >> "$GITHUB_STEP_SUMMARY"
+          exit 1
