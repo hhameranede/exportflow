@@ -15,10 +15,10 @@ CREATE TABLE IF NOT EXISTS carrier_evidence (
     'api_offer_access_unconfirmed', 'customer_code_scoped',
     'business_account_onboarding_required', 'developer_onboarding_required',
     'third_party_provider_approval_required', 'merchant_account_scoped',
-    'public_tracker_unverified'
+    'public_tracker_unverified', 'authorized_service_provider'
   )),
   tracking_rights_status TEXT NOT NULL CHECK (tracking_rights_status IN (
-    'not_assessed', 'own_shipments_scope', 'third_party_permission_required'
+    'not_assessed', 'own_shipments_scope', 'third_party_permission_required', 'third_party_authorized'
   )),
   official_source_url TEXT NOT NULL CHECK (official_source_url LIKE 'https://%'),
   public_disclosure TEXT NOT NULL CHECK (length(public_disclosure) BETWEEN 20 AND 420),
@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS carrier_evidence (
   CHECK (evidence_status != 'verified' OR (
     verification_method = 'live' AND verified_at IS NOT NULL
     AND verification_evidence_url LIKE 'https://%'
-    AND tracking_rights_status != 'not_assessed'
+    AND tracking_rights_status = 'third_party_authorized'
+    AND commercial_access_status = 'authorized_service_provider'
     AND authorization_evidence_url LIKE 'https://%'
   )),
   CHECK (verification_method NOT IN ('sandbox', 'live') OR verification_evidence_url LIKE 'https://%')
@@ -86,7 +87,8 @@ WHEN NEW.evidence_status = 'verified' AND (
   NEW.verified_at IS NULL OR
   NEW.verification_evidence_url IS NULL OR
   NEW.authorization_evidence_url IS NULL OR
-  NEW.tracking_rights_status = 'not_assessed'
+  NEW.tracking_rights_status != 'third_party_authorized' OR
+  NEW.commercial_access_status != 'authorized_service_provider'
 )
 BEGIN
   SELECT RAISE(ABORT, 'verified carrier requires live test and authorization evidence');
