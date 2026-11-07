@@ -7,6 +7,7 @@ const testStart = channel("dd-trace:ci:manual:test:start");
 const testFinish = channel("dd-trace:ci:manual:test:finish");
 
 const testScripts = [
+  "scripts/open-company-data-sources-test.mjs",
   "scripts/carrier-catalog-snapshot-test.mjs",
   "scripts/carrier-official-api-contract-test.mjs",
   "scripts/carrier-sandbox-validation-test.mjs",
