@@ -10,6 +10,7 @@ const testScripts = [
   "scripts/open-company-data-sources-test.mjs",
   "scripts/company-snapshot-kv-test.mjs",
   "scripts/acra-normalizer-test.mjs",
+  "scripts/gleif-normalizer-test.mjs",
   "scripts/carrier-catalog-snapshot-test.mjs",
   "scripts/carrier-official-api-contract-test.mjs",
   "scripts/carrier-sandbox-validation-test.mjs",
