@@ -196,7 +196,26 @@ test("same-time status and location conflicts reduce confidence", () => {
   assert.equal(truth.confidence, "low");
   assert.equal(truth.status, "unknown", "a latest-time status conflict must not be resolved by input order");
   assert.equal(truth.selected, null, "a conflicting latest status must not be exposed as selected truth");
+  assert.equal(truth.latestTrusted, null, "an ambiguous latest-time event must not be exposed as a unique trusted event");
   assert.equal(truth.insights.delay.level, "insufficient_evidence");
+});
+
+test("latest status remains usable when only the location is conflicted", () => {
+  const truth = resolveShipmentTruth({
+    source: "carrier-a",
+    events: [
+      event("2026-11-06T10:00:00Z", "in_transit", "Arrived at facility", { location: "Algiers" }),
+      event("2026-11-06T10:00:00Z", "in_transit", "Arrived at facility", {
+        location: "Oran",
+        source: "carrier-b"
+      })
+    ]
+  });
+  assert.equal(truth.status, "in_transit");
+  assert.equal(truth.confidence, "low");
+  assert.equal(truth.selected, null);
+  assert.equal(truth.latestTrusted, null);
+  assert.ok(truth.conflicts.some(conflict => conflict.type === "location_conflict"));
 });
 
 test("generic exception alone is insufficient evidence of delay", () => {
