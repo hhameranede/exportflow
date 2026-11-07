@@ -25,7 +25,7 @@ This is the next security layer for the Algerian merchant connector. It does not
 1. Create a dedicated D1 database for merchant credentials.
 2. Apply the migration to that database.
 3. Bind it to the Pages project as `MERCHANT_VAULT_DB` and redeploy for the binding to take effect.
-4. Create a cryptographically random 32-byte AES key, store it as a Cloudflare secret, and pass its decoded key ring and active key ID into this factory. Never put it in Git, Notion, Datadog, `wrangler.toml`, client code or GitHub Actions logs.
+4. Create a cryptographically random 32-byte AES key, base64-encode it, store that value as a Cloudflare secret, and pass a key ring of base64-encoded 32-byte keys plus the active key ID into this factory. Never put it in Git, Notion, Datadog, `wrangler.toml`, client code or GitHub Actions logs.
 5. Implement a real merchant authentication/session provider. The `merchantId` must be derived from that verified session, never accepted from a request body, URL or local storage.
 6. Implement account ownership proofs, consent UI, scopes, rate limits, revocation UX and an audit trail before route integration.
 
