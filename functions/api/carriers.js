@@ -154,6 +154,25 @@ function publicCarrierRecord(carrier, evidenceByAdapter) {
     countries,
     tracking: { mode, adapter },
     sourceIntegration,
+    sourceProvenance: carrier.provenance && typeof carrier.provenance === "object"
+      ? {
+          repository: carrier.provenance.repository,
+          commit: carrier.provenance.commit,
+          manifestPath: carrier.provenance.manifestPath,
+          sourceUrl: carrier.provenance.sourceUrl,
+          sourceLicense: carrier.provenance.sourceLicense,
+          licenseUrl: carrier.provenance.licenseUrl,
+          licensePath: carrier.provenance.licensePath,
+          attributionPath: carrier.provenance.attributionPath,
+          licenseStatus: carrier.provenance.licenseStatus,
+          licenseScope: carrier.provenance.licenseScope,
+          officialCarrierStatus: carrier.provenance.officialCarrierStatus,
+          carrierTrademarkRights: carrier.provenance.carrierTrademarkRights,
+          carrierApiAuthorization: carrier.provenance.carrierApiAuthorization,
+          thirdPartyTrackingDataRights: carrier.provenance.thirdPartyTrackingDataRights,
+          rightsNote: carrier.provenance.rightsNote
+        }
+      : null,
     evidence: evidence
       ? {
           level: evidence.evidenceLevel,
