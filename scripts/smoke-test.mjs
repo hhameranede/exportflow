@@ -84,6 +84,10 @@ assert.match(trackApi, /\^\(en\|ar\|es\|zh\|hi\|pt\|fr\|bn\)\$/i, "Tracking API 
 assert.match(js, /html\.dir\s*=\s*locale === "ar" \? "rtl" : "ltr"/, "Arabic must switch the page to RTL");
 assert.match(js, /localStorage\.setItem\("exportflow-language"/, "Language choice must persist");
 assert.doesNotMatch(js, /EXF-DEMO-001/, "The fake sample parcel flow must not be presented as live tracking");
+assert.doesNotMatch(html, /ACTIVE NETWORK SCANS|OVER 1,300\\+ COURIERS|SUPPORTED GLOBAL &amp; REGIONAL CARRIERS/i, "Catalog metadata must not be presented as live network activity or verified tracking support");
+assert.match(html, /data-i18n="illustrativeRouteLabel">ILLUSTRATIVE ROUTE · NOT LIVE SHIPMENT DATA/, "The animated route illustration must be labelled as illustrative");
+assert.doesNotMatch(html, /ticker-live-dot|chip-status-dot/, "Catalog entries must not display live/active status indicators");
+assert.equal((translationsSource.match(/"illustrativeRouteLabel":/g) || []).length, 8, "The illustrative route disclosure must exist in all eight locale dictionaries");
 assert.doesNotMatch(html, /98\.4%|200\+ carriers worldwide/i, "Unverified homepage statistics must be removed");
 
 assert.match(js, /fetch\("\/api\/track"/, "Tracking form must call the server-side tracking API");
