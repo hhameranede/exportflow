@@ -6,10 +6,10 @@ This layer specializes ExportFlow for Algerian merchants without changing the gl
 
 ## Architecture boundary
 
-- Global public tracking remains in \`functions/api/track.js\` and \`functions/lib/exportflow-carrier-engine.mjs\`.
-- Algerian merchant-account tracking is isolated in \`functions/lib/algerian-carrier-connectors.mjs\`.
+- Global public tracking remains in `functions/api/track.js` and `functions/lib/exportflow-carrier-engine.mjs`.
+- Algerian merchant-account tracking is isolated in `functions/lib/algerian-carrier-connectors.mjs`.
 - The Algerian connector is not imported by the public tracking route and is not an automatic fallback.
-- A caller must inject the upstream SDK \`createClient\` function, an authorization check and a server-side credential resolver.
+- A caller must inject the upstream SDK `createClient` function, an authorization check and a server-side credential resolver.
 - A failed Algerian merchant connection must not silently fall through to UPU or another carrier. Keep the two paths explicit.
 
 The implementation uses dependency injection instead of importing the third-party SDK directly. This keeps the existing Cloudflare build and lockfile unchanged until the SDK version, package integrity, Worker compatibility and upstream source review are approved.
@@ -20,13 +20,13 @@ The implementation uses dependency injection instead of importing the third-part
 | --- | --- |
 | Repository | [developing-off/dz-delivery](https://github.com/developing-off/dz-delivery) |
 | Pinned source commit | [45aa32ddf2ba7392da6c696aef187fcc059b3c8d](https://github.com/developing-off/dz-delivery/commit/45aa32ddf2ba7392da6c696aef187fcc059b3c8d) |
-| TypeScript package | \`@dz-delivery/core\` |
-| Published version reviewed | \`0.1.12\` |
+| TypeScript package | `@dz-delivery/core` |
+| Published version reviewed | `0.1.12` |
 | Root and TypeScript package license | MIT; upstream LICENSE file and package metadata inspected |
 | Runtime claims | TypeScript package documents Node.js 18+ and zero runtime dependencies, using native Fetch |
 | Materialization status | Upstream source is referenced and pinned here; it has **not** been copied into ExportFlow or installed as a runtime dependency in this change |
 
-The upstream project documents a common \`ShippingProvider\` contract and provider-specific API mappings. It is a useful adapter implementation, not proof of official carrier partnership or live availability. Its package is still 0.x, so API stability must be reviewed before adopting it as a production dependency.
+The upstream project documents a common `ShippingProvider` contract and provider-specific API mappings. It is a useful adapter implementation, not proof of official carrier partnership or live availability. Its package is still 0.x, so API stability must be reviewed before adopting it as a production dependency.
 
 ## Provider identifiers and credential contracts
 
@@ -34,17 +34,17 @@ The connector accepts only these static identifiers. Credentials are retrieved f
 
 | ExportFlow ID | Upstream SDK provider | Required credential fields |
 | --- | --- | --- |
-| \`yalidine\` | \`yalidine\` | \`apiId\`, \`apiToken\` |
-| \`guepex\` | \`yalidine\` | \`apiId\`, \`apiToken\`; fixed GuepEx API base URL |
-| \`zrexpress\` | \`zrexpress\` | \`apiKey\`, \`tenant\` |
-| \`maystro\` | \`maystro\` | \`apiToken\` |
-| \`ecotrack\` | \`ecotrack\` | \`token\`, approved \`courier\` key |
-| \`noest\` | \`noest\` | \`apiToken\`, \`userGuid\` |
-| \`ecom\` | \`ecom\` | \`apiKey\`, \`apiToken\` |
-| \`mdm\` | \`mdm\` | \`apiKey\`, \`storeId\` |
-| \`elogistia\` | \`elogistia\` | \`apiKey\` |
+| `yalidine` | `yalidine` | `apiId`, `apiToken` |
+| `guepex` | `yalidine` | `apiId`, `apiToken`; fixed GuepEx API base URL |
+| `zrexpress` | `zrexpress` | `apiKey`, `tenant` |
+| `maystro` | `maystro` | `apiToken` |
+| `ecotrack` | `ecotrack` | `token`, approved `courier` key |
+| `noest` | `noest` | `apiToken`, `userGuid` |
+| `ecom` | `ecom` | `apiKey`, `apiToken` |
+| `mdm` | `mdm` | `apiKey` (optional `storeId`; required for parcel creation, not tracking) |
+| `elogistia` | `elogistia` | `apiKey` |
 
-GuepEx is documented upstream as using the Yalidine platform with a different fixed API host; it is therefore an alias, not a wholly separate SDK provider. Ecotrack represents several courier brands on one platform. The allowlist in code prevents a merchant-provided URL from becoming an arbitrary outbound destination.
+GuepEx is documented upstream as using the Yalidine platform with a different fixed API host; it is therefore an alias, not a wholly separate SDK provider. Ecotrack represents several courier brands on one platform. Its accepted built-in keys are pinned to the upstream TypeScript map: `dhd`, `anderson`, `andersondelivery`, `worldexpress`, `48hrexpress`, `ecorapid`, `conexlog`, `msmgo`, `packers` and `rocketdelivery`. The allowlist in code prevents a merchant-provided URL from becoming an arbitrary outbound destination.
 
 The upstream feature matrix describes tracking support for the listed providers, but ExportFlow has not independently verified every endpoint against live carrier accounts. Carrier-specific operation limitations remain authoritative; do not infer that every provider supports every SDK method.
 
@@ -52,18 +52,21 @@ The upstream feature matrix describes tracking support for the listed providers,
 
 The factory requires three injected functions:
 
-1. \`authorizeMerchantProvider({ merchantId, provider, operation: "track" })\` must return literal \`true\` only after checking the authenticated merchant owns that connection and has tracking permission.
-2. \`resolveCredentials({ merchantId, provider })\` must return the saved provider credentials from a server-side secret store. It is called only after authorization succeeds.
-3. \`createClient(provider, config)\` is the upstream SDK factory supplied by the eventual integration module.
+1. `authorizeMerchantProvider({ merchantId, provider, operation: "track" })` must return literal `true` only after checking the authenticated merchant owns that connection and has tracking permission.
+2. `resolveCredentials({ merchantId, provider })` must return the saved provider credentials from a server-side secret store. It is called only after authorization succeeds.
+3. `createClient(provider, config)` is the upstream SDK factory supplied by the eventual integration module.
 
 The merchant ID passed to this internal boundary must come from a verified server session, never from a request body or browser local storage. The resolver must scope every credential lookup to that authenticated merchant and selected provider.
 
 ### Security controls in this implementation
 
 - Provider names and Ecotrack courier names are allowlisted.
-- Merchant-supplied \`baseUrl\`, \`fetch\` and other arbitrary SDK options are discarded.
+- Merchant-supplied `baseUrl`, `fetch` and other arbitrary SDK options are discarded.
 - GuepEx uses a fixed upstream base URL; no arbitrary host is accepted.
-- The SDK is configured with a 10-second timeout and \`includeRaw: false\`.
+- Ecotrack courier keys follow the upstream implementation's exact identifiers; custom tenant URLs are intentionally not accepted by this first boundary.
+- MDM `storeId` is retained only when present; the upstream type marks it optional, while parcel-creation and some merchant account operations need a store scope.
+- Elogistia's upstream adapter sends its API key in the query string. Do not activate it until outbound URL logging and telemetry controls have been reviewed for secret leakage.
+- The SDK is configured with a 10-second timeout and `includeRaw: false`.
 - Returned payloads expose only the requested tracking number, normalized status and a bounded event timeline. Raw carrier payloads, parcel identifiers and credentials are not returned.
 - Event labels are length-limited and email/phone-like strings are redacted.
 - Upstream exceptions are converted to stable error codes; raw provider messages are not exposed.
@@ -75,11 +78,11 @@ The credential vault, merchant authentication, connection management, revocation
 
 Run:
 
-\`\`\`bash
+```bash
 node scripts/algerian-connectors-test.mjs
-\`\`\`
+```
 
-The mock tests cover the provider allowlist, GuepEx alias and fixed endpoint, credential field filtering, authorization-before-secret-resolution, unknown provider rejection, Ecotrack host-injection rejection, response minimization, redaction and sanitized upstream failures.
+The mock tests cover the provider allowlist, GuepEx alias and fixed endpoint, credential field filtering, authorization-before-secret-resolution, prototype-key provider rejection, valid and invalid Ecotrack courier keys, MDM tracking without an optional store ID, response minimization, redaction and sanitized upstream failures.
 
 Evidence level for every provider remains **catalogued / mock-tested only**. No API key was used, no real tracking number was sent, no sandbox call was made and no carrier is marked live-verified.
 
