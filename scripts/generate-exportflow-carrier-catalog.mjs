@@ -60,13 +60,18 @@ async function readCarrierDirectory(entry) {
     sourceArtifacts: {
       adapterSource: await exists(join(directory, "adapter.ts")),
       liveTest: await exists(join(directory, "adapter.live.test.ts")),
-      fixtureTest: await exists(join(directory, "adapter.test.ts"))
+      fixtureTest: await exists(join(directory, "adapter.test.ts")),
+      apiModule: await exists(join(directory, "api.ts"))
     }
   };
 }
 
 const entries = await readdir(sourceRoot, { withFileTypes: true });
-const parsed = (await Promise.all(entries.map(readCarrierDirectory))).filter(Boolean);
+const parsed = [];
+for (const entry of entries) {
+  const record = await readCarrierDirectory(entry);
+  if (record) parsed.push(record);
+}
 parsed.sort((a, b) => a.id.localeCompare(b.id, "en"));
 
 const ids = parsed.map(record => record.id);
@@ -77,6 +82,7 @@ if (new Set(ids).size !== ids.length) throw new Error("Duplicate carrier ids fou
 if (!ids.includes("unknown")) throw new Error("Reserved unknown carrier record is missing");
 const adapterDirectories = parsed.filter(record => record.sourceArtifacts.adapterSource).length;
 const liveTestFiles = parsed.filter(record => record.sourceArtifacts.liveTest).length;
+const providerApiModules = parsed.filter(record => record.sourceArtifacts.apiModule).length;
 if (adapterDirectories !== expectedAdapterDirectories) {
   throw new Error("Expected " + expectedAdapterDirectories + " adapter source directories, found " + adapterDirectories);
 }
@@ -99,6 +105,7 @@ const metadata = {
   selectableCarrierRecords: parsed.filter(record => record.capabilities.selectable).length,
   adapterSourceDirectories: adapterDirectories,
   liveAdapterTestFiles: liveTestFiles,
+  providerApiModuleDirectories: providerApiModules,
   generatedFrom: "vendor/sources/universal-parcel-scraper/carriers/*/carrier.json",
   generationUsesNetwork: false
 };
