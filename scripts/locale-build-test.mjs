@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 
 const locales = ["en", "ar", "es", "zh", "hi", "pt", "fr", "bn"];
 const translationSource = await readFile("translations.js", "utf8");
-const translationMatch = translationSource.match(/window\\.EXPORTFLOW_TRANSLATIONS\\s*=\\s*([\\s\\S]*);\\s*$/);
+const translationMatch = translationSource.match(/window\.EXPORTFLOW_TRANSLATIONS\s*=\s*([\s\S]*);\s*$/);
 assert.ok(translationMatch, "Source locale dictionaries must be parseable JSON.");
 const translations = JSON.parse(translationMatch[1]);
 const carrierDirectoryKeys = [
