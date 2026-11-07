@@ -48,36 +48,36 @@ async function main() {
   assert.equal(unsafePunctuation.status, 400);
   assert.equal((await unsafePunctuation.json()).error, "invalid_tracking_number");
 
+  // Exercise the exact sanitizer expression used by the browser application.
+  // This catches accidental double escaping that would strip ordinary characters.
+  const appSource = await readFile("app.js", "utf8");
+  const sanitizerMatch = appSource.match(/const number = \(value \|\| ""\)\.replace\((\/\[.*?\/g), ""\)\.trim\(\);/);
+  assert.ok(sanitizerMatch, "Browser tracking sanitizer must remain discoverable for regression testing");
 
-// Exercise the exact sanitizer expression used by the browser application.
-// This catches accidental double escaping that would strip ordinary characters.
-const appSource = await readFile("app.js", "utf8");
-const sanitizerMatch = appSource.match(/const number = \(value \|\| ""\)\.replace\((\/\[.*?\/g), ""\)\.trim\(\);/);
-assert.ok(sanitizerMatch, "Browser tracking sanitizer must remain discoverable for regression testing");
-const normalizeBrowserInput = new Function(
-  "value",
-  \`return (value || "").replace(\${sanitizerMatch[1]}, "").trim();\`
-);
+  const regexLiteral = sanitizerMatch[1];
+  const finalSlash = regexLiteral.lastIndexOf("/");
+  const sanitizerRegex = new RegExp(regexLiteral.slice(1, finalSlash), regexLiteral.slice(finalSlash + 1));
+  const normalizeBrowserInput = value => (value || "").replace(sanitizerRegex, "").trim();
 
-const unchangedTrackingReferences = [
-  "1Z999AA10123456784",
-  "1234/12345678",
-  "99.34.123456.12345678",
-  "(00) 3 7012345 678901234 7",
-  "AB_123456789"
-];
-for (const value of unchangedTrackingReferences) {
+  const unchangedTrackingReferences = [
+    "1Z999AA10123456784",
+    "1234/12345678",
+    "99.34.123456.12345678",
+    "(00) 3 7012345 678901234 7",
+    "AB_123456789"
+  ];
+  for (const value of unchangedTrackingReferences) {
+    assert.equal(
+      normalizeBrowserInput(value),
+      value,
+      "Browser sanitization must not alter ordinary tracking characters"
+    );
+  }
   assert.equal(
-    normalizeBrowserInput(value),
-    value,
-    "Browser sanitization must not alter ordinary tracking characters"
+    normalizeBrowserInput("\u200B1Z999AA10123456784\u200D\uFEFF"),
+    "1Z999AA10123456784",
+    "Browser sanitization must remove zero-width formatting characters only"
   );
-}
-assert.equal(
-  normalizeBrowserInput("\\u200B1Z999AA10123456784\\u200D\\uFEFF"),
-  "1Z999AA10123456784",
-  "Browser sanitization must remove zero-width formatting characters only"
-);
 
   console.log("Tracking input compatibility and browser sanitizer tests passed without carrier lookups.");
 }
