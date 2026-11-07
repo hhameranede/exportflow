@@ -11,7 +11,7 @@ assert.equal(registry.policy.commercial_use_required, true);
 assert.equal(registry.policy.redistribution_required, true);
 assert.equal(registry.policy.repository_publicity_is_not_a_license, true);
 assert.equal(registry.policy.software_license_does_not_license_embedded_data, true);
-assert.ok(registry.sources.length >= 15, "Expected the external source register to keep growing");
+assert.ok(registry.sources.length >= 17, "Expected the external source register to keep growing");
 assert.ok(registry.rejected_candidates.length >= 4, "Unlicensed and unsuitable GitHub candidates must remain explicitly rejected");
 assert.ok(registry.existing_exportflow_sources.length >= 4, "Existing pinned sources must remain documented");
 
@@ -69,6 +69,15 @@ assert.ok(norway.limitations.some(value => /national identity numbers/i.test(val
 const estonia = registry.sources.find(source => source.id === "estonia-rik-e-business-register");
 assert.equal(estonia.license, "CC-BY-4.0");
 assert.match(estonia.ingestion_status, /basic_data_only/);
+
+const netherlands = registry.sources.find(source => source.id === "netherlands-kvk-basic-company-hvds");
+assert.equal(netherlands.license, "CC-BY-4.0");
+assert.match(netherlands.ingestion_status, /aggregate_analytics_only/);
+assert.ok(netherlands.limitations.some(value => /not suitable for entity-level directory lookup/i.test(value)));
+
+const slovenia = registry.sources.find(source => source.id === "slovenia-ajpes-prs");
+assert.equal(slovenia.license, "CC-BY-4.0");
+assert.match(slovenia.ingestion_status, /personal_data_filter/);
 
 const worldIndex = registry.sources.find(source => source.id === "world-company-database-github-index");
 assert.equal(worldIndex.license, "CC-BY-4.0");
