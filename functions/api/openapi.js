@@ -96,7 +96,7 @@ const OPENAPI = {
             description: "A bounded page of the upstream catalog with separate catalog, adapter and evidence counts.",
             content: { "application/json": { schema: { $ref: "#/components/schemas/CarrierDirectoryResponse" } } }
           },
-          "400": { description: "Invalid country, evidence or adapter filter.", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } }
+          "400": { description: "Invalid country, evidence or adapter filter.", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } }
         }
       }
     },
