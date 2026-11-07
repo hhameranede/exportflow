@@ -1,8 +1,96 @@
 import { CARRIERS, CARRIER_IDS } from "universal-parcel-scraper";
 
 const SAFE_TRACKING_MODES = new Set(["automatic", "link-only"]);
+const CARRIER_EVIDENCE_SQL = `
+  SELECT
+    provider_id, display_name, country_scope, integration_method, adapter_state,
+    adapter_ids_json, commercial_access_status, tracking_rights_status,
+    official_source_url, public_disclosure, evidence_status, verification_method,
+    verified_at, verification_evidence_url
+  FROM carrier_evidence
+  WHERE evidence_status != 'deprecated'
+  ORDER BY display_name
+`;
 
-function publicCarrierRecord(carrier) {
+const GENERIC_DISCLOSURE =
+  "Upstream catalog metadata only. It does not establish a live successful lookup, carrier authorization or permission to display shipment data for third parties.";
+
+function parseAdapterIds(value) {
+  if (typeof value !== "string") return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed)
+      ? [...new Set(parsed.filter(id => typeof id === "string" && /^[a-z0-9-]{2,80}$/i.test(id)))]
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function publicEvidenceRecord(row) {
+  const evidenceStatus = ["research", "testing", "integrated", "verified", "blocked", "deprecated"].includes(row?.evidence_status)
+    ? row.evidence_status
+    : "research";
+  const verificationMethod = ["none", "mock", "sandbox", "live"].includes(row?.verification_method)
+    ? row.verification_method
+    : "none";
+  const adapterState = ["present", "country_specific", "missing"].includes(row?.adapter_state)
+    ? row.adapter_state
+    : "missing";
+
+  return {
+    id: row.provider_id,
+    name: typeof row.display_name === "string" ? row.display_name.slice(0, 120) : row.provider_id,
+    countryScope: typeof row.country_scope === "string" ? row.country_scope.slice(0, 240) : "",
+    integrationMethod: typeof row.integration_method === "string" ? row.integration_method : "manual",
+    adapterState,
+    adapterIds: parseAdapterIds(row.adapter_ids_json),
+    evidenceLevel: evidenceStatus,
+    verification: {
+      method: verificationMethod,
+      liveVerified: evidenceStatus === "verified" && verificationMethod === "live",
+      verifiedAt: typeof row.verified_at === "string" ? row.verified_at : null,
+      evidenceUrl: typeof row.verification_evidence_url === "string" &&
+        row.verification_evidence_url.startsWith("https://")
+        ? row.verification_evidence_url
+        : null
+    },
+    commercialAccess: typeof row.commercial_access_status === "string"
+      ? row.commercial_access_status
+      : "not_assessed",
+    trackingRights: typeof row.tracking_rights_status === "string"
+      ? row.tracking_rights_status
+      : "not_assessed",
+    sourceUrl: typeof row.official_source_url === "string" &&
+      row.official_source_url.startsWith("https://")
+      ? row.official_source_url
+      : null,
+    disclosure: typeof row.public_disclosure === "string"
+      ? row.public_disclosure.slice(0, 420)
+      : GENERIC_DISCLOSURE
+  };
+}
+
+async function loadEvidenceRegistry(env) {
+  if (!env?.MERCHANT_DB || typeof env.MERCHANT_DB.prepare !== "function") {
+    return { available: false, records: [] };
+  }
+
+  try {
+    const result = await env.MERCHANT_DB.prepare(CARRIER_EVIDENCE_SQL).all();
+    const rows = Array.isArray(result?.results) ? result.results : [];
+    return {
+      available: true,
+      records: rows.map(publicEvidenceRecord)
+    };
+  } catch {
+    // The carrier directory remains useful before a preview DB migration is
+    // applied. Missing D1 data never promotes a catalog entry to verified.
+    return { available: false, records: [] };
+  }
+}
+
+function publicCarrierRecord(carrier, evidenceByAdapter) {
   const id = typeof carrier?.id === "string" && /^[a-z0-9-]{2,80}$/i.test(carrier.id)
     ? carrier.id
     : null;
@@ -20,18 +108,44 @@ function publicCarrierRecord(carrier) {
       .map(code => code.toUpperCase())
   )].sort();
 
+  const evidence = adapter ? evidenceByAdapter.get(adapter) : null;
   return {
     id,
     name: typeof carrier.name === "string" ? carrier.name.slice(0, 120) : id,
     countries,
-    tracking: { mode, adapter }
+    tracking: { mode, adapter },
+    evidence: evidence
+      ? {
+          level: evidence.evidenceLevel,
+          commercialAccess: evidence.commercialAccess,
+          trackingRights: evidence.trackingRights,
+          sourceUrl: evidence.sourceUrl,
+          disclosure: evidence.disclosure,
+          verification: evidence.verification
+        }
+      : {
+          level: "catalogued",
+          commercialAccess: "not_assessed",
+          trackingRights: "not_assessed",
+          sourceUrl: null,
+          disclosure: GENERIC_DISCLOSURE,
+          verification: { method: "none", liveVerified: false, verifiedAt: null, evidenceUrl: null }
+        }
   };
 }
 
-export async function onRequestGet() {
+export async function onRequestGet({ env } = {}) {
+  const registry = await loadEvidenceRegistry(env);
+  const evidenceByAdapter = new Map();
+  for (const evidence of registry.records) {
+    for (const adapterId of evidence.adapterIds) {
+      evidenceByAdapter.set(adapterId, evidence);
+    }
+  }
+
   const carrierRecords = Object.values(CARRIERS)
     .filter(carrier => carrier?.capabilities?.selectable === true)
-    .map(publicCarrierRecord)
+    .map(carrier => publicCarrierRecord(carrier, evidenceByAdapter))
     .filter(Boolean)
     .sort((a, b) => a.id.localeCompare(b.id));
 
@@ -46,6 +160,14 @@ export async function onRequestGet() {
   const linkOnlyCatalogRecords = carrierRecords.filter(record =>
     record.tracking.mode === "link-only"
   ).length;
+  const evidenceRegistryCounts = {
+    researched: registry.records.filter(record => record.evidenceLevel === "research").length,
+    testing: registry.records.filter(record => record.evidenceLevel === "testing").length,
+    integrated: registry.records.filter(record => record.evidenceLevel === "integrated").length,
+    verified: registry.records.filter(record => record.evidenceLevel === "verified" && record.verification.liveVerified).length,
+    blocked: registry.records.filter(record => record.evidenceLevel === "blocked").length,
+    withoutAdapter: registry.records.filter(record => record.adapterState === "missing").length
+  };
 
   return new Response(JSON.stringify({
     catalogEntries: CARRIER_IDS.length,
@@ -55,7 +177,10 @@ export async function onRequestGet() {
     linkOnlyCatalogRecords,
     carriers: CARRIER_IDS,
     carrierRecords,
-    metadataNotice: "Catalog capability metadata is not a live availability check, successful tracking guarantee or carrier partnership claim."
+    evidenceRegistryAvailable: registry.available,
+    evidenceRegistryCounts,
+    evidenceRegistry: registry.records,
+    metadataNotice: "A carrier catalog entry or adapter is not a live availability check, an authorized integration or a carrier partnership. Research status remains distinct from verified tracking; Verified requires live test evidence and an authorization reference."
   }), {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
