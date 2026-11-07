@@ -26,6 +26,10 @@ The root source declares Apache-2.0, but the repository NOTICE records nested MI
 
 A source audit does not grant carrier API access, permission to scrape a carrier website, commercial use of shipment data, redistribution rights, trademark rights or official partnership status. Every adapter remains rights-review-required until its provenance, third-party materials and carrier-specific terms/permissions are established.
 
+## Review matrix overlay
+
+The workflow also generates a separate 743-row review overlay from the JSON inventory. The CSV is included in the same GitHub Actions artifact as adapter-review-matrix.csv. Its methodology and status counts are documented in docs/FULL_743_ADAPTER_REVIEW_MATRIX.md, and scripts/build-743-review-matrix.mjs asserts the pinned source commit, exact row count, unique adapter IDs and zero pre-cleared rights. No family-wide rights inheritance is applied to country/service variants.
+
 ## Outputs
 
 - adapter-audit.json: full structured report with one object per adapter.
