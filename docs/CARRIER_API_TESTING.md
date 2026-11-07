@@ -1,0 +1,62 @@
+# Carrier API integration and batch test plan
+
+## Current connector inventory
+
+The pinned source snapshot is a mixed catalogue, not a list of official API integrations. The measured inventory is:
+
+| Artifact | Count | Meaning |
+| --- | ---: | --- |
+| Carrier manifests | 1,339 | Source records in the pinned carrier catalogue |
+| Dedicated adapter source files | 732 | Adapter implementations; many use public tracking pages or browser/HTTP transports |
+| Live-test definitions | 727 | Test definitions in the source tree; many are skipped until their private environment inputs exist |
+| Provider-specific `api.ts` modules | 3 | DHL Express, FedEx and UPS API client modules |
+
+The three API modules are exercised by `scripts/carrier-official-api-contract-test.mjs`. That script is part of `npm test`, and each assertion script is published through the existing Datadog CI Visibility integration in GitHub Actions.
+
+## What the batch contract test checks
+
+The CI suite uses mock fetch transports and fake credentials. It validates that each client constructs the correct request sequence and parses the test reply:
+
+| Provider | Contract tested | Expected credential inputs | Sandbox / test path |
+| --- | --- | --- | --- |
+| UPS | Basic-auth OAuth client-credentials POST, then bearer-auth Track API GET | `UPS_CLIENT_ID`, `UPS_CLIENT_SECRET` | UPS Customer Integration Environment can be selected with `UPS_API_URL=https://wwwcie.ups.com`; production default is `https://onlinetools.ups.com` |
+| FedEx | OAuth client-credentials POST, then bearer-auth Track API POST with detailed scans | `FEDEX_API_KEY`, `FEDEX_SECRET_KEY` | Use `FEDEX_API_URL=https://apis-sandbox.fedex.com` for sandbox credentials; production default is `https://apis.fedex.com` |
+| DHL Express | API-key-authenticated Shipment Tracking Unified API GET | `DHL_API_KEY` | The API uses `https://api-eu.dhl.com/track/shipments`; access requires an activated subscription key. DHL documents an initial development quota of 250 calls/day and a maximum of one call every five seconds, which is not a production allowance. |
+
+**The CI contract test makes zero requests to carrier networks.** It does not prove that a credential is valid, that an account has Track API access, that a carrier accepts ExportFlow as a service provider, or that ExportFlow may display third-party shipment data.
+
+## Live test inputs (never commit these)
+
+The upstream live suites are opt-in and require private, approved inputs. Examples include:
+
+- UPS: `UPS_CLIENT_ID`, `UPS_CLIENT_SECRET`, and (for a shipment-history test) `UPS_LIVE_TRACKING_NUMBER`.
+- FedEx: `FEDEX_API_KEY`, `FEDEX_SECRET_KEY`, and (for a shipment-history test) `FEDEX_LIVE_TRACKING_NUMBER`.
+- DHL Express: `DHL_API_KEY` and (for shipment-history tests) `DHL_EXPRESS_LIVE_TRACKING_NUMBER`.
+
+Use only carrier-approved sandbox credentials and synthetic tracking references where the provider supports them. A real shipment reference must be supplied by its owner with permission for the test. Keep secrets in a secret manager/GitHub Actions secrets, keep tracking references out of logs and telemetry, and never store raw carrier responses in the repository.
+
+## Evidence stages
+
+1. **Catalogued** — an upstream manifest identifies the carrier.
+2. **Adapter present** — source code exists for the connector.
+3. **Mock tested** — local contract/fixture tests pass; this is what the current API batch test establishes.
+4. **Sandbox tested** — the provider's own sandbox/test environment responds successfully to ExportFlow's app credentials.
+5. **Live tested** — a permitted live request succeeds with authorized inputs and safe projected output.
+6. **Commercially authorized** — documentary evidence explicitly covers the intended third-party/multi-merchant use and shipment-data display.
+
+A provider must not be promoted to `verified` based only on an API module, mock test, successful homepage probe or a generic developer key. The D1 evidence registry requires both live test evidence and a separate authorization reference before it can expose the verified state.
+
+## Datadog use and limits
+
+The current CI job enables Datadog Test Visibility when `DD_API_KEY` is configured, then runs the 23 assertion scripts through the `dd-trace:ci:manual:test:start/finish` channels. The API contract suite appears as `carrier-official-api-contract-test`. GitHub Actions output confirms that result was recorded in the CI session.
+
+Datadog Synthetic Monitoring currently has no Synthetic tests configured in the connected account, and test-creation permissions are not available. Do not describe the CI contract suite as a Datadog Synthetic test or production API uptime check. A future live suite can be added as a separate, manually approved workflow after the provider sandbox accounts and permitted inputs exist.
+
+## Official provider references
+
+- [UPS — Get started with UPS APIs](https://developer.ups.com/get-started): app registration, OAuth credentials and Customer Integration Environment guidance.
+- [FedEx Developer Portal — Track API](https://developer.fedex.com/api/en-us/catalog/track/v1/docs.html): Track API onboarding and request contract.
+- [FedEx — API best practices](https://www.fedex.com/content/dam/fedex/eu-europe/downloads/FedEx-API-Best-Practices_09_2022.pdf): sandbox and production OAuth endpoints and credential handling.
+- [DHL Developer Portal — Shipment Tracking Unified API](https://developer.dhl.com/tracking): subscription key, endpoint, activation and initial rate limits.
+
+Provider terms and quotas can change. Reconfirm them in the carrier's current developer portal before enabling a new live connector.
