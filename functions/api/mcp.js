@@ -242,6 +242,16 @@ function invalidToolArguments() {
   return { error: "invalid_tool_arguments" };
 }
 
+function toolCallFailed(toolName, result) {
+  if (!result || result.status < 200 || result.status >= 300) return true;
+  if (toolName !== "batch_track_shipments") return false;
+
+  const items = result.data?.results;
+  return !Array.isArray(items) || items.some(item =>
+    !Number.isInteger(item?.status) || item.status < 200 || item.status >= 300
+  );
+}
+
 async function callTool(name, args, request, env) {
   if (!isObject(args)) return { status: 400, data: invalidToolArguments() };
 
@@ -422,7 +432,7 @@ export async function onRequestPost({ request, env }) {
     return toolResult(
       message.id,
       result.data,
-      result.status < 200 || result.status >= 300,
+      toolCallFailed(params.name, result),
       serverInfoMeta()
     );
   }
