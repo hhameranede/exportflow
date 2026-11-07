@@ -164,11 +164,6 @@ function jsonResult(id, result) {
   return response({ jsonrpc: "2.0", id, result });
 }
 
-function errorText(value) {
-  if (typeof value === "string" && /^[a-z0-9_-]{1,80}$/i.test(value)) return value;
-  return "request_failed";
-}
-
 function makeInternalRequest(original, path, method, payload) {
   const url = new URL(path, original.url);
   const headers = new Headers();
@@ -402,4 +397,15 @@ export async function onRequestPost({ request, env }) {
   }
 
   return rpcError(message.id, -32601, "Method not found", undefined, 404);
+}
+
+export async function onRequestGet() {
+  return new Response(null, {
+    status: 405,
+    headers: {
+      Allow: "POST",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff"
+    }
+  });
 }
