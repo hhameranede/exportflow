@@ -313,7 +313,7 @@ async function callTool(name, args, request, env) {
 }
 
 function serverInfoMeta() {
-  return { [SERVER_META_KEY]: SERVER_INFO };
+  return { _meta: { [SERVER_META_KEY]: SERVER_INFO } };
 }
 
 export async function onRequestPost({ request, env }) {
