@@ -130,6 +130,7 @@ export class GlobalRateLimiter {
         limit: GLOBAL_RATE_REQUESTS_PER_WINDOW,
         remaining: 0,
         resetAt,
+        resetAfterSeconds: Math.max(1, resetAt - Math.floor(now / 1000)),
         retryAfterSeconds: Math.max(1, resetAt - Math.floor(now / 1000))
       };
     }
@@ -147,6 +148,7 @@ export class GlobalRateLimiter {
       limit: GLOBAL_RATE_REQUESTS_PER_WINDOW,
       remaining: Math.max(0, GLOBAL_RATE_REQUESTS_PER_WINDOW - updated.request_count),
       resetAt,
+      resetAfterSeconds: Math.max(0, resetAt - Math.floor(now / 1000)),
       retryAfterSeconds: 0
     };
   }
