@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#FAF9F6">
+<meta name="description" content="Build with ExportFlow: a documented shipment tracking API, bounded batch lookup, carrier catalog, country coverage and a lightweight JavaScript SDK.">
+<meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large">
+<title>Developers — ExportFlow Shipment API</title>
+<link rel="canonical" href="https://exportflow.me/developers/">
+<link rel="icon" href="/favicon.svg?v=20261106" type="image/svg+xml">
+<link rel="stylesheet" href="/styles.css?v=ef-ui-refresh-20261106-01">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ExportFlow">
+<meta property="og:title" content="Developers — ExportFlow Shipment API">
+<meta property="og:description" content="Build shipment tracking into your product with ExportFlow's API and JavaScript SDK.">
+<meta property="og:url" content="https://exportflow.me/developers/">
+<meta property="og:image" content="https://exportflow.me/og-image-20261106.png">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="/" aria-label="ExportFlow home"><span class="brand-name">Export<span>Flow</span></span></a>
+  <nav class="desktop-nav" aria-label="Developer navigation">
+    <a href="/#track">Track a parcel</a>
+    <a href="/coverage/">Carrier coverage</a>
+    <a href="/api/openapi">OpenAPI 3.1</a>
+  </nav>
+  <a class="header-cta" href="/api/openapi">View API contract</a>
+</header>
+<main class="page-shell" style="max-width:1080px;margin:0 auto;padding:clamp(24px,5vw,64px) 20px 80px">
+  <section class="hero-content" aria-labelledby="developersTitle">
+    <p class="eyebrow"><span class="eyebrow-index">API</span><span>DEVELOPER ECOSYSTEM</span></p>
+    <h1 id="developersTitle">Shipment data.<br><em>Built into your workflow.</em></h1>
+    <p class="hero-copy">Use ExportFlow's server-side carrier engine from your app, merchant workflow or logistics tool. One consistent contract for individual lookups, small batches and catalog discovery.</p>
+    <div class="hero-actions" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:24px">
+      <a class="primary-button" href="/api/openapi">Explore OpenAPI 3.1</a>
+      <a class="secondary-button" href="#quickstart">Read the quick start</a>
+    </div>
+  </section>
+
+  <section aria-labelledby="capabilitiesTitle" style="margin-top:60px">
+    <p class="eyebrow">01 / API SURFACE</p>
+    <h2 id="capabilitiesTitle">Small, useful endpoints.</h2>
+    <div class="feature-grid" style="margin-top:24px">
+      <article class="feature-card"><p class="field-label">POST</p><h3>/api/track</h3><p>Track one shipment and receive a normalized event timeline, source provenance, conservative confidence and evidence-based insights.</p></article>
+      <article class="feature-card"><p class="field-label">POST</p><h3>/api/batch-track</h3><p>Track up to five shipments in one request. Each result carries its own HTTP status so partial failures do not discard successful items.</p></article>
+      <article class="feature-card"><p class="field-label">GET</p><h3>/api/carriers</h3><p>Read the installed carrier ID catalog. Catalog presence is not a live-tracking guarantee.</p></article>
+      <article class="feature-card"><p class="field-label">GET</p><h3>/api/coverage</h3><p>Read catalog-derived country classifications: direct adapter, universal fallback, link-only or not listed.</p></article>
+    </div>
+  </section>
+
+  <section id="quickstart" aria-labelledby="quickstartTitle" style="margin-top:60px">
+    <p class="eyebrow">02 / QUICK START</p>
+    <h2 id="quickstartTitle">Use the JavaScript SDK.</h2>
+    <p class="body-copy">No API key is required for the current public lookup surface. Install no package: the lightweight ES module can be imported from ExportFlow or copied into your own build.</p>
+    <div class="code-panel" style="margin-top:20px">
+      <div class="code-panel-head"><strong>Browser or modern Node.js</strong><a href="/exportflow-sdk.mjs">Download SDK module</a></div>
+      <pre><code>import { createExportFlowClient } from "/exportflow-sdk.mjs";
+
+const exportflow = createExportFlowClient();
+
+const shipment = await exportflow.track({
+  number: "LX123456789CN",
+  language: "en"
+});
+
+console.log(shipment.status);
+console.log(shipment.truth.latestTrusted);</code></pre>
+    </div>
+    <div class="code-panel" style="margin-top:16px">
+      <div class="code-panel-head"><strong>Batch tracking</strong><span>Maximum five per call</span></div>
+      <pre><code>const batch = await exportflow.batchTrack([
+  { id: "order-1001", number: "LX123456789CN" },
+  { id: "order-1002", number: "RR123456789BD" }
+]);
+
+for (const item of batch.results) {
+  if (item.status === 200) {
+    console.log(item.id, item.data.status);
+  } else {
+    console.warn(item.id, item.data.error);
+  }
+}</code></pre>
+    </div>
+  </section>
+
+  <section aria-labelledby="limitsTitle" style="margin-top:60px">
+    <p class="eyebrow">03 / OPERATIONAL CONTRACT</p>
+    <h2 id="limitsTitle">Know the boundaries.</h2>
+    <div class="table-wrap" style="margin-top:20px">
+      <table>
+        <tbody>
+          <tr><th scope="row">Single lookup body</th><td>Up to 4 KiB</td></tr>
+          <tr><th scope="row">Batch request body</th><td>Up to 12 KiB and five shipments</td></tr>
+          <tr><th scope="row">Per-runtime request limit</th><td>12 single lookups per minute; each batch item uses the same limit</td></tr>
+          <tr><th scope="row">Concurrent lookups</th><td>Six per runtime instance</td></tr>
+          <tr><th scope="row">Lookup budget</th><td>25 seconds per carrier lookup</td></tr>
+          <tr><th scope="row">Supported language codes</th><td>en, ar, es, zh, hi, pt, fr, bn</td></tr>
+          <tr><th scope="row">Authentication</th><td>Not required for the current public read/lookup API</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="body-copy" style="margin-top:16px">Rate limits are isolate-local safeguards, not a contractual global quota. They may vary across Cloudflare runtime instances. Do not build a high-volume commercial workflow on the current public limits.</p>
+  </section>
+
+  <section aria-labelledby="privacyTitle" style="margin-top:60px">
+    <p class="eyebrow">04 / PRIVACY & EVIDENCE</p>
+    <h2 id="privacyTitle">Do not confuse a catalog with a verified network.</h2>
+    <p class="body-copy">ExportFlow does not provide account-backed server-side shipment history in this version. A lookup sends the tracking number to ExportFlow's server and, when the selected carrier adapter requires it, to that upstream carrier. API responses do not echo the submitted number. Do not submit someone else's tracking number without authorization.</p>
+    <p class="body-copy">Carrier catalog entries, country mappings and adapter metadata are discovery information—not proof of a successful live lookup, an official partnership, or delivery coverage. Shipment confidence remains conservative when source-quality evidence is unavailable. ETAs are shown only when reported by the carrier.</p>
+  </section>
+
+  <section aria-labelledby="specTitle" style="margin-top:60px">
+    <p class="eyebrow">05 / MACHINE-READABLE CONTRACT</p>
+    <h2 id="specTitle">Integrate against the schema.</h2>
+    <p class="body-copy">The OpenAPI document describes routes, inputs, result types, limits and privacy boundaries. Use it to generate typed clients or validate your own integration.</p>
+    <p style="margin-top:20px"><a class="primary-button" href="/api/openapi">Open the OpenAPI 3.1 JSON</a></p>
+  </section>
+</main>
+<footer class="site-footer"><p>ExportFlow — shipment tracking with evidence, not invented certainty.</p><nav aria-label="Footer"><a href="/privacy/">Privacy</a><a href="/coverage/">Coverage</a><a href="/">Home</a></nav></footer>
+</body>
+</html>
