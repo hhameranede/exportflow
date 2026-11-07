@@ -1,17 +1,13 @@
 #!/usr/bin/env node
 /**
- * Materialize the reviewed, pinned upstream source snapshots as ordinary files.
- *
- * This is intentionally a repository-maintenance script. The vendored trees are
- * reference/source snapshots; ExportFlow's runtime continues to use its pinned
- * npm dependency and does not import code from vendor/sources.
+ * Materialize reviewed, pinned upstream source snapshots as ordinary files.
+ * These are source/reference snapshots, not runtime imports.
  */
 import {
   cpSync,
   existsSync,
   lstatSync,
   mkdirSync,
-  readFileSync,
   readdirSync,
   rmSync,
   writeFileSync
@@ -28,8 +24,8 @@ const SOURCES = [
     destination: "vendor/sources/universal-parcel-scraper",
     repository: "https://github.com/plhery/universal-parcel-scraper",
     commit: "e64a466772ef25ce68e02d9c7c9f1613eec1208b",
-    license: "Apache-2.0 core; upstream NOTICE and nested MIT/CC BY 4.0/Open Database License attributions preserved",
-    excluded: ["trawl/ (optional AGPL-3.0 component)"]
+    license: "Apache-2.0 core; preserve upstream NOTICE and nested MIT/CC BY 4.0/Open Database License and government-data attributions",
+    excluded: ["trawl/ (85 files; optional AGPL-3.0 component)"]
   },
   {
     id: "shopana-carrier-api",
@@ -37,8 +33,8 @@ const SOURCES = [
     destination: "vendor/sources/shopana-carrier-api",
     repository: "https://github.com/shopanaio/carrier-api",
     commit: "450ab76612a359b494c5bb7a6bce1d97add130a2",
-    license: "Apache-2.0, including package-level license files",
-    excluded: []
+    license: "Apache-2.0, including root and all three package-level licenses",
+    excluded: ["generated coverage/ reports (41 files; 897,019 bytes)"]
   },
   {
     id: "karrio-community",
@@ -93,6 +89,9 @@ function shouldCopy(sourceId, sourceRoot, candidate) {
   if (sourceId === "universal-parcel-scraper" && parts[0] === "trawl") {
     return false;
   }
+  if (sourceId === "shopana-carrier-api" && parts.includes("coverage")) {
+    return false;
+  }
   if (base === ".DS_Store" || base === ".npmrc" || base === ".netrc" || base === ".pypirc") {
     return false;
   }
@@ -118,8 +117,41 @@ function assertFile(relativePath, label) {
   }
 }
 
-function existingMaterialization() {
-  return SOURCES.every(source => existsSync(path.join(ROOT, source.destination, "LICENSE")));
+function assertSourceLicenses() {
+  assertFile("vendor/sources/universal-parcel-scraper/LICENSE", "Universal Parcel Scraper Apache license");
+  assertFile("vendor/sources/universal-parcel-scraper/NOTICE", "Universal Parcel Scraper upstream NOTICE");
+  assertFile("vendor/sources/shopana-carrier-api/LICENSE", "Shopana root Apache license");
+  assertFile("vendor/sources/shopana-carrier-api/packages/novaposhta-api-client/LICENSE", "Nova Poshta SDK package license");
+  assertFile("vendor/sources/shopana-carrier-api/packages/novaposhta-mcp-server/LICENSE", "Nova Poshta MCP package license");
+  assertFile("vendor/sources/shopana-carrier-api/packages/novaposhta-transport-fetch/LICENSE", "Nova Poshta Fetch transport package license");
+  assertFile("vendor/sources/reference/karrio-community/LICENSE", "Karrio Community LGPL license");
+  assertFile("vendor/sources/reference/karrio-community/plugins/easypost/LICENSE", "EasyPost plugin LGPL license");
+}
+
+function writeSourceManifest(materialized) {
+  const manifest = [
+    "# Materialized upstream sources",
+    "",
+    "These are ordinary tracked files copied from exact upstream commits. No Git submodule pointers are used. These are source/reference snapshots, not runtime imports.",
+    "ExportFlow's deployed tracking integration continues to use the pinned npm dependency in package.json.",
+    "",
+    ...materialized.flatMap(source => [
+      "## " + source.id,
+      "- Upstream: " + source.repository,
+      "- Pinned commit: `" + source.commit + "`",
+      "- License: " + source.license,
+      "- Files stored: " + source.files,
+      "- Source bytes stored: " + source.bytes,
+      "- Exclusions: " + (source.excluded.length ? source.excluded.join("; ") : "VCS metadata, caches, symlinks, credential-bearing local configuration and runtime databases"),
+      ""
+    ]),
+    "The active production carrier engine remains the separately pinned npm dependency; Shopana and Karrio are source references only.",
+    "Do not treat source catalog entries as proof of a working adapter or carrier authorization.",
+    "Do not import LGPL reference code into the deployed bundle without a separate license and architecture review.",
+    "Preserve each upstream LICENSE, NOTICE, and nested component license when updating these snapshots.",
+    ""
+  ].join("\n");
+  writeFileSync(path.join(ROOT, "vendor/sources/README.md"), manifest, "utf8");
 }
 
 const branch = run("git", ["branch", "--show-current"]);
@@ -127,11 +159,30 @@ if (process.env.GITHUB_ACTIONS === "true" && branch !== EXPECTED_BRANCH) {
   throw new Error("Refusing to materialize sources outside the approved feature branch.");
 }
 
+const materializedRootsExist = SOURCES.every(source =>
+  existsSync(path.join(ROOT, source.destination, "LICENSE"))
+);
+
 if (!existsSync(path.join(ROOT, ".gitmodules"))) {
-  if (!existingMaterialization()) {
+  if (!materializedRootsExist) {
     throw new Error("Submodule manifest is absent and the full source materialization is incomplete.");
   }
-  console.log("Pinned sources are already materialized; no changes are required.");
+
+  // A previous materialization may have predated the explicit generated-coverage exclusion.
+  const shopanaCoverage = path.join(
+    ROOT,
+    "vendor/sources/shopana-carrier-api/packages/novaposhta-api-client/coverage"
+  );
+  rmSync(shopanaCoverage, { recursive: true, force: true });
+  rmSync(path.join(ROOT, "vendor/sources/universal-parcel-scraper/trawl"), { recursive: true, force: true });
+  assertSourceLicenses();
+
+  const materialized = SOURCES.map(source => ({
+    ...source,
+    ...countTree(path.join(ROOT, source.destination))
+  }));
+  writeSourceManifest(materialized);
+  console.log(JSON.stringify({ refreshedExistingSnapshots: materialized.map(({ id, files, bytes }) => ({ id, files, bytes })) }, null, 2));
   process.exit(0);
 }
 
@@ -145,9 +196,7 @@ for (const source of SOURCES) {
 
   const actualCommit = run("git", ["-C", source.source, "rev-parse", "HEAD"]);
   if (actualCommit !== source.commit) {
-    throw new Error(
-      "Upstream pin mismatch for " + source.id + ": expected " + source.commit + ", got " + actualCommit
-    );
+    throw new Error("Upstream pin mismatch for " + source.id + ": expected " + source.commit + ", got " + actualCommit);
   }
 
   rmSync(destination, { recursive: true, force: true });
@@ -158,59 +207,33 @@ for (const source of SOURCES) {
     filter: candidate => shouldCopy(source.id, sourceRoot, candidate)
   });
 
-  if (source.id === "universal-parcel-scraper") {
-    assertFile(path.join(source.destination, "LICENSE"), source.id + " Apache license");
-    assertFile(path.join(source.destination, "NOTICE"), source.id + " upstream NOTICE");
-    if (existsSync(path.join(destination, "trawl"))) {
-      throw new Error("The optional AGPL-3.0 TRAWL source must not be included in this Apache-licensed snapshot.");
-    }
-  } else if (source.id === "shopana-carrier-api") {
-    assertFile(path.join(source.destination, "LICENSE"), source.id + " root license");
-    assertFile(path.join(source.destination, "packages/novaposhta-api-client/LICENSE"), "Nova Poshta package license");
-    assertFile(path.join(source.destination, "packages/novaposhta-transport-fetch/LICENSE"), "Fetch transport package license");
-  } else {
-    assertFile(path.join(source.destination, "LICENSE"), source.id + " LGPL license");
-    assertFile(path.join(source.destination, "plugins/easypost/LICENSE"), "EasyPost plugin LGPL license");
+  assertSourceLicenses();
+  if (existsSync(path.join(destination, "trawl"))) {
+    throw new Error("The optional AGPL-3.0 TRAWL source must not be included in this Apache-licensed snapshot.");
+  }
+  if (source.id === "shopana-carrier-api" && existsSync(path.join(destination, "packages/novaposhta-api-client/coverage"))) {
+    throw new Error("Generated Shopana coverage reports must not be vendored.");
   }
 
   materialized.push({ ...source, ...countTree(destination) });
 }
 
-const manifest = [
-  "# Materialized upstream sources",
-  "",
-  "These are ordinary tracked files copied from exact upstream commits. They are source/reference snapshots, not runtime imports.",
-  "ExportFlow's deployed tracking integration continues to use the pinned npm dependency in package.json.",
-  "",
-  ...materialized.flatMap(source => [
-    "## " + source.id,
-    "- Upstream: " + source.repository,
-    "- Pinned commit: `" + source.commit + "`",
-    "- License: " + source.license,
-    "- Files: " + source.files,
-    "- Source bytes: " + source.bytes,
-    "- Exclusions: " + (source.excluded.length ? source.excluded.join(", ") : "credential-bearing local config, VCS metadata, caches, symlinks and runtime databases"),
-    ""
-  ]),
-  "Do not treat source catalog entries as proof of a working adapter or carrier authorization.",
-  "Do not import LGPL reference code into the deployed bundle without a separate license and architecture review.",
-  "Preserve each upstream LICENSE, NOTICE, and nested component license when updating these snapshots.",
-  ""
-].join("\n");
-writeFileSync(path.join(ROOT, "vendor/sources/README.md"), manifest, "utf8");
+writeSourceManifest(materialized);
 
-// The Git submodule gitlinks are replaced by the copied, ordinary source files.
+// Replace Git submodule gitlinks with the copied ordinary source files.
 for (const source of SOURCES) {
   run("git", ["rm", "--cached", "-f", "--", source.source]);
   rmSync(path.join(ROOT, source.source), { recursive: true, force: true });
 }
 rmSync(path.join(ROOT, ".gitmodules"), { force: true });
 
-const report = materialized.map(source => ({
-  source: source.id,
-  commit: source.commit,
-  files: source.files,
-  bytes: source.bytes,
-  destination: source.destination
-}));
-console.log(JSON.stringify({ materialized: report, removedSubmoduleManifest: true }, null, 2));
+console.log(JSON.stringify({
+  materialized: materialized.map(({ id, commit, files, bytes, destination }) => ({
+    source: id,
+    commit,
+    files,
+    bytes,
+    destination
+  })),
+  removedSubmoduleManifest: true
+}, null, 2));
