@@ -240,7 +240,7 @@ for (let index = 0; index < trustPageNames.length; index += 1) {
 }
 assert.match(build, /const publicPageDirectories/, "Cloudflare build must include all public pages");
 assert.match(build, /"developers"/, "Cloudflare build must copy the developer guide");
-assert.match(build, /"\\/developers\\/"/, "Generated sitemap must include the developer guide");
+assert.ok(sitemap.includes("https://exportflow.me/developers/"), "Source sitemap must include the developer guide");
 assert.match(css, /\.trust-page/, "Trust Center pages must share the new site theme");
 assert.match(css, /\.trust-hero/, "Trust Center hero styling must exist");
 assert.match(css, /body\.coverage-page \.legal-container/, "Privacy and terms pages must share the new card layout");
