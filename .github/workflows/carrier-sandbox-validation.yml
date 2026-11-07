@@ -1,0 +1,73 @@
+name: ExportFlow carrier Sandbox validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: Provider to validate against its official non-production environment
+        required: true
+        type: choice
+        options:
+          - ups
+          - fedex
+          - both
+        default: both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exportflow-carrier-sandbox
+  cancel-in-progress: false
+
+jobs:
+  sandbox-validation:
+    name: Validate selected carrier Sandbox APIs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies (frozen npm lockfile)
+        run: npm ci --no-audit --no-fund --foreground-scripts
+      - name: Detect Datadog Test Optimization configuration
+        id: datadog-config
+        shell: bash
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+        run: |
+          if [[ -n "${DD_API_KEY}" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Datadog Test Optimization is configured."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Datadog API key is not configured; sandbox results will remain in GitHub Actions."
+          fi
+      - name: Configure Datadog Test Optimization
+        if: steps.datadog-config.outputs.enabled == 'true'
+        uses: datadog/test-visibility-github-action@v3
+        with:
+          languages: js
+          api_key: ${{ secrets.DD_API_KEY }}
+          site: us5.datadoghq.com
+      - name: Validate UPS and/or FedEx Sandbox
+        env:
+          PROVIDER_SELECTION: ${{ inputs.provider }}
+          UPS_CLIENT_ID: ${{ secrets.UPS_SANDBOX_CLIENT_ID }}
+          UPS_CLIENT_SECRET: ${{ secrets.UPS_SANDBOX_CLIENT_SECRET }}
+          UPS_API_URL: https://wwwcie.ups.com
+          FEDEX_API_KEY: ${{ secrets.FEDEX_SANDBOX_API_KEY }}
+          FEDEX_SECRET_KEY: ${{ secrets.FEDEX_SANDBOX_SECRET_KEY }}
+          FEDEX_API_URL: https://apis-sandbox.fedex.com
+          NODE_OPTIONS: ${{ steps.datadog-config.outputs.enabled == 'true' && format('-r {0}', env.DD_TRACE_PACKAGE) || '' }}
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+          DD_SITE: us5.datadoghq.com
+          DD_CIVISIBILITY_AGENTLESS_ENABLED: ${{ steps.datadog-config.outputs.enabled }}
+          DD_SERVICE: exportflow-carrier-sandbox
+          DD_ENV: sandbox
+          DD_TEST_SESSION_NAME: exportflow-carrier-sandbox
+        run: node scripts/carrier-sandbox-validation.mjs "$PROVIDER_SELECTION"
