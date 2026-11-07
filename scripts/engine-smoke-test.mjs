@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { createTracker } from "universal-parcel-scraper/node";
+import { createExportFlowCarrierEngine } from "../functions/lib/exportflow-carrier-engine.mjs";
 
-const tracker = createTracker({ providers: [] });
+const tracker = createExportFlowCarrierEngine({ providers: [] });
 assert.equal(typeof tracker.detect, "function", "tracking engine should expose offline detection");
 assert.equal(typeof tracker.track, "function", "tracking engine should expose live tracking");
 
