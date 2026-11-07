@@ -99,7 +99,7 @@ assert.match(js, /function showTrackingError/, "Tracking failures must use the s
 assert.match(js, /formError\.scrollIntoView/, "Tracking failures must remain visible on mobile viewports");
 assert.match(js, /trackingErrorMessage/, "Tracking API failures must map server errors to readable messages");
 assert.match(js, /global_rate_limiter_not_configured/, "Global rate-limiter setup failures must not be silently hidden");
-assert.match(js, /typeof payload\.status === "string"/, "A malformed success response must not open an empty result panel");
+assert.ok(js.includes('typeof payload.status === "string"'), "A malformed success response must not open an empty result panel");
 
 assert.match(js, /postcodeInput\.value\.trim\(\)/, "Optional postcode should be submitted to the API");
 assert.match(js, /renderTimeline/, "Live scan history should be rendered into the timeline");
