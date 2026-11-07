@@ -50,6 +50,25 @@ A provider must not be promoted to `verified` based only on an API module, mock 
 
 The current CI job enables Datadog Test Visibility when `DD_API_KEY` is configured, then runs the 23 assertion scripts through the `dd-trace:ci:manual:test:start/finish` channels. The API contract suite appears as `carrier-official-api-contract-test`. GitHub Actions output confirms that result was recorded in the CI session.
 
+## Full-catalog source integration matrix
+
+The offline catalog generator also emits `CARRIER_INTEGRATION_MATRIX` for all 1,339 source records (including the reserved `unknown` row). The public paginated `GET /api/carrier-directory` response exposes the matching `sourceIntegration` object per carrier and adds `summary.integrationCounts` and `summary.apiClientRecords`.
+
+Use `GET /api/carrier-directory?integration=provider_api_client&pageSize=100` to list the three carriers with a provider-specific API client in the pinned source snapshot. Other supported classes are:
+
+| Class | Meaning |
+| --- | --- |
+| `provider_api_client` | A provider-specific `api.ts` client exists in the pinned source tree |
+| `dedicated_adapter` | A dedicated upstream `adapter.ts` exists; the source may use a public page, private endpoint or other transport |
+| `universal_fallback` | The carrier uses an upstream universal fallback |
+| `link_only` | The source record exposes a tracking link but no automated tracking mode |
+| `adapter_reference_only` | The manifest declares an automatic adapter reference but no matching local adapter source file was found in that carrier folder |
+| `catalogue_only` | A catalog record exists without an assessed dedicated connector |
+
+The per-record metadata includes whether adapter/fixture/live-test source files exist and the transport step names declared by the upstream manifest. The live-test field means a test definition exists; it does not mean it ran or passed. For API client records, required environment variable **names** and authentication pattern are listed, never secret values.
+
+All records start with `commercialAuthorization=not_assessed` and `thirdPartyTrackingRights=not_assessed` in this source matrix. Curated D1 evidence overlays these defaults where a researched provider record exists. The matrix intentionally does not infer "no official API" from the absence of an upstream `api.ts` file: that means only that the pinned snapshot did not include a provider-specific API client.
+
 Datadog Synthetic Monitoring currently has no Synthetic tests configured in the connected account, and test-creation permissions are not available. Do not describe the CI contract suite as a Datadog Synthetic test or production API uptime check. A future live suite can be added as a separate, manually approved workflow after the provider sandbox accounts and permitted inputs exist.
 
 ## Official provider references
