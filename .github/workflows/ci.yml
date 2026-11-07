@@ -37,6 +37,8 @@ jobs:
           node --check functions/api/health.js
           node --check functions/api/batch-track.js
           node --check functions/api/openapi.js
+          node --check functions/api/mcp.js
+          node --check scripts/mcp-test.mjs
           node --check exportflow-sdk.mjs
           node --check merchant.js
           node --check scripts/merchant-workspace-test.mjs
