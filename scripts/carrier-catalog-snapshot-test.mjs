@@ -20,6 +20,15 @@ for (const id of CARRIER_IDS) {
   const row = CARRIER_INTEGRATION_MATRIX[id];
   assert.ok(row, "Every source catalog entry needs an integration matrix row: " + id);
   assert.equal(row.carrierId, id);
+  const carrier = CARRIERS[id];
+  assert.equal(carrier.provenance.repository, "https://github.com/plhery/universal-parcel-scraper");
+  assert.equal(carrier.provenance.commit, CARRIER_CATALOG_METADATA.upstreamCommit);
+  assert.equal(carrier.provenance.manifestPath, "carriers/" + id + "/carrier.json");
+  assert.equal(carrier.provenance.sourceLicense, "Apache-2.0");
+  assert.equal(carrier.provenance.attributionPath, "vendor/sources/universal-parcel-scraper/NOTICE");
+  assert.equal(carrier.provenance.authorityStatus, "upstream_manifest_candidate_not_independently_verified");
+  assert.equal(carrier.provenance.commercialTrackingRights, "not_granted_by_software_license");
+  assert.ok(carrier.provenance.portalUrlCandidate === null || carrier.provenance.portalUrlCandidate.startsWith("https://"));
   assert.ok(["provider_api_client", "dedicated_adapter", "universal_fallback", "link_only", "adapter_reference_only", "catalogue_only"].includes(row.integrationClass));
   assert.ok(["present", "not_found"].includes(row.adapterSource));
   assert.ok(["defined", "not_found"].includes(row.fixtureTest));
