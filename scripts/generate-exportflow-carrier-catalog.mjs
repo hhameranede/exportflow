@@ -16,6 +16,7 @@ const API_CLIENT_PROFILES = Object.freeze({
     requiredEnvironment: ["DHL_API_KEY"],
     sandboxMode: "no_external_customer_test_environment",
     sandboxBaseUrl: null,
+    apiDocumentationUrl: "https://developer.dhl.com/api-reference/shipment-tracking",
     contractTest: "carrier-official-api-contract-test"
   },
   fedex: {
@@ -23,6 +24,7 @@ const API_CLIENT_PROFILES = Object.freeze({
     requiredEnvironment: ["FEDEX_API_KEY", "FEDEX_SECRET_KEY"],
     sandboxMode: "developer_sandbox",
     sandboxBaseUrl: "https://apis-sandbox.fedex.com",
+    apiDocumentationUrl: "https://developer.fedex.com/api/en-us/catalog/track/v1/docs.html",
     contractTest: "carrier-official-api-contract-test",
     onboardingRole: "integrator_provider"
   },
@@ -31,6 +33,7 @@ const API_CLIENT_PROFILES = Object.freeze({
     requiredEnvironment: ["UPS_CLIENT_ID", "UPS_CLIENT_SECRET"],
     sandboxMode: "customer_integration_environment",
     sandboxBaseUrl: "https://wwwcie.ups.com",
+    apiDocumentationUrl: "https://developer.ups.com/tag/Tracking?loc=en_US",
     contractTest: "carrier-official-api-contract-test"
   }
 });
@@ -169,6 +172,7 @@ const integrationMatrix = Object.fromEntries(parsed.map(record => {
     requiredEnvironment: profile?.requiredEnvironment || [],
     sandboxMode: profile?.sandboxMode || "not_assessed",
     sandboxBaseUrl: profile?.sandboxBaseUrl || null,
+    apiDocumentationUrl: profile?.apiDocumentationUrl || null,
     onboardingRole: profile?.onboardingRole || null,
     mockContractTest: profile?.contractTest || null
   }];
