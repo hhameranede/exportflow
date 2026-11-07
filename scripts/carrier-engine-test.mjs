@@ -32,13 +32,15 @@ assert.ok(catalog.catalogEntries >= catalog.carriers.length);
 assert.ok(catalog.selectableCarrierRecords > 0);
 assert.ok(catalog.carrierRecords.length > 0);
 assert.equal(catalog.carrierRecords.length, catalog.selectableCarrierRecords);
-assert.equal(
-  catalog.directAdapterCatalogRecords + catalog.universalFallbackCatalogRecords +
-    catalog.linkOnlyCatalogRecords,
-  catalog.carrierRecords.filter(record =>
-    ["automatic", "link-only"].includes(record.tracking.mode)
-  ).length
-);
+assert.equal(catalog.directAdapterCatalogRecords, catalog.carrierRecords.filter(record =>
+  record.tracking.mode === "automatic" && record.tracking.adapter && record.tracking.adapter !== "universal"
+).length);
+assert.equal(catalog.universalFallbackCatalogRecords, catalog.carrierRecords.filter(record =>
+  record.tracking.mode === "automatic" && record.tracking.adapter === "universal"
+).length);
+assert.equal(catalog.linkOnlyCatalogRecords, catalog.carrierRecords.filter(record =>
+  record.tracking.mode === "link-only"
+).length);
 for (const record of catalog.carrierRecords) {
   assert.match(record.id, /^[a-z0-9-]{2,80}$/i);
   assert.ok(Array.isArray(record.countries));
