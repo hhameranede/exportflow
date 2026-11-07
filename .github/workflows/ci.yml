@@ -50,9 +50,12 @@ jobs:
           node --check functions/api/merchant/auth/google/start.js
           node --check functions/api/merchant/auth/google/callback.js
           node --check functions/api/merchant/session.js
+          node --check 'functions/api/merchant/carriers/[provider]/credentials.js'
           node --check functions/_middleware.js
           node --check functions/lib/merchant-identity.mjs
+          node --check functions/lib/session-bound-merchant-vault.mjs
           node --check scripts/merchant-identity-test.mjs
+          node --check scripts/session-bound-merchant-vault-test.mjs
           node --check scripts/locale-build-test.mjs
           node --check scripts/run-datadog-tests.mjs
           node --check scripts/production-smoke-test.mjs
