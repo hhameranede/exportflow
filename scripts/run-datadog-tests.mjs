@@ -16,6 +16,7 @@ const testScripts = [
   "scripts/global-rate-limiter-test.mjs",
   "scripts/global-rate-limit-route-test.mjs",
   "scripts/carrier-evidence-test.mjs",
+  "scripts/carrier-directory-test.mjs",
   "scripts/cloudflare-fetch-test.mjs",
   "scripts/map-coordinates-test.mjs",
   "scripts/coverage-smoke-test.mjs",
