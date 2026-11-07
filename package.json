@@ -10,8 +10,8 @@
   "scripts": {
     "dev": "node dev-server.mjs",
     "start": "node dev-server.mjs",
-    "lint": "node --check app.js && node --check translations.js && node --check coverage.js && node --check exportflow-sdk.mjs && node --check merchant.js && node --check functions/api/mcp.js && node --check functions/api/track.js && node --check functions/api/batch-track.js && node --check functions/api/openapi.js && node --check functions/_middleware.js && node --check scripts/run-datadog-tests.mjs",
-    "check": "node scripts/smoke-test.mjs",
+    "lint": "node --check app.js && node --check translations.js && node --check coverage.js && node --check exportflow-sdk.mjs && node --check merchant.js && node --check functions/api/mcp.js && node --check functions/api/track.js && node --check functions/api/batch-track.js && node --check functions/api/openapi.js && node --check functions/_middleware.js && node --check scripts/run-datadog-tests.mjs && node --check functions/lib/algerian-carrier-connectors.mjs && node --check scripts/algerian-connectors-test.mjs",
+    "check": "node scripts/smoke-test.mjs && node scripts/algerian-connectors-test.mjs",
     "test": "node scripts/run-datadog-tests.mjs",
     "smoke:production": "node scripts/production-smoke-test.mjs",
     "build": "node scripts/build.mjs",
