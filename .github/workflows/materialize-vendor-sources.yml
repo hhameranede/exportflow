@@ -6,6 +6,7 @@ on:
       - feat/exportflow-global-logistics-1-2-20261107
     paths:
       - .github/workflows/materialize-vendor-sources.yml
+      - scripts/materialize-vendor-sources.mjs
   workflow_dispatch:
 
 permissions:
@@ -48,10 +49,12 @@ jobs:
           test -s vendor/sources/universal-parcel-scraper/NOTICE
           test -s vendor/sources/shopana-carrier-api/LICENSE
           test -s vendor/sources/shopana-carrier-api/packages/novaposhta-api-client/LICENSE
+          test -s vendor/sources/shopana-carrier-api/packages/novaposhta-mcp-server/LICENSE
           test -s vendor/sources/shopana-carrier-api/packages/novaposhta-transport-fetch/LICENSE
           test -s vendor/sources/reference/karrio-community/LICENSE
           test -s vendor/sources/reference/karrio-community/plugins/easypost/LICENSE
           test ! -e vendor/sources/universal-parcel-scraper/trawl
+          test ! -e vendor/sources/shopana-carrier-api/packages/novaposhta-api-client/coverage
           test ! -e .gitmodules
           if find vendor/sources -name .git -o -name node_modules -o -name .env -o -name .dev.vars | grep -q .; then
             echo "::error::VCS metadata, dependencies or private environment files were copied."
@@ -84,9 +87,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git add -A -- vendor
-          git add -u -- .gitmodules
-          # Preserve upstream fixtures verbatim; do not reject their original whitespace.
+          # Force-add upstream source files so nested upstream .gitignore rules cannot silently omit them.
+          git add -f -A -- vendor
+          git add -u
+          # Preserve upstream fixtures verbatim; do not rewrite their original whitespace.
           if git diff --cached --quiet; then
             echo "No vendor changes were produced; source materialization is already up to date."
             exit 0
