@@ -10,6 +10,7 @@ assert.equal(CARRIER_CATALOG_METADATA.upstreamCommit, "e64a466772ef25ce68e02d9c7
 assert.equal(CARRIER_CATALOG_METADATA.carrierRecords, 1339);
 assert.equal(CARRIER_CATALOG_METADATA.adapterSourceDirectories, 732);
 assert.equal(CARRIER_CATALOG_METADATA.liveAdapterTestFiles, 727);
+assert.equal(CARRIER_CATALOG_METADATA.providerApiModuleDirectories, 3);
 assert.equal(CARRIER_CATALOG_METADATA.generationUsesNetwork, false);
 
 const records = Object.values(CARRIERS);
