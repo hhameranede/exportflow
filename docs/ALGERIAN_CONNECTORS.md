@@ -1,6 +1,6 @@
 # Algerian carrier connector layer
 
-**Status: merchant-only tracking route added on PR #49 branch; code-level route test registered. Cloudflare Preview bundle and live authorization remain unverified. Not enabled in Production.**
+**Status: merchant-only tracking route added on PR #49 branch; GitHub CI #388 passed all 26 regression tests and the Wrangler Pages Functions bundle; Cloudflare Preview deployment succeeded. Direct HTTP canary and live authorization remain unverified. Not enabled in Production.**
 
 This layer specializes ExportFlow for Algerian merchants without changing the global tracking engine. It is deliberately read-only: it supports tracking, not order creation, cancellation, labels, fee quotes, parcel lists or merchant-side write operations.
 
@@ -12,7 +12,7 @@ This layer specializes ExportFlow for Algerian merchants without changing the gl
 - A caller must inject the upstream SDK `createClient` function, an authorization check and a server-side credential resolver.
 - A failed Algerian merchant connection must not silently fall through to UPU or another carrier. Keep the two paths explicit.
 
-The complete upstream source snapshot is present as ordinary Git files under `vendor/sources/algeria/dz-delivery/`: 910 files / 4,228,323 bytes, pinned to the exact upstream commit above. Its root MIT LICENSE and `packages/ts/package.json` are preserved. Do not create a second copy. The merchant route dynamically imports the pinned TypeScript source entrypoint at `packages/ts/src/index.ts`; no npm runtime dependency or generated `dist` artifact was added. Wrangler bundling of that TypeScript source is still awaiting CI verification.
+The complete upstream source snapshot is present as ordinary Git files under `vendor/sources/algeria/dz-delivery/`: 910 files / 4,228,323 bytes, pinned to the exact upstream commit above. Its root MIT LICENSE and `packages/ts/package.json` are preserved. Do not create a second copy. The merchant route dynamically imports the pinned TypeScript source entrypoint at `packages/ts/src/index.ts`; no npm runtime dependency or generated `dist` artifact was added. Wrangler Pages Functions bundling passed in CI #388 and the Cloudflare Pages Preview deployment completed. A direct HTTP request to the Preview endpoint could not be completed through the available inspection channel.
 
 The connector retains dependency injection. The merchant endpoint supplies a factory that dynamically imports `createClient` from the pinned MIT source only after the request passes session, origin, provider and quota checks. This keeps the public tracking engine and global fallback independent. The source's MIT license and attribution remain preserved.
 
@@ -26,7 +26,7 @@ The connector retains dependency injection. The merchant endpoint supplies a fac
 | Published version reviewed | `0.1.12` |
 | Root and TypeScript package license | MIT; upstream LICENSE file and package metadata inspected |
 | Runtime claims | TypeScript package documents Node.js 18+ and zero runtime dependencies, using native Fetch |
-| Materialization status | Full 910-file upstream source snapshot is already stored at `vendor/sources/algeria/dz-delivery/` in the parent branch; it remains reference-only and is **not** installed as a runtime dependency in this change |
+| Materialization status | Full 910-file upstream source snapshot is stored at `vendor/sources/algeria/dz-delivery/`; the merchant-only route dynamically imports its pinned TypeScript source entrypoint. It is not installed as a separate npm runtime dependency |
 
 The upstream project documents a common `ShippingProvider` contract and provider-specific API mappings. It is a useful adapter implementation, not proof of official carrier partnership or live availability. Its package is still 0.x, so API stability must be reviewed before adopting it as a production dependency.
 
@@ -96,8 +96,8 @@ Evidence level for every provider remains **catalogued / mock-tested only**. No 
 1. Configure a recoverable AES-256-GCM key ring as an encrypted Pages secret (`MERCHANT_CREDENTIAL_KEYRING_JSON`) only after documenting backup, rotation and recovery. Never place carrier API keys in GitHub, static pages, local storage, analytics, logs or public payloads.
 2. Configure and independently test Google OAuth (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `MERCHANT_APP_ORIGIN` and exact callback URI), then complete account ownership proof, explicit consent, per-provider scopes and immediate revocation.
 3. Review each carrier's current API contract, terms, display rights, rate limits and data-retention conditions independently.
-4. Complete Wrangler bundling and Preview compatibility checks for the pinned TypeScript source import. Keep the existing MIT LICENSE and upstream notices with the source snapshot; do not duplicate it.
+4. Configure the Preview-only merchant vault key ring and OAuth credentials after documenting key backup, rotation and account recovery. Keep the existing MIT LICENSE and upstream notices with the source snapshot; do not duplicate it.
 5. Add provider-specific mock fixtures and run tests with synthetic values. Use official sandbox/read-only credentials where available; any live test requires the merchant's explicit authorization.
-6. Configure the Preview-only vault key and OAuth credentials, pass the new route's CI and Cloudflare Preview bundle, then test only with owner-authorized sandbox credentials. Enable providers individually only after their own evidence reaches sandbox-tested or live-verified. Never display a provider as active merely because its adapter exists.
+6. Complete a safe Preview HTTP canary after the Preview vault key and Google OAuth credentials are configured; then test only with owner-authorized sandbox credentials. Enable providers individually only after their own evidence reaches sandbox-tested or live-verified. Never display a provider as active merely because its adapter exists.
 
 Until those gates are complete, the route remains a Preview/PR feature. It does not change public tracking, does not use carrier credentials belonging to other merchants, and does not establish live carrier coverage or commercial authorization.
