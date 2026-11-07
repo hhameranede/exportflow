@@ -188,6 +188,27 @@ const missingNameHeader = await call("tools/call", {
 assert.equal(missingNameHeader.status, 400);
 assert.equal((await missingNameHeader.json()).error.code, -32020);
 
+const unicodeToolName = "list_cärrìers";
+const encodedToolName = btoa(String.fromCharCode(...new TextEncoder().encode(unicodeToolName)));
+const encodedNameCall = await call("tools/call", {
+  name: unicodeToolName,
+  arguments: {}
+}, 17, { headers: { "Mcp-Name": "=?base64?" + encodedToolName + "?=" } });
+assert.equal(encodedNameCall.status, 400);
+assert.equal((await encodedNameCall.json()).error.code, -32602, "Valid Base64 Mcp-Name must decode before unsupported-tool validation");
+
+const malformedEncodedName = await call("tools/call", {
+  name: unicodeToolName,
+  arguments: {}
+}, 18, { headers: { "Mcp-Name": "=?base64?%%%?=" } });
+assert.equal(malformedEncodedName.status, 400);
+assert.equal((await malformedEncodedName.json()).error.code, -32020);
+
+const badAcceptToken = await call("tools/list", {}, 19, {
+  headers: { Accept: "notapplication/json, text/event-stream" }
+});
+assert.equal(badAcceptToken.status, 406, "Accept parsing must match exact media types");
+
 const invalidOrigin = await call("tools/list", {}, 12, {
   headers: { Origin: "https://attacker.example" }
 });
