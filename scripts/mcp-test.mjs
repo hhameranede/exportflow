@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { onRequestPost } from "../functions/api/mcp.js";
+import { onRequestGet, onRequestPost } from "../functions/api/mcp.js";
 
 const endpoint = "https://exportflow.me/api/mcp";
 const protocolVersion = "2026-07-28";
@@ -37,9 +37,15 @@ async function call(method, params = {}, id = 1, overrides = {}) {
   return onRequestPost({ request, env: {} });
 }
 
-const getOnly = await onRequestPost({ request: new Request(endpoint, { method: "GET" }), env: {} });
+const getOnly = await onRequestGet({ request: new Request(endpoint, { method: "GET" }), env: {} });
 assert.equal(getOnly.status, 405);
 assert.equal(getOnly.headers.get("Allow"), "POST");
+
+const getPassedToPostHandler = await onRequestPost({
+  request: new Request(endpoint, { method: "GET" }),
+  env: {}
+});
+assert.equal(getPassedToPostHandler.status, 405);
 
 const emptyBody = await onRequestPost({
   request: new Request(endpoint, {
