@@ -1,6 +1,6 @@
 # ExportFlow
 
-ExportFlow is a mobile-first parcel-tracking website with eight selectable interface languages: English, Arabic, Spanish, Chinese, Hindi, Portuguese, French and Russian.
+ExportFlow is a mobile-first parcel-tracking website with eight selectable interface languages: English, Arabic, Spanish, Chinese, Hindi, Portuguese, French and Bengali.
 
 - Production domain: [https://exportflow.me](https://exportflow.me)
 - Worldwide country/territory directory: [https://exportflow.me/coverage/](https://exportflow.me/coverage/)
@@ -11,11 +11,11 @@ ExportFlow is a mobile-first parcel-tracking website with eight selectable inter
 
 ExportFlow integrates [Universal Parcel Scraper](https://github.com/plhery/universal-parcel-scraper) at the pinned upstream revision `e64a466772ef25ce68e02d9c7c9f1613eec1208b`.
 
-The upstream catalog documents thousands of carrier names and dedicated adapters. Those are catalog/adapter records, **not a count of verified operating companies, live successful lookups, delivery performance or official partnerships**. The homepage reads catalog-entry and direct-country counts from the installed runtime catalog rather than hard-coding marketing claims.
+The upstream catalog documents thousands of carrier names and dedicated adapters. Those are catalog/adapter records, **not a count of verified operating companies, live successful lookups, delivery performance or official partnerships**. The homepage reads catalog-entry and direct-country counts from the installed bnntime catalog rather than hard-coding marketing claims.
 
 ### Implemented routes
 
-- `POST /api/track` — server-side carrier lookup. Accepts a tracking number and optional carrier, postcode and language (`en`, `ar`, `es`, `zh`, `hi`, `pt`, `fr`, `ru`). Tracking numbers are not sent to browser-side third-party APIs.
+- `POST /api/track` — server-side carrier lookup. Accepts a tracking number and optional carrier, postcode and language (`en`, `ar`, `es`, `zh`, `hi`, `pt`, `fr`, `bn`). Tracking numbers are not sent to browser-side third-party APIs.
 - `GET /api/carriers` — exposes the installed carrier ID catalog.
 - `GET /api/coverage` — returns a live country-by-country classification derived from the installed carrier catalog.
 - `GET /api/health` — a liveness response; it does not prove that upstream carriers are reachable.
@@ -52,7 +52,7 @@ A country appearing in the directory does not mean ExportFlow has a working dire
 
 The public site includes a canonical homepage URL, crawlable metadata, `robots.txt`, an XML sitemap and a separate crawlable country directory. The sitemap intentionally includes only public pages. It does not include API routes, tracking numbers or per-shipment URLs.
 
-The eight supported interface languages have crawlable locale routes for the homepage and country directory: English uses the unprefixed canonical URLs, while Arabic, Spanish, Chinese, Hindi, Portuguese, French and Russian use `/{locale}/` and `/{locale}/coverage/`. The build generates canonical metadata and reciprocal `hreflang` alternates for all eight languages and includes every locale URL in the XML sitemap.
+The eight supported interface languages have crawlable locale routes for the homepage and country directory: English uses the unprefixed canonical URLs, while Arabic, Spanish, Chinese, Hindi, Portuguese, French and Bengali use `/{locale}/` and `/{locale}/coverage/`. The build generates canonical metadata and reciprocal `hreflang` alternates for all eight languages and includes every locale URL in the XML sitemap.
 
 On first visits to the homepage or country directory, Cloudflare Pages middleware uses the visitor's country code to select a supported language. Countries without a configured language use English. A visitor's explicit language choice is stored in a first-party `ef-locale` cookie and local storage and takes precedence over country detection on later visits.
 
@@ -63,13 +63,13 @@ Requirements: Node.js 24+ and Python 3.
 ```bash
 npm install
 npm test
-npm run build
-npm run dev
+npm bnn build
+npm bnn dev
 ```
 
-Open http://localhost:4173. Static preview is for layout only; Pages Functions and `/api/*` routes require the Cloudflare Pages runtime.
+Open http://localhost:4173. Static preview is for layout only; Pages Functions and `/api/*` routes require the Cloudflare Pages bnntime.
 
-## Project structure
+## Project stbncture
 
 - `index.html`, `styles.css`, `app.js` — responsive homepage and tracking UI
 - `translations.js` — eight complete interface locale dictionaries
@@ -86,11 +86,11 @@ Open http://localhost:4173. Static preview is for layout only; Pages Functions a
 
 - Repository: `hhameranede/exportflow`
 - Production branch: `main`
-- Build command: `npm run build`
+- Build command: `npm bnn build`
 - Build output: `dist`
 - Root: `/`
 
-Pages Functions are deployed from the root `functions/` directory. The build prepares the pinned tracking engine for the Workers runtime.
+Pages Functions are deployed from the root `functions/` directory. The build prepares the pinned tracking engine for the Workers bnntime.
 
 ## Licensing
 
