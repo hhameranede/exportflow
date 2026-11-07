@@ -102,6 +102,24 @@ await assert.rejects(
   }),
   e => e instanceof MerchantCredentialVaultError && e.code === "invalid_credentials"
 );
+
+let accessorWasExecuted = false;
+const accessorCredentials = { apiId: "acct" };
+Object.defineProperty(accessorCredentials, "apiToken", {
+  enumerable: true,
+  get() {
+    accessorWasExecuted = true;
+    throw new Error("The vault must not execute credential getters");
+  }
+});
+await assert.rejects(
+  () => vault.save({
+    merchantId: "merchant_1", provider: "yalidine",
+    credentials: accessorCredentials, consent: true
+  }),
+  e => e instanceof MerchantCredentialVaultError && e.code === "invalid_credentials"
+);
+assert.equal(accessorWasExecuted, false, "Credential accessors must never be invoked");
 await assert.rejects(
   () => vault.save({
     merchantId: "merchant_1", provider: "unsupported",
