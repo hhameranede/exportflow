@@ -34,6 +34,27 @@ The pinned snapshot currently contains 1,339 carrier manifests, 732 `adapter.ts`
 
 A separate root regression script now exercises the three provider-specific API clients (UPS OAuth + Track, FedEx OAuth + Track, DHL Express API-key lookup) through intercepted mock HTTP responses. This validates request shape, credential handling and response parsing without sending external traffic. It is not a live carrier acceptance test.
 
+## Per-record source, license and rights ledger (2026-11-07)
+
+The ExportFlow-native carrier index now records provenance for every one of the **1,338 display entries** (the pinned upstream snapshot has 1,339 manifests including its reserved `unknown` record). Each entry carries its source repository, pinned commit, exact manifest path/permalink, recorded source license, local LICENSE/NOTICE paths and explicit rights boundaries. Package preparation generates the full machine-readable ledger at `data/carrier-catalog-licensing.json`.
+
+| Field | Recorded value | Meaning |
+| --- | --- | --- |
+| Source repository | `plhery/universal-parcel-scraper` | Upstream provenance, not ExportFlow authorship |
+| Source revision | `e64a466772ef25ce68e02d9c7c9f1613eec1208b` | Reproducible pinned manifest revision |
+| Manifest license | Apache-2.0 | Recorded license for the upstream carrier manifest/source material |
+| License / attribution | `third-party-licenses/universal-parcel-scraper/LICENSE` and `NOTICE` | Preserve both with the vendored source and covered redistributed material |
+| Official carrier identity | Not independently verified | An upstream catalogue listing does not prove official carrier status |
+| Carrier trademark rights | Not granted by the upstream software license | Use marks only as necessary for identification; do not imply endorsement |
+| Carrier API authorization | Not granted by the upstream software license | An adapter or API module does not authorize ExportFlow to call an API |
+| Third-party tracking-data rights | Not assessed per carrier | Commercial display/redistribution requires separate terms or written authorization |
+
+**Important scope distinction:** Apache-2.0 is the license recorded for the upstream repository's core source and carrier manifests. It permits use of that licensed upstream material subject to its conditions, including retaining the license and applicable NOTICE attributions. It does **not** grant rights from UPS, DHL, FedEx or any other carrier to their trademarks, API services, tracking pages, shipment records, customer data, or a commercial service-provider relationship. It also does not certify any carrier or make an upstream-declared URL an independently validated official endpoint.
+
+Unreviewed tracking-page candidates are retained only in the generated internal licensing ledger as research leads; they are not exposed in the public carrier index. The upstream NOTICE also records nested MIT model components, GeoNames CC BY 4.0, OpenStreetMap ODbL, Natural Earth and OurAirports public-domain data, and the Government Open Data License - India attribution. Those notices remain preserved and are not silently re-labelled as Apache-2.0. The AGPL-3.0 `trawl/` component remains excluded.
+
+Accordingly, all 1,338 directory entries now have reproducible source and license attribution, but the count of independently verified official carrier identities and carrier API authorizations remains **zero** until primary carrier evidence and applicable permissions are separately recorded. The D1 evidence registry remains the place to promote individual carriers from research to testing/integrated/verified; it must contain official documentation and authorization evidence before any verified or commercially authorized claim.
+
 ## Runtime and integration status
 
 - **Active tracking engine:** ExportFlow continues to use the pinned npm dependency `universal-parcel-scraper@0.977.1`, fixed to upstream commit `e64a466772ef25ce68e02d9c7c9f1613eec1208b`. The local snapshot is a separately stored source copy; it is not loaded as a second runtime engine.
