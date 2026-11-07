@@ -10,7 +10,7 @@
 <title>Merchant Workspace — ExportFlow</title>
 <link rel="canonical" href="https://exportflow.me/merchant/">
 <link rel="icon" href="/favicon.svg?v=20261106" type="image/svg+xml">
-<link rel="stylesheet" href="/styles.css?v=ef-ui-refresh-20261106-01">
+<link rel="stylesheet" href="/styles.css?v=ef-global-logistics-20261107-02">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -32,9 +32,18 @@
     <p class="body-copy">Keep a small follow-up list on this device and refresh up to ten shipments in two bounded batches. No account or server-side history is created.</p>
   </section>
 
-  <section aria-labelledby="privacyTitle" style="margin-top:28px">
+  <section aria-label="Local storage privacy notice" style="margin-top:28px">
     <div class="merchant-notice" id="privacyNotice">
-      **Device-only storage:** your order references and tracking numbers are saved in this browser's local storage. They are not uploaded when you add an item. Clicking “Refresh shipments” sends the selected tracking details to ExportFlow and, when needed, the upstream carrier. Avoid shared/public devices and clear this list before handing the device to someone else.
+      <strong>Device-only storage:</strong> your order references and tracking numbers are saved in this browser's local storage. They are not uploaded when you add an item. Clicking “Refresh shipments” sends the selected tracking details to ExportFlow and, when needed, the upstream carrier. Avoid shared/public devices and clear this list before handing the device to someone else.
+    </div>
+  </section>
+
+  <section aria-label="Shipment overview" style="margin-top:28px">
+    <div class="feature-grid merchant-stats">
+      <article class="feature-card merchant-stat"><span>Total saved</span><strong id="metricTotal">0</strong></article>
+      <article class="feature-card merchant-stat"><span>Refreshed</span><strong id="metricTracked">0</strong></article>
+      <article class="feature-card merchant-stat"><span>Delivered</span><strong id="metricDelivered">0</strong></article>
+      <article class="feature-card merchant-stat"><span>Needs attention</span><strong id="metricAttention">0</strong></article>
     </div>
   </section>
 
@@ -81,6 +90,7 @@
     <h2 id="watchlistTitle">Your saved shipments.</h2>
     <div class="merchant-toolbar">
       <button class="primary-button" type="button" id="refreshAll">Refresh shipments</button>
+      <button type="button" id="exportCsv">Export CSV</button>
       <button type="button" id="deleteAll" class="danger">Clear local watchlist</button>
       <span class="merchant-status" id="watchlistSummary" aria-live="polite">No shipments saved.</span>
     </div>
@@ -91,6 +101,6 @@
   </section>
 </main>
 <footer class="site-footer"><p>ExportFlow Merchant Workspace is a local utility, not a hosted multi-user merchant account.</p><nav aria-label="Footer"><a href="/developers/">Developers</a><a href="/privacy/">Privacy</a><a href="/">Home</a></nav></footer>
-<script type="module" src="/merchant.js"></script>
+<script type="module" src="/merchant.js?v=ef-global-logistics-20261107-02"></script>
 </body>
 </html>
