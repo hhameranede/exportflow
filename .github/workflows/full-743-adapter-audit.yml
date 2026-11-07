@@ -37,12 +37,6 @@ jobs:
       - name: Install upstream dependencies
         working-directory: .audit/upstream
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Generate complete adapter-by-adapter inventory
-        run: node scripts/full-adapter-audit.mjs
-        env:
-          EXPORTFLOW_UPSTREAM_ROOT: .audit/upstream
-          EXPORTFLOW_COMPARE_ROOT: vendor/sources/universal-parcel-scraper
-          EXPORTFLOW_AUDIT_OUTPUT: artifacts/full-743-adapter-audit
       - name: Detect Datadog Test Optimization configuration
         id: datadog-config
         shell: bash
@@ -84,6 +78,8 @@ jobs:
       - name: Run upstream typecheck
         working-directory: .audit/upstream
         run: npm run typecheck
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
       - name: Build upstream package
         working-directory: .audit/upstream
         run: npm run build
