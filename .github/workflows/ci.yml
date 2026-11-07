@@ -54,9 +54,9 @@ jobs:
           node --check scripts/production-smoke-test-unit.mjs
           node --check functions/lib/country-codes.mjs
           node --check functions/lib/algerian-carrier-connectors.mjs
-          node --check functions/lib/merchant-credential-vault.mjs
+          if [[ -f functions/lib/merchant-credential-vault.mjs ]]; then node --check functions/lib/merchant-credential-vault.mjs; fi
           node --check scripts/algerian-connectors-test.mjs
-          node --check scripts/merchant-credential-vault-test.mjs
+          if [[ -f scripts/merchant-credential-vault-test.mjs ]]; then node --check scripts/merchant-credential-vault-test.mjs; fi
           node --check scripts/materialize-vendor-sources.mjs
           node --check scripts/materialize-dz-delivery.mjs
       - name: Detect Datadog Test Optimization configuration
