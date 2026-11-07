@@ -1,4 +1,4 @@
-import { CARRIERS, CARRIER_IDS, CARRIER_CATALOG_METADATA } from "../../data/carrier-catalog.generated.mjs";
+import { CARRIERS, CARRIER_IDS, CARRIER_CATALOG_METADATA, CARRIER_INTEGRATION_MATRIX } from "../../data/carrier-catalog.generated.mjs";
 
 const SAFE_TRACKING_MODES = new Set(["automatic", "link-only"]);
 const CARRIER_EVIDENCE_SQL = `
@@ -127,12 +127,31 @@ function publicCarrierRecord(carrier, evidenceByAdapter) {
       .map(code => code.toUpperCase())
   )].sort();
 
+  const matrix = CARRIER_INTEGRATION_MATRIX[id] || null;
+  const integrationClass = [
+    "provider_api_client", "dedicated_adapter", "universal_fallback",
+    "link_only", "adapter_reference_only", "catalogue_only"
+  ].includes(matrix?.integrationClass) ? matrix.integrationClass : "catalogue_only";
+  const sourceIntegration = {
+    integrationClass,
+    apiClient: matrix?.apiClient === "source_module_present" ? "source_module_present" : "not_assessed",
+    apiAuthentication: typeof matrix?.apiAuthentication === "string" ? matrix.apiAuthentication : null,
+    requiredEnvironment: Array.isArray(matrix?.requiredEnvironment) ? matrix.requiredEnvironment : [],
+    mockContractTest: typeof matrix?.mockContractTest === "string" ? matrix.mockContractTest : null,
+    adapterSource: matrix?.adapterSource === "present" ? "present" : "not_found",
+    fixtureTest: matrix?.fixtureTest === "defined" ? "defined" : "not_found",
+    liveTestDefinition: matrix?.liveTestDefinition === "defined" ? "defined" : "not_found",
+    upstreamTrackingSteps: Array.isArray(matrix?.upstreamTrackingSteps) ? matrix.upstreamTrackingSteps : [],
+    commercialAuthorization: "not_assessed",
+    thirdPartyTrackingRights: "not_assessed"
+  };
   const evidence = adapter ? evidenceByAdapter.get(adapter) : null;
   return {
     id,
     name: typeof carrier.name === "string" ? carrier.name.slice(0, 120) : id,
     countries,
     tracking: { mode, adapter },
+    sourceIntegration,
     evidence: evidence
       ? {
           level: evidence.evidenceLevel,
@@ -198,6 +217,11 @@ export async function onRequestGet({ env } = {}) {
     carriers: CARRIER_IDS,
     carrierRecords,
     evidenceRegistryAvailable: registry.available,
+    sourceIntegrationSummary: {
+      records: CARRIER_CATALOG_METADATA.integrationMatrixRecords,
+      providerApiClients: CARRIER_CATALOG_METADATA.providerApiClientRecords,
+      classes: CARRIER_CATALOG_METADATA.integrationClassCounts
+    },
     evidenceRegistryCounts,
     evidenceRegistry: registry.records,
     metadataNotice: "A carrier catalog entry or adapter is not a live availability check, an authorized integration or a carrier partnership. Research status remains distinct from verified tracking; Verified requires live test evidence and an authorization reference."
