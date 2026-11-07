@@ -98,3 +98,15 @@ This removes address fields from the first pilot because a legal-entity address 
 Tests cover LEI checksum, name/country validation, active/issued state, allowed and excluded categories, unknown category rejection, and intentional omission of addresses and identifiers that might expose personal data.
 
 The test is wired into package lint/check, CI syntax validation and the Datadog manual regression suite.
+
+## Bounded official Access Service client — 2026-11-07
+
+Implemented in the isolated follow-up branch `feat/gleif-access-service-client-20261107`:
+
+- `functions/lib/gleif-access-service.mjs` calls only the official `https://api.gleif.org/api/v1/lei-records` endpoint using the JSON:API response shape and the documented `page[number]` / `page[size]` pagination model.
+- The default page size is 25; one collector invocation reads at most four pages and accepts at most 25 normalized records. Request timeout is bounded to 8 seconds by default (500–15,000 ms configurable).
+- Pagination links are validated to stay on the exact HTTPS GLEIF origin and LEI-record route, with the next sequential page and unchanged bounded page size. Redirects are rejected. No automatic retries or bulk Golden Copy download are used.
+- The client passes candidate records through the existing conservative normalizer and returns only the normalized entity plus its allowlisted source projection; it does not expose raw API records.
+- The implementation is read-only and has no D1/KV write path. It does not create ingestion runs or import records. Any future persistence must independently pass the existing D1 rights trigger and use the recorded retrieval/source provenance.
+- Tests use mocked Fetch responses only; no live GLEIF request, external credential, private source data, or remote database is used.
+- Official API reference: https://api.gleif.org/docs. GLEIF documents JSON:API responses and pagination via `page[number]` and `page[size]`; the service documentation states a 60-request-per-minute per-user limit. The client’s four-page maximum is deliberately below that limit.
