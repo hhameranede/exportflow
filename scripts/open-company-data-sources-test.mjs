@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
+const migration = await readFile("migrations/0005_open_company_data_registry.sql", "utf8");
+for (const table of [
+  "company_data_sources",
+  "company_entities",
+  "company_source_snapshots",
+  "company_source_records",
+  "company_field_provenance",
+  "company_entity_links",
+  "company_ingestion_runs",
+  "company_data_source_audit"
+]) {
+  assert.match(migration, new RegExp("CREATE TABLE IF NOT EXISTS " + table + "\\b"));
+}
+assert.match(migration, /trg_company_source_records_rights_insert/);
+assert.match(migration, /trg_company_source_records_rights_update/);
+assert.match(migration, /commercial_use = 1/);
+assert.match(migration, /redistribution = 1/);
+assert.match(migration, /RAISE\\(ABORT/);
+assert.doesNotMatch(migration, /\\n\\s*(email|phone|personal_id|beneficial_owner)\\s+TEXT/i);
+
 const registry = JSON.parse(
   await readFile("data/open-company-data-sources.json", "utf8")
 );
