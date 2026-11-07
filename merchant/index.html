@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#FAF9F6">
+<meta name="description" content="A private, device-only merchant workspace for organizing a small shipment watchlist with ExportFlow.">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="googlebot" content="noindex,nofollow,noarchive">
+<title>Merchant Workspace — ExportFlow</title>
+<link rel="canonical" href="https://exportflow.me/merchant/">
+<link rel="icon" href="/favicon.svg?v=20261106" type="image/svg+xml">
+<link rel="stylesheet" href="/styles.css?v=ef-ui-refresh-20261106-01">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="/" aria-label="ExportFlow home"><span class="brand-name">Export<span>Flow</span></span></a>
+  <nav class="desktop-nav" aria-label="Merchant navigation">
+    <a href="/developers/">Developers</a>
+    <a href="/coverage/">Carrier coverage</a>
+    <a href="/">Track a parcel</a>
+  </nav>
+  <span class="field-label">LOCAL WORKSPACE</span>
+</header>
+<main class="page-shell" style="max-width:1080px;margin:0 auto;padding:clamp(24px,5vw,64px) 20px 80px">
+  <section class="hero-content" aria-labelledby="merchantTitle">
+    <p class="eyebrow"><span class="eyebrow-index">WORKSPACE</span><span>MERCHANT TOOLS</span></p>
+    <h1 id="merchantTitle">Your shipments.<br><em>One working list.</em></h1>
+    <p class="body-copy">Keep a small follow-up list on this device and refresh up to ten shipments in two bounded batches. No account or server-side history is created.</p>
+  </section>
+
+  <section aria-labelledby="privacyTitle" style="margin-top:28px">
+    <div class="merchant-notice" id="privacyNotice">
+      **Device-only storage:** your order references and tracking numbers are saved in this browser's local storage. They are not uploaded when you add an item. Clicking “Refresh shipments” sends the selected tracking details to ExportFlow and, when needed, the upstream carrier. Avoid shared/public devices and clear this list before handing the device to someone else.
+    </div>
+  </section>
+
+  <section aria-labelledby="addShipmentTitle" style="margin-top:32px">
+    <p class="eyebrow">01 / ADD A SHIPMENT</p>
+    <h2 id="addShipmentTitle">Add to your watchlist.</h2>
+    <form class="merchant-form" id="merchantForm" style="margin-top:16px">
+      <label>
+        Order reference
+        <input id="orderReference" name="orderReference" maxlength="64" autocomplete="off" placeholder="Order #1042" required>
+      </label>
+      <label>
+        Tracking number
+        <input id="trackingNumber" name="trackingNumber" maxlength="40" autocomplete="off" spellcheck="false" placeholder="LX123456789CN" required>
+      </label>
+      <label>
+        Carrier ID (optional)
+        <input id="carrierId" name="carrierId" maxlength="80" autocomplete="off" placeholder="Leave blank to detect">
+      </label>
+      <label>
+        Postcode (optional)
+        <input id="postcode" name="postcode" maxlength="24" autocomplete="off" placeholder="If the carrier requires it">
+      </label>
+      <label class="form-wide">
+        Result language
+        <select id="language" name="language">
+          <option value="en">English</option>
+          <option value="ar">العربية</option>
+          <option value="fr">Français</option>
+          <option value="es">Español</option>
+          <option value="pt">Português</option>
+          <option value="hi">हिन्दी</option>
+          <option value="zh">中文</option>
+          <option value="bn">বাংলা</option>
+        </select>
+      </label>
+      <div class="form-wide"><button class="primary-button" type="submit">Add shipment to this device</button></div>
+    </form>
+    <p class="merchant-status" id="formStatus" role="status" aria-live="polite"></p>
+  </section>
+
+  <section aria-labelledby="watchlistTitle" style="margin-top:52px">
+    <p class="eyebrow">02 / SHIPMENT WATCHLIST</p>
+    <h2 id="watchlistTitle">Your saved shipments.</h2>
+    <div class="merchant-toolbar">
+      <button class="primary-button" type="button" id="refreshAll">Refresh shipments</button>
+      <button type="button" id="deleteAll" class="danger">Clear local watchlist</button>
+      <span class="merchant-status" id="watchlistSummary" aria-live="polite">No shipments saved.</span>
+    </div>
+    <div class="merchant-list" id="watchlist" aria-live="polite">
+      <p class="merchant-notice">Your watchlist is empty. Add an order above to begin.</p>
+    </div>
+    <p class="merchant-status" id="refreshStatus" role="status" aria-live="polite" style="margin-top:14px"></p>
+  </section>
+</main>
+<footer class="site-footer"><p>ExportFlow Merchant Workspace is a local utility, not a hosted multi-user merchant account.</p><nav aria-label="Footer"><a href="/developers/">Developers</a><a href="/privacy/">Privacy</a><a href="/">Home</a></nav></footer>
+<script type="module" src="/merchant.js"></script>
+</body>
+</html>
