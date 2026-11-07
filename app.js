@@ -558,7 +558,7 @@
   }
 
   async function trackLive(value) {
-    const number = (value || "").replace(/[\\u200B-\\u200D\\uFEFF]/g, "").trim();
+    const number = (value || "").replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
     if (!number) {
       showTrackingError(t("errorEmpty"));
       if (trackingInput) trackingInput.focus();
