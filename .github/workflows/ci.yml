@@ -38,6 +38,8 @@ jobs:
           node --check functions/api/batch-track.js
           node --check functions/api/openapi.js
           node --check exportflow-sdk.mjs
+          node --check merchant.js
+          node --check scripts/merchant-workspace-test.mjs
           node --check scripts/batch-track-test.mjs
           node --check scripts/openapi-test.mjs
           node --check scripts/sdk-test.mjs
@@ -68,6 +70,8 @@ jobs:
           test -s dist/og-image-20261106.png
           test -s dist/coverage/index.html
           test -s dist/developers/index.html
+          test -s dist/merchant/index.html
+          test -s dist/merchant.js
           test -s dist/exportflow-sdk.mjs
           test -s dist/about/index.html
           test -s dist/contact/index.html
