@@ -24,6 +24,12 @@ The reviewed source snapshots below are now ordinary tracked files in this priva
 
 The machine-readable inventory is in [`vendor/sources/README.md`](../vendor/sources/README.md). The source snapshots are kept for auditability, future adapter research and reproducible diffs; **they are not all wired into the production runtime**.
 
+### ExportFlow-native carrier catalogue
+
+The pinned `carriers/*/carrier.json` manifests are compiled by `scripts/generate-exportflow-carrier-catalog.mjs` into `data/carrier-catalog.generated.mjs` during the repository's install/prepare step. The generator reads only the tracked in-repository snapshot and performs no network request. The public `GET /api/carrier-directory` and `GET /api/carriers` routes consume this ExportFlow-normalized snapshot instead of importing carrier-list metadata from the external npm package at request time.
+
+This gives ExportFlow ownership of the normalized catalogue schema, identifiers, directory API, pagination, search, evidence overlay and customer-facing presentation. It does **not** transfer ownership of carrier names, trademarks, logos, shipment information or the source data's underlying license rights. The upstream repository, pinned commit, Apache-2.0 core license and NOTICE/data attributions remain recorded and must be preserved. The separate tracking engine still uses the pinned runtime package; this change internalizes the directory data path, not the entire tracking implementation.
+
 ## Runtime and integration status
 
 - **Active tracking engine:** ExportFlow continues to use the pinned npm dependency `universal-parcel-scraper@0.977.1`, fixed to upstream commit `e64a466772ef25ce68e02d9c7c9f1613eec1208b`. The local snapshot is a separately stored source copy; it is not loaded as a second runtime engine.
