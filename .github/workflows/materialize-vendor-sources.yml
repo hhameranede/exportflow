@@ -1,0 +1,112 @@
+name: Materialize pinned vendor sources
+
+on:
+  push:
+    branches:
+      - feat/exportflow-global-logistics-1-2-20261107
+    paths:
+      - .github/workflows/materialize-vendor-sources.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exportflow-vendor-materialization-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    name: Copy pinned sources, preserve licenses and verify ExportFlow
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Check out feature branch and pinned source submodules
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Verify and materialize exact upstream source commits
+        run: node scripts/materialize-vendor-sources.mjs
+
+      - name: Verify no prohibited source component or VCS metadata was copied
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s vendor/sources/universal-parcel-scraper/LICENSE
+          test -s vendor/sources/universal-parcel-scraper/NOTICE
+          test -s vendor/sources/shopana-carrier-api/LICENSE
+          test -s vendor/sources/shopana-carrier-api/packages/novaposhta-api-client/LICENSE
+          test -s vendor/sources/shopana-carrier-api/packages/novaposhta-transport-fetch/LICENSE
+          test -s vendor/sources/reference/karrio-community/LICENSE
+          test -s vendor/sources/reference/karrio-community/plugins/easypost/LICENSE
+          test ! -e vendor/sources/universal-parcel-scraper/trawl
+          test ! -e .gitmodules
+          if find vendor/sources -name .git -o -name node_modules -o -name .env -o -name .dev.vars | grep -q .; then
+            echo "::error::VCS metadata, dependencies or private environment files were copied."
+            exit 1
+          fi
+          du -sh vendor/sources
+          find vendor/sources -type f | wc -l
+
+      - name: Install ExportFlow dependencies from the frozen lockfile
+        run: npm ci --no-audit --no-fund --foreground-scripts
+
+      - name: Check source materializer syntax and project lint
+        run: |
+          node --check scripts/materialize-vendor-sources.mjs
+          npm run lint
+
+      - name: Run ExportFlow regression suite
+        run: npm test
+
+      - name: Build Cloudflare Pages output
+        run: npm run build
+
+      - name: Verify localized SEO pages and hreflang sitemap
+        run: node scripts/locale-build-test.mjs
+
+      - name: Bundle Pages Functions with production Wrangler
+        run: npx --yes wrangler@3.114.17 pages functions build functions --outdir .wrangler/pages-functions
+
+      - name: Stage only approved vendor source snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A -- vendor
+          git add -u -- .gitmodules
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "No vendor changes were produced; source materialization is already up to date."
+            exit 0
+          fi
+          git diff --cached --stat
+
+      - name: Commit and push materialized sources to the feature branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "vendor: materialize pinned licensed source snapshots"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Trigger full ExportFlow CI for the materialized commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ci.yml --ref "${GITHUB_REF_NAME}"
