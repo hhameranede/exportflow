@@ -184,8 +184,6 @@ expected_primary_sources = {
     "yanwen": "https://opendocs.yw56.com.cn/webfile/7128663508291424256/",
     "cainiao": "https://open.gfn.cainiao.com/apiInfo/introduce",
     "china-post": "https://iframe.chinapost.com.cn/en/category/1408/3925-1.htm",
-    "yunexpress": "https://www.yunexpress.com/",
-    "china-post": "https://english.chinapost.com.cn/en/report/2210/0013-1.htm",
     "yunexpress": "https://www.yunexpress.com/resource/shipment-tracking"
 }
 for provider_id, source_url in expected_primary_sources.items():
