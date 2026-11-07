@@ -196,3 +196,18 @@ The register has expanded from 18 to **20 external source entries**. These two s
 Official evidence: [Singapore ACRA dataset and record count](https://data.gov.sg/datasets/d_3f960c10fed6145404ca7b821f263b87/view), [Singapore Open Data Licence 1.0](https://developers.data.gov.sg/open-data-licence), [data.gov.sg privacy and API terms](https://developers.data.gov.sg/privacy-and-terms), [Canada Federal Corporations dataset and licence metadata](https://open.canada.ca/data/en/dataset/0032ce54-c5dd-4b66-99a0-320a7b5e99f2), [Corporations Canada data services](https://ised-isde.canada.ca/site/corporations-canada/en/data-services), [federal corporation JSON schema guide](https://ised-isde.canada.ca/site/corporations-canada/en/accessing-federal-corporation-json-datasets).
 
 Both sources are seeded as rights-approved at the metadata level but remain `candidate` for ingestion with personal-data review pending. No company records from either source have been imported yet.
+
+
+## ACRA import schema and safe normalization — 2026-11-07
+
+Official ACRA dataset fields have now been checked from the publisher's live October 2026 dataset page: `uen`, `issuance_agency_desc`, `uen_status_desc`, `entity_name`, `entity_type_desc`, `uen_issue_date`, `reg_street_name`, and `reg_postal_code`. The published file contains about 2.1 million rows (223.4 MB). The field distribution shows a substantial Sole Proprietorship/Partnership population, so the source cannot be copied wholesale into a public company directory.
+
+Implementation:
+- `functions/lib/acra-normalizer.mjs` allows only current `Registered` records whose entity type is exactly `Local Company` or `Limited Liability Partnership`.
+- Sole traders/partnerships, foreign branches, unknown/future types, deregistered rows and malformed IDs/names/dates are excluded.
+- Only the eight official dataset fields are projected; arbitrary extra columns such as director/contact information are ignored.
+- The registered street name is retained only in the source provenance record, not misrepresented as a complete registered address. D1 normalized address stays null; postal code is optional.
+- `scripts/acra-normalizer-test.mjs` covers allowed and excluded cases, including future/unknown types and personal/contact-field stripping.
+- Full import remains blocked: source-level personal-data review is pending, no company records have been imported, and the full 223 MB file does not belong in KV. See [ACRA import specification](ACRA_SINGAPORE_IMPORT_SPEC.md).
+
+Publisher evidence: [ACRA dataset schema and October 2026 record count](https://data.gov.sg/datasets/d_3f960c10fed6145404ca7b821f263b87/view), [Singapore Open Data Licence 1.0](https://developers.data.gov.sg/open-data-licence), [data.gov.sg terms](https://developers.data.gov.sg/privacy-and-terms).
