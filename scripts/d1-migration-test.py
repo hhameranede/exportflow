@@ -162,6 +162,37 @@ assert all(row[2] == "none" for row in evidence_rows), evidence_rows
 assert all(row[3].startswith("https://") for row in evidence_rows), evidence_rows
 assert all(row[5] is None for row in evidence_rows), evidence_rows
 
+expected_primary_sources = {
+    "ups": "https://developer.ups.com/tag/Tracking?loc=en_US",
+    "fedex": "https://developer.fedex.com/",
+    "dhl-express": "https://developer.dhl.com/tracking?language_content_entity=en",
+    "aramex": "https://www.aramex.com/ae/en/developers-solution-center/aramex-apis",
+    "canada-post": "https://www.canadapost-postescanada.ca/info/mc/business/productsservices/developers/services/tracking/default.jsf?LOCALE=en",
+    "australia-post": "https://developers.auspost.com.au/apis/shipping-and-tracking/info/api-resources/tracking",
+    "royal-mail": "https://developer.royalmail.net/api",
+    "correos": "https://www.correos.es/es/en/companies/e-commerce/reinforce-your-ecommerce-logistics/api-integration",
+    "la-poste": "https://developer.laposte.fr/catalog-apis/suivi%402",
+    "japan-post": "https://www.post.japanpost.jp/index_en.html",
+    "usps": "https://developers.usps.com/",
+    "postnl": "https://developer.postnl.nl/integration-with-postnl/api-overview/send-and-track/shippingstatus-webservice/",
+    "dpd-geopost": "https://developer.dpdgroup.com/",
+    "gls": "https://dev-portal.gls-group.net/get-started",
+    "emirates-post": "https://www.emiratespost.ae/all-services/integration-solutions",
+    "sf-express": "https://open.sf-express.com/developerIntroduction",
+    "india-post": "https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspxTrack",
+    "singapore-post": "https://www.singpost.com/track-items",
+    "yanwen": "https://opendocs.yw56.com.cn/webfile/7128663508291424256/",
+    "cainiao": "https://open.gfn.cainiao.com/apiInfo/introduce"
+}
+for provider_id, source_url in expected_primary_sources.items():
+    row = db.execute(
+        """SELECT official_source_url, evidence_status, verification_method,
+                  verified_at, verification_evidence_url, authorization_evidence_url
+           FROM carrier_evidence WHERE provider_id = ?""",
+        (provider_id,)
+    ).fetchone()
+    assert row == (source_url, "research", "none", None, None, None), (provider_id, row)
+
 import json
 for row in evidence_rows:
     adapter_ids = json.loads(row[4])
@@ -227,4 +258,4 @@ verified = db.execute(
 ).fetchone()
 assert verified == ("verified", "live"), verified
 
-print(f"D1 migrations passed ({len(migrations)} files; {len(required)} required tables; {len(evidence_rows)} researched carrier records).")
+print(f"D1 migrations passed ({len(migrations)} files; {len(required)} required tables; {len(evidence_rows)} researched carrier records; {len(expected_primary_sources)} dated official-source records).")
