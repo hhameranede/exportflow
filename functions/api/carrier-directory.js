@@ -151,6 +151,7 @@ function buildCatalogRecords() {
               : [],
             sandboxMode: typeof matrix.sandboxMode === "string" ? matrix.sandboxMode : "not_assessed",
             sandboxBaseUrl: typeof matrix.sandboxBaseUrl === "string" && matrix.sandboxBaseUrl.startsWith("https://") ? matrix.sandboxBaseUrl : null,
+            apiDocumentationUrl: typeof matrix.apiDocumentationUrl === "string" && matrix.apiDocumentationUrl.startsWith("https://") ? matrix.apiDocumentationUrl : null,
             onboardingRole: typeof matrix.onboardingRole === "string" ? matrix.onboardingRole : null,
             mockContractTest: typeof matrix.mockContractTest === "string" ? matrix.mockContractTest : null,
             adapterSource: matrix.adapterSource === "present" ? "present" : "not_found",
