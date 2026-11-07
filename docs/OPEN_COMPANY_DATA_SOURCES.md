@@ -161,3 +161,22 @@ The current RIK download page says downloads require acceptance of the licence t
 ### R2 activation blocker
 
 Cloudflare R2 API returned HTTP 403 / error 10042: “Please enable R2 through the Cloudflare Dashboard.” This is account-level service activation, not a missing API permission. The API has no activation operation for this state. Enable R2 in the account dashboard before bucket creation; do not attempt repeated API calls. After activation, create the private bucket `exportflow-company-snapshots` with no public access and bind it only to the ingestion Worker.
+
+
+## Free-first storage correction — 2026-11-07
+
+The initial plan treated R2 as a prerequisite for every snapshot. That is too broad. **R2 is optional for compact operational manifests and small bounded payloads**; it remains the preferred object store for large immutable raw files and partitioned Parquet, but account activation is not required for the next implementation stage.
+
+- **D1 Preview is live and verified:** migrations 0005 and 0006 are applied to `exportflow-intelligence-preview-db`. The 8 registry tables exist; source register count is 18 (13 approved-rights candidates, 3 discovery-only rows, 1 blocked source and 1 quarantined source). At this point there are still zero company entities, source records, snapshots or ingestion runs. Production D1 remains untouched.
+- **Workers KV Preview namespace:** `exportflow-company-snapshots-kv` (`27b82210532f4ebf9df94b3f1003d74b`, EU).
+- **Workers KV Production namespace:** `exportflow-company-snapshots-prod-kv` (`cfe7b730249d4b24a6d02f2a8c5bc155`, EU). This resource was created but no Production Worker deployment or data write was performed.
+- Both namespaces are bound in Wrangler as `COMPANY_SNAPSHOT_KV`, with Preview and Production IDs separated. No R2 binding is configured.
+- `functions/lib/company-snapshot-kv.mjs` stores only a strict, 32 KiB-capped manifest allowlist (source ID, snapshot ID, SHA-256, file format, count, retrieval time, rights evidence and licence). It deliberately drops arbitrary fields, including raw company rows and personal data. Cache TTL defaults to seven days; D1 remains the durable system of record.
+- `scripts/company-snapshot-kv-test.mjs` validates scoped keys, manifest allowlisting, evidence URL, digest/format/count validation, TTL bounds, read and delete behaviour. It is added to the Datadog regression runner, the package lint/check scripts and CI syntax checks.
+
+Cloudflare's current published Workers KV Free allowance is 100,000 reads/day, 1,000 writes/day, 1,000 deletes/day, 1,000 list operations/day and 1 GB stored data per account; a value can be up to 25 MiB. These are quotas, not a guarantee that KV is a suitable bulk-file lake. The current free Workers plan also has separate request/CPU limits. We therefore batch/cache manifests and never perform one KV write for every company record.
+
+**Large-source ingestion remains gated.** GLEIF's latest published Golden Copy page reports 3,471,073 LEI records in its latest listed October 23, 2026 file, plus separate relationship and reporting-exception datasets. A full unfiltered copy is not an appropriate KV workload. Begin with a bounded, source-filtered sample and deterministic schema tests; then use D1 in controlled batches for approved compact fields. Large raw files and Parquet remain deferred until a genuine object-storage facility is available. Do not treat a KV manifest as if it were a raw snapshot archive.
+
+Official references: [Workers KV limits](https://developers.cloudflare.com/kv/platform/limits/), [Workers KV pricing](https://developers.cloudflare.com/kv/platform/pricing/), [GLEIF Golden Copy and delta files](https://www.gleif.org/en/lei-data/gleif-golden-copy/), [GLEIF download page and current record counts](https://www.gleif.org/en/lei-data/gleif-golden-copy/download-the-golden-copy).
+
