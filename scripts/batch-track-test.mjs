@@ -73,4 +73,27 @@ assert.ok(mixedPayload.results.every(result => result.status === 400));
 assert.ok(mixedPayload.results.every(result => result.data.error === "invalid_tracking_number"));
 assert.ok(!JSON.stringify(mixedPayload).includes('"abc"'), "Batch responses must never echo tracking numbers");
 
+const invalidFields = await send(post({
+  shipments: [
+    { id: "bad_carrier", number: "ABCD1234", carrier: "not a valid carrier" },
+    { id: "bad_postcode", number: "EFGH5678", postcode: "??" },
+    { id: "bad_language", number: "IJKL9012", language: "ru" }
+  ]
+}));
+assert.equal(invalidFields.status, 200);
+const invalidFieldResults = await invalidFields.json();
+assert.deepEqual(
+  invalidFieldResults.results.map(result => result.data.error),
+  ["invalid_carrier", "invalid_postcode", "invalid_language"]
+);
+assert.ok(invalidFieldResults.results.every(result => result.status === 400));
+assert.equal(invalidFieldResults.summary.failed, 3);
+assert.ok(!JSON.stringify(invalidFieldResults).includes("not a valid carrier"));
+
+const missingNumber = await send(post({ shipments: [{ id: "missing_number" }] }));
+assert.equal(missingNumber.status, 200);
+const missingNumberPayload = await missingNumber.json();
+assert.equal(missingNumberPayload.results[0].status, 400);
+assert.equal(missingNumberPayload.results[0].data.error, "invalid_tracking_number");
+
 console.log("Batch tracking endpoint validation, limits, isolation and redaction verified.");
