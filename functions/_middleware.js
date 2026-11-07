@@ -1,4 +1,4 @@
-const SUPPORTED_LOCALES = new Set(["en", "ar", "es", "zh", "hi", "pt", "fr", "ru"]);
+const SUPPORTED_LOCALES = new Set(["en", "ar", "es", "zh", "hi", "pt", "fr", "bn"]);
 
 const COUNTRY_GROUPS = {
   ar: ["DZ", "BH", "KM", "DJ", "EG", "IQ", "JO", "KW", "LB", "LY", "MR", "MA", "OM", "PS", "QA", "SA", "SO", "SD", "SY", "TD", "TN", "AE", "YE"],
@@ -7,7 +7,7 @@ const COUNTRY_GROUPS = {
   pt: ["AO", "BR", "CV", "GW", "MZ", "PT", "ST", "TL"],
   zh: ["CN", "HK", "MO", "SG", "TW"],
   hi: ["IN"],
-  ru: ["BY", "KZ", "KG", "RU"]
+  bn: ["BD"]
 };
 
 const COUNTRY_TO_LOCALE = new Map(
