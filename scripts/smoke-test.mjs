@@ -120,8 +120,8 @@ const sitemapLocations = [...sitemap.matchAll(/<loc>(https:\/\/exportflow\.me\/[
 const expectedLocalizedUrls = locales.flatMap(locale => [
   locale === "en" ? "https://exportflow.me/" : "https://exportflow.me/" + locale + "/",
   locale === "en" ? "https://exportflow.me/coverage/" : "https://exportflow.me/" + locale + "/coverage/"
-]).concat(["https://exportflow.me/about/", "https://exportflow.me/contact/", "https://exportflow.me/privacy/", "https://exportflow.me/terms/", "https://exportflow.me/cookies/", "https://exportflow.me/security/", "https://exportflow.me/disclaimer/"]);
-assert.equal(sitemapLocations.length, 23, "Sitemap must contain sixteen localized URLs and seven trust pages");
+]).concat(["https://exportflow.me/about/", "https://exportflow.me/contact/", "https://exportflow.me/privacy/", "https://exportflow.me/terms/", "https://exportflow.me/cookies/", "https://exportflow.me/security/", "https://exportflow.me/disclaimer/", "https://exportflow.me/developers/"]);
+assert.equal(sitemapLocations.length, 24, "Sitemap must contain sixteen localized URLs, seven trust pages and the developer guide");
 assert.deepEqual(sitemapLocations.sort(), expectedLocalizedUrls.sort(), "Sitemap must list every public locale route exactly once");
 assert.match(sitemap, /xmlns:xhtml="http:\/\/www\.w3\.org\/1999\/xhtml"/, "Sitemap must declare the hreflang namespace");
 for (const locale of locales) assert.ok(sitemap.includes('hreflang="' + locale + '"'), "Sitemap must include hreflang for " + locale);
