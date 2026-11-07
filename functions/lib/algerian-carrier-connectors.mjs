@@ -297,7 +297,9 @@ export function createAlgerianCarrierConnector({
 
       let client;
       try {
-        client = createClient(config.sdkProvider, sdkConfig);
+        // The SDK factory may lazily import a pinned runtime module. Awaiting
+        // also preserves compatibility with existing synchronous test factories.
+        client = await createClient(config.sdkProvider, sdkConfig);
       } catch {
         throw new AlgerianConnectorError("adapter_unavailable", providerId);
       }
