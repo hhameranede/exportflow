@@ -96,7 +96,9 @@ assert.match(estonia.license, /CC-BY-4.0_CURRENT_RIK_PAGE__CC-BY-SA-4.0_IN_2023_
 assert.equal(estonia.redistribution, false);
 assert.match(estonia.rights_status, /provisional_license_conflict/);
 assert.match(estonia.ingestion_status, /quarantined/);
-assert.match(seedMigration, /estonia-rik-e-business-register[^\\n]*'quarantined', 1, 0/);
+const estoniaSeed = seedMigration.split("\n").find(line => line.includes("'estonia-rik-e-business-register'"));
+assert.ok(estoniaSeed?.includes("'quarantined', 1, 0"));
+assert.ok(estoniaSeed?.includes("'blocked', 'pending'"));
 
 const lithuania = registry.sources.find(source => source.id === "lithuania-centre-of-registers-open-financial-data");
 assert.equal(lithuania.license, "CC-BY-4.0");
