@@ -59,6 +59,8 @@ jobs:
           languages: js
           api_key: ${{ secrets.DD_API_KEY }}
           site: us5.datadoghq.com
+      - name: Test redacted credential-literal source classifier
+        run: node scripts/credential-literal-classifier-test.mjs
       - name: Record one aggregate audit result in Datadog
         run: node scripts/full-adapter-audit.mjs
         env:
