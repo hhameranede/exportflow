@@ -1,9 +1,9 @@
-const LITERAL_PATTERN = /(api[_-]?key|client[_-]?secret|password|access[_-]?token)\\s*[:=]\\s*(['"])([^'"]{12,})\\2/ig;
+const LITERAL_PATTERN = /(api[_-]?key|client[_-]?secret|password|access[_-]?token)\s*[:=]\s*(['"])([^'"]{12,})\2/ig;
 
 function sourceKind(path) {
-  const normalized = String(path || "").replaceAll("\\\\", "/");
-  if (/(^|\\/)fixtures?(\\/|$)|\\.(html|fixture)\\.(json|txt)$/i.test(normalized)) return "fixture";
-  if (/\\.(test|spec)\\.(ts|tsx|js|mjs|cjs)$/i.test(normalized)) return "test";
+  const normalized = String(path || "").replaceAll("\\", "/");
+  if (/(^|\/)fixtures?(\/|$)|\.(html|fixture)\.(json|txt)$/i.test(normalized)) return "fixture";
+  if (/\.(test|spec)\.(ts|tsx|js|mjs|cjs)$/i.test(normalized)) return "test";
   return "runtime";
 }
 
@@ -16,7 +16,7 @@ export function classifyCredentialLiteralFindings(files) {
   for (const file of files || []) {
     const path = String(file?.path || "");
     const kind = sourceKind(path);
-    const lines = String(file?.content || "").split(/\\r?\\n/);
+    const lines = String(file?.content || "").split(/\r?\n/);
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index];
       LITERAL_PATTERN.lastIndex = 0;
