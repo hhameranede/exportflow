@@ -10,7 +10,7 @@ ExportFlow is currently pinned to an older snapshot with 732 adapter source dire
 
 The generated JSON and CSV inventory covers every adapter directory and records manifest identity, tracking mode, country metadata, source/test/fixture files, local license/notice files, browser requirements, network-client patterns, external hostnames, imports, environment variable names only, authentication indicators, timeout/abort/retry/rate-limit/User-Agent patterns, privacy-related code signals and static security heuristics.
 
-Static heuristics are signals for review, not proof of runtime behaviour or a vulnerability finding. The audit does not collect credential values, shipment numbers, recipient data or private fixtures.
+Static heuristics are signals for review, not proof of runtime behaviour or a vulnerability finding. The audit does not collect credential values, shipment numbers, recipient data or private fixtures. Credential-like literal matches are now reported with file path, line, field name, source kind and value length only; the matched values are never written. Runtime-source findings are separated from test/spec and fixture findings so synthetic mocks do not receive the same priority as deployed code.
 
 ## Offline validation
 
