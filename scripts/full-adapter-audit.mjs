@@ -3,6 +3,7 @@ import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { channel } from "node:diagnostics_channel";
+import { classifyCredentialLiteralFindings } from "./credential-literal-classifier.mjs";
 
 const PIN = "9c088edaa089135b89658f2b611f8a741d5238c6";
 const EXPECTED_ADAPTERS = 743;
@@ -145,13 +146,24 @@ async function runAudit() {
     }
     const files = await walk(folder);
     const sourceFiles = files.filter(x => /\.(ts|tsx|js|mjs|cjs)$/.test(x.path));
-    const code = [adapter, ...(await Promise.all(sourceFiles.filter(x => x.path !== "adapter.ts").map(x => readText(x.absolute))))].join("\n");
+    const sourceContents = await Promise.all(sourceFiles.map(async file => ({ path: file.path, content: await readText(file.absolute) })));
+    const code = sourceContents.map(file => file.content).join("\n");
     const tests = files.filter(x => /\.(test|spec)\.(ts|tsx|js|mjs|cjs)$/.test(x.path)).map(x => x.path);
     const liveTests = tests.filter(x => /\.live\.test\./i.test(x));
     const offlineTests = tests.filter(x => !/\.live\.test\./i.test(x));
     const fixtures = files.filter(x => /(^|\/)fixtures?\//i.test(x.path) || /\.(html|fixture)\.(json|txt)$/i.test(x.path)).map(x => x.path);
     const localRights = files.filter(x => /(^|\/)(LICENSE|LICENCE|NOTICE|COPYING|COPYRIGHT)([._-]|$)/i.test(x.path)).map(x => x.path);
     const sig = signals(code, manifest || {});
+    const credentialLiteralFindings = classifyCredentialLiteralFindings(sourceContents);
+    const runtimeCredentialLiteralFindings = credentialLiteralFindings.filter(x => x.sourceKind === "runtime");
+    const testFixtureCredentialLiteralFindings = credentialLiteralFindings.filter(x => x.sourceKind !== "runtime");
+    const securityHeuristics = {
+      ...sig.securityHeuristics,
+      possibleCredentialLiteral: credentialLiteralFindings.length > 0,
+      possibleCredentialLiteralInRuntimeSource: runtimeCredentialLiteralFindings.length > 0,
+      possibleCredentialLiteralInTestOrFixture: testFixtureCredentialLiteralFindings.length > 0,
+      credentialLiteralFindingLocations: credentialLiteralFindings
+    };
     const id = typeof manifest?.id === "string" ? manifest.id : ent.name;
     if (id !== ent.name) integrityIssues.push({ id: ent.name, issue: "manifest_id_mismatch" });
     adapters.push({
@@ -169,7 +181,7 @@ async function runAudit() {
       networkSignals: sig.network, externalHosts: sig.externalHosts, imports: sig.imports,
       environmentVariableNamesOnly: sig.environmentVariableNames,
       authenticationSignals: sig.authentication, reliabilitySignals: sig.reliability,
-      privacyRelatedCodeSignals: sig.privacySignals, securityHeuristics: sig.securityHeuristics,
+      privacyRelatedCodeSignals: sig.privacySignals, securityHeuristics,
       officialCarrierStatus: "not_independently_verified",
       carrierApiAuthorization: "not_established_by_software_license",
       commercialTrackingRights: "not_assessed"
@@ -206,6 +218,13 @@ async function runAudit() {
     adaptersWithRetryOrRateLimitSignals: adapters.filter(x => x.reliabilitySignals.retryOrBackoff || x.reliabilitySignals.rateLimit).length,
     adaptersWithLocalLicenseNoticeFiles: adapters.filter(x => x.localLicenseNoticeFiles.length > 0).length,
     uniqueExternalHostnames: unique(adapters.flatMap(x => x.externalHosts)).length,
+    adaptersWithCredentialLiteralInRuntimeSource: adapters.filter(x => x.securityHeuristics.possibleCredentialLiteralInRuntimeSource).length,
+    adaptersWithCredentialLiteralOnlyInTestsOrFixtures: adapters.filter(x => !x.securityHeuristics.possibleCredentialLiteralInRuntimeSource && x.securityHeuristics.possibleCredentialLiteralInTestOrFixture).length,
+    credentialLiteralFindingsBySourceKind: {
+      runtime: adapters.reduce((n, x) => n + x.securityHeuristics.credentialLiteralFindingLocations.filter(f => f.sourceKind === "runtime").length, 0),
+      test: adapters.reduce((n, x) => n + x.securityHeuristics.credentialLiteralFindingLocations.filter(f => f.sourceKind === "test").length, 0),
+      fixture: adapters.reduce((n, x) => n + x.securityHeuristics.credentialLiteralFindingLocations.filter(f => f.sourceKind === "fixture").length, 0)
+    },
     repositoryLicenseNoticeFiles: rightsInventory.length
   };
   const failures = [];
@@ -270,6 +289,8 @@ async function runAudit() {
     "| Live-test definition files | " + summary.liveTestDefinitionFiles + " |",
     "| Adapters with fixtures | " + summary.adaptersWithFixtures + " |",
     "| Browser-dependent/indicated adapters | " + summary.browserDependentOrIndicated + " |",
+    "| Adapters with credential-like literals in runtime source (heuristic) | " + summary.adaptersWithCredentialLiteralInRuntimeSource + " |",
+    "| Adapters with credential-like literals only in tests/fixtures | " + summary.adaptersWithCredentialLiteralOnlyInTestsOrFixtures + " |",
     "| Adapters with auth signals | " + summary.adaptersWithAuthSignals + " |",
     "| Adapters with timeout/abort signals | " + summary.adaptersWithTimeoutOrAbortSignals + " |",
     "| Adapters with retry/rate-limit signals | " + summary.adaptersWithRetryOrRateLimitSignals + " |",
