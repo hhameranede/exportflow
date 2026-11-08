@@ -301,6 +301,7 @@
       invalid_input: "errorInvalid",
       invalid_carrier: "errorInvalid",
       not_found: "errorNotFound",
+      verification_required: "errorVerificationRequired",
       rate_limited: "errorRateLimited",
       input_required: "errorInputRequired",
       tracking_unavailable: "errorUnavailable",
