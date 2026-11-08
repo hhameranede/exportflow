@@ -137,22 +137,25 @@ function projectResult(response) {
   };
 }
 
-function trackingFailure(error) {
+export function trackingFailure(error) {
   if (error instanceof TrackingError) {
-    const kind = error.hint?.kind || "unavailable";
+    const attempts = Array.isArray(error.attempts) ? error.attempts.map(attempt => ({
+      source: safeText(attempt.source, 80),
+      kind: safeText(attempt.kind, 40),
+      durationMs: Number.isFinite(attempt.durationMs) ? attempt.durationMs : null
+    })) : [];
+    // A challenge is not evidence that a parcel does not exist. When no source
+    // returns history and any attempted carrier blocks verification, report an
+    // inconclusive lookup even if another fallback says not_found.
+    const verificationBlocked = attempts.some(attempt => attempt.kind === "challenge");
+    const kind = verificationBlocked ? "verification_required" : (error.hint?.kind || "unavailable");
     const status = kind === "not_found" ? 404
       : kind === "rate_limited" ? 429
       : kind === "invalid_input" ? 400
       : kind === "input_required" ? 422
+      : kind === "verification_required" ? 503
       : 502;
-    return json({
-      error: kind,
-      attempts: Array.isArray(error.attempts) ? error.attempts.map(attempt => ({
-        source: safeText(attempt.source, 80),
-        kind: safeText(attempt.kind, 40),
-        durationMs: Number.isFinite(attempt.durationMs) ? attempt.durationMs : null
-      })) : []
-    }, status);
+    return json({ error: kind, attempts }, status);
   }
 
   if (error instanceof TypeError || error instanceof RangeError) {

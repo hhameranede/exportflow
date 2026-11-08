@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { onRequestPost } from "../functions/api/track.js";
+import { onRequestPost, trackingFailure } from "../functions/api/track.js";
+import { TrackingError } from "../node_modules/universal-parcel-scraper/dist/facade/index.js";
 
 function requestFor(number, language = "xx") {
   return new Request("https://exportflow.me/api/track", {
@@ -14,6 +15,23 @@ function requestFor(number, language = "xx") {
 }
 
 async function main() {
+  // A carrier challenge plus a fallback no-result must not be presented as
+  // proof that the shipment does not exist. These are pure local error tests.
+  const mixedFailure = new TrackingError([
+    { source: "USPS", kind: "challenge", durationMs: 12 },
+    { source: "UPU", kind: "not_found", durationMs: 4 }
+  ], { kind: "not_found" });
+  const mixedResponse = trackingFailure(mixedFailure);
+  assert.equal(mixedResponse.status, 503);
+  assert.equal((await mixedResponse.json()).error, "verification_required");
+
+  const confirmedNoResult = new TrackingError([
+    { source: "UPU", kind: "not_found", durationMs: 4 }
+  ], { kind: "not_found" });
+  const notFoundResponse = trackingFailure(confirmedNoResult);
+  assert.equal(notFoundResponse.status, 404);
+  assert.equal((await notFoundResponse.json()).error, "not_found");
+
   // An invalid language stops the request before rate limiting or any carrier
   // lookup. Receiving invalid_language proves the number passed the raw-input
   // gate without contacting an external carrier.
