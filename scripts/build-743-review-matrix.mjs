@@ -52,7 +52,7 @@ const columns = [
 'upstream_snapshot_commit','upstream_adapter_source_url','external_hostnames_static_source_signals','environment_variable_names_only',
 'token_or_api_key_signal','cookie_or_csrf_signal','timeout_or_deadline_signal','abort_signal','retry_or_backoff_signal',
 'rate_limit_signal','user_agent_signal','privacy_related_code_signals','dynamic_code_execution_heuristic',
-'possible_credential_literal_heuristic','exact_legal_carrier_entity','ledger_exact_slug_match','ledger_research_tier_reference',
+'possible_credential_literal_heuristic','possible_credential_literal_runtime_source','possible_credential_literal_test_or_fixture','credential_literal_finding_locations','exact_legal_carrier_entity','ledger_exact_slug_match','ledger_research_tier_reference',
 'ledger_reference_name','review_status','technical_review_priority','technical_triage_reasons','family_identity_boundary_note',
 'official_api_evidence_status','official_api_evidence_url','account_or_merchant_delegation_gate',
 'public_recipient_display_permission','commercial_tracking_and_ads_permission','data_retention_and_deletion_requirements',
@@ -61,11 +61,13 @@ const columns = [
 
 const rows = report.adapters.map(a => {
   const id=a.id, match=direct[id], family=familyNote(id);
-  const cred=!!a.securityHeuristics?.possibleCredentialLiteral;
+  const cred=!!a.securityHeuristics?.possibleCredentialLiteralInRuntimeSource;
+  const testFixtureCred=!!a.securityHeuristics?.possibleCredentialLiteralInTestOrFixture;
   const dynamic=!!a.securityHeuristics?.dynamicCodeExecution;
   const noBrowser=!!a.networkSignals?.fetch && !a.networkSignals?.browser && !!a.hasOfflineTest && (a.fixtureFiles||[]).length>0;
   const reasons=[];
-  if (cred) reasons.push('possible credential-literal heuristic; inspect source manually without exposing values');
+  if (cred) reasons.push('credential-like literal pattern in runtime source; exact value is redacted; manual security review required');
+  if (testFixtureCred) reasons.push('credential-like literal pattern in test/fixture code; classified separately and not treated as a runtime secret');
   if (dynamic) reasons.push('dynamic-code-execution heuristic; inspect source manually');
   if (noBrowser) reasons.push('HTTP/no-browser candidate with offline test and fixture; inspect endpoint provenance and terms');
   if (!a.hasOfflineTest) reasons.push('no offline test definition');
@@ -73,7 +75,7 @@ const rows = report.adapters.map(a => {
   if (a.networkSignals?.browser) reasons.push('browser automation indicator; inspect terms, anti-bot and runtime dependency');
   if ((a.privacyRelatedCodeSignals||[]).length) reasons.push('privacy-related code signals require minimization review');
   const status=match ? match[1] : (cred||dynamic||noBrowser||family ? 'source-review-needed' : 'unreviewed');
-  const priority=cred||dynamic ? 'P0-manual-source-security-review' : (noBrowser||!a.hasOfflineTest ? 'P1-source-or-test-gap-review' : (!(a.fixtureFiles||[]).length ? 'P2-fixture-gap-review' : ((a.privacyRelatedCodeSignals||[]).length ? 'P2-privacy-signal-review' : 'P3-standard-review')));
+  const priority=cred||dynamic ? 'P0-manual-source-security-review' : (noBrowser||!a.hasOfflineTest ? 'P1-source-or-test-gap-review' : (testFixtureCred || !(a.fixtureFiles||[]).length || (a.privacyRelatedCodeSignals||[]).length ? 'P2-test-fixture-or-privacy-review' : 'P3-standard-review'));
   const tier=match ? match[0] : '';
   const gate=match?.[0]==='B' ? 'Ledger records account/MID/delegation gates; verify current official terms for this exact route.' : match?.[0]==='C' ? 'Official API/contract candidate; verify eligibility, customer authorization and display scope.' : match?.[0]==='D' ? 'Public route not cleared; do not use for hosted public lookup until approved API/permission evidence exists.' : 'not_assessed';
   return {
@@ -96,7 +98,9 @@ const rows = report.adapters.map(a => {
     timeout_or_deadline_signal:!!a.reliabilitySignals?.timeoutOrDeadline, abort_signal:!!a.reliabilitySignals?.abortSignal,
     retry_or_backoff_signal:!!a.reliabilitySignals?.retryOrBackoff, rate_limit_signal:!!a.reliabilitySignals?.rateLimit,
     user_agent_signal:!!a.reliabilitySignals?.userAgent, privacy_related_code_signals:(a.privacyRelatedCodeSignals||[]).join('; '),
-    dynamic_code_execution_heuristic:dynamic, possible_credential_literal_heuristic:cred,
+    dynamic_code_execution_heuristic:dynamic, possible_credential_literal_heuristic:!!a.securityHeuristics?.possibleCredentialLiteral,
+    possible_credential_literal_runtime_source:cred, possible_credential_literal_test_or_fixture:testFixtureCred,
+    credential_literal_finding_locations:JSON.stringify(a.securityHeuristics?.credentialLiteralFindingLocations||[]),
     exact_legal_carrier_entity:'', ledger_exact_slug_match:!!match,
     ledger_research_tier_reference:match ? tier+'-provisional-provider-research-reference' : 'no-exact-ledger-match',
     ledger_reference_name:match ? match[2] : '',
@@ -116,6 +120,6 @@ await mkdir(dirname(output),{recursive:true});
 await writeFile(output,lines.join('\n')+'\n','utf8');
 const statuses={};
 for (const r of rows) statuses[r.review_status]=(statuses[r.review_status]||0)+1;
-const summary={rows:rows.length,uniqueIds:new Set(rows.map(r=>r.adapter_id)).size,exactLedgerSlugMatches:rows.filter(r=>r.ledger_exact_slug_match).length,credentialLiteralFlags:rows.filter(r=>r.possible_credential_literal_heuristic).length,httpNoBrowserCandidates:rows.filter(r=>r.technical_triage_reasons.includes('HTTP/no-browser candidate')).length,noOfflineTests:rows.filter(r=>!r.offline_test_present).length,noFixtures:rows.filter(r=>!r.fixture_present).length,rightsCleared:rows.filter(r=>r.rights_release_state!=='not_cleared').length,statuses};
+const summary={rows:rows.length,uniqueIds:new Set(rows.map(r=>r.adapter_id)).size,exactLedgerSlugMatches:rows.filter(r=>r.ledger_exact_slug_match).length,credentialLiteralFlags:rows.filter(r=>r.possible_credential_literal_heuristic).length,runtimeCredentialLiteralAdapters:rows.filter(r=>r.possible_credential_literal_runtime_source).length,testFixtureOnlyCredentialLiteralAdapters:rows.filter(r=>!r.possible_credential_literal_runtime_source && r.possible_credential_literal_test_or_fixture).length,httpNoBrowserCandidates:rows.filter(r=>r.technical_triage_reasons.includes('HTTP/no-browser candidate')).length,noOfflineTests:rows.filter(r=>!r.offline_test_present).length,noFixtures:rows.filter(r=>!r.fixture_present).length,rightsCleared:rows.filter(r=>r.rights_release_state!=='not_cleared').length,statuses};
 assert.equal(summary.rows,expected); assert.equal(summary.uniqueIds,expected); assert.equal(summary.rightsCleared,0);
 console.log(JSON.stringify(summary,null,2));
