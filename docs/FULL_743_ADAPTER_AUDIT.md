@@ -37,3 +37,10 @@ The workflow also generates a separate 743-row review overlay from the JSON inve
 - adapter-audit.md: summary and source/rights/testing interpretation.
 
 No merge, production dependency update, D1 migration, credential activation, carrier live lookup or deployment is performed.
+
+
+## Source-scope correction — 2026-11-09
+
+Static network, browser, host, import, authentication, reliability, privacy and dynamic-code signals are calculated from runtime adapter source plus manifest metadata only. Test/spec directories (including \`__tests__\`, \`tests\`, and \`specs\`) and fixture paths (including \`__fixtures__\`) are classified separately. Their indicators remain available under \`nonRuntimeSignals\`; they do not inflate runtime counts or runtime-risk priority.
+
+Credential-like literals are scanned in source code and text fixtures (JSON, HTML, text and YAML), while values remain redacted. Quoted JSON property names are recognized. The report schema is version 1.1.0. The newest GitHub Actions artifact is the source of truth for updated classifications.
