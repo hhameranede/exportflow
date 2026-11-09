@@ -30,8 +30,10 @@ for (const pkg of manifest.packages) {
 
 const upstream = manifest.packages.find(pkg => pkg.name === "universal-parcel-scraper");
 assert.ok(upstream);
-assert.ok(upstream.licenseFiles.some(file => file.sourcePath.endsWith("/LICENSE")));
-assert.ok(upstream.licenseFiles.some(file => file.sourcePath.endsWith("/NOTICE")));
+assert.ok(upstream.licenseFiles.some(file => file.sourcePath === "node_modules/universal-parcel-scraper/LICENSE"),
+  "the upstream package-root Apache-2.0 LICENSE must be included");
+assert.ok(upstream.licenseFiles.some(file => file.sourcePath === "node_modules/universal-parcel-scraper/NOTICE"),
+  "the upstream package-root NOTICE must be included");
 assert.ok(upstream.licenseFiles.some(file => file.sourcePath.endsWith("/dist/carriers/correios-br/model/LICENSE")),
   "the nested MIT Correios CAPTCHA model license must be included");
 assert.ok(upstream.licenseFiles.some(file => file.sourcePath.endsWith("/dist/core/transport/text-captcha-model/LICENSE")),
@@ -57,7 +59,12 @@ assert.equal(saxesFallback.sourceCommit, "211fa0ebec9b628affc09219199639887174bf
 assert.equal(saxesFallback.sourceBlob, "187f3ba399862022f4e670b2a3a1dbc6d7e6a800");
 assert.equal(saxesFallback.npmGitHead, saxesFallback.sourceCommit);
 assert.equal(saxesFallback.versionSourceMatchVerified, true);
-assert.ok((await readFile(path.join(licensesRoot, "index.html"), "utf8")).includes("Third-party software notices"));
+const licenseIndexHtml = await readFile(path.join(licensesRoot, "index.html"), "utf8");
+assert.ok(licenseIndexHtml.includes("Third-party software notices"));
+assert.ok(licenseIndexHtml.includes('href="/licenses/packages/universal-parcel-scraper__0.977.1/LICENSE">Apache-2.0 LICENSE</a>'),
+  "the Apache-2.0 link must point to the package-root LICENSE, not a nested MIT model license");
+assert.ok(licenseIndexHtml.includes('href="/licenses/packages/universal-parcel-scraper__0.977.1/NOTICE">Upstream NOTICE</a>'),
+  "the upstream NOTICE link must point to the package-root NOTICE");
 assert.ok((await readFile(path.join(licensesRoot, "THIRD_PARTY_NOTICES.md"), "utf8")).includes("Locked production dependencies"));
 assert.ok((await readFile(path.join(licensesRoot, "EXPORTFLOW_MODIFICATIONS.md"), "utf8")).includes("Modified by ExportFlow for Cloudflare Workers"));
 console.log("third-party license staging: " + manifest.packageCount + " packages; every package has a copied LICENSE/NOTICE file");
