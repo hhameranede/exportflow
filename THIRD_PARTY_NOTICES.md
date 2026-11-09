@@ -18,3 +18,6 @@ The build intentionally does not add a root LICENSE to ExportFlow, because this 
 ## Explicit repository-license fallback
 
 The npm archive for `boolbase@1.0.0` declares `ISC` in package metadata but contains no license text file. The build therefore copies the ISC license text from [fb55/boolbase LICENSE at commit 54811f01c797a6bb1c263183ae90b7dd627e0638](https://github.com/fb55/boolbase/blob/54811f01c797a6bb1c263183ae90b7dd627e0638/LICENSE). The NPM version metadata reported gitHead `68dff5fbe60c51eb37725ea9e3ed310dcc1e776e`, which GitHub did not resolve; the fallback is explicitly labelled as **not proven to be the exact historical source file for the published release**. This evidence gap is retained in `licenses/manifest.json` and the public notice page.
+
+
+The upstream NOTICE identifies extracted code from the historical `plhery/delivery-tracker` project. Its current successor, [`plhery/peek-delivery-tracker`](https://github.com/plhery/peek-delivery-tracker), declares Apache-2.0 and its root LICENSE has the same Git blob SHA as the Universal Parcel Scraper root LICENSE. This is corroborating source-license evidence, not a full contributor chain-of-title review.
