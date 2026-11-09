@@ -54,6 +54,11 @@ jobs:
           node --check scripts/merchant-tracking-route-test.mjs
           node --check scripts/security-headers-test.mjs
           node --check 'functions/api/merchant/carriers/[provider]/credentials.js'
+          node --check 'functions/api/merchant/carriers/[provider]/official-credentials.js'
+          node --check 'functions/api/merchant/carriers/[provider]/sandbox.js'
+          node --check functions/lib/official-api-credential-vault.mjs
+          node --check scripts/official-api-credential-vault-test.mjs
+          node --check scripts/official-api-sandbox-route-test.mjs
           node --check functions/_middleware.js
           node --check functions/lib/merchant-identity.mjs
           node --check functions/lib/session-bound-merchant-vault.mjs
