@@ -159,7 +159,7 @@ async function runAudit() {
     const code = runtimeSourceContents.map(file => file.content).join("\n");
     const testCode = testSourceContents.map(file => file.content).join("\n");
     const fixtureCode = [...fixtureSourceContents, ...fixtureTextContents].map(file => file.content).join("\n");
-    const tests = testSourceContents.map(file => file.path);
+    const tests = sourceFiles.filter(file => /\.(test|spec)\.(ts|tsx|js|mjs|cjs)$/i.test(file.path)).map(file => file.path);
     const liveTests = tests.filter(x => /\.live\.test\./i.test(x));
     const offlineTests = tests.filter(x => !/\.live\.test\./i.test(x));
     const fixtures = files.filter(file => classifyAdapterSourceKind(file.path) === "fixture").map(x => x.path);
