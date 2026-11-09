@@ -227,9 +227,9 @@ export async function onRequestPost({ request, env }) {
     return json({ error: "invalid_language" }, 400);
   }
 
-  // India Post currently resolves through MySpeedPost, a third-party tracker
-  // whose published terms prohibit automated access and commercial reuse
-  // without prior written permission. Stop this route before any carrier call.
+  // Apply the route-specific rights gate before rate limiting or any carrier
+  // request. The policy includes explicit terms conflicts and unresolved
+  // public third-party display routes held pending evidence.
   const detection = carrier ? null : parseTrackingInput(number);
   const selectedCarrier = carrier || detection?.carrier;
   const ambiguousBlockedCandidate = !carrier

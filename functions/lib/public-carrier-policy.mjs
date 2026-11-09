@@ -1,16 +1,38 @@
 /**
- * Public tracking policy for route-specific source restrictions.
+ * Public tracking policy for rights-gated source routes.
  *
- * India Post's current upstream adapter reads MySpeedPost, a third-party tracker
- * whose published Terms of Service prohibit automated access and commercial
- * reuse without prior written permission. This restriction applies to the
- * current MySpeedPost-backed route, not to India Post's official systems.
+ * Quarantine is scoped to ExportFlow's public tracking API, public carrier
+ * directory and coverage output. The upstream package stays intact so its
+ * code, provenance and adapter implementations remain available for audit.
  *
- * Keep the upstream package intact for source auditing; filter this ID from
- * ExportFlow's public tracking API, catalog and coverage until written rights
- * for the exact route and intended use are evidenced.
+ * - india-post: the pinned adapter calls MySpeedPost, whose published terms
+ *   expressly prohibit automated access and commercial reuse without prior
+ *   written permission. This is a MySpeedPost-route finding, not an India
+ *   Post-wide finding.
+ * - yunexpress: the Yuntrack Terms of Use reserve site content/data and say
+ *   use, copying or display requires express written authorization. No such
+ *   ExportFlow authorization is recorded.
+ * - singapore-post: SingPost's website terms reserve proprietary content and
+ *   grant no licence to use or reproduce it. No API or public third-party
+ *   display authorization is recorded. The terms review did not establish a
+ *   separate blanket automated-access prohibition; this is a rights hold.
+ * - china-post: the pinned route uses the EMS app guest endpoint / browser
+ *   route. No public developer entitlement or third-party hosted-display
+ *   authorization for ExportFlow was established. This is an unresolved
+ *   rights hold, not a finding that China Post prohibits all API use.
+ *
+ * These are route-specific public-service holds, not findings that every
+ * carrier service or official integration is prohibited. Re-enable an ID only
+ * after documenting permission for the exact source, automated access,
+ * recipient-facing display and commercial model, or after replacing it with
+ * a separately verified authorized API route.
  */
-const QUARANTINED_PUBLIC_CARRIERS = new Set(["india-post"]);
+const QUARANTINED_PUBLIC_CARRIERS = new Set([
+  "china-post",
+  "india-post",
+  "singapore-post",
+  "yunexpress"
+]);
 
 export function isPublicCarrierQuarantined(carrierId) {
   return typeof carrierId === "string"
