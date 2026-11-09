@@ -44,6 +44,8 @@ export async function stageThirdPartyLicenses({ root = process.cwd(), output = p
   const lockedPackages = Object.entries(lock.packages || {})
     .filter(([lockPath]) => lockPath.startsWith("node_modules/"))
     .sort(([a], [b]) => a.localeCompare(b));
+  const fallbackManifest = JSON.parse(await readFile(path.resolve(root, "third-party-license-fallbacks.json"), "utf8"));
+  const licenseFallbacks = fallbackManifest.packages || {};
 
   if (lockedPackages.length === 0) throw new Error("package-lock.json contains no installed packages");
 
@@ -76,25 +78,64 @@ export async function stageThirdPartyLicenses({ root = process.cwd(), output = p
     }
 
     const licenseFiles = await findLicenseFiles(packageDir);
-    if (licenseFiles.length === 0) {
-      throw new Error("No packaged LICENSE/LICENCE/UNLICENSE/COPYING/NOTICE file found for " + lockPath + " (" + declaredLicense + ")");
+    const hasPackagedLicenseText = licenseFiles.some(relativeFile =>
+      /^(?:LICENSE|LICENCE|UNLICENSE|COPYING)(?:[._-][A-Z0-9._-]+)?$/i.test(path.basename(relativeFile))
+    );
+    const fallback = licenseFallbacks[lockPath] || null;
+    if (!hasPackagedLicenseText && (!fallback || fallback.license !== declaredLicense)) {
+      throw new Error("No packaged license text or verified fallback found for " + lockPath + " (" + declaredLicense + ")");
     }
 
     const slug = safeSlug(lockPath.slice("node_modules/".length)) + "__" + safeSlug(lockMeta.version);
     const destination = path.join(packagesRoot, slug);
     await mkdir(destination, { recursive: true });
 
+    const filesToCopy = licenseFiles.map(relativeFile => ({
+      relativeFile,
+      sourcePath: lockPath + "/" + relativeFile,
+      source: path.join(packageDir, ...relativeFile.split("/")),
+      provenance: "npm-package-archive"
+    }));
+    if (!hasPackagedLicenseText && fallback) {
+      const fallbackSource = path.resolve(root, fallback.path);
+      const relativeFallback = path.relative(root, fallbackSource);
+      if (relativeFallback.startsWith("..") || path.isAbsolute(relativeFallback)) {
+        throw new Error("Unsafe license fallback path for " + lockPath);
+      }
+      await readFile(fallbackSource);
+      filesToCopy.push({
+        relativeFile: "LICENSE",
+        sourcePath: fallback.path,
+        source: fallbackSource,
+        provenance: "repository-license-fallback",
+        sourceUrl: fallback.sourceUrl,
+        sourceCommit: fallback.sourceCommit,
+        sourceBlob: fallback.sourceBlob,
+        npmGitHead: fallback.npmGitHead || null,
+        versionSourceMatchVerified: fallback.versionSourceMatchVerified === true,
+        evidenceNote: fallback.evidenceNote || null
+      });
+    }
+
     const copiedFiles = [];
-    for (const relativeFile of licenseFiles) {
-      const source = path.join(packageDir, ...relativeFile.split("/"));
-      const target = path.join(destination, ...relativeFile.split("/"));
+    for (const entry of filesToCopy) {
+      const outputRelativeFile = entry.relativeFile;
+      const source = entry.source;
+      const target = path.join(destination, ...outputRelativeFile.split("/"));
       await mkdir(path.dirname(target), { recursive: true });
       await copyFile(source, target);
       const bytes = await readFile(source);
       copiedFiles.push({
-        sourcePath: lockPath + "/" + relativeFile,
-        outputPath: "licenses/packages/" + slug + "/" + relativeFile,
-        href: "/licenses/packages/" + encodePath(slug + "/" + relativeFile),
+        sourcePath: entry.sourcePath,
+        outputPath: "licenses/packages/" + slug + "/" + outputRelativeFile,
+        href: "/licenses/packages/" + encodePath(slug + "/" + outputRelativeFile),
+        provenance: entry.provenance,
+        sourceUrl: entry.sourceUrl || null,
+        sourceCommit: entry.sourceCommit || null,
+        sourceBlob: entry.sourceBlob || null,
+        npmGitHead: entry.npmGitHead || null,
+        versionSourceMatchVerified: entry.versionSourceMatchVerified ?? null,
+        evidenceNote: entry.evidenceNote || null,
         sizeBytes: bytes.byteLength,
         sha256: createHash("sha256").update(bytes).digest("hex")
       });
@@ -107,7 +148,10 @@ export async function stageThirdPartyLicenses({ root = process.cwd(), output = p
       license: declaredLicense,
       repository: pkg.repository || null,
       homepage: pkg.homepage || null,
-      licenseFiles: copiedFiles
+      licenseFiles: copiedFiles,
+      licenseFileSource: filesToCopy.some(entry => entry.provenance === "repository-license-fallback")
+        ? "npm-package-archive-plus-repository-fallback"
+        : "npm-package-archive"
     };
     await writeFile(path.join(destination, "package-metadata.json"), JSON.stringify(packageMeta, null, 2) + "\n");
     manifestPackages.push(packageMeta);
