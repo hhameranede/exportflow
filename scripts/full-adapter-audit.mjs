@@ -3,7 +3,7 @@ import { readFile, readdir, mkdir, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { channel } from "node:diagnostics_channel";
-import { classifyCredentialLiteralFindings } from "./credential-literal-classifier.mjs";
+import { classifyAdapterSourceKind, classifyCredentialLiteralFindings } from "./credential-literal-classifier.mjs";
 
 const PIN = "9c088edaa089135b89658f2b611f8a741d5238c6";
 const EXPECTED_ADAPTERS = 743;
@@ -147,14 +147,28 @@ async function runAudit() {
     const files = await walk(folder);
     const sourceFiles = files.filter(x => /\.(ts|tsx|js|mjs|cjs)$/.test(x.path));
     const sourceContents = await Promise.all(sourceFiles.map(async file => ({ path: file.path, content: await readText(file.absolute) })));
-    const code = sourceContents.map(file => file.content).join("\n");
-    const tests = files.filter(x => /\.(test|spec)\.(ts|tsx|js|mjs|cjs)$/.test(x.path)).map(x => x.path);
+    const runtimeSourceContents = sourceContents.filter(file => classifyAdapterSourceKind(file.path) === "runtime");
+    const testSourceContents = sourceContents.filter(file => classifyAdapterSourceKind(file.path) === "test");
+    const fixtureSourceContents = sourceContents.filter(file => classifyAdapterSourceKind(file.path) === "fixture");
+    const fixtureTextFiles = files.filter(file =>
+      classifyAdapterSourceKind(file.path) === "fixture" &&
+      /\.(json|html|txt|ya?ml)$/i.test(file.path) &&
+      !/\.(ts|tsx|js|mjs|cjs)$/i.test(file.path)
+    );
+    const fixtureTextContents = await Promise.all(fixtureTextFiles.map(async file => ({ path: file.path, content: await readText(file.absolute) })));
+    const code = runtimeSourceContents.map(file => file.content).join("\n");
+    const testCode = testSourceContents.map(file => file.content).join("\n");
+    const fixtureCode = [...fixtureSourceContents, ...fixtureTextContents].map(file => file.content).join("\n");
+    const tests = testSourceContents.map(file => file.path);
     const liveTests = tests.filter(x => /\.live\.test\./i.test(x));
     const offlineTests = tests.filter(x => !/\.live\.test\./i.test(x));
-    const fixtures = files.filter(x => /(^|\/)fixtures?\//i.test(x.path) || /\.(html|fixture)\.(json|txt)$/i.test(x.path)).map(x => x.path);
+    const fixtures = files.filter(file => classifyAdapterSourceKind(file.path) === "fixture").map(x => x.path);
     const localRights = files.filter(x => /(^|\/)(LICENSE|LICENCE|NOTICE|COPYING|COPYRIGHT)([._-]|$)/i.test(x.path)).map(x => x.path);
     const sig = signals(code, manifest || {});
-    const credentialLiteralFindings = classifyCredentialLiteralFindings(sourceContents);
+    const testSig = testCode ? signals(testCode, {}) : null;
+    const fixtureSig = fixtureCode ? signals(fixtureCode, {}) : null;
+    const credentialScanContents = [...sourceContents, ...fixtureTextContents];
+    const credentialLiteralFindings = classifyCredentialLiteralFindings(credentialScanContents);
     const runtimeCredentialLiteralFindings = credentialLiteralFindings.filter(x => x.sourceKind === "runtime");
     const testFixtureCredentialLiteralFindings = credentialLiteralFindings.filter(x => x.sourceKind !== "runtime");
     const securityHeuristics = {
@@ -173,7 +187,14 @@ async function runAudit() {
       selectable: manifest?.selectable === true,
       countries: Array.isArray(manifest?.region?.countries) ? unique(manifest.region.countries.filter(x => typeof x === "string").map(x => x.toUpperCase())) : [],
       trackingSteps: sig.steps, sourceFileCount: sourceFiles.length,
+      runtimeSourceFileCount: runtimeSourceContents.length,
+      testSourceFileCount: testSourceContents.length,
+      fixtureSourceFileCount: fixtureSourceContents.length + fixtureTextContents.length,
       sourceFiles: sourceFiles.map(x => x.path),
+      runtimeSourceFiles: runtimeSourceContents.map(x => x.path),
+      testSourceFiles: testSourceContents.map(x => x.path),
+      fixtureSourceFiles: [...fixtureSourceContents, ...fixtureTextContents].map(x => x.path),
+      nonRuntimeSignals: { test: testSig, fixture: fixtureSig },
       offlineTestFiles: offlineTests, liveTestFiles: liveTests, fixtureFiles: fixtures,
       hasOfflineTest: offlineTests.length > 0, hasLiveTestDefinition: liveTests.length > 0,
       localLicenseNoticeFiles: localRights,
@@ -213,6 +234,7 @@ async function runAudit() {
     liveTestDefinitionFiles: adapters.reduce((n, x) => n + x.liveTestFiles.length, 0),
     adaptersWithFixtures: adapters.filter(x => x.fixtureFiles.length > 0).length,
     browserDependentOrIndicated: adapters.filter(x => x.networkSignals.browser).length,
+    adaptersWithBrowserSignalsInTestsOrFixtures: adapters.filter(x => x.nonRuntimeSignals?.test?.network?.browser || x.nonRuntimeSignals?.fixture?.network?.browser).length,
     adaptersWithAuthSignals: adapters.filter(x => x.authenticationSignals.tokenOrApiKey || x.authenticationSignals.cookieOrCsrf || x.environmentVariableNamesOnly.length).length,
     adaptersWithTimeoutOrAbortSignals: adapters.filter(x => x.reliabilitySignals.timeoutOrDeadline || x.reliabilitySignals.abortSignal).length,
     adaptersWithRetryOrRateLimitSignals: adapters.filter(x => x.reliabilitySignals.retryOrBackoff || x.reliabilitySignals.rateLimit).length,
@@ -235,7 +257,7 @@ async function runAudit() {
   if (duplicateIds.length || integrityIssues.length) failures.push("Manifest or adapter identity integrity issues found");
 
   const report = {
-    schemaVersion: "1.0.0", generatedAt: new Date().toISOString(),
+    schemaVersion: "1.1.0", generatedAt: new Date().toISOString(),
     source: {
       repository: "https://github.com/plhery/universal-parcel-scraper",
       commit, commitUrl: "https://github.com/plhery/universal-parcel-scraper/commit/" + commit,
@@ -265,7 +287,7 @@ async function runAudit() {
 
   await mkdir(outputRoot, { recursive: true });
   await writeFile(join(outputRoot, "adapter-audit.json"), JSON.stringify(report, null, 2) + "\n");
-  const columns = ["id","directory","displayName","trackingMode","trackingAdapter","selectable","countries","trackingSteps","sourceFileCount","sourceFiles","hasOfflineTest","offlineTestFiles","hasLiveTestDefinition","liveTestFiles","fixtureFiles","localLicenseNoticeFiles","licenseReview","networkSignals","externalHosts","imports","environmentVariableNamesOnly","authenticationSignals","reliabilitySignals","privacyRelatedCodeSignals","securityHeuristics","officialCarrierStatus","carrierApiAuthorization","commercialTrackingRights"];
+  const columns = ["id","directory","displayName","trackingMode","trackingAdapter","selectable","countries","trackingSteps","sourceFileCount","runtimeSourceFileCount","testSourceFileCount","fixtureSourceFileCount","sourceFiles","runtimeSourceFiles","testSourceFiles","fixtureSourceFiles","nonRuntimeSignals","hasOfflineTest","offlineTestFiles","hasLiveTestDefinition","liveTestFiles","fixtureFiles","localLicenseNoticeFiles","licenseReview","networkSignals","externalHosts","imports","environmentVariableNamesOnly","authenticationSignals","reliabilitySignals","privacyRelatedCodeSignals","securityHeuristics","officialCarrierStatus","carrierApiAuthorization","commercialTrackingRights"];
   const csvRows = [columns.map(csv).join(",")];
   for (const adapter of adapters) csvRows.push(columns.map(key => csv(adapter[key])).join(","));
   await writeFile(join(outputRoot, "adapter-audit.csv"), csvRows.join("\n") + "\n");
@@ -288,7 +310,8 @@ async function runAudit() {
     "| Adapters with live-test definitions (not executed) | " + summary.adaptersWithLiveTestDefinitions + " |",
     "| Live-test definition files | " + summary.liveTestDefinitionFiles + " |",
     "| Adapters with fixtures | " + summary.adaptersWithFixtures + " |",
-    "| Browser-dependent/indicated adapters | " + summary.browserDependentOrIndicated + " |",
+    "| Browser indicators in runtime source or manifest | " + summary.browserDependentOrIndicated + " |",
+    "| Browser indicators confined to test/fixture source | " + summary.adaptersWithBrowserSignalsInTestsOrFixtures + " |",
     "| Adapters with credential-like literals in runtime source (heuristic) | " + summary.adaptersWithCredentialLiteralInRuntimeSource + " |",
     "| Adapters with credential-like literals only in tests/fixtures | " + summary.adaptersWithCredentialLiteralOnlyInTestsOrFixtures + " |",
     "| Adapters with auth signals | " + summary.adaptersWithAuthSignals + " |",
@@ -309,6 +332,7 @@ async function runAudit() {
     "- Apache-2.0 software licensing does not grant carrier API authorization, trademark rights, shipment-data redistribution permission or official partnership.",
     "- Nested license/notice files remain separately attributed.",
     "- Optional AGPL-3.0 TRAWL component is excluded from ExportFlow runtime imports.",
+    "- Runtime signals are calculated only from runtime source and manifest metadata; test and fixture signals are retained separately in nonRuntimeSignals.",
     "- Browser/network/auth/reliability/privacy/security flags are static indicators, not proven runtime facts.",
     "- Live tests were inventoried only; no carrier requests, credentials or shipment samples were used.", "",
     "Detailed per-adapter records are in adapter-audit.json and adapter-audit.csv.",
