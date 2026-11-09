@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0.0",
+  "packages": {
+    "node_modules/boolbase": {
+      "license": "ISC",
+      "path": "third-party-license-fallbacks/boolbase/LICENSE",
+      "sourceUrl": "https://github.com/fb55/boolbase/blob/54811f01c797a6bb1c263183ae90b7dd627e0638/LICENSE",
+      "sourceCommit": "54811f01c797a6bb1c263183ae90b7dd627e0638",
+      "sourceBlob": "a689aae96e8957e4ab7a3a7449fe5271a6516e4b",
+      "npmGitHead": "68dff5fbe60c51eb37725ea9e3ed310dcc1e776e",
+      "versionSourceMatchVerified": false,
+      "evidenceNote": "The exact npm version metadata declares ISC but its packed archive contains no LICENSE file. The npm gitHead SHA returned by registry metadata could not be resolved by GitHub (404/422). This fallback is the ISC LICENSE file at the current source-repository commit shown above; it is not represented as a proven historical match to the npm release."
+    }
+  }
+}
