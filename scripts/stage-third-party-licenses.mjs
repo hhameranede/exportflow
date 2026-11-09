@@ -52,6 +52,7 @@ export async function stageThirdPartyLicenses({ root = process.cwd(), output = p
 
   const manifestPackages = [];
   const markdownRows = [];
+  const htmlRows = [];
   for (const [lockPath, lockMeta] of lockedPackages) {
     const packageDir = path.resolve(root, lockPath);
     const relativePackageDir = path.relative(root, packageDir);
@@ -110,10 +111,9 @@ export async function stageThirdPartyLicenses({ root = process.cwd(), output = p
     const links = copiedFiles.map(file => '<a href="' + escapeHtml(file.href) + '">' +
       escapeHtml(path.basename(file.sourcePath)) + '</a>').join(" · ");
     markdownRows.push("| " + pkg.name + " | " + pkg.version + " | " + declaredLicense + " | " +
-      copiedFiles.map(file => "[" + path.basename(file.sourcePath) + "](" + file.outputPath + ")").join(", ") + " |");
-    packageMeta.htmlRow = "<tr><td><code>" + escapeHtml(pkg.name) + "</code><br><small>" +
+      copiedFiles.map(file => "[" + path.basename(file.sourcePath) + "](" + file.outputPath + ")    htmlRows.push("<tr><td><code>" + escapeHtml(pkg.name) + "</code><br><small>" +
       escapeHtml(pkg.version) + "</small></td><td><code>" + escapeHtml(declaredLicense) +
-      "</code></td><td>" + links + "</td></tr>";
+      "</code></td><td>" + links + "</td></tr>");+ links + "</td></tr>";
   }
 
   const upstream = manifestPackages.find(pkg => pkg.name === "universal-parcel-scraper");
@@ -133,7 +133,7 @@ export async function stageThirdPartyLicenses({ root = process.cwd(), output = p
 
   const upstreamLicense = upstream.licenseFiles.find(file => file.sourcePath.endsWith("/LICENSE"));
   const upstreamNotice = upstream.licenseFiles.find(file => file.sourcePath.endsWith("/NOTICE"));
-  const tableRows = manifestPackages.map(pkg => pkg.htmlRow).join("\n");
+  const tableRows = htmlRows.join("\n");
   const html = [
     "<!doctype html>",
     '<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
