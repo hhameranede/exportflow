@@ -3,7 +3,7 @@ import { FedExApiClient } from "../../../../../node_modules/universal-parcel-scr
 import {
   createSessionBoundOfficialApiCredentialVault,
   officialApiCredentialVaultErrorResponse
-} from "../../../../../lib/official-api-credential-vault.mjs";
+} from "../../../../lib/official-api-credential-vault.mjs";
 import {
   consumeGlobalRateLimit,
   globalRateLimitHeaders
@@ -48,7 +48,7 @@ function trustedSameOrigin(request, env) {
   }
 }
 
-function createSandboxClient(provider, credentials, fetcher = fetch) {
+export function createSandboxClient(provider, credentials, fetcher = fetch) {
   const sandbox = SANDBOXES[provider];
   if (!sandbox) throw new Error("unsupported_provider");
   if (provider === "ups") {
