@@ -21,7 +21,13 @@ The optional TRAWL browser service is separately **AGPL-3.0**. It is not one of 
 | Actually pinned by ExportFlow `main` | 0.977.1 | [`e64a466772ef25ce68e02d9c7c9f1613eec1208b`](https://github.com/plhery/universal-parcel-scraper/commit/e64a466772ef25ce68e02d9c7c9f1613eec1208b) | 732 |
 | Later 743-adapter audit snapshot | 0.1010.2 | [`9c088edaa089135b89658f2b611f8a741d5238c6`](https://github.com/plhery/universal-parcel-scraper/commit/9c088edaa089135b89658f2b611f8a741d5238c6) | 743 |
 
-Both Git trees were complete (not truncated). Both snapshots contain the same seven license/notice-related file paths with identical blob SHAs. The attached [`UPSTREAM_ADAPTER_CODE_LICENSE_MATRIX.csv`](UPSTREAM_ADAPTER_CODE_LICENSE_MATRIX.csv) maps every one of the 743 adapter IDs and marks which 732 occur in ExportFlow's actual pinned runtime dependency.
+Both Git trees were complete (not truncated). Both snapshots contain the same seven license/notice-related file paths with identical blob SHAs.
+
+### Historical source repository cross-check
+
+The upstream NOTICE says that Universal Parcel Scraper contains code extracted from `plhery/delivery-tracker`. GitHub now resolves the successor project as [`plhery/peek-delivery-tracker`](https://github.com/plhery/peek-delivery-tracker). Its repository metadata declares Apache-2.0, and its root LICENSE has blob SHA `261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64`, exactly matching the root LICENSE blob in both Universal Parcel Scraper snapshots. This independently corroborates the Apache-2.0 license for the named historical source project. It still does not prove a complete contributor-by-contributor chain of title or rule out separate private agreements.
+
+The attached [`UPSTREAM_ADAPTER_CODE_LICENSE_MATRIX.csv`](UPSTREAM_ADAPTER_CODE_LICENSE_MATRIX.csv) maps every one of the 743 adapter IDs and marks which 732 occur in ExportFlow's actual pinned runtime dependency.
 
 ## Per-adapter result
 
