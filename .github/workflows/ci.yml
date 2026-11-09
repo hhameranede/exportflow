@@ -37,6 +37,8 @@ jobs:
           node --check functions/api/health.js
           node --check functions/_middleware.js
           node --check scripts/locale-build-test.mjs
+          node --check scripts/stage-third-party-licenses.mjs
+          node --check scripts/third-party-licenses-test.mjs
           node --check functions/lib/country-codes.mjs
       - name: Run regression tests
         run: npm test
@@ -68,3 +70,7 @@ jobs:
           test -s dist/cookies/index.html
           test -s dist/security/index.html
           test -s dist/disclaimer/index.html
+          test -s dist/licenses/index.html
+          test -s dist/licenses/manifest.json
+          test -s dist/licenses/THIRD_PARTY_NOTICES.md
+          node scripts/third-party-licenses-test.mjs
