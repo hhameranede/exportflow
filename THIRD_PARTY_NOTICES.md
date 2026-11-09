@@ -2,7 +2,7 @@
 
 This repository uses third-party software under the package-specific licenses recorded in package-lock.json. The root ExportFlow application is not relicensed by those dependencies.
 
-The build generates a public /licenses/ page and copies the exact license and notice files found in each installed package to dist/licenses/packages/. It also emits dist/licenses/manifest.json, recording the exact locked package version, declared license metadata, and copied license-file paths.
+The build generates a public /licenses/ page and copies the exact license and notice files found in each installed package to dist/licenses/packages/. It also emits dist/licenses/manifest.json with the exact locked package version, declared license metadata, copied license-file paths, and SHA-256 hashes. Worker-specific files patched by ExportFlow carry prominent modification comments, with the changes summarized in dist/licenses/EXPORTFLOW_MODIFICATIONS.md.
 
 The Universal Parcel Scraper dependency is pinned to commit e64a466772ef25ce68e02d9c7c9f1613eec1208b (version 0.977.1) and declares Apache-2.0. Its upstream LICENSE and NOTICE are included in the build output. Nested model license files are preserved when present in the package distribution.
 
