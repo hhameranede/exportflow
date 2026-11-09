@@ -32,6 +32,10 @@ const upstream = manifest.packages.find(pkg => pkg.name === "universal-parcel-sc
 assert.ok(upstream);
 assert.ok(upstream.licenseFiles.some(file => file.sourcePath.endsWith("/LICENSE")));
 assert.ok(upstream.licenseFiles.some(file => file.sourcePath.endsWith("/NOTICE")));
+assert.ok(upstream.licenseFiles.some(file => file.sourcePath.endsWith("/dist/carriers/correios-br/model/LICENSE")),
+  "the nested MIT Correios CAPTCHA model license must be included");
+assert.ok(upstream.licenseFiles.some(file => file.sourcePath.endsWith("/dist/core/transport/text-captcha-model/LICENSE")),
+  "the nested MIT text CAPTCHA model license must be included");
 const boolbase = manifest.packages.find(pkg => pkg.lockPath === "node_modules/boolbase");
 assert.ok(boolbase);
 assert.equal(boolbase.license, "ISC");
@@ -41,7 +45,8 @@ assert.ok(boolbaseFallback);
 assert.equal(boolbaseFallback.sourceCommit, "54811f01c797a6bb1c263183ae90b7dd627e0638");
 assert.equal(boolbaseFallback.sourceBlob, "a689aae96e8957e4ab7a3a7449fe5271a6516e4b");
 assert.equal(boolbaseFallback.versionSourceMatchVerified, false);
-assert.ok(boolbaseFallback.evidenceNote.includes("not proven historical match"));
+assert.ok(boolbaseFallback.evidenceNote.includes("proven historical match"));
+assert.equal(boolbaseFallback.versionSourceMatchVerified, false);
 const saxes = manifest.packages.find(pkg => pkg.lockPath === "node_modules/saxes");
 assert.ok(saxes);
 assert.equal(saxes.license, "ISC");
