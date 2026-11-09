@@ -22,6 +22,9 @@ CREATE INDEX IF NOT EXISTS idx_merchant_official_api_credentials_updated
 -- Rebuild is required because SQLite cannot alter an existing CHECK constraint.
 DROP TRIGGER IF EXISTS merchant_provider_audit_events_no_update;
 DROP TRIGGER IF EXISTS merchant_provider_audit_events_no_delete;
+DROP TRIGGER IF EXISTS merchant_provider_credentials_audit_insert;
+DROP TRIGGER IF EXISTS merchant_provider_credentials_audit_update;
+DROP TRIGGER IF EXISTS merchant_provider_credentials_audit_delete;
 
 CREATE TABLE merchant_provider_audit_events_rebuilt (
   id TEXT PRIMARY KEY,
@@ -61,6 +64,52 @@ BEGIN
 END;
 
 -- Official API credential lifecycle events record scope only, never secret fields.
+-- Recreate the legacy Algeria credential audit hooks against the rebuilt audit table.
+CREATE TRIGGER IF NOT EXISTS merchant_provider_credentials_audit_insert
+AFTER INSERT ON merchant_provider_credentials
+BEGIN
+  INSERT INTO merchant_provider_audit_events
+    (id, merchant_id, provider, event_type, occurred_at, metadata_json)
+  VALUES (
+    lower(hex(randomblob(16))),
+    NEW.merchant_id,
+    NEW.provider,
+    'credential.connected',
+    NEW.updated_at,
+    '{"scope":"track"}'
+  );
+END;
+
+CREATE TRIGGER IF NOT EXISTS merchant_provider_credentials_audit_update
+AFTER UPDATE ON merchant_provider_credentials
+BEGIN
+  INSERT INTO merchant_provider_audit_events
+    (id, merchant_id, provider, event_type, occurred_at, metadata_json)
+  VALUES (
+    lower(hex(randomblob(16))),
+    NEW.merchant_id,
+    NEW.provider,
+    'credential.updated',
+    NEW.updated_at,
+    '{"scope":"track"}'
+  );
+END;
+
+CREATE TRIGGER IF NOT EXISTS merchant_provider_credentials_audit_delete
+AFTER DELETE ON merchant_provider_credentials
+BEGIN
+  INSERT INTO merchant_provider_audit_events
+    (id, merchant_id, provider, event_type, occurred_at, metadata_json)
+  VALUES (
+    lower(hex(randomblob(16))),
+    OLD.merchant_id,
+    OLD.provider,
+    'credential.disconnected',
+    OLD.updated_at,
+    '{"scope":"track"}'
+  );
+END;
+
 CREATE TRIGGER IF NOT EXISTS merchant_official_api_credentials_audit_insert
 AFTER INSERT ON merchant_official_api_credentials
 BEGIN
