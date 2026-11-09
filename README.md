@@ -94,4 +94,6 @@ Pages Functions are deployed from the root `functions/` directory. The build pre
 
 ## Licensing
 
-The upstream core is Apache-2.0. Its optional TRAWL derivative is AGPL-3.0 and is not bundled or enabled in this integration. Keep upstream `LICENSE`, `NOTICE` and required third-party notices with redistribution. See upstream notices for bundled model and data attributions.
+The upstream core dependency is Apache-2.0. Its optional TRAWL derivative is AGPL-3.0 and is not bundled or enabled in this integration. The build copies the exact license and notice files from every locked production dependency into `dist/licenses/` and publishes a third-party notice index at [`/licenses/`](https://exportflow.me/licenses/). These notices apply only to their named third-party packages and do not relicense ExportFlow's original code.
+
+Carrier API access, automated access to carrier websites, carrier trademarks and commercial/public display of shipment data are separate from software source-code licensing. See the restricted Carrier Rights & Licensing Ledger for carrier-specific evidence.

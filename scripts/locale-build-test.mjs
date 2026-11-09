@@ -31,12 +31,17 @@ for (const pageName of trustPageNames) {
   assert.ok(page.includes("/styles.css?v=ef-ui-refresh-20261106-01"), pageName + " page must load the shared design stylesheet");
 }
 
+const licensesPage = await readFile("dist/licenses/index.html", "utf8");
+assert.ok(licensesPage.includes('<link rel="canonical" href="https://exportflow.me/licenses/">'));
+assert.ok(licensesPage.includes("/licenses/manifest.json"));
+
 const sitemap = await readFile("dist/sitemap.xml", "utf8");
 const locations = [...sitemap.matchAll(/<loc>(https:\/\/exportflow\.me\/[^<]*)<\/loc>/g)].map(match => match[1]);
-assert.equal(locations.length, 23, "Built sitemap must include sixteen localized routes and seven static trust pages");
+assert.equal(locations.length, 24, "Built sitemap must include sixteen localized routes, seven trust pages and the license notices page");
 assert.ok(sitemap.includes('xmlns:xhtml="http://www.w3.org/1999/xhtml"'));
 assert.ok(locations.includes("https://exportflow.me/privacy/"));
 assert.ok(locations.includes("https://exportflow.me/terms/"));
+assert.ok(locations.includes("https://exportflow.me/licenses/"));
 for (const pageName of trustPageNames) {
   assert.ok(locations.includes("https://exportflow.me/" + pageName + "/"), "Built sitemap must include " + pageName);
 }
