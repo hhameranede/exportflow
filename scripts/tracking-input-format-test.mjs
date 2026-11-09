@@ -66,13 +66,16 @@ async function main() {
   assert.equal(unsafePunctuation.status, 400);
   assert.equal((await unsafePunctuation.json()).error, "invalid_tracking_number");
 
-  // Synthetic-only regression checks: the India Post adapter uses MySpeedPost,
-  // a third-party route whose published terms prohibit automated access and
-  // commercial reuse without prior written permission. No carrier request runs.
+  // Synthetic-only regression checks for the batch rights quarantine.
+  // China Post, India Post, Singapore Post and YunExpress must be rejected
+  // before rate limiting or any outbound carrier request. No carrier request runs.
   for (const [number, carrier] of [
     ["RR999999987IN", undefined],
     ["RR999999987IN", "india-post"],
-    ["1Z999AA10123456784", "india-post"]
+    ["1Z999AA10123456784", "india-post"],
+    ["SYNTHETIC1234", "china-post"],
+    ["SYNTHETIC1234", "singapore-post"],
+    ["SYNTHETIC1234", "yunexpress"]
   ]) {
     const response = await onRequestPost({
       request: requestFor(number, "en", carrier),
