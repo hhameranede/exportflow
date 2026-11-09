@@ -177,9 +177,11 @@ export async function stageThirdPartyLicenses({ root = process.cwd(), output = p
   }
 
   const upstream = manifestPackages.find(pkg => pkg.name === "universal-parcel-scraper");
-  if (!upstream || !upstream.licenseFiles.some(file => file.sourcePath.endsWith("/LICENSE")) ||
-      !upstream.licenseFiles.some(file => file.sourcePath.endsWith("/NOTICE"))) {
-    throw new Error("The upstream Universal Parcel Scraper LICENSE and NOTICE must be included in the staged output");
+  const upstreamRootLicensePath = "node_modules/universal-parcel-scraper/LICENSE";
+  const upstreamRootNoticePath = "node_modules/universal-parcel-scraper/NOTICE";
+  if (!upstream || !upstream.licenseFiles.some(file => file.sourcePath === upstreamRootLicensePath) ||
+      !upstream.licenseFiles.some(file => file.sourcePath === upstreamRootNoticePath)) {
+    throw new Error("The upstream Universal Parcel Scraper root LICENSE and NOTICE must be included in the staged output");
   }
 
   const manifest = {
@@ -191,8 +193,8 @@ export async function stageThirdPartyLicenses({ root = process.cwd(), output = p
   };
   await writeFile(path.join(licensesRoot, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
 
-  const upstreamLicense = upstream.licenseFiles.find(file => file.sourcePath.endsWith("/LICENSE"));
-  const upstreamNotice = upstream.licenseFiles.find(file => file.sourcePath.endsWith("/NOTICE"));
+  const upstreamLicense = upstream.licenseFiles.find(file => file.sourcePath === upstreamRootLicensePath);
+  const upstreamNotice = upstream.licenseFiles.find(file => file.sourcePath === upstreamRootNoticePath);
   const tableRows = htmlRows.join("\n");
   const html = [
     "<!doctype html>",
