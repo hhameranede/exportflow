@@ -163,8 +163,11 @@ export async function stageThirdPartyLicenses({ root = process.cwd(), output = p
       return '<a href="' + escapeHtml(file.href) + '">' +
         escapeHtml(path.basename(file.sourcePath)) + '</a>' + sourceLink;
     }).join(" · ");
-    const fallbackNote = copiedFiles.some(file => file.provenance === "repository-license-fallback")
-      ? '<br><small>Repository license fallback; exact match to published package source is not verified.</small>'
+    const fallbackFile = copiedFiles.find(file => file.provenance === "repository-license-fallback");
+    const fallbackNote = fallbackFile
+      ? fallbackFile.versionSourceMatchVerified
+        ? '<br><small>Repository license fallback; source commit matches the npm gitHead.</small>'
+        : '<br><small>Repository license fallback; exact match to published package source is not verified.</small>'
       : "";
     markdownRows.push("| " + pkg.name + " | " + pkg.version + " | " + declaredLicense + " | " +
       copiedFiles.map(file => "[" + path.basename(file.sourcePath) + "](" + file.outputPath + ")").join(", ") + " |");
