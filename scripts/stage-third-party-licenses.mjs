@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -89,10 +90,13 @@ export async function stageThirdPartyLicenses({ root = process.cwd(), output = p
       const target = path.join(destination, ...relativeFile.split("/"));
       await mkdir(path.dirname(target), { recursive: true });
       await copyFile(source, target);
+      const bytes = await readFile(source);
       copiedFiles.push({
         sourcePath: lockPath + "/" + relativeFile,
         outputPath: "licenses/packages/" + slug + "/" + relativeFile,
-        href: "/licenses/packages/" + encodePath(slug + "/" + relativeFile)
+        href: "/licenses/packages/" + encodePath(slug + "/" + relativeFile),
+        sizeBytes: bytes.byteLength,
+        sha256: createHash("sha256").update(bytes).digest("hex")
       });
     }
 
