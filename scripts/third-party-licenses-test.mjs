@@ -42,6 +42,16 @@ assert.equal(boolbaseFallback.sourceCommit, "54811f01c797a6bb1c263183ae90b7dd627
 assert.equal(boolbaseFallback.sourceBlob, "a689aae96e8957e4ab7a3a7449fe5271a6516e4b");
 assert.equal(boolbaseFallback.versionSourceMatchVerified, false);
 assert.ok(boolbaseFallback.evidenceNote.includes("not proven historical match"));
+const saxes = manifest.packages.find(pkg => pkg.lockPath === "node_modules/saxes");
+assert.ok(saxes);
+assert.equal(saxes.license, "ISC");
+assert.equal(saxes.licenseFileSource, "npm-package-archive-plus-repository-fallback");
+const saxesFallback = saxes.licenseFiles.find(file => file.provenance === "repository-license-fallback");
+assert.ok(saxesFallback);
+assert.equal(saxesFallback.sourceCommit, "211fa0ebec9b628affc09219199639887174bfc3");
+assert.equal(saxesFallback.sourceBlob, "187f3ba399862022f4e670b2a3a1dbc6d7e6a800");
+assert.equal(saxesFallback.npmGitHead, saxesFallback.sourceCommit);
+assert.equal(saxesFallback.versionSourceMatchVerified, true);
 assert.ok((await readFile(path.join(licensesRoot, "index.html"), "utf8")).includes("Third-party software notices"));
 assert.ok((await readFile(path.join(licensesRoot, "THIRD_PARTY_NOTICES.md"), "utf8")).includes("Locked production dependencies"));
 assert.ok((await readFile(path.join(licensesRoot, "EXPORTFLOW_MODIFICATIONS.md"), "utf8")).includes("Modified by ExportFlow for Cloudflare Workers"));
