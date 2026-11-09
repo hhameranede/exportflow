@@ -197,6 +197,7 @@ export async function stageThirdPartyLicenses({ root = process.cwd(), output = p
   const html = [
     "<!doctype html>",
     '<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
+    '<link rel="canonical" href="https://exportflow.me/licenses/">',
     "<title>Third-party software notices — ExportFlow</title>",
     '<meta name="description" content="Open-source license texts and attribution notices for third-party software used by ExportFlow.">',
     "<style>",
