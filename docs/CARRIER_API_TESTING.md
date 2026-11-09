@@ -105,3 +105,19 @@ No shipment response body, test tracking reference, secret, recipient data or ad
 This workflow proves only that the selected app credentials and Track endpoint work in that provider's Sandbox for the documented synthetic request. It does not verify production credentials, third-party customer shipment rights, a commercial partnership or permission to redistribute/display tracking data.
 
 Provider terms and quotas can change. Reconfirm them in the carrier's current developer portal before enabling a new live connector.
+
+
+## Tenant-bound official API sandbox probe — 2026-11-09
+
+The isolated branch `feat/fedex-ups-merchant-sandbox-connectors-20261109` adds a merchant-scoped preflight for **FedEx** and **UPS** only:
+
+- `POST /api/merchant/carriers/{provider}/official-credentials` stores or replaces that merchant's API credentials after same-origin, authenticated-session and explicit-consent checks. `DELETE` revokes the connection.
+- `POST /api/merchant/carriers/{provider}/sandbox` resolves credentials from the authenticated merchant's own encrypted vault and sends one fixed synthetic reference to the provider's official non-production host.
+- FedEx is hard-pinned to `https://apis-sandbox.fedex.com`; UPS is hard-pinned to `https://wwwcie.ups.com`. A request body or stored credential cannot choose an outbound host.
+- Credential ciphertext uses AES-256-GCM with additional authenticated data bound to merchant ID, provider and sandbox scope. D1 stores ciphertext/IV/key ID only; audit triggers record lifecycle metadata and never credential values.
+- The official API vault is separate from the legacy Algeria-only credential table. It accepts exactly FedEx and UPS fields and has an independent `sandbox_track` scope.
+- The probe returns a small status object only. It does not return tracking history, consignee data, addresses, signatures, raw API payloads or the synthetic tracking reference.
+
+**Important limits:** this is an isolated draft branch and has not been deployed or run against an actual provider sandbox. The added automated tests use mocked fetch and fixed synthetic fixtures. A passing CI run will prove build/mock behavior only, not valid credentials or real sandbox connectivity. No API keys were created, no carrier endpoint was contacted, and no Production migration or deployment occurred.
+
+This sandbox scope is not permission to display third-party shipment data. It does not authorize arbitrary public tracking, multi-merchant data aggregation, resale, advertising-supported display or use of real shipment references. The 743-row rights matrix remains the separate rights-review record. DHL Express remains excluded from this initial cohort.
