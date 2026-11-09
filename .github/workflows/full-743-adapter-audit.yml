@@ -8,6 +8,8 @@ on:
       - docs/FULL_743_ADAPTER_REVIEW_MATRIX.md
       - scripts/full-adapter-audit.mjs
       - scripts/build-743-review-matrix.mjs
+      - scripts/credential-literal-classifier.mjs
+      - scripts/credential-literal-classifier-test.mjs
 permissions:
   contents: read
 concurrency:
