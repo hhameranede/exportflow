@@ -107,6 +107,7 @@ async function patchWorkerIncompatibleEngineFiles(directory) {
   // The files are bundled by esbuild, which already selects the JSON loader by extension.
   // This happens after Node regression tests and only in the Pages build tree.
   let normalized = 0;
+  const modifiedFiles = [];
 
   async function visit(folder) {
     for (const entry of await readdir(folder, { withFileTypes: true })) {
@@ -126,6 +127,7 @@ async function patchWorkerIncompatibleEngineFiles(directory) {
         "$1"
       );
       await writeFile(file, addModificationNotice(compatible));
+      modifiedFiles.push(file.slice(directory.length + 1).replaceAll("\\", "/"));
       normalized += matches.length;
     }
   }
@@ -134,7 +136,7 @@ async function patchWorkerIncompatibleEngineFiles(directory) {
   if (normalized === 0) {
     throw new Error("Expected JSON import attributes in the pinned engine build; none were found");
   }
-  return normalized;
+  return { normalized, modifiedFiles };
 }
 
 async function patchWorkerPlaceAssets() {
@@ -241,7 +243,8 @@ for (const page of publicPageDirectories) {
 await generateLocalizedPages();
 
 try {
-  const jsonImports = await patchWorkerIncompatibleEngineFiles(engineDist);
+  const jsonPatch = await patchWorkerIncompatibleEngineFiles(engineDist);
+  const jsonImports = jsonPatch.normalized;
   await patchWorkerPlaceAssets();
 
   // JCEX's origin-pinning recovery path requires a custom Node undici Agent.
@@ -279,6 +282,20 @@ try {
     await writeFile(depponAdapter, addModificationNotice(depponCompatible));
   }
 
+  const modifiedUpstreamFiles = [
+    ...jsonPatch.modifiedFiles,
+    "places/index.js",
+    "carriers/jcex/origin.js",
+    "core/transport/optional.js",
+    "carriers/deppon/adapter.js"
+  ];
+  for (const relativeFile of modifiedUpstreamFiles) {
+    const source = await readFile(resolve(engineDist, relativeFile), "utf8");
+    if (!source.includes("Modified by ExportFlow for Cloudflare Workers")) {
+      throw new Error("Missing Apache-2.0 modification notice in " + relativeFile);
+    }
+  }
+
   console.log(
     "Prepared upstream engine for Pages: normalized " + jsonImports +
     " JSON imports; guarded place-data filesystem reads; disabled Node-only JCEX, local-browser, and native-image challenge fallbacks."
@@ -295,7 +312,8 @@ await writeFile(resolve(output, "licenses/EXPORTFLOW_MODIFICATIONS.md"), [
   "",
   "This file lists Worker-compatibility modifications made to copied/generated files from the Apache-2.0 Universal Parcel Scraper dependency. Each modified file begins with a prominent comment: " + EXPORTFLOW_MODIFICATION_NOTICE.trim(),
   "",
-  "- JSON import attributes are normalized for the Pages/Workers bundler.",
+  "- JSON import attributes are normalized for the Pages/Workers bundler in these files:",
+  ...jsonPatch.modifiedFiles.map(file => "  - " + file),
   "- Places data reads are guarded because filesystem-backed data files are unavailable in the Workers runtime.",
   "- JCEX's Node HTTPS origin-pinning helper is disabled in Workers.",
   "- Local Chromium and native Sharp loading are disabled in Workers; optional remote TRAWL is a separate service and is not configured by this build.",
