@@ -3,6 +3,7 @@ import {
   createOfficialApiSandboxHandler,
   createSandboxClient
 } from "../functions/api/merchant/carriers/[provider]/sandbox.js";
+import { OfficialApiCredentialVaultError } from "../functions/lib/official-api-credential-vault.mjs";
 
 const origin = "https://exportflow.me";
 const env = { MERCHANT_APP_ORIGIN: origin };
@@ -123,7 +124,7 @@ const unsupported = await handler({ request: request(), env, params: { provider:
 assert.equal(unsupported.status, 400);
 
 const unauthorized = createOfficialApiSandboxHandler({
-  createVault: async () => { throw Object.assign(new Error("unauthenticated"), { code: "unauthenticated", status: 401 }); },
+  createVault: async () => { throw new OfficialApiCredentialVaultError("unauthenticated", 401); },
   consumeRateLimit: async () => allowedQuota
 });
 const noSession = await unauthorized({ request: request(), env, params: { provider: "ups" } });
