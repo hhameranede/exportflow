@@ -73,4 +73,5 @@ jobs:
           test -s dist/licenses/index.html
           test -s dist/licenses/manifest.json
           test -s dist/licenses/THIRD_PARTY_NOTICES.md
+          test -s dist/licenses/EXPORTFLOW_MODIFICATIONS.md
           node scripts/third-party-licenses-test.mjs
