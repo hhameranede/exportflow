@@ -29,3 +29,8 @@ The npm archive for `saxes@6.0.0` declares ISC but omits the license text. The n
 
 
 A second archive omission is `saxes@6.0.0`: its npm metadata `gitHead` resolves to the exact release commit `211fa0ebec9b628affc09219199639887174bfc3`. The license text from that commit is included intact and marked as a verified exact-source fallback in the generated manifest. It retains the ISC notices for saxes/sax and a historic MIT attribution for a helper no longer used.
+
+
+## Contributor-origin boundary
+
+The upstream public Apache-2.0 license states that intentionally submitted contributions are under Apache-2.0 unless a contributor states otherwise, while preserving separate license agreements. We found no public CLA/DCO file in the audited upstream tree. This supports the public license classification but does not prove the absence of private agreements or replace a rights-holder confirmation for a complete copyright-chain review.
