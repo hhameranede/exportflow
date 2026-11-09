@@ -1,9 +1,11 @@
 import { CARRIER_IDS } from "universal-parcel-scraper";
+import { filterPublicCarrierIds } from "../lib/public-carrier-policy.mjs";
 
 export async function onRequestGet() {
+  const carriers = filterPublicCarrierIds(CARRIER_IDS);
   return new Response(JSON.stringify({
-    catalogEntries: CARRIER_IDS.length,
-    carriers: CARRIER_IDS
+    catalogEntries: carriers.length,
+    carriers
   }), {
     headers: {
       "Content-Type": "application/json; charset=utf-8",

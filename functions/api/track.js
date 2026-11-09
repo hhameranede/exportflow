@@ -1,4 +1,6 @@
 import { createTracker, TrackingError } from "../../node_modules/universal-parcel-scraper/dist/facade/index.js";
+import { parseTrackingInput } from "universal-parcel-scraper";
+import { isPublicCarrierQuarantined } from "../lib/public-carrier-policy.mjs";
 import { createCloudflareFetch } from "../lib/cloudflare-fetch.mjs";
 import { safeEventPoint } from "../lib/coordinates.mjs";
 
@@ -223,6 +225,18 @@ export async function onRequestPost({ request, env }) {
   const language = input.language === undefined ? undefined : input.language;
   if (language !== undefined && (typeof language !== "string" || !/^(en|ar|es|zh|hi|pt|fr|ru)$/i.test(language))) {
     return json({ error: "invalid_language" }, 400);
+  }
+
+  // India Post currently resolves through MySpeedPost, a third-party tracker
+  // whose published terms prohibit automated access and commercial reuse
+  // without prior written permission. Stop this route before any carrier call.
+  const detection = carrier ? null : parseTrackingInput(number);
+  const selectedCarrier = carrier || detection?.carrier;
+  const ambiguousBlockedCandidate = !carrier
+    && Array.isArray(detection?.candidates)
+    && detection.candidates.some(isPublicCarrierQuarantined);
+  if (isPublicCarrierQuarantined(selectedCarrier) || ambiguousBlockedCandidate) {
+    return json({ error: "tracking_unavailable", reason: "carrier_source_restricted" }, 503);
   }
 
   const retryAfter = await consumeRateLimit(request);

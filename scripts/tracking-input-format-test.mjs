@@ -3,14 +3,14 @@ import { readFile } from "node:fs/promises";
 import { onRequestPost, trackingFailure } from "../functions/api/track.js";
 import { TrackingError } from "../node_modules/universal-parcel-scraper/dist/facade/index.js";
 
-function requestFor(number, language = "xx") {
+function requestFor(number, language = "xx", carrier) {
   return new Request("https://exportflow.me/api/track", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "Origin": "https://exportflow.me"
     },
-    body: JSON.stringify({ number, language })
+    body: JSON.stringify({ number, language, ...(carrier ? { carrier } : {}) })
   });
 }
 
@@ -65,6 +65,25 @@ async function main() {
   });
   assert.equal(unsafePunctuation.status, 400);
   assert.equal((await unsafePunctuation.json()).error, "invalid_tracking_number");
+
+  // Synthetic-only regression checks: the India Post adapter uses MySpeedPost,
+  // a third-party route whose published terms prohibit automated access and
+  // commercial reuse without prior written permission. No carrier request runs.
+  for (const [number, carrier] of [
+    ["RR999999987IN", undefined],
+    ["RR999999987IN", "india-post"],
+    ["1Z999AA10123456784", "india-post"]
+  ]) {
+    const response = await onRequestPost({
+      request: requestFor(number, "en", carrier),
+      env: {}
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      error: "tracking_unavailable",
+      reason: "carrier_source_restricted"
+    });
+  }
 
   // Exercise the exact sanitizer expression used by the browser application.
   // This catches accidental double escaping that would strip ordinary characters.

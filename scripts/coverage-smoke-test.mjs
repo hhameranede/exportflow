@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { onRequestGet } from "../functions/api/coverage.js";
 import { COUNTRY_CODES } from "../functions/lib/country-codes.mjs";
+import { onRequestGet as getCarrierCatalog } from "../functions/api/carriers.js";
 
 const response = await onRequestGet();
 assert.equal(response.status, 200);
@@ -35,5 +36,14 @@ assert.equal(payload.summary.linkOnlyCountryCount, payload.countries.filter(coun
 assert.equal(payload.summary.countriesWithoutCatalogEntry, payload.countries.filter(country => country.status === "not-listed").length);
 assert.ok(payload.summary.catalogEntries > 0);
 assert.ok(payload.upstreamRevision);
+assert.equal(payload.summary.quarantinedCarrierCount, 1);
+assert.ok(payload.countries.every(country => country.carriers.every(carrier => carrier.id !== "india-post")));
+
+const catalogResponse = await getCarrierCatalog();
+assert.equal(catalogResponse.status, 200);
+const publicCatalog = await catalogResponse.json();
+assert.equal(publicCatalog.catalogEntries, publicCatalog.carriers.length);
+assert.ok(!publicCatalog.carriers.includes("india-post"));
+assert.ok(publicCatalog.carriers.includes("ups"));
 
 console.log(`Coverage catalog tests passed: ${payload.summary.catalogEntries} catalog records across ${payload.summary.allCountries} ISO country/territory codes; ${payload.summary.directCountryCount} have at least one direct adapter.`);
