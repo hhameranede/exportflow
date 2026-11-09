@@ -140,3 +140,13 @@ Treat this as a packaging step to close before distributing source/binaries cont
 **Completed:** immutable tree enumeration for both snapshots; extraction and SHA comparison of all seven license/notice paths; effective license mapping for all 743 IDs; determination of the 732 currently pinned IDs; manual reading of root LICENSE/NOTICE, both nested MIT licenses, TRAWL AGPL license/source note; inspection of package manifest/build-copy rules, ExportFlow tracking function and Production environment variable names; extraction of all 33 production dependency license declarations.
 
 **Not a formal legal sign-off:** no source-by-source copyright/provenance chain audit was performed; the 33 npm package license fields were read from lock metadata rather than manually compared against every full license; the final ExportFlow distribution notice-delivery check remains open. Carrier API access, website automation, trademarks and shipment-data display/reuse remain separate and are not authorized by this source-license report.
+
+
+### npm archives with missing license text
+
+Two locked packages in the current dependency graph declare a license in npm metadata but omit the license text from their packed tarballs. The build supplies explicit, provenance-labelled repository fallbacks:
+
+- `boolbase@1.0.0` (ISC): the npm archive omits LICENSE. Registry metadata reports gitHead `68dff5fbe60c51eb37725ea9e3ed310dcc1e776e`, which GitHub did not resolve. We include the ISC text from the source repository at commit `54811f01c797a6bb1c263183ae90b7dd627e0638`, but the exact historical match to that npm release is **not verified**.
+- `saxes@6.0.0` (ISC): npm registry gitHead `211fa0ebec9b628affc09219199639887174bfc3` resolves in GitHub as the 6.0.0 release commit. Its LICENSE blob `187f3ba399862022f4e670b2a3a1dbc6d7e6a800` is included intact; exact source commit match is verified.
+
+Both fallbacks are explicitly marked in the generated manifest with source URL, source commit, blob SHA, npm gitHead, SHA-256 of the delivered text and a Boolean provenance-match field. The public notices page distinguishes verified from unverified fallbacks.
