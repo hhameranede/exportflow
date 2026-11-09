@@ -7,6 +7,17 @@ const output = resolve(root, "dist");
 const files = ["index.html", "styles.css", "app.js", "translations.js", "coverage.js", "robots.txt", "sitemap.xml", "_headers", "favicon.svg", "favicon-32x32.png", "apple-touch-icon.png", "site.webmanifest", "og-image-20261106.png", "404.html"];
 const engineDist = resolve(root, "node_modules/universal-parcel-scraper/dist");
 const localeCodes = ["en", "ar", "es", "zh", "hi", "pt", "fr", "ru"];
+const EXPORTFLOW_MODIFICATION_NOTICE = "// Modified by ExportFlow for Cloudflare Workers; third-party notices: /licenses/.\n";
+
+function addModificationNotice(source) {
+  if (source.includes("Modified by ExportFlow for Cloudflare Workers")) return source;
+  if (source.startsWith("#!")) {
+    const newline = source.indexOf("\n");
+    return newline === -1 ? source + "\n" + EXPORTFLOW_MODIFICATION_NOTICE :
+      source.slice(0, newline + 1) + EXPORTFLOW_MODIFICATION_NOTICE + source.slice(newline + 1);
+  }
+  return EXPORTFLOW_MODIFICATION_NOTICE + source;
+}
 const localizedPageSpecs = [
   { source: "index.html", route: "/", kind: "home" },
   { source: "coverage/index.html", route: "/coverage/", kind: "coverage" }
@@ -114,7 +125,7 @@ async function patchWorkerIncompatibleEngineFiles(directory) {
         /(["'][^"']+\.json["'])\s+with\s*\{\s*type\s*:\s*["']json["']\s*\}/g,
         "$1"
       );
-      await writeFile(file, compatible);
+      await writeFile(file, addModificationNotice(compatible));
       normalized += matches.length;
     }
   }
@@ -209,7 +220,7 @@ async function patchWorkerPlaceAssets() {
     "PIN-code data read"
   );
 
-  await writeFile(placesFile, lines.join("\n"));
+  await writeFile(placesFile, addModificationNotice(lines.join("\n")));
 }
 
 await rm(output, { recursive: true, force: true });
@@ -235,16 +246,16 @@ try {
 
   // JCEX's origin-pinning recovery path requires a custom Node undici Agent.
   const jcexOrigin = resolve(engineDist, "carriers/jcex/origin.js");
-  await writeFile(jcexOrigin,
+  await writeFile(jcexOrigin, addModificationNotice(
     "// Cloudflare Workers cannot pin a Node HTTPS socket to a custom origin.\n" +
     "export async function withJcexOrigin() {\n" +
     "  throw new Error(\"JCEX origin pinning is unavailable in this runtime\");\n" +
     "}\n"
-  );
+  ));
 
   // Disable local browser and native image routes; normal HTTP carrier adapters remain enabled.
   const optionalTransport = resolve(engineDist, "core/transport/optional.js");
-  await writeFile(optionalTransport,
+  await writeFile(optionalTransport, addModificationNotice(
     "import { TransportError } from '../errors/index.js';\n" +
     "export async function loadChromium(provider) {\n" +
     "  throw new TransportError(provider, 'Local browser automation is unavailable in Cloudflare Workers; configure the remote TRAWL service.');\n" +
@@ -252,7 +263,7 @@ try {
     "export async function loadSharp(provider) {\n" +
     "  throw new TransportError(provider, 'Image challenge decoding is unavailable in Cloudflare Workers.');\n" +
     "}\n"
-  );
+  ));
 
   // Replace Deppon's direct Sharp solver so its adapter can fail gracefully without native Sharp.
   const depponAdapter = resolve(engineDist, "carriers/deppon/adapter.js");
@@ -265,7 +276,7 @@ try {
     if (depponCompatible === depponSource) {
       throw new Error("Could not locate Deppon's native Sharp import for the Pages compatibility patch");
     }
-    await writeFile(depponAdapter, depponCompatible);
+    await writeFile(depponAdapter, addModificationNotice(depponCompatible));
   }
 
   console.log(
@@ -278,6 +289,21 @@ try {
   throw error;
 }
 
+await mkdir(resolve(output, "licenses"), { recursive: true });
+await writeFile(resolve(output, "licenses/EXPORTFLOW_MODIFICATIONS.md"), [
+  "# ExportFlow build modifications to upstream code",
+  "",
+  "This file lists Worker-compatibility modifications made to copied/generated files from the Apache-2.0 Universal Parcel Scraper dependency. Each modified file begins with a prominent comment: " + EXPORTFLOW_MODIFICATION_NOTICE.trim(),
+  "",
+  "- JSON import attributes are normalized for the Pages/Workers bundler.",
+  "- Places data reads are guarded because filesystem-backed data files are unavailable in the Workers runtime.",
+  "- JCEX's Node HTTPS origin-pinning helper is disabled in Workers.",
+  "- Local Chromium and native Sharp loading are disabled in Workers; optional remote TRAWL is a separate service and is not configured by this build.",
+  "- Deppon's native Sharp-based image challenge path is disabled in Workers.",
+  "",
+  "The modifications are generated in the build output only; the upstream source package in node_modules is not edited. The upstream Apache-2.0 LICENSE and NOTICE are preserved under this directory's package-license index.",
+  ""
+].join("\n"));
 const licenseStage = await stageThirdPartyLicenses({ root, output });
 console.log("Staged " + licenseStage.packageCount + " third-party package license records in " + licenseStage.licenseRoot);
 console.log("Built ExportFlow static site into " + output);
