@@ -7,7 +7,7 @@ import {
 import {
   consumeGlobalRateLimit,
   globalRateLimitHeaders
-} from "../../../../../lib/global-rate-limiter.mjs";
+} from "../../../../lib/global-rate-limiter.mjs";
 
 const SANDBOXES = Object.freeze({
   ups: Object.freeze({
