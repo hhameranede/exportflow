@@ -110,10 +110,13 @@ export async function stageThirdPartyLicenses({ root = process.cwd(), output = p
 
     const links = copiedFiles.map(file => '<a href="' + escapeHtml(file.href) + '">' +
       escapeHtml(path.basename(file.sourcePath)) + '</a>').join(" · ");
+    const links = copiedFiles.map(file => '<a href="' + escapeHtml(file.href) + '">' +
+      escapeHtml(path.basename(file.sourcePath)) + '</a>').join(" · ");
     markdownRows.push("| " + pkg.name + " | " + pkg.version + " | " + declaredLicense + " | " +
-      copiedFiles.map(file => "[" + path.basename(file.sourcePath) + "](" + file.outputPath + ")    htmlRows.push("<tr><td><code>" + escapeHtml(pkg.name) + "</code><br><small>" +
+      copiedFiles.map(file => "[" + path.basename(file.sourcePath) + "](" + file.outputPath + ")").join(", ") + " |");
+    htmlRows.push("<tr><td><code>" + escapeHtml(pkg.name) + "</code><br><small>" +
       escapeHtml(pkg.version) + "</small></td><td><code>" + escapeHtml(declaredLicense) +
-      "</code></td><td>" + links + "</td></tr>");+ links + "</td></tr>";
+      "</code></td><td>" + links + "</td></tr>");
   }
 
   const upstream = manifestPackages.find(pkg => pkg.name === "universal-parcel-scraper");
