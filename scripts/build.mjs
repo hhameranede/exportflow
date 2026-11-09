@@ -242,8 +242,9 @@ for (const page of publicPageDirectories) {
 
 await generateLocalizedPages();
 
+let jsonPatch;
 try {
-  const jsonPatch = await patchWorkerIncompatibleEngineFiles(engineDist);
+  jsonPatch = await patchWorkerIncompatibleEngineFiles(engineDist);
   const jsonImports = jsonPatch.normalized;
   await patchWorkerPlaceAssets();
 
