@@ -129,17 +129,31 @@ No GPL/AGPL/SSPL-style license is declared in those lockfile entries. This is me
 
 Official references: [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0.html), [MIT](https://opensource.org/license/MIT), [AGPL-3.0](https://opensource.org/license/agpl-3-0), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/), [Government Open Data License - India](https://data.gov.in/Godl).
 
-## Distribution compliance item still open
+## Distribution packaging status — Build and CI verified; Production publication pending
 
-A read-only scan of ExportFlow's current `main` tree found no root `LICENSE` or `NOTICE` file. ExportFlow's README says these upstream notices should be kept with redistribution. The upstream dependency package contains them, but this review did not verify that every final redistributed ExportFlow source/build artifact exposes the required notices to its recipients.
+A read-only scan of ExportFlow `main` found no root `LICENSE` or `NOTICE`. No root LICENSE was added: this audit does not relicense ExportFlow's original source code. Instead, Draft PR #59 adds a source-level `THIRD_PARTY_NOTICES.md` and a build step that creates a dedicated third-party notice package.
 
-Treat this as a packaging step to close before distributing source/binaries containing the upstream code: decide where to include the Apache-2.0 license, upstream NOTICE, the applicable MIT model notices and any used data attributions. No Production files were changed.
+The build now:
+- Reads every `node_modules/*` entry in the frozen package lock (33 entries at the audited lock version), checks the installed package version and declared license against the lockfile, and stops on missing/mismatched metadata.
+- Copies every discovered upstream/package LICENSE, LICENCE, UNLICENSE, COPYING and NOTICE file into `dist/licenses/packages/`. A package may not pass unless at least one license-text file is present in its archive or in an explicit provenance-labelled fallback.
+- Generates `dist/licenses/manifest.json` with the exact package/version, declared license, source path/provenance, applicable source URL/commit/blob/npm gitHead, whether the source-to-release match is verified, byte length and SHA-256.
+- Generates a public `/licenses/` page with canonical URL, the upstream Apache LICENSE and NOTICE, links to each package's license texts, and explicit disclosure for verified/unverified repository fallbacks. The page is linked from the footer and included in the sitemap.
+- Preserves the two MIT model LICENSE files nested within the upstream package, as well as the upstream NOTICE's data attributions.
+- Adds prominent `Modified by ExportFlow for Cloudflare Workers` comments to every Worker-specific upstream file changed by the build and publishes `/licenses/EXPORTFLOW_MODIFICATIONS.md`. Build-time verification checks the comments exist in all changed source files.
+
+Two npm archives omit a license text file despite declaring ISC in metadata. Both are handled explicitly and remain visible in the generated manifest:
+- `boolbase@1.0.0`: repository fallback from commit `54811f01c797a6bb1c263183ae90b7dd627e0638`; the npm-reported gitHead could not be resolved, so exact historical source matching is **not verified**.
+- `saxes@6.0.0`: repository fallback from npm gitHead/release commit `211fa0ebec9b628affc09219199639887174bfc3`; exact source commit and LICENSE blob match are verified.
+
+**CI verification:** [Run #532](https://github.com/hhameranede/exportflow/actions/runs/42547420784) completed successfully across frozen npm install, JavaScript syntax, regression tests, license-staging Build, canonical/hreflang/sitemap checks, Wrangler Pages Functions bundle, and public artifact checks. This proves the generated preview Build output in CI contained the expected notices and hashes.
+
+**Publication boundary:** PR #59 remains Draft/open/unmerged. Production remains on the existing `main` commit; `/licenses/` is not claimed to be live on the public site until a separately approved merge and Production deployment.
 
 ## Completion status and limitations
 
 **Completed:** immutable tree enumeration for both snapshots; extraction and SHA comparison of all seven license/notice paths; effective license mapping for all 743 IDs; determination of the 732 currently pinned IDs; manual reading of root LICENSE/NOTICE, both nested MIT licenses, TRAWL AGPL license/source note; inspection of package manifest/build-copy rules, ExportFlow tracking function and Production environment variable names; extraction of all 33 production dependency license declarations.
 
-**Not a formal legal sign-off:** no source-by-source copyright/provenance chain audit was performed; the 33 npm package license fields were read from lock metadata rather than manually compared against every full license; the final ExportFlow distribution notice-delivery check remains open. Carrier API access, website automation, trademarks and shipment-data display/reuse remain separate and are not authorized by this source-license report.
+**Not a formal legal sign-off:** the 33 npm package license texts are now copied and SHA-256 checked in the CI Build, but every package's full legal terms and notices have not been manually analysed clause-by-clause. The `boolbase@1.0.0` fallback is explicitly not a proven historical match to that published npm release. The public upstream tree has no CLA/DCO; separate private agreements and contributor-by-contributor chain of title require confirmation from the rights holder. Carrier API access, website automation, trademarks and shipment-data display/reuse remain separate and are not authorized by this source-license report.
 
 
 ### npm archives with missing license text
