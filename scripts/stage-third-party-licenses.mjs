@@ -156,13 +156,21 @@ export async function stageThirdPartyLicenses({ root = process.cwd(), output = p
     await writeFile(path.join(destination, "package-metadata.json"), JSON.stringify(packageMeta, null, 2) + "\n");
     manifestPackages.push(packageMeta);
 
-    const links = copiedFiles.map(file => '<a href="' + escapeHtml(file.href) + '">' +
-      escapeHtml(path.basename(file.sourcePath)) + '</a>').join(" · ");
+    const links = copiedFiles.map(file => {
+      const sourceLink = file.sourceUrl
+        ? ' <small>(source: <a href="' + escapeHtml(file.sourceUrl) + '">repository</a>)</small>'
+        : "";
+      return '<a href="' + escapeHtml(file.href) + '">' +
+        escapeHtml(path.basename(file.sourcePath)) + '</a>' + sourceLink;
+    }).join(" · ");
+    const fallbackNote = copiedFiles.some(file => file.provenance === "repository-license-fallback")
+      ? '<br><small>Repository license fallback; exact match to published package source is not verified.</small>'
+      : "";
     markdownRows.push("| " + pkg.name + " | " + pkg.version + " | " + declaredLicense + " | " +
       copiedFiles.map(file => "[" + path.basename(file.sourcePath) + "](" + file.outputPath + ")").join(", ") + " |");
     htmlRows.push("<tr><td><code>" + escapeHtml(pkg.name) + "</code><br><small>" +
       escapeHtml(pkg.version) + "</small></td><td><code>" + escapeHtml(declaredLicense) +
-      "</code></td><td>" + links + "</td></tr>");
+      "</code></td><td>" + links + fallbackNote + "</td></tr>");
   }
 
   const upstream = manifestPackages.find(pkg => pkg.name === "universal-parcel-scraper");
