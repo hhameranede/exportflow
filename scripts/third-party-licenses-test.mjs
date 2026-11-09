@@ -34,4 +34,5 @@ assert.ok(upstream.licenseFiles.some(file => file.sourcePath.endsWith("/LICENSE"
 assert.ok(upstream.licenseFiles.some(file => file.sourcePath.endsWith("/NOTICE")));
 assert.ok((await readFile(path.join(licensesRoot, "index.html"), "utf8")).includes("Third-party software notices"));
 assert.ok((await readFile(path.join(licensesRoot, "THIRD_PARTY_NOTICES.md"), "utf8")).includes("Locked production dependencies"));
+assert.ok((await readFile(path.join(licensesRoot, "EXPORTFLOW_MODIFICATIONS.md"), "utf8")).includes("Modified by ExportFlow for Cloudflare Workers"));
 console.log("third-party license staging: " + manifest.packageCount + " packages; every package has a copied LICENSE/NOTICE file");
