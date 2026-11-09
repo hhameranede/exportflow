@@ -49,3 +49,10 @@ Do not promote an adapter to approved-for-testing until a permitted test route a
 ## Safety boundaries
 
 No live carrier requests, real tracking numbers, credentials, recipient information, scraping sessions or production changes were used to generate this matrix. The CSV contains source-level indicators and empty evidence fields only. Keep the PR Draft until the review plan and evidence are checked. No merge or deployment is authorized by this work.
+
+
+## Runtime versus test/fixture signal scope — 2026-11-09
+
+The primary matrix columns (browser, HTTP client, external host, environment, authentication, reliability, privacy and dynamic-code indicators) are calculated from runtime adapter source and manifest metadata only. Test/spec and fixture files are counted and reported separately in \`non_runtime_source_signals\`. A browser or HTTP client used by an offline test is not evidence that the deployed adapter uses that client.
+
+Credential-like literal findings are scanned across source files and text fixtures, with path-based classification for test directories and fixture directories. The matched value is never serialized. Re-run results supersede the historical technical triage counts above; use the newest workflow artifact for current counts.
