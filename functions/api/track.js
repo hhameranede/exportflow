@@ -232,11 +232,11 @@ export async function onRequestPost({ request, env }) {
   // public third-party display routes held pending evidence.
   const detection = carrier ? null : parseTrackingInput(number);
   const selectedCarrier = carrier || detection?.carrier;
-  const ambiguousBlockedCandidate = !carrier
-    && Array.isArray(detection?.candidates)
-    && detection.candidates.some(isPublicCarrierQuarantined);
-  if (isPublicCarrierQuarantined(selectedCarrier) || ambiguousBlockedCandidate) {
-    return json({ error: "tracking_unavailable", reason: "carrier_source_restricted" }, 503);
+  // Block only the carrier selected with confidence (or explicitly supplied).
+  // An unrelated quarantined carrier appearing among ambiguous candidates must
+  // not prevent another carrier's adapter from being tried.
+  if (isPublicCarrierQuarantined(selectedCarrier)) {
+    return json({ error: "carrier_authorization_required" }, 403);
   }
 
   const retryAfter = await consumeRateLimit(request);
