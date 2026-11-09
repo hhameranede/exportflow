@@ -165,7 +165,7 @@ export async function stageThirdPartyLicenses({ root = process.cwd(), output = p
     "<table><thead><tr><th>Package / version</th><th>Declared license</th><th>Included license/notice files</th></tr></thead><tbody>",
     tableRows,
     "</tbody></table>",
-    '<p><a href="/licenses/manifest.json">Machine-readable package/license manifest</a></p>',
+    '<p><a href="/licenses/manifest.json">Machine-readable package/license manifest</a> · <a href="/licenses/EXPORTFLOW_MODIFICATIONS.md">ExportFlow build modifications</a></p>',
     "<p><small>Generated during the ExportFlow build. See the repository's THIRD_PARTY_NOTICES.md for source-level notes and methodology.</small></p>",
     "</body></html>"
   ].join("\n") + "\n";
