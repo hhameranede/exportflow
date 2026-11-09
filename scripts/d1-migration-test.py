@@ -22,6 +22,7 @@ tables = {
 }
 required = {
     "merchant_provider_credentials",
+    "merchant_official_api_credentials",
     "merchant_users",
     "merchant_sessions",
     "merchant_security_events",
@@ -147,6 +148,74 @@ for statement in (
         pass
     else:
         raise AssertionError("Merchant provider audit events must be append-only.")
+
+
+official_credential_columns = {
+    row[1] for row in db.execute(
+        "PRAGMA table_info(merchant_official_api_credentials)"
+    ).fetchall()
+}
+assert official_credential_columns == {
+    "merchant_id", "provider", "key_id", "iv", "ciphertext",
+    "scope", "consented_at", "created_at", "updated_at"
+}, "Official API vault must remain ciphertext-only."
+
+official_credential = (
+    "merchant-test-1", "fedex", "test-key-v1", "c" * 16,
+    "official-api-ciphertext-only", "sandbox_track", "2026-11-07T12:03:00Z",
+    "2026-11-07T12:03:00Z", "2026-11-07T12:03:00Z"
+)
+db.execute(
+    """INSERT INTO merchant_official_api_credentials
+       (merchant_id, provider, key_id, iv, ciphertext, scope, consented_at,
+        created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+    official_credential
+)
+official_audit = db.execute(
+    """SELECT event_type, provider, metadata_json FROM merchant_provider_audit_events
+       WHERE provider = 'fedex' ORDER BY occurred_at"""
+).fetchall()
+assert official_audit == [
+    ("credential.connected", "fedex", '{"scope":"sandbox_track"}')
+], official_audit
+
+db.execute(
+    """UPDATE merchant_official_api_credentials
+       SET key_id = ?, iv = ?, ciphertext = ?, updated_at = ?
+       WHERE merchant_id = ? AND provider = ?""",
+    ("test-key-v2", "d" * 16, "replacement-ciphertext", "2026-11-07T12:04:00Z",
+     "merchant-test-1", "fedex")
+)
+db.execute(
+    "DELETE FROM merchant_official_api_credentials WHERE merchant_id = ? AND provider = ?",
+    ("merchant-test-1", "fedex")
+)
+official_audit = db.execute(
+    """SELECT event_type, provider, metadata_json FROM merchant_provider_audit_events
+       WHERE provider = 'fedex' ORDER BY occurred_at"""
+).fetchall()
+assert official_audit == [
+    ("credential.connected", "fedex", '{"scope":"sandbox_track"}'),
+    ("credential.updated", "fedex", '{"scope":"sandbox_track"}'),
+    ("credential.disconnected", "fedex", '{"scope":"sandbox_track"}')
+], official_audit
+assert "official-api-ciphertext-only" not in str(official_audit)
+assert "apiSecret" not in str(official_audit)
+
+try:
+    db.execute(
+        """INSERT INTO merchant_official_api_credentials
+           (merchant_id, provider, key_id, iv, ciphertext, scope, consented_at,
+            created_at, updated_at)
+           VALUES (?, 'dhl-express', ?, ?, ?, 'sandbox_track', ?, ?, ?)""",
+        ("merchant-test-1", "test-key-v1", "e" * 16, "ciphertext",
+         "2026-11-07T12:05:00Z", "2026-11-07T12:05:00Z", "2026-11-07T12:05:00Z")
+    )
+except sqlite3.IntegrityError:
+    pass
+else:
+    raise AssertionError("The official API vault must reject providers outside FedEx and UPS.")
 
 
 # Global carrier evidence is explicit and conservative: the seeded provider research
