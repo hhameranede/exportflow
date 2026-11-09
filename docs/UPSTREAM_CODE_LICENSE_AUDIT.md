@@ -150,3 +150,8 @@ Two locked packages in the current dependency graph declare a license in npm met
 - `saxes@6.0.0` (ISC): npm registry gitHead `211fa0ebec9b628affc09219199639887174bfc3` resolves in GitHub as the 6.0.0 release commit. Its LICENSE blob `187f3ba399862022f4e670b2a3a1dbc6d7e6a800` is included intact; exact source commit match is verified.
 
 Both fallbacks are explicitly marked in the generated manifest with source URL, source commit, blob SHA, npm gitHead, SHA-256 of the delivered text and a Boolean provenance-match field. The public notices page distinguishes verified from unverified fallbacks.
+
+
+## Contributor and copyright-chain evidence boundary
+
+The upstream tree at the audited immutable commit contains no file or path matching a Contributor License Agreement (CLA), Developer Certificate of Origin (DCO), or contributor assignment agreement. The root Apache-2.0 License section 5 states that contributions intentionally submitted for inclusion are under Apache-2.0 unless the contributor explicitly states otherwise, and it preserves any separate license agreement already executed with the licensor. This is the public repository's stated contribution basis; it does **not** prove that no private side agreement exists or independently establish every contributor's authority for every historical source file. A final copyright-chain sign-off would require confirmation from the upstream rights holder and review of any separate agreements.
