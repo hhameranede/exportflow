@@ -36,14 +36,17 @@ assert.equal(payload.summary.linkOnlyCountryCount, payload.countries.filter(coun
 assert.equal(payload.summary.countriesWithoutCatalogEntry, payload.countries.filter(country => country.status === "not-listed").length);
 assert.ok(payload.summary.catalogEntries > 0);
 assert.ok(payload.upstreamRevision);
-assert.equal(payload.summary.quarantinedCarrierCount, 1);
-assert.ok(payload.countries.every(country => country.carriers.every(carrier => carrier.id !== "india-post")));
+const quarantinedIds = ["china-post", "india-post", "singapore-post", "yunexpress"];
+assert.equal(payload.summary.quarantinedCarrierCount, quarantinedIds.length);
+assert.ok(payload.countries.every(country =>
+  country.carriers.every(carrier => !quarantinedIds.includes(carrier.id))
+));
 
 const catalogResponse = await getCarrierCatalog();
 assert.equal(catalogResponse.status, 200);
 const publicCatalog = await catalogResponse.json();
 assert.equal(publicCatalog.catalogEntries, publicCatalog.carriers.length);
-assert.ok(!publicCatalog.carriers.includes("india-post"));
+for (const id of quarantinedIds) assert.ok(!publicCatalog.carriers.includes(id), id + " must be absent from the public carrier catalog");
 assert.ok(publicCatalog.carriers.includes("ups"));
 
 console.log(`Coverage catalog tests passed: ${payload.summary.catalogEntries} catalog records across ${payload.summary.allCountries} ISO country/territory codes; ${payload.summary.directCountryCount} have at least one direct adapter.`);
