@@ -1,3 +1,4 @@
+import { stageThirdPartyLicenses } from "./stage-third-party-licenses.mjs";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -78,7 +79,7 @@ async function generateLocalizedPages() {
     }
   }
 
-  for (const route of ["/about/", "/contact/", "/privacy/", "/terms/", "/cookies/", "/security/", "/disclaimer/"]) {
+  for (const route of ["/about/", "/contact/", "/privacy/", "/terms/", "/cookies/", "/security/", "/disclaimer/", "/licenses/"]) {
     sitemapEntries.push("  <url>\n    <loc>https://exportflow.me" + route + "</loc>\n  </url>");
   }
 
@@ -277,4 +278,6 @@ try {
   throw error;
 }
 
+const licenseStage = await stageThirdPartyLicenses({ root, output });
+console.log("Staged " + licenseStage.packageCount + " third-party package license records in " + licenseStage.licenseRoot);
 console.log("Built ExportFlow static site into " + output);
