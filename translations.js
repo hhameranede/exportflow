@@ -58,7 +58,7 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "errorEmpty": "Enter a tracking number first.",
     "errorInvalid": "That tracking number is invalid or unsupported.",
     "errorNotFound": "The carrier has not found this shipment yet.",
-"errorVerificationRequired": "The carrier's verification check blocked this lookup. This does not mean the tracking number is invalid. Try the carrier's official tracking page or try again later.",
+    "errorVerificationRequired": "The carrier's verification check blocked this lookup. This does not mean the tracking number is invalid. Try the carrier's official tracking page or try again later.",
     "errorRateLimited": "Too many requests. Please try again shortly.",
     "errorInputRequired": "This carrier needs a postcode. Add it and try again.",
     "errorUnavailable": "The carrier could not be reached right now. Please try again later.",
@@ -141,7 +141,8 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "emptyResultTitle": "No updates yet",
     "emptyResultCopy": "The carrier has received tracking information, but has not posted transit scans yet.",
     "chooseLanguage": "Choose language",
-    "supportedCarriersHeading": "SUPPORTED GLOBAL & REGIONAL CARRIERS · OVER 1,300+ COURIERS"
+    "supportedCarriersHeading": "SUPPORTED GLOBAL & REGIONAL CARRIERS · OVER 1,300+ COURIERS",
+    "errorCarrierAuthorizationRequired": "ExportFlow cannot run this public lookup because the carrier source requires approved access. Use the carrier's official tracking page or connect an authorized merchant account."
   },
   "ar": {
     "announcement": "تابع كل شحناتك في مكان واحد",
@@ -201,7 +202,7 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "errorEmpty": "أدخل رقم التتبع أولًا.",
     "errorInvalid": "رقم التتبع غير صالح أو غير مدعوم.",
     "errorNotFound": "لم تعثر شركة الشحن على هذه الشحنة بعد.",
-"errorVerificationRequired": "منعت أنظمة التحقق لدى شركة الشحن إكمال البحث. هذا لا يعني أن رقم التتبع غير صحيح. راجع صفحة التتبع الرسمية للشركة أو أعد المحاولة لاحقًا.",
+    "errorVerificationRequired": "منعت أنظمة التحقق لدى شركة الشحن إكمال البحث. هذا لا يعني أن رقم التتبع غير صحيح. راجع صفحة التتبع الرسمية للشركة أو أعد المحاولة لاحقًا.",
     "errorRateLimited": "عدد كبير من الطلبات. حاول بعد قليل.",
     "errorInputRequired": "تحتاج هذه الشركة إلى الرمز البريدي. أضفه ثم أعد المحاولة.",
     "errorUnavailable": "تعذر الوصول إلى شركة الشحن الآن. حاول لاحقًا.",
@@ -284,7 +285,8 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "emptyResultTitle": "لا توجد تحديثات حتى الآن",
     "emptyResultCopy": "سجلت شركة الشحن رقم التتبع ولكن لم تنشر مسحات بعد.",
     "chooseLanguage": "اختر اللغة",
-    "supportedCarriersHeading": "شركات الشحن العالمية والإقليمية المدعومة · أكثر من 1,300 شركة"
+    "supportedCarriersHeading": "شركات الشحن العالمية والإقليمية المدعومة · أكثر من 1,300 شركة",
+    "errorCarrierAuthorizationRequired": "لا يمكن لـ ExportFlow تنفيذ هذا التتبع العام لأن مصدر شركة الشحن يتطلب صلاحية وصول معتمدة. استخدم صفحة التتبع الرسمية أو اربط حساب تاجر مخوّل."
   },
   "es": {
     "announcement": "Sigue cada entrega desde un solo lugar",
@@ -344,7 +346,7 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "errorEmpty": "Introduce primero un número de seguimiento.",
     "errorInvalid": "El número de seguimiento no es válido o no está admitido.",
     "errorNotFound": "El transportista aún no ha encontrado este envío.",
-"errorVerificationRequired": "La verificación del transportista bloqueó esta consulta. Esto no significa que el número de seguimiento sea inválido. Prueba la página oficial del transportista o inténtalo más tarde.",
+    "errorVerificationRequired": "La verificación del transportista bloqueó esta consulta. Esto no significa que el número de seguimiento sea inválido. Prueba la página oficial del transportista o inténtalo más tarde.",
     "errorRateLimited": "Demasiadas solicitudes. Inténtalo de nuevo en breve.",
     "errorInputRequired": "Este transportista necesita un código postal. Añádelo e inténtalo otra vez.",
     "errorUnavailable": "No se pudo contactar con el transportista. Inténtalo más tarde.",
@@ -427,7 +429,8 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "emptyResultTitle": "Sin actualizaciones aún",
     "emptyResultCopy": "El transportista ha recibido la información pero aún no hay escaneos.",
     "chooseLanguage": "Elegir idioma",
-    "supportedCarriersHeading": "TRANSPORTISTAS GLOBALES Y REGIONALES COMPATIBLES · MÁS DE 1.300 EMPRESAS"
+    "supportedCarriersHeading": "TRANSPORTISTAS GLOBALES Y REGIONALES COMPATIBLES · MÁS DE 1.300 EMPRESAS",
+    "errorCarrierAuthorizationRequired": "ExportFlow no puede realizar esta consulta pública porque la fuente del transportista requiere acceso autorizado. Usa la página oficial de seguimiento o conecta una cuenta de comerciante autorizada."
   },
   "zh": {
     "announcement": "在一个清晰页面跟踪每一次配送",
@@ -487,7 +490,7 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "errorEmpty": "请先输入追踪号码。",
     "errorInvalid": "追踪号码无效或暂不支持。",
     "errorNotFound": "承运商尚未找到此包裹。",
-"errorVerificationRequired": "承运商的验证机制阻止了此次查询。这并不表示运单号无效。请使用承运商官方查询页面，或稍后重试。",
+    "errorVerificationRequired": "承运商的验证机制阻止了此次查询。这并不表示运单号无效。请使用承运商官方查询页面，或稍后重试。",
     "errorRateLimited": "请求过于频繁，请稍后重试。",
     "errorInputRequired": "该承运商需要邮政编码。请填写后重试。",
     "errorUnavailable": "暂时无法连接承运商，请稍后重试。",
@@ -570,7 +573,8 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "emptyResultTitle": "暂无更新",
     "emptyResultCopy": "承运商已接收信息，尚未发布运输扫描记录。",
     "chooseLanguage": "选择语言",
-    "supportedCarriersHeading": "支持的全球及区域快递公司 · 超过 1,300 家物流网络"
+    "supportedCarriersHeading": "支持的全球及区域快递公司 · 超过 1,300 家物流网络",
+    "errorCarrierAuthorizationRequired": "此承运商的数据源需要经过批准的访问权限，ExportFlow 目前无法进行公开查询。请使用承运商的官方查询页面，或连接已获授权的商家账户。"
   },
   "hi": {
     "announcement": "हर डिलीवरी को एक ही जगह पर ट्रैक करें",
@@ -630,7 +634,7 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "errorEmpty": "पहले ट्रैकिंग नंबर दर्ज करें।",
     "errorInvalid": "यह ट्रैकिंग नंबर अमान्य या असमर्थित है।",
     "errorNotFound": "कूरियर को यह शिपमेंट अभी नहीं मिला।",
-"errorVerificationRequired": "कूरियर की सत्यापन प्रणाली ने इस खोज को रोक दिया। इसका मतलब यह नहीं है कि ट्रैकिंग नंबर गलत है। कूरियर के आधिकारिक ट्रैकिंग पेज पर जाएँ या बाद में फिर कोशिश करें।",
+    "errorVerificationRequired": "कूरियर की सत्यापन प्रणाली ने इस खोज को रोक दिया। इसका मतलब यह नहीं है कि ट्रैकिंग नंबर गलत है। कूरियर के आधिकारिक ट्रैकिंग पेज पर जाएँ या बाद में फिर कोशिश करें।",
     "errorRateLimited": "बहुत अधिक अनुरोध। कृपया थोड़ी देर बाद प्रयास करें।",
     "errorInputRequired": "इस कूरियर को पोस्टकोड चाहिए। इसे जोड़कर फिर प्रयास करें।",
     "errorUnavailable": "कूरियर तक अभी पहुँचा नहीं जा सका। बाद में प्रयास करें।",
@@ -713,7 +717,8 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "emptyResultTitle": "अभी कोई अपडेट नहीं",
     "emptyResultCopy": "कूरियर को शिपमेंट जानकारी मिल गई है, लेकिन अभी स्कैन उपलब्ध नहीं हैं।",
     "chooseLanguage": "भाषा चुनें",
-    "supportedCarriersHeading": "समर्थित वैश्विक और क्षेत्रीय कूरियर कम्पनियां · 1,300+ से अधिक सेवाएं"
+    "supportedCarriersHeading": "समर्थित वैश्विक और क्षेत्रीय कूरियर कम्पनियां · 1,300+ से अधिक सेवाएं",
+    "errorCarrierAuthorizationRequired": "इस स्रोत के लिए स्वीकृत पहुँच आवश्यक है, इसलिए ExportFlow अभी सार्वजनिक ट्रैकिंग नहीं कर सकता। आधिकारिक ट्रैकिंग पेज का उपयोग करें या अधिकृत व्यापारी खाता कनेक्ट करें।"
   },
   "pt": {
     "announcement": "Acompanhe cada entrega num só lugar",
@@ -773,7 +778,7 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "errorEmpty": "Introduza primeiro um código de rastreio.",
     "errorInvalid": "Este código de rastreio é inválido ou não é suportado.",
     "errorNotFound": "A transportadora ainda não encontrou esta encomenda.",
-"errorVerificationRequired": "A verificação da transportadora bloqueou esta consulta. Isso não significa que o código de rastreio seja inválido. Consulte a página oficial da transportadora ou tente novamente mais tarde.",
+    "errorVerificationRequired": "A verificação da transportadora bloqueou esta consulta. Isso não significa que o código de rastreio seja inválido. Consulte a página oficial da transportadora ou tente novamente mais tarde.",
     "errorRateLimited": "Demasiados pedidos. Tente novamente em breve.",
     "errorInputRequired": "Esta transportadora precisa de um código postal. Adicione-o e tente novamente.",
     "errorUnavailable": "Não foi possível contactar a transportadora. Tente mais tarde.",
@@ -856,7 +861,8 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "emptyResultTitle": "Sem atualizações ainda",
     "emptyResultCopy": "A transportadora recebeu as informações, mas ainda não publicou leituras.",
     "chooseLanguage": "Escolher idioma",
-    "supportedCarriersHeading": "TRANSPORTADORAS GLOBAIS E REGIONAIS SUPORTADAS · MAIS DE 1.300 EMPRESAS"
+    "supportedCarriersHeading": "TRANSPORTADORAS GLOBAIS E REGIONAIS SUPORTADAS · MAIS DE 1.300 EMPRESAS",
+    "errorCarrierAuthorizationRequired": "O ExportFlow não pode consultar publicamente esta transportadora porque a fonte exige acesso autorizado. Use a página oficial de rastreamento ou conecte uma conta de comerciante autorizada."
   },
   "fr": {
     "announcement": "Suivez chaque livraison au même endroit",
@@ -916,7 +922,7 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "errorEmpty": "Saisissez d'abord un numéro de suivi.",
     "errorInvalid": "Ce numéro de suivi est invalide ou non pris en charge.",
     "errorNotFound": "Le transporteur n'a pas encore trouvé cet envoi.",
-"errorVerificationRequired": "La vérification du transporteur a bloqué cette recherche. Cela ne signifie pas que le numéro de suivi est invalide. Consultez la page officielle du transporteur ou réessayez plus tard.",
+    "errorVerificationRequired": "La vérification du transporteur a bloqué cette recherche. Cela ne signifie pas que le numéro de suivi est invalide. Consultez la page officielle du transporteur ou réessayez plus tard.",
     "errorRateLimited": "Trop de demandes. Veuillez réessayer bientôt.",
     "errorInputRequired": "Ce transporteur a besoin d'un code postal. Ajoutez-le puis réessayez.",
     "errorUnavailable": "Le transporteur est momentanément inaccessible. Réessayez plus tard.",
@@ -999,7 +1005,8 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "emptyResultTitle": "Aucune mise à jour",
     "emptyResultCopy": "Le transporteur a reçu l avis d expédition mais aucun scan n est encore disponible.",
     "chooseLanguage": "Choisir la langue",
-    "supportedCarriersHeading": "TRANSPORTEURS MONDIAUX ET RÉGIONAUX COMPATIBLES · PLUS DE 1 300 TRANSPORTEURS"
+    "supportedCarriersHeading": "TRANSPORTEURS MONDIAUX ET RÉGIONAUX COMPATIBLES · PLUS DE 1 300 TRANSPORTEURS",
+    "errorCarrierAuthorizationRequired": "ExportFlow ne peut pas effectuer cette recherche publique, car la source du transporteur exige un accès autorisé. Utilisez sa page officielle de suivi ou connectez un compte marchand autorisé."
   },
   "ru": {
     "announcement": "Следите за каждой доставкой в одном месте",
@@ -1059,7 +1066,7 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "errorEmpty": "Сначала введите номер отслеживания.",
     "errorInvalid": "Этот номер недействителен или не поддерживается.",
     "errorNotFound": "Перевозчик пока не нашёл это отправление.",
-"errorVerificationRequired": "Проверка службы доставки заблокировала этот запрос. Это не означает, что номер отслеживания неверен. Проверьте его на официальной странице перевозчика или попробуйте позже.",
+    "errorVerificationRequired": "Проверка службы доставки заблокировала этот запрос. Это не означает, что номер отслеживания неверен. Проверьте его на официальной странице перевозчика или попробуйте позже.",
     "errorRateLimited": "Слишком много запросов. Повторите попытку позже.",
     "errorInputRequired": "Этому перевозчику нужен почтовый индекс. Добавьте его и повторите попытку.",
     "errorUnavailable": "Не удалось связаться с перевозчиком. Попробуйте позже.",
@@ -1142,6 +1149,7 @@ window.EXPORTFLOW_TRANSLATIONS = {
     "emptyResultTitle": "Пока нет обновлений",
     "emptyResultCopy": "Перевозчик получил информацию, но ещё не опубликовал статус сканирования.",
     "chooseLanguage": "Выбрать язык",
-    "supportedCarriersHeading": "ПОДДЕРЖИВАЕМЫЕ МИРОВЫЕ И РЕГИОНАЛЬНЫЕ СЛУЖБЫ · БОЛЕЕ 1 300 КОМПАНИЙ"
+    "supportedCarriersHeading": "ПОДДЕРЖИВАЕМЫЕ МИРОВЫЕ И РЕГИОНАЛЬНЫЕ СЛУЖБЫ · БОЛЕЕ 1 300 КОМПАНИЙ",
+    "errorCarrierAuthorizationRequired": "ExportFlow не может выполнить публичный запрос: источник перевозчика требует подтверждённого доступа. Используйте официальную страницу отслеживания или подключите авторизованный аккаунт продавца."
   }
 };
