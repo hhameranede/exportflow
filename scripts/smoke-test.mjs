@@ -79,6 +79,10 @@ assert.ok(css.includes(".form-error[hidden]") && css.includes("display: none !im
 
 assert.match(js, /postcodeInput\.value\.trim\(\)/, "Optional postcode should be submitted to the API");
 assert.match(js, /renderTimeline/, "Live scan history should be rendered into the timeline");
+assert.match(trackApi, /carrier_authorization_required/, "Restricted public carrier sources must return a dedicated authorization error");
+assert.match(trackApi, /isPublicCarrierQuarantined\(selectedCarrier\)/, "Only the selected carrier should be checked against the public source policy");
+assert.doesNotMatch(trackApi, /ambiguousBlockedCandidate/, "An unrelated ambiguous candidate must not block another carrier");
+assert.match(js, /carrier_authorization_required: "errorCarrierAuthorizationRequired"/, "The browser must localize the restricted-source error");
 assert.match(trackApi, /createTracker/, "Tracking API must use the upstream parcel engine");
 assert.match(trackApi, /safeEventPoint\(event\.point\)/, "Carrier scan coordinates should be validated before projection");
 assert.match(js, /renderShipmentMap/, "Live tracking should render its map panel");
