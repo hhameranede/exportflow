@@ -1,5 +1,6 @@
 import { CARRIERS, CARRIER_IDS } from "universal-parcel-scraper";
 import { COUNTRY_CODES } from "../lib/country-codes.mjs";
+import { filterPublicCarrierIds, filterPublicCarrierRecords } from "../lib/public-carrier-policy.mjs";
 
 const SOURCE_REVISION = "e64a466772ef25ce68e02d9c7c9f1613eec1208b";
 function add(map, code, carrier, adapter) {
@@ -10,7 +11,7 @@ const sorted = values => values.slice().sort((a,b) => a.name.localeCompare(b.nam
 
 export async function onRequestGet() {
   const direct = new Map(), universal = new Map(), linkOnly = new Map(), all = new Map();
-  const selectable = Object.values(CARRIERS).filter(carrier => carrier && carrier.id !== "unknown" && carrier.capabilities?.selectable === true);
+  const selectable = filterPublicCarrierRecords(Object.values(CARRIERS).filter(carrier => carrier && carrier.id !== "unknown" && carrier.capabilities?.selectable === true));
   const directCarrierIds = new Set();
   for (const carrier of selectable) {
     const codes = Array.isArray(carrier.countries) ? carrier.countries : [];
@@ -38,7 +39,8 @@ export async function onRequestGet() {
   });
   const summary = {
     allCountries: COUNTRY_CODES.length,
-    catalogEntries: CARRIER_IDS.length,
+    catalogEntries: filterPublicCarrierIds(CARRIER_IDS).length,
+    quarantinedCarrierCount: CARRIER_IDS.length - filterPublicCarrierIds(CARRIER_IDS).length,
     selectableCarrierRecords: selectable.length,
     directCarrierRecords: directCarrierIds.size,
     directCountryCount: countries.filter(c => c.status === "direct").length,
