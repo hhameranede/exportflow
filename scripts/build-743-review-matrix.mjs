@@ -47,6 +47,7 @@ assert.equal(new Set(report.adapters.map(a=>a.id)).size,expected,'Adapter IDs mu
 const columns = [
 'adapter_id','adapter_display_name','adapter_directory','country_codes','tracking_mode','tracking_steps','tracking_adapter_reference',
 'browser_indicator','fetch_indicator','axios_indicator','undici_indicator','other_http_client_indicator','source_file_count',
+'runtime_source_file_count','test_source_file_count','fixture_source_file_count','non_runtime_source_signals',
 'offline_test_present','offline_test_files','live_test_definition_present_not_executed','live_test_definition_files',
 'fixture_present','fixture_files','local_license_notice_files','license_provenance_review','upstream_declared_root_license',
 'upstream_snapshot_commit','upstream_adapter_source_url','external_hostnames_static_source_signals','environment_variable_names_only',
@@ -85,6 +86,10 @@ const rows = report.adapters.map(a => {
     browser_indicator:!!a.networkSignals?.browser, fetch_indicator:!!a.networkSignals?.fetch,
     axios_indicator:!!a.networkSignals?.axios, undici_indicator:!!a.networkSignals?.undici,
     other_http_client_indicator:!!a.networkSignals?.otherHttpClient, source_file_count:a.sourceFileCount||0,
+    runtime_source_file_count:a.runtimeSourceFileCount ?? a.sourceFileCount ?? 0,
+    test_source_file_count:a.testSourceFileCount||0,
+    fixture_source_file_count:a.fixtureSourceFileCount||0,
+    non_runtime_source_signals:JSON.stringify(a.nonRuntimeSignals||{}),
     offline_test_present:!!a.hasOfflineTest, offline_test_files:(a.offlineTestFiles||[]).join('; '),
     live_test_definition_present_not_executed:!!a.hasLiveTestDefinition, live_test_definition_files:(a.liveTestFiles||[]).join('; '),
     fixture_present:(a.fixtureFiles||[]).length>0, fixture_files:(a.fixtureFiles||[]).join('; '),
