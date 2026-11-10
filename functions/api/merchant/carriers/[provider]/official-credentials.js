@@ -93,17 +93,26 @@ function trustedSameOriginRead(request, env) {
   }
 }
 
-export async function onRequestGet({ request, env, params }) {
-  if (!trustedSameOriginRead(request, env)) return jsonResponse({ error: "origin_forbidden" }, 403);
-  const provider = String(params?.provider || "").trim().toLowerCase();
-  if (!allowedProvider(provider)) return jsonResponse({ error: "unsupported_provider" }, 400);
-  try {
-    const vault = await createSessionBoundOfficialApiCredentialVault(request, env);
-    return jsonResponse(await vault.getStatus({ provider }));
-  } catch (error) {
-    return officialApiCredentialVaultErrorResponse(error);
-  }
+export function createOfficialApiCredentialStatusHandler({
+  createVault = createSessionBoundOfficialApiCredentialVault
+} = {}) {
+  return async function onRequestGet({ request, env, params } = {}) {
+    if (!request || request.method !== "GET") {
+      return jsonResponse({ error: "method_not_allowed" }, 405, { Allow: "GET" });
+    }
+    if (!trustedSameOriginRead(request, env)) return jsonResponse({ error: "origin_forbidden" }, 403);
+    const provider = String(params?.provider || "").trim().toLowerCase();
+    if (!allowedProvider(provider)) return jsonResponse({ error: "unsupported_provider" }, 400);
+    try {
+      const vault = await createVault(request, env);
+      return jsonResponse(await vault.getStatus({ provider }));
+    } catch (error) {
+      return officialApiCredentialVaultErrorResponse(error);
+    }
+  };
 }
+
+export const onRequestGet = createOfficialApiCredentialStatusHandler();
 
 export async function onRequestPost({ request, env, params }) {
   if (!trustedSameOrigin(request, env)) return jsonResponse({ error: "origin_forbidden" }, 403);
