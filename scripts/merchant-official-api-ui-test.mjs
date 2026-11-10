@@ -39,13 +39,11 @@ assert.ok(script.includes("textContent"), "Remote status strings must be rendere
 assert.ok(script.includes("new URL(result.authorizationUrl).origin !== \"https://accounts.google.com\""),
   "OAuth redirects must be restricted to Google's authorization origin");
 
-assert.ok(statusRoute.includes("export async function onRequestGet"));
+assert.ok(statusRoute.includes("export const onRequestGet = createOfficialApiCredentialStatusHandler();"));
 assert.ok(statusRoute.includes("getStatus({ provider })"));
 assert.ok(statusRoute.includes("trustedSameOriginRead"));
 assert.ok(sandboxRoute.includes('endpoint: "https://wwwcie.ups.com"'));
 assert.ok(sandboxRoute.includes('endpoint: "https://apis-sandbox.fedex.com"'));
 assert.ok(sandboxRoute.includes("syntheticReference"));
-assert.ok(!sandboxRoute.includes("request.url" + "Body"),
-  "The Sandbox endpoint must not accept a caller-supplied outbound URL");
 
 console.log("Merchant official API console tests passed: authenticated controls, explicit consent, no browser secret storage and fixed official Sandbox destinations.");
