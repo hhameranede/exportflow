@@ -27,6 +27,11 @@ function fakeD1() {
           });
           return { meta: { changes: 1 } };
         }};
+        if (sql.startsWith("SELECT scope")) return { first: async () => {
+          calls.push("status");
+          const row = rows.get(values[0] + ":" + values[1]);
+          return row ? { scope: row.scope, consented_at: row.consented_at, updated_at: row.updated_at } : null;
+        }};
         if (sql.startsWith("SELECT key_id")) return { first: async () => {
           calls.push("read");
           return rows.get(values[0] + ":" + values[1]) || null;
@@ -97,6 +102,16 @@ assert.deepEqual(await vault.resolveCredentials({ merchantId: "merchant_1", prov
   apiKey: "fedex-key",
   apiSecret: "fedex-secret"
 });
+const fedexStatus = await vault.getStatus({ merchantId: "merchant_1", provider: "fedex" });
+assert.deepEqual(fedexStatus, {
+  provider: "fedex",
+  connected: true,
+  scope: "sandbox_track",
+  consentedAt: "2026-11-09T13:00:00.000Z",
+  updatedAt: "2026-11-09T13:00:00.000Z"
+});
+assert.equal(JSON.stringify(fedexStatus).includes("fedex-secret"), false,
+  "Connection status must not expose credential material");
 
 const upsSaved = await vault.save({
   merchantId: "merchant_1",
@@ -175,5 +190,8 @@ assert.deepEqual(await rotated.revoke({ merchantId: "merchant_1", provider: "ups
   revoked: true
 });
 assert.equal(await rotated.resolveCredentials({ merchantId: "merchant_1", provider: "ups" }), null);
+assert.deepEqual(await rotated.getStatus({ merchantId: "merchant_1", provider: "ups" }), {
+  provider: "ups", connected: false, scope: null, consentedAt: null, updatedAt: null
+});
 
-console.log("Official API credential vault tests passed: AES-GCM tenant binding, consent, provider allowlist, no plaintext and key rotation.");
+console.log("Official API credential vault tests passed: AES-GCM tenant binding, consent, provider allowlist, status minimization, no plaintext and key rotation.");
