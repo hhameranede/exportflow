@@ -81,6 +81,30 @@ function allowedProvider(provider) {
   return provider === "fedex" || provider === "ups";
 }
 
+function trustedSameOriginRead(request, env) {
+  if (typeof env?.MERCHANT_APP_ORIGIN !== "string") return false;
+  try {
+    const parsed = new URL(env.MERCHANT_APP_ORIGIN);
+    const local = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+    if ((parsed.protocol !== "https:" && !local) || parsed.origin !== env.MERCHANT_APP_ORIGIN) return false;
+    return new URL(request.url).origin === parsed.origin;
+  } catch {
+    return false;
+  }
+}
+
+export async function onRequestGet({ request, env, params }) {
+  if (!trustedSameOriginRead(request, env)) return jsonResponse({ error: "origin_forbidden" }, 403);
+  const provider = String(params?.provider || "").trim().toLowerCase();
+  if (!allowedProvider(provider)) return jsonResponse({ error: "unsupported_provider" }, 400);
+  try {
+    const vault = await createSessionBoundOfficialApiCredentialVault(request, env);
+    return jsonResponse(await vault.getStatus({ provider }));
+  } catch (error) {
+    return officialApiCredentialVaultErrorResponse(error);
+  }
+}
+
 export async function onRequestPost({ request, env, params }) {
   if (!trustedSameOrigin(request, env)) return jsonResponse({ error: "origin_forbidden" }, 403);
   const provider = String(params?.provider || "").trim().toLowerCase();
