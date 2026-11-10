@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { onRequestPost } from "../functions/api/track.js";
+import { parseTrackingInput } from "universal-parcel-scraper";
 import {
   filterPublicCarrierIds,
   isPublicCarrierQuarantined
@@ -7,6 +8,15 @@ import {
 
 assert.equal(isPublicCarrierQuarantined("USPS"), true);
 assert.equal(isPublicCarrierQuarantined("ups"), false);
+
+// This known postal reference is ambiguous across several carriers. USPS may
+// appear as a candidate, but the selected carrier remains unknown; candidate
+// membership alone must never trigger the public-route rights gate.
+const ambiguous = parseTrackingInput("9361289722660264016923");
+assert.equal(ambiguous.carrier, "unknown");
+assert.ok(ambiguous.candidates.includes("usps"));
+assert.equal(isPublicCarrierQuarantined(ambiguous.carrier), false);
+
 assert.deepEqual(
   filterPublicCarrierIds(["ups", "usps", "fedex", "yunexpress"]),
   ["ups", "fedex"]
