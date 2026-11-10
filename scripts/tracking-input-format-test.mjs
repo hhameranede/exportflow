@@ -81,10 +81,9 @@ async function main() {
       request: requestFor(number, "en", carrier),
       env: {}
     });
-    assert.equal(response.status, 503);
+    assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), {
-      error: "tracking_unavailable",
-      reason: "carrier_source_restricted"
+      error: "carrier_authorization_required"
     });
   }
 
