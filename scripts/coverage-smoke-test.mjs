@@ -36,7 +36,7 @@ assert.equal(payload.summary.linkOnlyCountryCount, payload.countries.filter(coun
 assert.equal(payload.summary.countriesWithoutCatalogEntry, payload.countries.filter(country => country.status === "not-listed").length);
 assert.ok(payload.summary.catalogEntries > 0);
 assert.ok(payload.upstreamRevision);
-const quarantinedIds = ["china-post", "india-post", "singapore-post", "yunexpress"];
+const quarantinedIds = ["china-post", "india-post", "singapore-post", "usps", "yunexpress"];
 assert.equal(payload.summary.quarantinedCarrierCount, quarantinedIds.length);
 assert.ok(payload.countries.every(country =>
   country.carriers.every(carrier => !quarantinedIds.includes(carrier.id))

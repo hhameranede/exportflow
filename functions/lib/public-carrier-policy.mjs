@@ -16,6 +16,11 @@
  *   grant no licence to use or reproduce it. No API or public third-party
  *   display authorization is recorded. The terms review did not establish a
  *   separate blanket automated-access prohibition; this is a rights hold.
+ * - usps: the pinned adapter uses the public USPS browser tracking page, which
+ *   returns an interactive verification challenge in Production. No ExportFlow
+ *   service-provider access, paid API entitlement, or shipment/MID authorization
+ *   is recorded. Keep this public route blocked; a separately approved official
+ *   merchant API route may be implemented independently.
  * - china-post: the pinned route uses the EMS app guest endpoint / browser
  *   route. No public developer entitlement or third-party hosted-display
  *   authorization for ExportFlow was established. This is an unresolved
@@ -31,6 +36,7 @@ const QUARANTINED_PUBLIC_CARRIERS = new Set([
   "china-post",
   "india-post",
   "singapore-post",
+  "usps",
   "yunexpress"
 ]);
 

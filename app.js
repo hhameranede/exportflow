@@ -302,6 +302,7 @@
       invalid_carrier: "errorInvalid",
       not_found: "errorNotFound",
       verification_required: "errorVerificationRequired",
+      carrier_authorization_required: "errorCarrierAuthorizationRequired",
       rate_limited: "errorRateLimited",
       input_required: "errorInputRequired",
       tracking_unavailable: "errorUnavailable",
