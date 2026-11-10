@@ -55,4 +55,4 @@ The interface remains unavailable until the selected non-production Pages enviro
 
 ### Current validation boundary
 
-The branch tests use fake D1 and mocked carrier fetches. No credentials were created, no live Sandbox call was sent, no D1 remote migration or secret change was made, and no Production or Preview deployment was performed by this review branch. A successful mock test is not evidence of carrier Sandbox connectivity or public tracking authorization.
+The branch tests use fake D1 and mocked carrier fetches. No credentials were created, no live Sandbox call was sent, and no D1 remote migration or secret change was made. Cloudflare automatically created Preview deployment records for this review branch, but they remain queued/idle with no aliases; no Preview build/deploy has completed. Production was not deployed or changed. A successful mock test is not evidence of carrier Sandbox connectivity or public tracking authorization.
