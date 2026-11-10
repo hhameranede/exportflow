@@ -23,18 +23,18 @@
     <a href="/coverage/">Carrier coverage</a>
     <a href="/">Track a parcel</a>
   </nav>
-  <span class="field-label">LOCAL WORKSPACE</span>
+  <span class="field-label">MERCHANT WORKSPACE</span>
 </header>
 <main class="page-shell" style="max-width:1080px;margin:0 auto;padding:clamp(24px,5vw,64px) 20px 80px">
   <section class="hero-content" aria-labelledby="merchantTitle">
     <p class="eyebrow"><span class="eyebrow-index">WORKSPACE</span><span>MERCHANT TOOLS</span></p>
     <h1 id="merchantTitle">Your shipments.<br><em>One working list.</em></h1>
-    <p class="body-copy">Keep a small follow-up list on this device and refresh up to ten shipments in two bounded batches. No account or server-side history is created.</p>
+    <p class="body-copy">Manage your device-only shipment watchlist and connect your own carrier accounts for official Sandbox checks. Sandbox credentials are stored encrypted on the server only after secure sign-in and explicit consent.</p>
   </section>
 
   <section aria-label="Local storage privacy notice" style="margin-top:28px">
     <div class="merchant-notice" id="privacyNotice">
-      <strong>Device-only storage:</strong> your order references and tracking numbers are saved in this browser's local storage. They are not uploaded when you add an item. Clicking “Refresh shipments” sends the selected tracking details to ExportFlow and, when needed, the upstream carrier. Avoid shared/public devices and clear this list before handing the device to someone else.
+      <strong>Watchlist privacy:</strong> order references and tracking numbers in the watchlist stay in this browser's local storage until you refresh shipments. Official API credentials are separate: they are sent only over HTTPS after sign-in and consent, encrypted in the merchant vault, and never saved in local storage. Sandbox checks use fixed synthetic references, not real shipments.
     </div>
   </section>
 
@@ -99,8 +99,97 @@
     </div>
     <p class="merchant-status" id="refreshStatus" role="status" aria-live="polite" style="margin-top:14px"></p>
   </section>
+
+  <section id="officialApiSandbox" class="official-api-section" aria-labelledby="officialApiTitle" style="margin-top:52px">
+    <div class="official-api-heading">
+      <p class="eyebrow">03 / OFFICIAL API SANDBOX</p>
+      <h2 id="officialApiTitle">Connect your own carrier accounts.</h2>
+      <p class="body-copy">Connect UPS and FedEx using credentials issued for your own developer or shipper account. These controls verify official non-production Sandbox connectivity only; they do not turn on public visitor tracking.</p>
+    </div>
+
+    <div class="official-api-account" aria-live="polite">
+      <div class="official-api-account-copy">
+        <strong>Merchant account</strong>
+        <p id="officialApiAccountStatus" class="merchant-status">Checking secure sign-in…</p>
+      </div>
+      <div class="official-api-account-actions">
+        <button id="officialApiSignIn" class="primary-button" type="button">Sign in with Google</button>
+        <button id="officialApiSignOut" type="button" hidden>Sign out</button>
+      </div>
+    </div>
+
+    <p id="officialApiAuthNotice" class="merchant-notice" role="note">
+      Sign in before connecting a carrier. Your credentials must belong to your own account and must be issued for the provider's Sandbox environment. Never paste production keys here.
+    </p>
+
+    <div id="officialApiConnections" class="official-api-grid" hidden>
+      <article class="official-api-card" data-provider-panel="ups" data-connected="false">
+        <div class="official-api-card-heading">
+          <div>
+            <p class="eyebrow">OFFICIAL SANDBOX</p>
+            <h3>UPS</h3>
+          </div>
+          <span class="official-api-provider-label">UPS Customer Integration Environment</span>
+        </div>
+        <p class="official-api-description">Use the Client ID and Client Secret created for your own UPS Sandbox application.</p>
+        <p class="merchant-status" data-provider-status aria-live="polite">Sign in to view this connection.</p>
+        <form class="official-api-form" autocomplete="off">
+          <label>
+            UPS Client ID
+            <input name="clientId" type="password" maxlength="512" autocomplete="new-password" spellcheck="false" required>
+          </label>
+          <label>
+            UPS Client Secret
+            <input name="clientSecret" type="password" maxlength="512" autocomplete="new-password" spellcheck="false" required>
+          </label>
+          <label class="official-api-consent">
+            <input name="consent" type="checkbox" required>
+            <span>I own or am authorized to manage this UPS developer account and consent to encrypted storage for Sandbox testing only.</span>
+          </label>
+          <button class="primary-button" type="submit">Save UPS Sandbox credentials</button>
+        </form>
+        <div class="official-api-actions">
+          <button type="button" data-action="sandbox" disabled>Test UPS Sandbox</button>
+          <button type="button" data-action="disconnect" class="danger" disabled>Disconnect</button>
+        </div>
+      </article>
+
+      <article class="official-api-card" data-provider-panel="fedex" data-connected="false">
+        <div class="official-api-card-heading">
+          <div>
+            <p class="eyebrow">OFFICIAL SANDBOX</p>
+            <h3>FedEx</h3>
+          </div>
+          <span class="official-api-provider-label">FedEx Developer Test Credentials</span>
+        </div>
+        <p class="official-api-description">Use the API Key and Secret Key issued for your own FedEx Developer test project.</p>
+        <p class="merchant-status" data-provider-status aria-live="polite">Sign in to view this connection.</p>
+        <form class="official-api-form" autocomplete="off">
+          <label>
+            FedEx API Key
+            <input name="apiKey" type="password" maxlength="512" autocomplete="new-password" spellcheck="false" required>
+          </label>
+          <label>
+            FedEx Secret Key
+            <input name="apiSecret" type="password" maxlength="512" autocomplete="new-password" spellcheck="false" required>
+          </label>
+          <label class="official-api-consent">
+            <input name="consent" type="checkbox" required>
+            <span>I own or am authorized to manage this FedEx developer account and consent to encrypted storage for Sandbox testing only.</span>
+          </label>
+          <button class="primary-button" type="submit">Save FedEx Sandbox credentials</button>
+        </form>
+        <div class="official-api-actions">
+          <button type="button" data-action="sandbox" disabled>Test FedEx Sandbox</button>
+          <button type="button" data-action="disconnect" class="danger" disabled>Disconnect</button>
+        </div>
+      </article>
+    </div>
+    <p class="official-api-footnote">Sandbox checks use a fixed synthetic reference and a hard-coded official Sandbox host. They return a connection result only. They do not query real shipments, bypass carrier verification, or authorize public redistribution or display of tracking data.</p>
+  </section>
 </main>
-<footer class="site-footer"><p>ExportFlow Merchant Workspace is a local utility, not a hosted multi-user merchant account.</p><nav aria-label="Footer"><a href="/developers/">Developers</a><a href="/privacy/">Privacy</a><a href="/">Home</a></nav></footer>
+<footer class="site-footer"><p>Shipment watchlists stay on this device. Official API Sandbox credentials are merchant-scoped and encrypted server-side after sign-in and consent.</p><nav aria-label="Footer"><a href="/developers/">Developers</a><a href="/privacy/">Privacy</a><a href="/">Home</a></nav></footer>
 <script type="module" src="/merchant.js?v=ef-global-logistics-20261107-02"></script>
+<script type="module" src="/merchant-official-api.js?v=20261110-01"></script>
 </body>
 </html>
