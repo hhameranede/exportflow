@@ -16,6 +16,7 @@ const testScripts = [
   "scripts/carrier-sandbox-validation-test.mjs",
   "scripts/official-api-credential-vault-test.mjs",
   "scripts/official-api-sandbox-route-test.mjs",
+  "scripts/merchant-official-api-ui-test.mjs",
   "scripts/engine-smoke-test.mjs",
   "scripts/carrier-engine-test.mjs",
   "scripts/algerian-connectors-test.mjs",
