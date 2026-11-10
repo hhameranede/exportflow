@@ -174,6 +174,11 @@ if (root) {
       event.preventDefault();
       if (!authenticated || busy) return;
       const fields = provider === "ups" ? ["clientId", "clientSecret"] : ["apiKey", "apiSecret"];
+      const consentInput = form.elements.namedItem("consent");
+      if (!consentInput || consentInput.checked !== true) {
+        setText(status, "Confirm that you own or are authorized to manage this carrier account.");
+        return;
+      }
       const credentials = {};
       for (const field of fields) {
         const input = form.elements.namedItem(field);
