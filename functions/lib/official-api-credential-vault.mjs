@@ -19,6 +19,8 @@ const UPSERT_SQL = `INSERT INTO ${TABLE}
     scope = excluded.scope, consented_at = excluded.consented_at, updated_at = excluded.updated_at`;
 const SELECT_SQL = `SELECT key_id, iv, ciphertext, scope, consented_at
   FROM ${TABLE} WHERE merchant_id = ? AND provider = ? LIMIT 1`;
+const SELECT_STATUS_SQL = `SELECT scope, consented_at, updated_at
+  FROM ${TABLE} WHERE merchant_id = ? AND provider = ? LIMIT 1`;
 const DELETE_SQL = `DELETE FROM ${TABLE} WHERE merchant_id = ? AND provider = ?`;
 
 export class OfficialApiCredentialVaultError extends Error {
@@ -222,6 +224,28 @@ export function createOfficialApiCredentialVault({
       return row ? decrypt(context, row) : null;
     },
 
+    async getStatus({ merchantId, provider } = {}) {
+      const context = contextOf(merchantId, provider);
+      await authorize(context, "sandbox_track");
+      let row;
+      try {
+        row = await db.prepare(SELECT_STATUS_SQL).bind(context.merchantId, context.provider).first();
+      } catch {
+        throw new OfficialApiCredentialVaultError("vault_unavailable", 503, context.provider);
+      }
+      if (!row) return { provider: context.provider, connected: false, scope: null, consentedAt: null, updatedAt: null };
+      if (row.scope !== "sandbox_track" || !row.consented_at || !row.updated_at) {
+        throw new OfficialApiCredentialVaultError("invalid_vault_record", 503, context.provider);
+      }
+      return {
+        provider: context.provider,
+        connected: true,
+        scope: row.scope,
+        consentedAt: row.consented_at,
+        updatedAt: row.updated_at
+      };
+    },
+
     async revoke({ merchantId, provider } = {}) {
       const context = contextOf(merchantId, provider);
       await authorize(context, "disconnect");
@@ -262,6 +286,7 @@ export async function createSessionBoundOfficialApiCredentialVault(request, env,
   return Object.freeze({
     user: Object.freeze({ id: merchantId, email: session.user.email, displayName: session.user.displayName }),
     save: ({ provider, credentials, consent } = {}) => vault.save({ merchantId, provider, credentials, consent }),
+    getStatus: ({ provider } = {}) => vault.getStatus({ merchantId, provider }),
     resolveCredentials: ({ provider } = {}) => vault.resolveCredentials({ merchantId, provider }),
     revoke: ({ provider } = {}) => vault.revoke({ merchantId, provider })
   });
