@@ -7,6 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 # Merchant Sandbox integration is Preview-only in this branch.
 [env.preview.vars]
 EXPORTFLOW_ENV = "preview"
+MERCHANT_APP_ORIGIN = "https://feat-merchant-official-api-p.exportflow-aja.pages.dev"
 
 [[env.preview.d1_databases]]
 binding = "MERCHANT_DB"

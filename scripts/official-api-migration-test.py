@@ -14,6 +14,15 @@ for name in [
 ]:
     db.executescript((migrations / name).read_text(encoding="utf-8"))
 
+# The existing Preview D1 has these foundation tables but no Wrangler migration journal.
+# Reapplying the baseline migrations must therefore be safe and idempotent.
+for name in [
+    "0001_merchant_credentials.sql",
+    "0002_merchant_identity.sql",
+    "0003_merchant_provider_audit.sql",
+]:
+    db.executescript((migrations / name).read_text(encoding="utf-8"))
+
 db.execute(
     "INSERT INTO merchant_users "
     "(id,auth_provider,provider_subject,email,email_normalized,display_name,email_verified_at,created_at,updated_at,last_login_at) "
