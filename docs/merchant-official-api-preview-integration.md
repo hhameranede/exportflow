@@ -28,15 +28,17 @@ The Merchant Sandbox migration is isolated to:
 
 This avoids claiming that unrelated legacy migrations were applied and avoids replaying their history. The migration adds `merchant_official_api_credentials` and safely rebuilds the metadata-only audit provider allowlist while preserving existing audit rows. A SQLite regression test exercises replay of baseline migrations 0001–0003, the official credential migration, trigger behavior, ciphertext-only columns, and the dedicated migration-journal name.
 
-### Backup and apply gate
+### Backup and apply result
 - Preview database: `exportflow-intelligence-preview-db` (`9657dfdc-5b80-4a0b-a982-8865152b2c82`).
-- A D1 SQL export backup of the affected Merchant identity/credential/audit tables was completed before any schema write.
-- Migration has **not** been applied remotely yet.
-- After reviewing the branch and ensuring the target is Preview, run:
+- A D1 SQL export backup of the affected Merchant identity/credential/audit tables completed immediately before migration. Backup file: `9657dfdc-5b80-4a0b-a982-8865152b2c82-00000016-00000000-00005120-0192ab295d4cb310a9a9a257e3f3f950.sql`.
+- Migration `0001_official_api_credentials.sql` was applied to **Preview D1 only** on 2026-11-11 at 13:25:17 UTC through the Cloudflare D1 API. The custom journal records that exact migration filename. The legacy `d1_migrations` table was not created or modified.
+- Post-migration checks confirmed `merchant_official_api_credentials`, its update index and three metadata-only audit triggers exist; the audit provider allowlist includes UPS/FedEx; the new table contains ciphertext/key metadata and scope/consent/timestamps only; no plaintext credential columns exist.
+- Existing Merchant row counts remained unchanged (0 users, 0 sessions, 0 legacy credentials and 0 audit rows); Carrier Evidence remained at 22 rows; `PRAGMA foreign_key_check` returned no violations.
+- For a newly provisioned Preview D1 database, the scoped migration can be applied with:
   ```sh
   npx wrangler d1 migrations apply exportflow-intelligence-preview-db --remote --config wrangler.toml --env preview
   ```
-- Verify `merchant_official_api_credentials` exists and `merchant_official_api_migrations` contains exactly `0001_official_api_credentials.sql`. Do not apply this under Production or use the root migrations directory.
+- Do not apply this migration under Production or use the root migrations directory.
 
 ## Required Preview credentials before an authenticated owner test
 Set the following in Cloudflare Pages **Preview** environment only:
@@ -49,3 +51,11 @@ The OAuth client must include the callback URI above. Do not place secrets in Gi
 
 ## Validation limits
 The latest Preview page returns HTTP 200 with `noindex,nofollow,noarchive`. The session and UPS/FedEx credential-status routes return 401 for an unauthenticated visitor, confirming origin validation and the D1-backed auth gate. The mocked test suite is not evidence of a real UPS/FedEx Sandbox call, carrier Production entitlement, or third-party shipment-display rights.
+
+## Latest verified Preview release — 2026-11-11
+- Current PR #67 head: `95656a7082fec9f92b7113369a9a3309f8cac7ed`.
+- Verify CI [#558](https://github.com/hhameranede/exportflow/actions/runs/43028249749) passed all quality/build steps on code head `df9cf44fb34c951f7097429e2a443f276860f959`.
+- Pages Preview deployment [7547730f](https://7547730f.exportflow-aja.pages.dev) succeeded on the same code head and retains alias `https://feat-merchant-official-api-p.exportflow-aja.pages.dev`.
+- Live checks: Merchant page HTTP 200 with noindex; session and UPS/FedEx credential-status endpoints HTTP 401 unauthenticated.
+- PR [#67](https://github.com/hhameranede/exportflow/pull/67) remains Open / Draft / mergeable / unmerged. Production remains on `main` commit `b67f6ae470ef9733ffb0988e7185dfcb7c0f3411`, deployment `5bffba35-f815-4cec-8d34-4ecd63e4afc5`, alias `https://exportflow.me`.
+- Remaining gate: configure Preview Google OAuth client ID/secret and `MERCHANT_CREDENTIAL_KEYRING_JSON` as Preview secrets, then complete owner sign-in and live UPS/FedEx Sandbox checks with merchant-owned test credentials. No live carrier call has been sent yet.
