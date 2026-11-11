@@ -53,7 +53,6 @@ The OAuth client must include the callback URI above. Do not place secrets in Gi
 The latest Preview page returns HTTP 200 with `noindex,nofollow,noarchive`. The session and UPS/FedEx credential-status routes return 401 for an unauthenticated visitor, confirming origin validation and the D1-backed auth gate. The mocked test suite is not evidence of a real UPS/FedEx Sandbox call, carrier Production entitlement, or third-party shipment-display rights.
 
 ## Latest verified Preview release — 2026-11-11
-- Current PR #67 head: `95656a7082fec9f92b7113369a9a3309f8cac7ed`.
 - Verify CI [#558](https://github.com/hhameranede/exportflow/actions/runs/43028249749) passed all quality/build steps on code head `df9cf44fb34c951f7097429e2a443f276860f959`.
 - Pages Preview deployment [7547730f](https://7547730f.exportflow-aja.pages.dev) succeeded on the same code head and retains alias `https://feat-merchant-official-api-p.exportflow-aja.pages.dev`.
 - Live checks: Merchant page HTTP 200 with noindex; session and UPS/FedEx credential-status endpoints HTTP 401 unauthenticated.
