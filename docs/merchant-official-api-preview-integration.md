@@ -41,13 +41,44 @@ This avoids claiming that unrelated legacy migrations were applied and avoids re
 - Do not apply this migration under Production or use the root migrations directory.
 
 ## Required Preview credentials before an authenticated owner test
-Set the following in Cloudflare Pages **Preview** environment only:
-- `GOOGLE_OAUTH_CLIENT_ID`
-- `GOOGLE_OAUTH_CLIENT_SECRET` (Secret)
-- `MERCHANT_CREDENTIAL_KEYRING_JSON` (Secret; active AES-256 key must be exactly 32 bytes, with a secure offline backup)
-- `GLOBAL_RATE_LIMITER_HMAC_SECRET` is already configured in Preview and must be retained.
 
-The OAuth client must include the callback URI above. Do not place secrets in Git, PR comments, Notion, or chat. Do not configure these values under Production for this Preview test.
+### Google OAuth Web application client
+Create a Google OAuth 2.0 client with application type **Web application**. This code uses the server-side authorization-code flow: configure the following **Authorized redirect URI** exactly (scheme, hostname, path, and trailing slash must match):
+
+```text
+https://feat-merchant-official-api-p.exportflow-aja.pages.dev/api/merchant/auth/google/callback
+```
+
+The flow requests only `openid email profile` and uses state, nonce, and PKCE. It exchanges the authorization code on the server. A JavaScript origin is not required for this server-side redirect flow; do not add one unless a separate browser-side Google API flow is introduced. See Google's [Web Server OAuth documentation](https://developers.google.com/identity/protocols/oauth2/web-server).
+
+In Cloudflare Pages **Preview** environment only, set:
+- `GOOGLE_OAUTH_CLIENT_ID` — ordinary Variable.
+- `GOOGLE_OAUTH_CLIENT_SECRET` — Secret.
+- `MERCHANT_CREDENTIAL_KEYRING_JSON` — Secret.
+- `GLOBAL_RATE_LIMITER_HMAC_SECRET` is already configured in Preview and must be retained.
+- `GOOGLE_REDIRECT_URI` is optional. If set, it must equal the callback URI above exactly; otherwise the code derives the URI from `MERCHANT_APP_ORIGIN`.
+
+### Merchant AES-256 key-ring
+Generate a fresh 32-byte key locally; do not send its output in chat or commit it to Git:
+
+```sh
+openssl rand -base64 32
+```
+
+Put the output into the JSON structure below, replacing the placeholder. The value under `keys.v1` must be valid Base64 that decodes to exactly 32 bytes, and `activeKeyId` must match a key name:
+
+```json
+{
+  "activeKeyId": "v1",
+  "keys": {
+    "v1": "REPLACE_WITH_BASE64_OUTPUT"
+  }
+}
+```
+
+Store this whole JSON document as the `MERCHANT_CREDENTIAL_KEYRING_JSON` Preview Secret. Keep a secure offline backup of the key-ring. Losing the key means credentials encrypted with it cannot be decrypted. During future key rotation, retain old key IDs in `keys` until all records encrypted with those keys have been re-encrypted or deleted.
+
+Do not place secret values in Git, PR comments, Notion, or chat. Do not configure any of these values under Production for this Preview test.
 
 ## Validation limits
 The latest Preview page returns HTTP 200 with `noindex,nofollow,noarchive`. The session and UPS/FedEx credential-status routes return 401 for an unauthenticated visitor, confirming origin validation and the D1-backed auth gate. The mocked test suite is not evidence of a real UPS/FedEx Sandbox call, carrier Production entitlement, or third-party shipment-display rights.
