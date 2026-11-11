@@ -55,3 +55,8 @@
 
 /sitemap.xml
   Cache-Control: public, max-age=3600
+
+
+/merchant/*
+  Cache-Control: no-store, private
+  X-Robots-Tag: noindex, nofollow, noarchive
