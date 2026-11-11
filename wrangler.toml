@@ -13,7 +13,8 @@ MERCHANT_APP_ORIGIN = "https://feat-merchant-official-api-p.exportflow-aja.pages
 binding = "MERCHANT_DB"
 database_name = "exportflow-intelligence-preview-db"
 database_id = "9657dfdc-5b80-4a0b-a982-8865152b2c82"
-migrations_dir = "migrations"
+migrations_dir = "migrations/merchant-official-api"
+migrations_table = "merchant_official_api_migrations"
 
 [[env.preview.durable_objects.bindings]]
 name = "GLOBAL_RATE_LIMITER"

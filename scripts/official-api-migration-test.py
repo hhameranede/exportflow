@@ -41,7 +41,15 @@ db.execute(
 before = db.execute("SELECT COUNT(*) FROM merchant_provider_audit_events").fetchone()[0]
 assert before == 1, "Legacy credential trigger must record a metadata-only event"
 
-db.executescript((migrations / "0008_merchant_official_api_credentials.sql").read_text(encoding="utf-8"))
+# The Merchant-only Wrangler migration journal is isolated from the legacy
+# d1_migrations history shared by the wider carrier/company schema.
+journal = "merchant_official_api_migrations"
+db.execute(
+    f'CREATE TABLE "{journal}" (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL)'
+)
+migration_files = sorted((migrations / "merchant-official-api").glob("*.sql"))
+assert [path.name for path in migration_files] == ["0001_official_api_credentials.sql"]
+db.executescript(migration_files[0].read_text(encoding="utf-8"))
 
 after = db.execute("SELECT COUNT(*) FROM merchant_provider_audit_events").fetchone()[0]
 assert after == before, "Migration 0008 must preserve all existing audit rows"
@@ -75,5 +83,11 @@ try:
 except sqlite3.IntegrityError:
     pass
 
+db.execute('INSERT INTO "merchant_official_api_migrations" (name) VALUES (?)',
+            ("0001_official_api_credentials.sql",))
+assert db.execute('SELECT name FROM "merchant_official_api_migrations"').fetchall() == [
+    ("0001_official_api_credentials.sql",)
+]
+assert db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='d1_migrations'").fetchone() is None
 assert db.execute("PRAGMA foreign_key_check").fetchall() == []
 print("Official API migrations passed: legacy audit preserved, UPS/FedEx scope recorded, secrets remain encrypted-only.")
