@@ -10,7 +10,7 @@
   <title>Merchant Sandbox Console — ExportFlow</title>
   <link rel="canonical" href="https://exportflow.me/merchant/">
   <link rel="icon" href="/favicon.svg?v=20261106" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css?v=ef-sandbox-20261111-01">
+  <link rel="stylesheet" href="/styles.css?v=ef-mock-tests-20261112-01">
 </head>
 <body>
   <header class="site-header">
@@ -24,9 +24,9 @@
   </header>
   <main class="page-shell" style="max-width:1080px;margin:0 auto;padding:clamp(24px,5vw,64px) 20px 80px">
     <section class="hero-content" aria-labelledby="merchantTitle">
-      <p class="eyebrow"><span class="eyebrow-index">WORKSPACE</span><span>OFFICIAL API SANDBOX</span></p>
+      <p class="eyebrow"><span class="eyebrow-index">WORKSPACE</span><span>SIMULATED TESTS / OFFICIAL SANDBOX</span></p>
       <h1 id="merchantTitle">Your carrier accounts.<br><em>Your controlled tests.</em></h1>
-      <p class="body-copy">Connect only carrier accounts you own or are authorized to manage. This console stores credentials encrypted on the server after secure sign-in and explicit consent. It tests fixed synthetic Sandbox references only; it does not query real shipments or enable public visitor tracking.</p>
+      <p class="body-copy">Official Sandbox connections are optional and require carrier accounts you own or are authorized to manage. You can also run credential-free simulated tests: they use ExportFlow fixtures only, never contact UPS or FedEx, and never query real shipments.</p>
     </section>
 
     <section id="officialApiSandbox" class="official-api-section" aria-labelledby="officialApiTitle">
@@ -52,6 +52,18 @@
       </div>
 
       <div id="officialApiConnections" class="official-api-grid" hidden>
+        <article class="official-api-card official-api-mock-card" id="officialApiMockTests" aria-labelledby="officialApiMockTitle">
+          <div class="official-api-card-heading">
+            <div><p class="eyebrow">SIMULATED TEST MODE</p><h3 id="officialApiMockTitle">Test without carrier credentials</h3></div>
+            <span class="official-api-provider-label">No carrier requests</span>
+          </div>
+          <p class="official-api-description">Run deterministic UPS and FedEx fixtures using ExportFlow's own test data. No carrier account, API key, credential vault, or external carrier request is used.</p>
+          <div class="official-api-actions">
+            <button type="button" data-action="mock" data-provider="ups">Run UPS simulated test</button>
+            <button type="button" data-action="mock" data-provider="fedex">Run FedEx simulated test</button>
+          </div>
+          <p id="officialApiMockStatus" class="merchant-status" role="status" aria-live="polite">Sign in to run local simulated tests. Official Sandbox connections are optional.</p>
+        </article>
         <article class="official-api-card" data-provider-panel="ups" data-connected="false">
           <div class="official-api-card-heading">
             <div><p class="eyebrow">OFFICIAL SANDBOX</p><h3>UPS</h3></div>
@@ -108,7 +120,7 @@
       <p class="official-api-footnote">Scope is limited to official non-production Sandbox checks using synthetic references. No carrier CAPTCHA, bot protection, public tracking restrictions, or third-party data rights are bypassed. A successful Sandbox test is not proof of Production authorization or public shipment-display rights.</p>
     </section>
   </main>
-  <footer class="site-footer"><p>ExportFlow Merchant Sandbox Console — official non-production APIs only.</p><nav aria-label="Footer"><a href="/privacy/">Privacy</a><a href="/">Home</a></nav></footer>
-  <script src="/merchant-official-api.js?v=ef-sandbox-20261111-01" defer></script>
+  <footer class="site-footer"><p>ExportFlow Merchant Workspace — simulated fixtures and optional official non-production APIs.</p><nav aria-label="Footer"><a href="/privacy/">Privacy</a><a href="/">Home</a></nav></footer>
+  <script src="/merchant-official-api.js?v=ef-mock-tests-20261112-01" defer></script>
 </body>
 </html>
