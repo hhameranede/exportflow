@@ -55,13 +55,14 @@ jobs:
             mkdir -p "$DATADOG_TRACER_DIR"
             if npm install --prefix "$DATADOG_TRACER_DIR" --no-save --no-package-lock --no-audit --no-fund dd-trace@6.24.0; then
               DD_CIVISIBILITY_AGENTLESS_ENABLED=true \
+              DD_CIVISIBILITY_MANUAL_API_ENABLED=true \
               DD_API_KEY="$DD_API_KEY" \
               DD_SITE=us5.datadoghq.com \
               DD_SERVICE=exportflow \
               DD_ENV=ci \
               DD_TEST_SESSION_NAME=exportflow-regression \
-              NODE_OPTIONS="-r $DATADOG_TRACER_DIR/node_modules/dd-trace/ci/init -r $GITHUB_WORKSPACE/scripts/datadog-ci-test-events.cjs ${NODE_OPTIONS:-}" \
-              npm test
+              NODE_OPTIONS="-r $DATADOG_TRACER_DIR/node_modules/dd-trace/ci/init ${NODE_OPTIONS:-}" \
+              node scripts/datadog-ci-test-events.cjs
             else
               echo "::warning::Datadog tracer installation failed; regression tests will run without Test Visibility upload."
               npm test
