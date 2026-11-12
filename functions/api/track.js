@@ -5,7 +5,7 @@ import { createCloudflareFetch } from "../lib/cloudflare-fetch.mjs";
 import { safeEventPoint } from "../lib/coordinates.mjs";
 
 const MAX_BODY_CHARS = 4_096;
-const MAX_NUMBER_LENGTH = 64;
+const MAX_NUMBER_LENGTH = 256;
 const REQUESTS_PER_MINUTE = 12;
 const MAX_CONCURRENT_LOOKUPS = 6;
 const LOOKUP_BUDGET_MS = 25_000;
