@@ -89,3 +89,21 @@ The latest Preview page returns HTTP 200 with `noindex,nofollow,noarchive`. The 
 - Live checks: Merchant page HTTP 200 with noindex; session and UPS/FedEx credential-status endpoints HTTP 401 unauthenticated.
 - PR [#67](https://github.com/hhameranede/exportflow/pull/67) remains Open / Draft / mergeable / unmerged. Production remains on `main` commit `b67f6ae470ef9733ffb0988e7185dfcb7c0f3411`, deployment `5bffba35-f815-4cec-8d34-4ecd63e4afc5`, alias `https://exportflow.me`.
 - Remaining gate: configure Preview Google OAuth client ID/secret and `MERCHANT_CREDENTIAL_KEYRING_JSON` as Preview secrets, then complete owner sign-in and live UPS/FedEx Sandbox checks with merchant-owned test credentials. No live carrier call has been sent yet.
+
+## Simulated Test Mode and Datadog CI Visibility — 2026-11-12
+
+The Merchant workspace now separates credential-free simulation from the optional official carrier Sandbox features.
+
+- `POST /api/merchant/carriers/{provider}/mock` supports `ups` and `fedex` only. It requires a valid merchant session and a trusted same-origin request.
+- The mock route returns deterministic ExportFlow fixture events with `environment=simulated`, `fixture=deterministic_mock`, `outboundRequests=0` and `realShipmentLookup=false`. It imports no carrier SDK, calls no carrier endpoint, and does not read the credential vault.
+- The Merchant UI exposes separate “Run UPS simulated test” and “Run FedEx simulated test” actions. The existing “Run Sandbox check” controls remain isolated and still require user-owned/authorized credentials.
+- Tests cover both providers, successful fixtures, unauthenticated access, origin rejection, unsupported providers, method restriction, and the absence of a network-call path.
+- `scripts/datadog-ci-test-events.cjs` uses Datadog's documented manual testing channels to report one result per Node regression script. It does not emit individual assertion-level events and does not enable Production APM, RUM, or application logging.
+- CI installs the pinned `dd-trace@6.24.0` package only when the GitHub Actions repository secret `DD_API_KEY` is present. Agentless Test Visibility is configured for `DD_SITE=us5.datadoghq.com`. If the secret is absent, tests still run normally and the Datadog upload is skipped with a workflow warning.
+- Datadog CI/Test Visibility dashboards remain the place to inspect events after ingestion is confirmed. No project-specific dashboard is claimed as created yet.
+
+### Status correction
+
+The earlier “Remaining Preview gate” section above is a pre-completion checkpoint. As of 2026-11-12, the Preview OAuth and key-ring secrets have been configured, the owner Google sign-in has succeeded, and the Merchant workspace has been opened successfully. The user chose not to create UPS/FedEx developer accounts, so no real carrier Sandbox credentials or carrier requests are in scope. Mock results must never be described as official carrier validation.
+
+The current implementation is on PR [#67](https://github.com/hhameranede/exportflow/pull/67), head commit `25ea26cca1904780966645d63f993f1239f9a54f`. Verify CI [#572](https://github.com/hhameranede/exportflow/actions/runs/43203304140) is running for this head. Production remains on `main` commit `b67f6ae470ef9733ffb0988e7185dfcb7c0f3411`, deployment `5bffba35-f815-4cec-8d34-4ecd63e4afc5`, with no changes in this work.
