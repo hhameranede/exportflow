@@ -36,11 +36,15 @@ async function main() {
   // lookup. Receiving invalid_language proves the number passed the raw-input
   // gate without contacting an external carrier.
   const supportedFormats = [
+    "ABC",
     "99.34.123456.12345678",
     "1234/12345678",
     "(00) 3 7012345 678901234 7",
     "AB_123456789",
-    "AB1".repeat(21) + "A"
+    "AB12;1234",
+    "AB12+?=:#[]",
+    "é-配送-123",
+    "AB1".repeat(80) + "A"
   ];
 
   for (const number of supportedFormats) {
@@ -53,18 +57,18 @@ async function main() {
   }
 
   const overlong = await onRequestPost({
-    request: requestFor("A1".repeat(33)),
+    request: requestFor("A1".repeat(129)),
     env: {}
   });
   assert.equal(overlong.status, 400);
   assert.equal((await overlong.json()).error, "invalid_tracking_number");
 
-  const unsafePunctuation = await onRequestPost({
-    request: requestFor("AB12;1234"),
+  const controlCharacters = await onRequestPost({
+    request: requestFor("AB12\u0000ABC"),
     env: {}
   });
-  assert.equal(unsafePunctuation.status, 400);
-  assert.equal((await unsafePunctuation.json()).error, "invalid_tracking_number");
+  assert.equal(controlCharacters.status, 400);
+  assert.equal((await controlCharacters.json()).error, "invalid_tracking_number");
 
   // Synthetic-only regression checks for the batch rights quarantine.
   // China Post, India Post, Singapore Post and YunExpress must be rejected

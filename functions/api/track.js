@@ -5,7 +5,7 @@ import { createCloudflareFetch } from "../lib/cloudflare-fetch.mjs";
 import { safeEventPoint } from "../lib/coordinates.mjs";
 
 const MAX_BODY_CHARS = 4_096;
-const MAX_NUMBER_LENGTH = 64;
+const MAX_NUMBER_LENGTH = 256;
 const REQUESTS_PER_MINUTE = 12;
 const MAX_CONCURRENT_LOOKUPS = 6;
 const LOOKUP_BUDGET_MS = 25_000;
@@ -207,8 +207,12 @@ export async function onRequestPost({ request, env }) {
     return json({ error: "unknown_request_field" }, 400);
   }
 
-  const number = typeof input.number === "string" ? input.number.trim() : "";
-  if (number.length < 4 || number.length > MAX_NUMBER_LENGTH || !/^[a-zA-Z0-9\s().\/_-]+$/.test(number)) {
+  const number = typeof input.number === "string"
+    ? input.number.replace(/[\u200B-\u200D\uFEFF]/g, "").trim()
+    : "";
+  // Let the pinned upstream parser and carrier adapters judge identifier syntax.
+  // Keep only bounded, non-empty, printable input at this public boundary.
+  if (!number || number.length > MAX_NUMBER_LENGTH || /[\u0000-\u001F\u007F-\u009F]/.test(number)) {
     return json({ error: "invalid_tracking_number" }, 400);
   }
 
