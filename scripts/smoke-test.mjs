@@ -68,8 +68,9 @@ assert.doesNotMatch(html, /98\.4%|200\+ carriers worldwide/i, "Unverified homepa
 
 assert.match(js, /fetch\("\/api\/track"/, "Tracking form must call the server-side tracking API");
 
-assert.match(trackApi, /MAX_NUMBER_LENGTH = 64/, "Tracking API must accept supported formatted identifiers before normalization");
-assert.ok(trackApi.includes(String.raw`^[a-zA-Z0-9\s().\/_-]+$`), "Tracking API must accept carrier-documented punctuation");
+assert.match(trackApi, /MAX_NUMBER_LENGTH = 256/, "Tracking API should accept longer tracking identifiers");
+assert.ok(trackApi.includes(String.raw\`/[\u0000-\u001F\u007F-\u009F]/\`), "Tracking API should reject control characters without imposing a carrier-format whitelist");
+assert.doesNotMatch(trackApi, /\^\[a-zA-Z0-9/, "Tracking API must defer tracking identifier syntax to the upstream engine");
 assert.match(js, /let trackingRequestInFlight = false/, "Tracking requests must be deduplicated");
 assert.match(js, /function showTrackingError/, "Tracking errors must use a visible error handler");
 assert.ok(js.includes("formError.scrollIntoView"), "Tracking failures must be brought into view on mobile");
