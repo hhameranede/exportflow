@@ -1,44 +1,41 @@
-// Reports one Datadog manual test event per Node-based regression script.
-// Loaded only in CI when DD_API_KEY is configured.
+// Wrap ExportFlow's custom Node regression suite as one Datadog manual test event.
 "use strict";
 
-const path = require("node:path");
+const { spawnSync } = require("node:child_process");
 const { channel } = require("node:diagnostics_channel");
 
-if (
-  process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED === "true" &&
-  process.env.DD_API_KEY &&
-  process.env.DD_SITE
-) {
-  const scriptPath = typeof process.argv[1] === "string" ? process.argv[1] : "";
-  const normalizedPath = scriptPath.replace(/\\/g, "/");
-  const match = normalizedPath.match(/(?:^|\/)scripts\/([^/]+)\.mjs$/);
+const start = channel("dd-trace:ci:manual:test:start");
+const finish = channel("dd-trace:ci:manual:test:finish");
+const addTags = channel("dd-trace:ci:manual:test:addTags");
 
-  if (match && !match[1].startsWith("datadog-")) {
-    const testName = match[1];
-    const testSuite = "exportflow-regression";
-    const start = channel("dd-trace:ci:manual:test:start");
-    const finish = channel("dd-trace:ci:manual:test:finish");
-    const addTags = channel("dd-trace:ci:manual:test:addTags");
-    let finished = false;
+start.publish({
+  testName: "exportflow-regression-suite",
+  testSuite: "ExportFlow CI"
+});
+addTags.publish({
+  project: "exportflow",
+  "test.scope": "node-regression-suite"
+});
 
-    start.publish({ testName, testSuite });
-    addTags.publish({
-      project: "exportflow",
-      "test.scope": "node-regression-script"
-    });
-
-    const publishFinish = () => {
-      if (finished) return;
-      finished = true;
-      const failed = Number(process.exitCode || 0) !== 0;
-      finish.publish({
-        status: failed ? "fail" : "pass",
-        error: failed ? new Error("Regression script exited with code " + process.exitCode) : undefined
-      });
-    };
-
-    process.once("beforeExit", publishFinish);
-    process.once("exit", publishFinish);
-  }
+const childEnv = { ...process.env };
+for (const key of Object.keys(childEnv)) {
+  if (key.startsWith("DD_") || key === "NODE_OPTIONS") delete childEnv[key];
 }
+
+const result = spawnSync("npm", ["test"], {
+  stdio: "inherit",
+  env: childEnv
+});
+const exitCode = result.error || typeof result.status !== "number"
+  ? 1
+  : result.status;
+const failed = exitCode !== 0;
+
+finish.publish({
+  status: failed ? "fail" : "pass",
+  error: failed
+    ? (result.error || new Error("npm test exited with code " + exitCode))
+    : undefined
+});
+
+process.exitCode = exitCode;
