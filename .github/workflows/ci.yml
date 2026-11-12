@@ -51,15 +51,21 @@ jobs:
             echo "::warning::DD_API_KEY is not configured; regression tests will run normally and Datadog Test Visibility upload will be skipped."
             npm test
           else
-            npm install --no-save --no-package-lock --no-audit --no-fund dd-trace@6.24.0
-            DD_CIVISIBILITY_AGENTLESS_ENABLED=true \
-            DD_API_KEY="$DD_API_KEY" \
-            DD_SITE=us5.datadoghq.com \
-            DD_SERVICE=exportflow \
-            DD_ENV=ci \
-            DD_TEST_SESSION_NAME=exportflow-regression \
-            NODE_OPTIONS="-r dd-trace/ci/init -r $GITHUB_WORKSPACE/scripts/datadog-ci-test-events.cjs ${NODE_OPTIONS:-}" \
-            npm test
+            DATADOG_TRACER_DIR="$RUNNER_TEMP/exportflow-datadog-tracer"
+            mkdir -p "$DATADOG_TRACER_DIR"
+            if npm install --prefix "$DATADOG_TRACER_DIR" --no-save --no-package-lock --no-audit --no-fund dd-trace@6.24.0; then
+              DD_CIVISIBILITY_AGENTLESS_ENABLED=true \
+              DD_API_KEY="$DD_API_KEY" \
+              DD_SITE=us5.datadoghq.com \
+              DD_SERVICE=exportflow \
+              DD_ENV=ci \
+              DD_TEST_SESSION_NAME=exportflow-regression \
+              NODE_OPTIONS="-r $DATADOG_TRACER_DIR/node_modules/dd-trace/ci/init -r $GITHUB_WORKSPACE/scripts/datadog-ci-test-events.cjs ${NODE_OPTIONS:-}" \
+              npm test
+            else
+              echo "::warning::Datadog tracer installation failed; regression tests will run without Test Visibility upload."
+              npm test
+            fi
           fi
       - name: Build Cloudflare Pages output
         run: npm run build
