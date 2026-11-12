@@ -40,8 +40,27 @@ jobs:
           node --check scripts/stage-third-party-licenses.mjs
           node --check scripts/third-party-licenses-test.mjs
           node --check functions/lib/country-codes.mjs
-      - name: Run regression tests
-        run: npm test
+          node --check 'functions/api/merchant/carriers/[provider]/mock.js'
+          node --check scripts/official-api-mock-route-test.mjs
+          node --check scripts/datadog-ci-test-events.cjs
+      - name: Run regression tests with optional Datadog Test Visibility
+        env:
+          DD_API_KEY: ${{ secrets.DD_API_KEY }}
+        run: |
+          if [ -z "$DD_API_KEY" ]; then
+            echo "::warning::DD_API_KEY is not configured; regression tests will run normally and Datadog Test Visibility upload will be skipped."
+            npm test
+          else
+            npm install --no-save --no-package-lock --no-audit --no-fund dd-trace@6.24.0
+            DD_CIVISIBILITY_AGENTLESS_ENABLED=true \
+            DD_API_KEY="$DD_API_KEY" \
+            DD_SITE=us5.datadoghq.com \
+            DD_SERVICE=exportflow \
+            DD_ENV=ci \
+            DD_TEST_SESSION_NAME=exportflow-regression \
+            NODE_OPTIONS="-r dd-trace/ci/init -r $GITHUB_WORKSPACE/scripts/datadog-ci-test-events.cjs ${NODE_OPTIONS:-}" \
+            npm test
+          fi
       - name: Build Cloudflare Pages output
         run: npm run build
       - name: Verify localized SEO pages and hreflang sitemap
