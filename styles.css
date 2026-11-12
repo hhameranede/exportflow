@@ -3457,3 +3457,8 @@ body.coverage-page .coverage-footer a:hover { color: var(--ef-coral); }
 .official-api-card [data-provider-status]{min-height:36px;padding:9px 10px;border-radius:9px;background:var(--ef-paper)}
 .official-api-footnote{margin-top:16px;padding-top:14px;border-top:1px solid var(--ef-border-light)}
 @media(max-width:760px){.official-api-grid{grid-template-columns:minmax(0,1fr)}.official-api-account{align-items:flex-start;flex-direction:column}.official-api-provider-label{max-width:120px}}
+
+.official-api-mock-card{grid-column:1/-1;border-color:var(--ef-coral);background:var(--ef-surface-white)}
+.official-api-mock-card .eyebrow{color:var(--ef-coral)}
+.official-api-mock-card #officialApiMockStatus{min-height:36px;padding:9px 10px;border-radius:9px;background:var(--ef-paper);overflow-wrap:anywhere}
+@media(max-width:760px){.official-api-mock-card{grid-column:auto}}
