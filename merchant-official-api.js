@@ -6,6 +6,8 @@ if (root) {
   const accountStatus = root.querySelector("#officialApiAccountStatus");
   const providerSection = root.querySelector("#officialApiConnections");
   const authNotice = root.querySelector("#officialApiAuthNotice");
+  const mockStatus = root.querySelector("#officialApiMockStatus");
+  const mockButtons = root.querySelectorAll('[data-action="mock"]');
   const providers = ["ups", "fedex"];
   let authenticated = false;
   let busy = false;
@@ -27,7 +29,8 @@ if (root) {
       forbidden: "This merchant account is not permitted to use this connection.",
       origin_forbidden: "The request origin was not accepted.",
       credential_decryption_failed: "The saved credentials could not be opened. Reconnect the carrier account.",
-      vault_unavailable: "The credential vault is temporarily unavailable."
+      vault_unavailable: "The credential vault is temporarily unavailable.",
+      simulated_test_invalid_response: "The simulated test returned an unexpected response. No official carrier test was run."
     };
     return messages[code] || "The request could not be completed (" + String(code || "unknown_error") + ").";
   }
@@ -71,6 +74,7 @@ if (root) {
       if (test) test.disabled = !enabled || !connected;
       if (disconnect) disconnect.disabled = !enabled || !connected;
     });
+    mockButtons.forEach(button => { button.disabled = !authenticated || busy; });
     if (signInButton) signInButton.hidden = authenticated;
     if (signOutButton) signOutButton.hidden = !authenticated;
     if (providerSection) providerSection.hidden = !authenticated;
@@ -245,6 +249,39 @@ if (root) {
       } finally {
         setBusy(false);
         await refreshProvider(provider);
+      }
+    });
+  });
+
+  mockButtons.forEach(button => {
+    button.addEventListener("click", async () => {
+      const provider = button.dataset.provider;
+      if (!providers.includes(provider) || !authenticated || busy) return;
+      setBusy(true);
+      setText(mockStatus, "Running the " + provider.toUpperCase() + " simulated test…");
+      try {
+        const result = await requestJson("/api/merchant/carriers/" + provider + "/mock", {
+          method: "POST",
+          headers: { Accept: "application/json" }
+        });
+        if (
+          result.provider !== provider ||
+          result.environment !== "simulated" ||
+          result.result !== "passed" ||
+          result.outboundRequests !== 0 ||
+          result.realShipmentLookup !== false ||
+          !Array.isArray(result.events)
+        ) {
+          throw new Error("simulated_test_invalid_response");
+        }
+        const eventLabels = result.events.map(event => event.label).filter(label => typeof label === "string");
+        setText(mockStatus,
+          provider.toUpperCase() + " simulated test passed. No request was sent to carrier APIs. " +
+          eventLabels.join(" → "));
+      } catch (error) {
+        setText(mockStatus, messageFor(error.message));
+      } finally {
+        setBusy(false);
       }
     });
   });
