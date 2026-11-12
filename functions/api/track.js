@@ -207,8 +207,12 @@ export async function onRequestPost({ request, env }) {
     return json({ error: "unknown_request_field" }, 400);
   }
 
-  const number = typeof input.number === "string" ? input.number.trim() : "";
-  if (number.length < 4 || number.length > MAX_NUMBER_LENGTH || !/^[a-zA-Z0-9\s().\/_-]+$/.test(number)) {
+  const number = typeof input.number === "string"
+    ? input.number.replace(/[\u200B-\u200D\uFEFF]/g, "").trim()
+    : "";
+  // Let the pinned upstream parser and carrier adapters judge identifier syntax.
+  // Keep only bounded, non-empty, printable input at this public boundary.
+  if (!number || number.length > MAX_NUMBER_LENGTH || /[\u0000-\u001F\u007F-\u009F]/.test(number)) {
     return json({ error: "invalid_tracking_number" }, 400);
   }
 
