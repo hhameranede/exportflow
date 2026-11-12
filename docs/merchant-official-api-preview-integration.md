@@ -98,8 +98,8 @@ The Merchant workspace now separates credential-free simulation from the optiona
 - The mock route returns deterministic ExportFlow fixture events with `environment=simulated`, `fixture=deterministic_mock`, `outboundRequests=0` and `realShipmentLookup=false`. It imports no carrier SDK, calls no carrier endpoint, and does not read the credential vault.
 - The Merchant UI exposes separate “Run UPS simulated test” and “Run FedEx simulated test” actions. The existing “Run Sandbox check” controls remain isolated and still require user-owned/authorized credentials.
 - Tests cover both providers, successful fixtures, unauthenticated access, origin rejection, unsupported providers, method restriction, and the absence of a network-call path.
-- `scripts/datadog-ci-test-events.cjs` uses Datadog's documented manual testing channels to report one result per Node regression script. It does not emit individual assertion-level events and does not enable Production APM, RUM, or application logging.
-- CI installs the pinned `dd-trace@6.24.0` package only when the GitHub Actions repository secret `DD_API_KEY` is present. Agentless Test Visibility is configured for `DD_SITE=us5.datadoghq.com`. If the secret is absent, tests still run normally and the Datadog upload is skipped with a workflow warning.
+- `scripts/datadog-ci-test-events.cjs` wraps the custom `npm test` regression suite as one Datadog manual test event. It reports suite-level pass/fail, not individual assertion results, and does not enable Production APM, RUM, or application logging.
+- CI installs the pinned `dd-trace@6.24.0` package into a runner-temporary directory only when the GitHub Actions repository secret `DD_API_KEY` is present. Agentless Test Visibility and the manual API are configured for `DD_SITE=us5.datadoghq.com`. If the secret is absent, tests still run normally and the Datadog upload is skipped with a workflow warning. The runner removes `DD_*` and `NODE_OPTIONS` from the child `npm test` process; only the wrapper sends the suite event.
 - Datadog CI/Test Visibility dashboards remain the place to inspect events after ingestion is confirmed. No project-specific dashboard is claimed as created yet.
 
 ### Status correction
@@ -107,3 +107,9 @@ The Merchant workspace now separates credential-free simulation from the optiona
 The earlier “Remaining Preview gate” section above is a pre-completion checkpoint. As of 2026-11-12, the Preview OAuth and key-ring secrets have been configured, the owner Google sign-in has succeeded, and the Merchant workspace has been opened successfully. The user chose not to create UPS/FedEx developer accounts, so no real carrier Sandbox credentials or carrier requests are in scope. Mock results must never be described as official carrier validation.
 
 The current implementation is on PR [#67](https://github.com/hhameranede/exportflow/pull/67), head commit `25ea26cca1904780966645d63f993f1239f9a54f`. Verify CI [#572](https://github.com/hhameranede/exportflow/actions/runs/43203304140) is running for this head. Production remains on `main` commit `b67f6ae470ef9733ffb0988e7185dfcb7c0f3411`, deployment `5bffba35-f815-4cec-8d34-4ecd63e4afc5`, with no changes in this work.
+
+### Datadog ingestion verification — 2026-11-12
+
+- Datadog CI Pipeline Visibility returned the GitHub Actions pipeline for Verify CI run [#574](https://github.com/hhameranede/exportflow/actions/runs/43204827539) with conclusion `success`.
+- The CI Test Events search returned zero events for the initial per-process manual reporter, so Test Visibility was not marked verified.
+- The manual reporter was changed to emit one suite-level event from a process preloaded with `dd-trace/ci/init`; `DD_CIVISIBILITY_MANUAL_API_ENABLED=true` is now explicit. The next successful CI run must be searched for a corresponding Test Event before claiming Test Visibility ingestion is complete.
