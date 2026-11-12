@@ -64,7 +64,7 @@ async function main() {
   assert.equal((await overlong.json()).error, "invalid_tracking_number");
 
   const controlCharacters = await onRequestPost({
-    request: requestFor("AB12\\u0000ABC"),
+    request: requestFor("AB12\u0000ABC"),
     env: {}
   });
   assert.equal(controlCharacters.status, 400);
