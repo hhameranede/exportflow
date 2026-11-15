@@ -17,7 +17,7 @@
 
     for (const card of cards) {
       const matchesTerm = !term || normalize(card.dataset.search).includes(term);
-      const markets = (card.dataset.countryCodes || "").split(/\\s+/).filter(Boolean);
+      const markets = (card.dataset.countryCodes || "").split(/\s+/).filter(Boolean);
       const matchesCountry = selectedCountry === "all" || markets.includes(selectedCountry);
       const show = matchesTerm && matchesCountry;
       card.hidden = !show;
