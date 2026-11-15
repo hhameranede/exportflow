@@ -38,6 +38,7 @@ jobs:
           node --check functions/api/health.js
           node --check functions/_middleware.js
           node --check scripts/locale-build-test.mjs
+          node --check scripts/company-directory-data.mjs
           node --check scripts/stage-third-party-licenses.mjs
           node --check scripts/third-party-licenses-test.mjs
           node --check functions/lib/country-codes.mjs
