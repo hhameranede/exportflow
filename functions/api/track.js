@@ -139,29 +139,69 @@ function projectResult(response) {
   };
 }
 
-export function trackingFailure(error) {
+function hasText(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasConfiguredFedExRoute(env) {
+  const apiConfigured = hasText(env?.FEDEX_API_KEY) && hasText(env?.FEDEX_SECRET_KEY);
+  const browserRouteConfigured = hasText(env?.EXPORTFLOW_TRAWL_URL);
+  return apiConfigured || browserRouteConfigured;
+}
+
+function publicTrackingErrorKind(kind) {
+  const mapping = {
+    not_found: "not_found",
+    rate_limited: "rate_limited",
+    invalid_input: "invalid_input",
+    input_required: "input_required",
+    challenge: "verification_required",
+    transport: "carrier_unavailable",
+    maintenance: "carrier_maintenance",
+    schema: "carrier_response_invalid",
+    indeterminate: "carrier_unavailable",
+    budget: "tracking_timeout"
+  };
+  return mapping[kind] || "tracking_unavailable";
+}
+
+export function trackingFailure(error, env = {}) {
   if (error instanceof TrackingError) {
     const attempts = Array.isArray(error.attempts) ? error.attempts.map(attempt => ({
       source: safeText(attempt.source, 80),
       kind: safeText(attempt.kind, 40),
       durationMs: Number.isFinite(attempt.durationMs) ? attempt.durationMs : null
     })) : [];
-    // A challenge is not evidence that a parcel does not exist. When no source
-    // returns history and any attempted carrier blocks verification, report an
-    // inconclusive lookup even if another fallback says not_found.
-    const verificationBlocked = attempts.some(attempt => attempt.kind === "challenge");
-    const kind = verificationBlocked ? "verification_required" : (error.hint?.kind || "unavailable");
+
+    // A challenge is not evidence that a parcel does not exist. A FedEx adapter
+    // without either its official API credentials or an approved browser route
+    // is a configuration gap, not proof that a parcel failed verification.
+    const fedexAttempted = attempts.some(attempt => String(attempt.source || "").toLowerCase() === "fedex");
+    const fedexRouteMissing = fedexAttempted && !hasConfiguredFedExRoute(env) &&
+      attempts.some(attempt => ["challenge", "transport", "budget"].includes(attempt.kind));
+    const verificationBlocked = error.hint?.kind === "challenge" ||
+      attempts.some(attempt => attempt.kind === "challenge");
+    const kind = fedexRouteMissing
+      ? "carrier_connection_not_configured"
+      : verificationBlocked
+        ? "verification_required"
+        : publicTrackingErrorKind(error.hint?.kind);
+
     const status = kind === "not_found" ? 404
       : kind === "rate_limited" ? 429
       : kind === "invalid_input" ? 400
       : kind === "input_required" ? 422
-      : kind === "verification_required" ? 503
+      : kind === "tracking_timeout" ? 504
+      : kind === "carrier_connection_not_configured" || kind === "verification_required" || kind === "carrier_maintenance" ? 503
       : 502;
     return json({ error: kind, attempts }, status);
   }
 
   if (error instanceof TypeError || error instanceof RangeError) {
     return json({ error: "invalid_input" }, 400);
+  }
+  if (error instanceof SyntaxError) {
+    return json({ error: "carrier_response_invalid" }, 502);
   }
   return json({ error: "tracking_unavailable" }, 502);
 }
@@ -264,7 +304,7 @@ export async function onRequestPost({ request, env }) {
     });
     return json(projectResult(result), 200);
   } catch (error) {
-    return trackingFailure(error);
+    return trackingFailure(error, env);
   } finally {
     activeLookups = Math.max(0, activeLookups - 1);
   }
