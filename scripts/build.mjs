@@ -1,4 +1,6 @@
 import { stageThirdPartyLicenses } from "./stage-third-party-licenses.mjs";
+import { onRequestGet as getPublicCoverage } from "../functions/api/coverage.js";
+import { renderCompanyDirectory } from "./company-directory-data.mjs";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -239,6 +241,19 @@ for (const page of publicPageDirectories) {
   await mkdir(resolve(output, page), { recursive: true });
   await cp(resolve(root, page, "index.html"), resolve(output, page, "index.html"));
 }
+
+const publicCoverageResponse = await getPublicCoverage();
+if (!publicCoverageResponse.ok) {
+  throw new Error("Could not generate the carrier directory from public coverage data");
+}
+const publicCoverage = await publicCoverageResponse.json();
+const companyDirectoryTemplate = await readFile(resolve(root, "companies/index.html"), "utf8");
+const renderedCompanyDirectory = renderCompanyDirectory(companyDirectoryTemplate, publicCoverage);
+await writeFile(resolve(output, "companies/index.html"), renderedCompanyDirectory);
+console.log(
+  "Generated " + publicCoverage.summary.directCarrierRecords +
+  " direct-adapter carrier profiles across " + publicCoverage.summary.directCountryCount + " countries."
+);
 
 await generateLocalizedPages();
 
