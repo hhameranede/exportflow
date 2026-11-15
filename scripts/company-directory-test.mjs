@@ -17,6 +17,13 @@ const ids = carriers.map(carrier => carrier.id);
 assert.equal(cards.length, payload.summary.directCarrierRecords,
   "every public direct-adapter carrier record should have one profile");
 assert.equal(new Set(ids).size, ids.length, "carrier profiles should be deduplicated by carrier ID");
+assert.equal(
+  [...html.matchAll(new RegExp(carriers.length.toLocaleString("en-US") + " carrier profiles", "g"))].length,
+  2,
+  "the hero and live result count should both display the generated profile total"
+);
+assert.doesNotMatch(html, /\{\{COMPANY_COUNT\}\}|\{\{COUNTRY_COUNT\}\}/,
+  "all generated count placeholders should be replaced");
 assert.ok(cards.length > 32, "the directory should exceed the old 32-profile list");
 assert.ok(html.includes(payload.summary.directCountryCount + " countries with direct routes"));
 assert.ok(html.includes('id="companySearch"'));
