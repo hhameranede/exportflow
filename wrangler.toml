@@ -3,3 +3,14 @@ name = "exportflow"
 pages_build_output_dir = "./dist"
 compatibility_date = "2026-11-05"
 compatibility_flags = ["nodejs_compat"]
+
+# Preview-only observability canary. This branch enables Cloudflare-native
+# telemetry at low sampling; no external Datadog destination or API key is set.
+[observability.logs]
+enabled = true
+invocation_logs = true
+head_sampling_rate = 0.05
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 0.05
