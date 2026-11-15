@@ -28,6 +28,17 @@ function json(body, status = 200, extraHeaders = {}) {
   });
 }
 
+function withRequestId(response, requestId) {
+  if (!requestId) return response;
+  const headers = new Headers(response.headers);
+  headers.set("X-Request-ID", safeText(requestId, 80) || "unknown");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
+}
+
 async function readBoundedBody(request, limit) {
   if (!request.body) return "";
   const reader = request.body.getReader();
@@ -119,6 +130,73 @@ function safeStage(value) {
   return typeof value === "string" && /^[a-z_]{2,40}$/.test(value) ? value : "unknown";
 }
 
+function safeIdentifier(value) {
+  const normalized = typeof value === "string"
+    ? value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80)
+    : "";
+  return normalized || "unknown";
+}
+
+function emitTrackingLog(record) {
+  // Diagnostics must never affect a user-facing tracking response.
+  try {
+    console.log(record);
+  } catch {
+    // Ignore logging failures.
+  }
+}
+
+export function trackingSuccessSummary(response, durationMs) {
+  const result = response?.result ?? {};
+  return {
+    outcome: "success",
+    carrier: safeIdentifier(response?.carrier),
+    source: safeIdentifier(response?.source),
+    status: safeStage(result.current_stage),
+    durationMs: Number.isFinite(durationMs) ? Math.max(0, Math.round(durationMs)) : null,
+    eventCount: Array.isArray(result.events) ? result.events.length : 0
+  };
+}
+
+export function trackingLogSummary(error, env = {}, selectedCarrier) {
+  const attempts = error instanceof TrackingError && Array.isArray(error.attempts)
+    ? error.attempts.map(attempt => ({
+      carrier: safeIdentifier(attempt?.source),
+      failureKind: safeIdentifier(attempt?.kind),
+      durationMs: Number.isFinite(attempt?.durationMs) ? Math.max(0, Math.round(attempt.durationMs)) : null
+    }))
+    : [];
+
+  if (error instanceof TrackingError) {
+    const fedexAttempted = attempts.some(attempt => attempt.carrier === "fedex");
+    const fedexRouteMissing = fedexAttempted && !hasConfiguredFedExRoute(env) &&
+      attempts.some(attempt => ["challenge", "transport"].includes(attempt.failureKind));
+    const verificationBlocked = error.hint?.kind === "challenge" ||
+      attempts.some(attempt => attempt.failureKind === "challenge");
+    const errorClass = fedexRouteMissing
+      ? "carrier_connection_not_configured"
+      : verificationBlocked
+        ? "verification_required"
+        : publicTrackingErrorKind(error.hint?.kind);
+    return {
+      carrier: safeIdentifier(selectedCarrier),
+      errorClass,
+      attempts
+    };
+  }
+
+  const errorClass = error instanceof TypeError || error instanceof RangeError
+    ? "invalid_input"
+    : error instanceof SyntaxError
+      ? "carrier_response_invalid"
+      : "tracking_unavailable";
+  return {
+    carrier: safeIdentifier(selectedCarrier),
+    errorClass,
+    attempts: []
+  };
+}
+
 function projectResult(response) {
   const result = response?.result ?? {};
   const events = Array.isArray(result.events) ? result.events.slice(0, 60).map(event => ({
@@ -165,7 +243,7 @@ function publicTrackingErrorKind(kind) {
   return mapping[kind] || "tracking_unavailable";
 }
 
-export function trackingFailure(error, env = {}) {
+export function trackingFailure(error, env = {}, requestId = null) {
   if (error instanceof TrackingError) {
     const attempts = Array.isArray(error.attempts) ? error.attempts.map(attempt => ({
       source: safeText(attempt.source, 80),
@@ -194,16 +272,16 @@ export function trackingFailure(error, env = {}) {
       : kind === "tracking_timeout" ? 504
       : kind === "carrier_connection_not_configured" || kind === "verification_required" || kind === "carrier_maintenance" ? 503
       : 502;
-    return json({ error: kind, attempts }, status);
+    return withRequestId(json({ error: kind, attempts }, status), requestId);
   }
 
   if (error instanceof TypeError || error instanceof RangeError) {
-    return json({ error: "invalid_input" }, 400);
+    return withRequestId(json({ error: "invalid_input" }, 400), requestId);
   }
   if (error instanceof SyntaxError) {
-    return json({ error: "carrier_response_invalid" }, 502);
+    return withRequestId(json({ error: "carrier_response_invalid" }, 502), requestId);
   }
-  return json({ error: "tracking_unavailable" }, 502);
+  return withRequestId(json({ error: "tracking_unavailable" }, 502), requestId);
 }
 
 export async function onRequestPost({ request, env }) {
@@ -292,6 +370,8 @@ export async function onRequestPost({ request, env }) {
   }
 
   activeLookups += 1;
+  const requestId = crypto.randomUUID();
+  const lookupStartedAt = Date.now();
   try {
     const result = await getTracker(env).track({
       number,
@@ -302,9 +382,25 @@ export async function onRequestPost({ request, env }) {
       budgetMs: LOOKUP_BUDGET_MS,
       signal: request.signal
     });
-    return json(projectResult(result), 200);
+    const durationMs = Date.now() - lookupStartedAt;
+    const summary = trackingSuccessSummary(result, durationMs);
+    emitTrackingLog({
+      event: "exportflow.tracking.lookup",
+      requestId,
+      ...summary
+    });
+    return json(projectResult(result), 200, { "X-Request-ID": requestId });
   } catch (error) {
-    return trackingFailure(error, env);
+    const durationMs = Date.now() - lookupStartedAt;
+    const summary = trackingLogSummary(error, env, selectedCarrier);
+    emitTrackingLog({
+      event: "exportflow.tracking.lookup",
+      requestId,
+      outcome: "failure",
+      durationMs,
+      ...summary
+    });
+    return trackingFailure(error, env, requestId);
   } finally {
     activeLookups = Math.max(0, activeLookups - 1);
   }
