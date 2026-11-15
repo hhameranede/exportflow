@@ -118,7 +118,7 @@ assert.deepEqual(safeLogSuccess, {
 assert.equal(JSON.stringify(safeLogSuccess).includes("private event"), false);
 assert.equal(JSON.stringify(safeLogSuccess).includes("private location"), false);
 
-const requestIdResponse = trackingFailure(unexpected, {}, "test-request-id");
+const requestIdResponse = trackingFailure(new Error("private diagnostic"), {}, "test-request-id");
 assert.equal(requestIdResponse.headers.get("X-Request-ID"), "test-request-id");
 
 const malformedPayload = await classify(new SyntaxError("private carrier payload"));
