@@ -15,7 +15,7 @@ const cards = [...html.matchAll(/<article class="directory-card"/g)];
 const ids = carriers.map(carrier => carrier.id);
 
 assert.equal(cards.length, payload.summary.directoryCarrierRecords,
-  "every public direct-adapter carrier record should have one profile");
+  "every adapter-backed carrier record should have one directory profile");
 assert.equal(new Set(ids).size, ids.length, "carrier profiles should be deduplicated by carrier ID");
 assert.equal(
   [...html.matchAll(new RegExp(carriers.length.toLocaleString("en-US") + " carrier profiles", "g"))].length,
@@ -25,11 +25,11 @@ assert.equal(
 assert.doesNotMatch(html, /\{\{COMPANY_COUNT\}\}|\{\{COUNTRY_COUNT\}\}/,
   "all generated count placeholders should be replaced");
 assert.ok(cards.length > 32, "the directory should exceed the old 32-profile list");
-assert.ok(html.includes(payload.summary.directoryCountryCount + " countries with direct routes"));
+assert.ok(html.includes(payload.summary.directoryCountryCount + " countries represented in the adapter catalog"));
 assert.ok(html.includes('id="companySearch"'));
 assert.ok(html.includes('id="companyCountry"'));
 assert.ok(ids.includes("algerie-poste"), "the direct Algerie Poste adapter should be included");
-assert.ok(html.includes("ExportFlow provides carrier information and shipment-tracking lookups"));
+assert.ok(html.includes("ExportFlow brings carrier information and shipment lookup tools together"));
 assert.ok(html.includes("shipment lookup tools together"));
 assert.ok(html.includes("availability depends on the selected route"));
 assert.ok(html.includes('href="/companies/"'));
