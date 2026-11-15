@@ -21,7 +21,7 @@ assert.ok(cards.length > 32, "the directory should exceed the old 32-profile lis
 assert.ok(html.includes(payload.summary.directCountryCount + " countries with direct routes"));
 assert.ok(html.includes('id="companySearch"'));
 assert.ok(html.includes('id="companyCountry"'));
-assert.ok(html.includes('data-carrier-id="algerie-poste"') || ids.includes("algerie-poste") === false);
+assert.ok(ids.includes("algerie-poste"), "the direct Algerie Poste adapter should be included");
 assert.ok(html.includes("ExportFlow provides carrier information and shipment-tracking lookups"));
 assert.ok(html.includes("carrier-specific tracking route"));
 assert.ok(html.includes('href="/companies/"'));
