@@ -178,7 +178,7 @@ export function trackingFailure(error, env = {}) {
     // is a configuration gap, not proof that a parcel failed verification.
     const fedexAttempted = attempts.some(attempt => String(attempt.source || "").toLowerCase() === "fedex");
     const fedexRouteMissing = fedexAttempted && !hasConfiguredFedExRoute(env) &&
-      attempts.some(attempt => ["challenge", "transport", "budget"].includes(attempt.kind));
+      attempts.some(attempt => ["challenge", "transport"].includes(attempt.kind));
     const verificationBlocked = error.hint?.kind === "challenge" ||
       attempts.some(attempt => attempt.kind === "challenge");
     const kind = fedexRouteMissing
