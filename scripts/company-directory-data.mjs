@@ -13,12 +13,15 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function replaceToken(html, token, value) {
+function replaceToken(html, token, value, replaceAll = false) {
   const occurrences = html.split(token).length - 1;
-  if (occurrences !== 1) {
-    throw new Error("Expected exactly one directory template token: " + token);
+  if (replaceAll ? occurrences === 0 : occurrences !== 1) {
+    throw new Error(
+      "Expected " + (replaceAll ? "at least one" : "exactly one") +
+      " directory template token: " + token
+    );
   }
-  return html.replace(token, value);
+  return replaceAll ? html.replaceAll(token, value) : html.replace(token, value);
 }
 
 export function collectDirectCarriers(payload) {
@@ -144,7 +147,7 @@ export function renderCompanyDirectory(template, payload) {
   let html = template;
   html = replaceToken(html, "<!-- EXPORTFLOW_COMPANY_SCHEMA -->",
     '<script type="application/ld+json">' + safeSchema + "</script>");
-  html = replaceToken(html, "{{COMPANY_COUNT}}", carriers.length.toLocaleString("en-US"));
+  html = replaceToken(html, "{{COMPANY_COUNT}}", carriers.length.toLocaleString("en-US"), true);
   html = replaceToken(html, "{{COUNTRY_COUNT}}",
     Number(payload.summary.directCountryCount).toLocaleString("en-US"));
   html = replaceToken(html, "<!-- EXPORTFLOW_COMPANY_COUNTRY_OPTIONS -->", countryOptions);
