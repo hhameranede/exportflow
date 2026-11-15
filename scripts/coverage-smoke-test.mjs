@@ -38,6 +38,14 @@ assert.ok(payload.summary.catalogEntries > 0);
 assert.ok(payload.upstreamRevision);
 const quarantinedIds = ["china-post", "india-post", "singapore-post", "usps", "yunexpress"];
 assert.equal(payload.summary.quarantinedCarrierCount, quarantinedIds.length);
+assert.ok(Array.isArray(payload.directoryCarriers));
+assert.equal(payload.directoryCarriers.length, payload.summary.directoryCarrierRecords);
+assert.ok(payload.summary.directoryCarrierRecords > payload.summary.directCarrierRecords,
+  "the information directory should include adapter profiles outside public tracking coverage");
+for (const id of quarantinedIds) {
+  assert.ok(payload.directoryCarriers.some(carrier => carrier.id === id),
+    id + " should remain in the information directory");
+}
 assert.ok(payload.countries.every(country =>
   country.carriers.every(carrier => !quarantinedIds.includes(carrier.id))
 ));
