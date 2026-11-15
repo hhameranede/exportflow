@@ -174,7 +174,7 @@ export function trackingFailure(error, env = {}) {
     })) : [];
 
     // A challenge is not evidence that a parcel does not exist. A FedEx adapter
-    // without either its official API credentials or an approved browser route
+    // without either its official API credentials or a configured browser route
     // is a configuration gap, not proof that a parcel failed verification.
     const fedexAttempted = attempts.some(attempt => String(attempt.source || "").toLowerCase() === "fedex");
     const fedexRouteMissing = fedexAttempted && !hasConfiguredFedExRoute(env) &&
