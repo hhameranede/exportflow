@@ -3427,3 +3427,169 @@ body.coverage-page .coverage-footer a:hover { color: var(--ef-coral); }
 @media (prefers-reduced-motion: reduce) {
   .catalog-stat strong.is-counted { animation: none; }
 }
+
+
+/* Public company directory */
+.directory-main {
+  flex: 1;
+  width: min(1120px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 28px 0 76px;
+}
+.directory-hero { margin-bottom: 22px; }
+.directory-hero h1 { max-width: 18ch; }
+.directory-browser {
+  padding: clamp(22px, 4vw, 36px);
+  border: 1px solid var(--ef-border-light);
+  border-radius: 24px;
+  background: var(--ef-surface-white);
+  box-shadow: var(--shadow-card);
+}
+.directory-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 14px;
+}
+.directory-search,
+.directory-filter { display: grid; gap: 8px; }
+.directory-search > span,
+.directory-filter > span {
+  color: var(--ef-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.directory-search input,
+.directory-filter select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--ef-input-border);
+  border-radius: var(--radius-md);
+  outline: none;
+  background: #fff;
+  color: var(--ef-text-main);
+  font: inherit;
+}
+.directory-search input:focus,
+.directory-filter select:focus {
+  border-color: var(--ef-coral);
+  box-shadow: 0 0 0 3px var(--ef-coral-tint);
+}
+.directory-result-count {
+  margin: 20px 0 14px;
+  color: var(--ef-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+.directory-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.directory-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 20px;
+  border: 1px solid var(--ef-border-light);
+  border-radius: var(--radius-lg);
+  background: #fff;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+.directory-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 95, 87, .55);
+  box-shadow: var(--shadow-subtle);
+}
+.directory-card[hidden] { display: none !important; }
+.directory-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.company-monogram {
+  display: inline-grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--ef-navy);
+  color: #fff;
+  font-family: var(--font-family-display);
+  font-size: 13px;
+  font-weight: 700;
+}
+.directory-category {
+  padding: 5px 9px;
+  border: 1px solid var(--ef-border-light);
+  border-radius: var(--radius-full);
+  background: var(--ef-paper);
+  color: var(--ef-text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: end;
+}
+.directory-card h2 {
+  margin: 0 0 9px;
+  color: var(--ef-navy);
+  font-family: var(--font-family-display);
+  font-size: 19px;
+  line-height: 1.25;
+}
+.directory-card p {
+  flex: 1;
+  margin: 0 0 18px;
+  color: var(--ef-text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.directory-card-region {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-bottom: 15px;
+  color: var(--ef-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.directory-company-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 13px;
+  border-top: 1px solid var(--ef-border-light);
+  color: var(--ef-coral-hover);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.directory-company-link:hover { color: var(--ef-coral-active); }
+.directory-empty {
+  margin: 24px 0 6px;
+  padding: 30px 18px;
+  border: 1px dashed var(--ef-border-light);
+  border-radius: var(--radius-lg);
+  color: var(--ef-text-muted);
+  text-align: center;
+}
+.directory-empty[hidden] { display: none; }
+.directory-footer nav { gap: 10px 16px; }
+.directory-footer nav a { white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .directory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+  .directory-main { width: calc(100% - 24px); padding: 22px 0 48px; }
+  .directory-tools { grid-template-columns: minmax(0, 1fr); }
+  .directory-grid { grid-template-columns: minmax(0, 1fr); }
+  .directory-browser { padding: 20px 14px; border-radius: 20px; }
+  .directory-card { padding: 18px; }
+}
