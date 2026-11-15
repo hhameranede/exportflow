@@ -37,6 +37,35 @@ export async function onRequestGet() {
     const status = directCarriers.length ? "direct" : fallbackCarriers.length ? "universal-fallback" : linkCarriers.length ? "link-only" : "not-listed";
     return { code, status, carrierCount: carriers.length, directCarrierCount: directCarriers.length, fallbackCarrierCount: fallbackCarriers.length, linkOnlyCarrierCount: linkCarriers.length, carriers, directCarriers, fallbackCarriers, linkOnlyCarriers: linkCarriers };
   });
+
+  // Directory inventory is descriptive only. Public tracking coverage above
+  // remains filtered by the current rights policy.
+  const directoryRecords = new Map();
+  const directorySelectable = Object.values(CARRIERS).filter(carrier =>
+    carrier && carrier.id !== "unknown" && carrier.capabilities?.selectable === true
+  );
+  for (const carrier of directorySelectable) {
+    const tracking = carrier.capabilities?.tracking;
+    if (tracking?.mode !== "automatic" ||
+        typeof tracking.adapter !== "string" ||
+        !tracking.adapter.length ||
+        tracking.adapter === "universal") continue;
+
+    const codes = Array.isArray(carrier.countries) ? carrier.countries : [];
+    let record = directoryRecords.get(carrier.id);
+    if (!record) {
+      record = { id: carrier.id, name: carrier.name || carrier.id, adapter: tracking.adapter, countries: [] };
+      directoryRecords.set(carrier.id, record);
+    }
+    for (const raw of codes) {
+      const code = typeof raw === "string" ? raw.toUpperCase() : "";
+      if (/^[A-Z]{2}$/.test(code) && !record.countries.includes(code)) record.countries.push(code);
+    }
+  }
+  const directoryCarriers = [...directoryRecords.values()]
+    .map(record => ({ ...record, countries: record.countries.sort((a,b) => a.localeCompare(b, "en")) }))
+    .sort((a,b) => a.name.localeCompare(b.name, "en") || a.id.localeCompare(b.id, "en"));
+  const directoryCountryCount = new Set(directoryCarriers.flatMap(carrier => carrier.countries)).size;
   const summary = {
     allCountries: COUNTRY_CODES.length,
     catalogEntries: filterPublicCarrierIds(CARRIER_IDS).length,
@@ -44,12 +73,14 @@ export async function onRequestGet() {
     selectableCarrierRecords: selectable.length,
     directCarrierRecords: directCarrierIds.size,
     directCountryCount: countries.filter(c => c.status === "direct").length,
+    directoryCarrierRecords: directoryCarriers.length,
+    directoryCountryCount,
     universalFallbackCountryCount: countries.filter(c => c.fallbackCarrierCount > 0).length,
     linkOnlyCountryCount: countries.filter(c => c.status === "link-only").length,
     countriesWithAnyCatalogEntry: countries.filter(c => c.status !== "not-listed").length,
     countriesWithoutCatalogEntry: countries.filter(c => c.status === "not-listed").length
   };
-  return new Response(JSON.stringify({ source: "installed-universal-parcel-scraper-catalog", upstreamRevision: SOURCE_REVISION, generatedAt: new Date().toISOString(), summary, countries }), {
+  return new Response(JSON.stringify({ source: "installed-universal-parcel-scraper-catalog", upstreamRevision: SOURCE_REVISION, generatedAt: new Date().toISOString(), summary, countries, directoryCarriers }), {
     headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=3600, s-maxage=3600", "X-Content-Type-Options": "nosniff", "X-Robots-Tag": "noindex, nofollow" }
   });
 }
