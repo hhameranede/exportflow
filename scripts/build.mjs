@@ -251,7 +251,7 @@ const companyDirectoryTemplate = await readFile(resolve(root, "companies/index.h
 const renderedCompanyDirectory = renderCompanyDirectory(companyDirectoryTemplate, publicCoverage);
 await writeFile(resolve(output, "companies/index.html"), renderedCompanyDirectory);
 console.log(
-  "Generated " + publicCoverage.summary.directCarrierRecords +
+  "Generated " + publicCoverage.summary.directoryCarrierRecords +
   " adapter-backed carrier profiles across " + publicCoverage.summary.directoryCountryCount + " countries."
 );
 
