@@ -252,7 +252,7 @@ const renderedCompanyDirectory = renderCompanyDirectory(companyDirectoryTemplate
 await writeFile(resolve(output, "companies/index.html"), renderedCompanyDirectory);
 console.log(
   "Generated " + publicCoverage.summary.directCarrierRecords +
-  " direct-adapter carrier profiles across " + publicCoverage.summary.directCountryCount + " countries."
+  " adapter-backed carrier profiles across " + publicCoverage.summary.directoryCountryCount + " countries."
 );
 
 await generateLocalizedPages();
