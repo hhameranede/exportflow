@@ -31,6 +31,7 @@ jobs:
           node --check app.js
           node --check translations.js
           node --check coverage.js
+          node --check company-directory.js
           node --check functions/api/track.js
           node --check functions/api/carriers.js
           node --check functions/api/coverage.js
@@ -55,6 +56,7 @@ jobs:
           test -s dist/app.js
           test -s dist/translations.js
           test -s dist/coverage.js
+          test -s dist/company-directory.js
           test -s dist/robots.txt
           test -s dist/sitemap.xml
           test -s dist/favicon.svg
@@ -63,6 +65,7 @@ jobs:
           test -s dist/site.webmanifest
           test -s dist/og-image-20261106.png
           test -s dist/coverage/index.html
+          test -s dist/companies/index.html
           test -s dist/about/index.html
           test -s dist/contact/index.html
           test -s dist/privacy/index.html
