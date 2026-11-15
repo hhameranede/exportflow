@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 
 const html = await readFile(new URL("../companies/index.html", import.meta.url), "utf8");
 const script = await readFile(new URL("../company-directory.js", import.meta.url), "utf8");
-const cards = [...html.matchAll(/<article class="directory-card"\b/g)];
+const cards = [...html.matchAll(/<article class="directory-card"/g)];
 const links = [...html.matchAll(/<a class="directory-company-link" href="([^"]+)"/g)];
 
 const expectedCompanies = [
