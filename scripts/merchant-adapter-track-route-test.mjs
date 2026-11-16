@@ -146,6 +146,23 @@ const universalResponse = await handler({
 assert.equal(universalResponse.status, 400);
 assert.equal((await universalResponse.json()).error, "unsupported_direct_carrier");
 
+
+const quarantinedCalls = [];
+const quarantinedHandler = createMerchantAdapterTrackHandler({
+  resolveSession: async () => sessions.get("merchant-alpha-session"),
+  consumeRateLimit: async () => quota,
+  isCarrierQuarantined: carrierId => carrierId === "ups",
+  trackerFactory: () => { quarantinedCalls.push("tracker"); throw new Error("Quarantined carrier must not reach adapter"); }
+});
+const quarantined = await quarantinedHandler({
+  request: request("ups", "1ZTEST000000000000"),
+  env,
+  params: { provider: "ups" }
+});
+assert.equal(quarantined.status, 400);
+assert.equal((await quarantined.json()).error, "unsupported_direct_carrier");
+assert.deepEqual(quarantinedCalls, [], "Locally quarantined carriers must be stopped before adapter creation");
+
 const wrongOrigin = await handler({
   request: request("ups", "1ZTEST000000000000", { origin: "https://attacker.invalid" }),
   env,
