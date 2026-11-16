@@ -7,16 +7,20 @@ if (root) {
   const connectionSection = root.querySelector("#merchantConnections");
   const authNotice = root.querySelector("#merchantAuthNotice");
   const trackingForm = root.querySelector("#merchantTrackingForm");
+  const carrierSearch = root.querySelector("#merchantCarrierSearch");
+  const carrierCount = root.querySelector("#merchantCarrierCount");
   const trackingCarrier = root.querySelector("#merchantTrackingCarrier");
   const trackingNumber = root.querySelector("#merchantTrackingNumber");
+  const additionalFields = root.querySelector("#merchantAdditionalFields");
   const trackingButton = root.querySelector("#merchantTrackButton");
   const trackingStatus = root.querySelector("#merchantTrackingStatus");
   const trackingResult = root.querySelector("#merchantTrackingResult");
   const trackingSummary = root.querySelector("#merchantTrackingSummary");
   const trackingEvents = root.querySelector("#merchantTrackingEvents");
-  const providers = ["ups", "fedex"];
   let authenticated = false;
   let busy = false;
+  let carrierCatalog = [];
+  let catalogLoaded = false;
 
   function setText(element, value) {
     if (element) element.textContent = String(value ?? "");
@@ -26,7 +30,13 @@ if (root) {
     const messages = {
       unauthenticated: "Sign in before using your merchant workspace.",
       merchant_auth_not_configured: "Merchant sign-in is not configured in this environment yet.",
+      carrier_catalog_unavailable: "The direct carrier catalog is temporarily unavailable. Try again shortly.",
+      unsupported_direct_carrier: "Choose a carrier from the direct-adapter catalog.",
       invalid_tracking_number: "Enter a valid tracking number for the selected carrier.",
+      invalid_trackingUrl: "Enter the complete tracking link requested by this carrier.",
+      invalid_postcode: "Enter a valid delivery postcode.",
+      invalid_postcodeCountry: "Enter a two-letter postcode country code.",
+      carrier_input_required: "This carrier needs an additional detail. Check the fields shown above.",
       carrier_lookup_failed: "The carrier adapter could not return a tracking result. Check the number and try again.",
       carrier_lookup_timeout: "The carrier adapter timed out. Try again later.",
       carrier_verification_required: "The carrier requires an additional verification step. Try again later.",
@@ -54,6 +64,10 @@ if (root) {
     return data;
   }
 
+  function selectedCarrier() {
+    return carrierCatalog.find(carrier => carrier.id === trackingCarrier.value) || null;
+  }
+
   function updateControls() {
     root.querySelectorAll("button").forEach(button => {
       if (button.dataset.stayEnabled === "true") return;
@@ -61,10 +75,12 @@ if (root) {
     });
     if (trackingForm) {
       trackingForm.querySelectorAll("input, select, button").forEach(control => {
-        control.disabled = !authenticated || busy;
+        control.disabled = !authenticated || busy || !catalogLoaded;
       });
     }
-    if (trackingButton) trackingButton.disabled = !authenticated || busy;
+    if (trackingButton) {
+      trackingButton.disabled = !authenticated || busy || !catalogLoaded || !selectedCarrier() || !trackingNumber.value.trim();
+    }
     if (signInButton) signInButton.hidden = authenticated;
     if (signOutButton) signOutButton.hidden = !authenticated;
     if (connectionSection) connectionSection.hidden = !authenticated;
@@ -115,6 +131,124 @@ if (root) {
     trackingResult.hidden = false;
   }
 
+  function renderCarrierOptions() {
+    const previous = trackingCarrier.value;
+    const query = carrierSearch.value.trim().toLowerCase();
+    const matches = carrierCatalog.filter(carrier => {
+      if (!query) return true;
+      return [carrier.name, carrier.id, ...(carrier.aliases || [])]
+        .some(value => String(value || "").toLowerCase().includes(query));
+    });
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = matches.length ? "Select a direct carrier…" : "No direct carriers match this search";
+    trackingCarrier.replaceChildren(placeholder);
+    matches.forEach(carrier => {
+      const option = document.createElement("option");
+      option.value = carrier.id;
+      option.textContent = carrier.name + " · " + carrier.id;
+      trackingCarrier.append(option);
+    });
+
+    if (matches.some(carrier => carrier.id === previous)) {
+      trackingCarrier.value = previous;
+    } else {
+      trackingCarrier.value = "";
+    }
+    setText(carrierCount, matches.length + " of " + carrierCatalog.length + " direct adapters shown");
+    renderAdditionalFields();
+    updateControls();
+  }
+
+  function normalizedNumber(value) {
+    return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  }
+
+  function activeRequirements(carrier) {
+    const number = normalizedNumber(trackingNumber.value);
+    return (carrier?.requirements || []).filter(requirement => {
+      if (!requirement.whenTrackingNumber) return true;
+      try {
+        return new RegExp("^(?:" + requirement.whenTrackingNumber + ")$").test(number);
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  function renderAdditionalFields() {
+    if (!additionalFields) return;
+    const previousValues = {};
+    additionalFields.querySelectorAll("[data-merchant-extra-field]").forEach(input => {
+      previousValues[input.name] = input.value;
+    });
+    additionalFields.replaceChildren();
+
+    const requirements = activeRequirements(selectedCarrier());
+    requirements.forEach((requirement, index) => {
+      const label = document.createElement("label");
+      label.textContent = requirement.label + (requirement.optional ? " (optional)" : "");
+      const input = document.createElement("input");
+      input.name = requirement.field;
+      input.type = requirement.type === "url" ? "url" : "text";
+      input.autocomplete = requirement.autoComplete || "off";
+      input.maxLength = Number.isInteger(requirement.maxLength) ? requirement.maxLength : 4096;
+      input.placeholder = requirement.placeholder || "";
+      input.required = requirement.optional !== true;
+      input.dataset.merchantExtraField = "true";
+      if (requirement.inputMode) input.inputMode = requirement.inputMode;
+      if (requirement.pattern) input.pattern = requirement.pattern;
+      input.value = previousValues[requirement.field] || "";
+      label.append(input);
+      additionalFields.append(label);
+
+      if (requirement.help) {
+        const help = document.createElement("p");
+        help.className = "official-api-description";
+        help.textContent = requirement.help;
+        additionalFields.append(help);
+      }
+
+      if (requirement.readsCountry && requirement.field === "postcode") {
+        const countryLabel = document.createElement("label");
+        countryLabel.textContent = "Postcode country (two-letter code, optional)";
+        const countryInput = document.createElement("input");
+        countryInput.name = "postcodeCountry";
+        countryInput.type = "text";
+        countryInput.maxLength = 2;
+        countryInput.autocomplete = "country";
+        countryInput.placeholder = "US, FR, DE…";
+        countryInput.dataset.merchantExtraField = "true";
+        countryInput.value = previousValues.postcodeCountry || "";
+        countryLabel.append(countryInput);
+        additionalFields.append(countryLabel);
+      }
+    });
+    updateControls();
+  }
+
+  async function loadCarrierCatalog() {
+    setText(carrierCount, "Loading direct carrier adapters…");
+    try {
+      const result = await requestJson("/api/merchant/carrier-catalog");
+      if (!Array.isArray(result.carriers) || !Number.isInteger(result.count) || result.count !== result.carriers.length) {
+        throw new Error("carrier_catalog_unavailable");
+      }
+      carrierCatalog = result.carriers;
+      catalogLoaded = carrierCatalog.length > 0;
+      renderCarrierOptions();
+      if (!catalogLoaded) {
+        setText(trackingStatus, "No direct carrier adapters are available in this environment.");
+      }
+    } catch (error) {
+      catalogLoaded = false;
+      setText(carrierCount, messageFor(error.message));
+      setText(trackingStatus, messageFor("carrier_catalog_unavailable"));
+    }
+    updateControls();
+  }
+
   async function loadSession() {
     setText(accountStatus, "Checking merchant sign-in…");
     try {
@@ -128,6 +262,7 @@ if (root) {
       authenticated = response.ok && data.authenticated === true;
       if (authenticated) {
         setText(accountStatus, "Signed in as " + (data.user?.email || "merchant account"));
+        await loadCarrierCatalog();
       } else if (response.status === 401) {
         setText(accountStatus, "Sign in to access your merchant shipments.");
       } else {
@@ -170,9 +305,13 @@ if (root) {
         headers: { Accept: "application/json" }
       });
       authenticated = false;
+      carrierCatalog = [];
+      catalogLoaded = false;
       clearTrackingResult();
       setText(accountStatus, "Signed out.");
       setText(trackingStatus, "Sign in to track a shipment.");
+      trackingCarrier.replaceChildren();
+      additionalFields.replaceChildren();
     } catch (error) {
       setText(accountStatus, messageFor(error.message));
     } finally {
@@ -180,14 +319,18 @@ if (root) {
     }
   });
 
+  carrierSearch?.addEventListener("input", renderCarrierOptions);
+  trackingCarrier?.addEventListener("change", renderAdditionalFields);
+  trackingNumber?.addEventListener("input", renderAdditionalFields);
+
   trackingForm?.addEventListener("submit", async event => {
     event.preventDefault();
     if (!authenticated || busy) return;
 
-    const provider = trackingCarrier.value;
+    const carrier = selectedCarrier();
     const number = trackingNumber.value.trim();
-    if (!providers.includes(provider)) {
-      setText(trackingStatus, "Choose a supported carrier.");
+    if (!carrier) {
+      setText(trackingStatus, "Choose a direct carrier from the catalog.");
       return;
     }
     if (!number) {
@@ -195,17 +338,22 @@ if (root) {
       return;
     }
 
+    const payload = { number };
+    additionalFields.querySelectorAll("[data-merchant-extra-field]").forEach(input => {
+      if (input.value.trim()) payload[input.name] = input.value.trim();
+    });
+
     clearTrackingResult();
     setBusy(true);
-    setText(trackingStatus, "Sending the lookup through ExportFlow's " + provider.toUpperCase() + " adapter…");
+    setText(trackingStatus, "Sending the lookup through ExportFlow's " + carrier.name + " direct adapter…");
     try {
-      const result = await requestJson("/api/merchant/carriers/" + provider + "/track", {
+      const result = await requestJson("/api/merchant/carriers/" + encodeURIComponent(carrier.id) + "/track", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ number })
+        body: JSON.stringify(payload)
       });
       renderTrackingResult(result);
-      setText(trackingStatus, "ExportFlow's carrier adapter returned a tracking response.");
+      setText(trackingStatus, "ExportFlow's " + carrier.name + " adapter returned a tracking response.");
     } catch (error) {
       setText(trackingStatus, messageFor(error.message));
     } finally {
