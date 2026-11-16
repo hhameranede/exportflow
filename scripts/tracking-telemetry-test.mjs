@@ -13,6 +13,8 @@ assert.match(wranglerConfig, /^\[\[env\.preview\.d1_databases\]\]$/m);
 assert.match(wranglerConfig, /^binding = "EXPORTFLOW_TELEMETRY_DB"$/m);
 assert.match(wranglerConfig, /^database_name = "exportflow-tracking-telemetry-preview-db"$/m);
 assert.match(wranglerConfig, /^database_id = "decef588-a198-4bdd-9764-e0ce2e2caaee"$/m);
+assert.match(wranglerConfig, /^preview_database_id = "local-exportflow-telemetry"$/m);
+assert.match(wranglerConfig, /^migrations_dir = "migrations\/telemetry"$/m);
 assert.doesNotMatch(wranglerConfig, /^\[\[d1_databases\]\]$/m);
 assert.doesNotMatch(wranglerConfig, /^\[\[env\.production\.d1_databases\]\]$/m);
 assert.doesNotMatch(wranglerConfig, /exportflow-tracking-telemetry-production-db/);

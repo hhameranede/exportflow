@@ -10,3 +10,5 @@ compatibility_flags = ["nodejs_compat"]
 binding = "EXPORTFLOW_TELEMETRY_DB"
 database_name = "exportflow-tracking-telemetry-preview-db"
 database_id = "decef588-a198-4bdd-9764-e0ce2e2caaee"
+preview_database_id = "local-exportflow-telemetry"
+migrations_dir = "migrations/telemetry"
