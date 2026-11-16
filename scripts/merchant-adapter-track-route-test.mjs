@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
-import {
-  adapterEnvironment,
-  createMerchantAdapterTrackHandler
-} from "../functions/api/merchant/carriers/[provider]/track.js";
-import { OfficialApiCredentialVaultError } from "../functions/lib/official-api-credential-vault.mjs";
+import { createMerchantAdapterTrackHandler } from "../functions/api/merchant/carriers/[provider]/track.js";
 
 const ORIGIN = "https://merchant-preview.example.test";
-const env = { MERCHANT_APP_ORIGIN: ORIGIN };
+const env = {
+  MERCHANT_APP_ORIGIN: ORIGIN,
+  EXPORTFLOW_TRAWL_URL: "https://private-trawl.example.test",
+  UPS_CLIENT_ID: "owner-ups-app-id",
+  UPS_CLIENT_SECRET: "owner-ups-app-secret",
+  FEDEX_API_KEY: "owner-fedex-app-key",
+  FEDEX_SECRET_KEY: "owner-fedex-app-secret"
+};
 const quota = {
   allowed: true,
   limit: 12,
@@ -15,32 +18,25 @@ const quota = {
   resetAt: 1_800_000_060,
   resetAfterSeconds: 60
 };
-
-const merchantCredentials = {
-  merchant_alpha: {
-    ups: { clientId: "alpha-ups-id", clientSecret: "alpha-ups-secret" },
-    fedex: { apiKey: "alpha-fedex-key", apiSecret: "alpha-fedex-secret" }
-  },
-  merchant_beta: {
-    ups: { clientId: "beta-ups-id", clientSecret: "beta-ups-secret" },
-    fedex: { apiKey: "beta-fedex-key", apiSecret: "beta-fedex-secret" }
-  }
-};
+const sessions = new Map([
+  ["merchant-alpha-session", { user: { id: "merchant_alpha" } }],
+  ["merchant-beta-session", { user: { id: "merchant_beta" } }]
+]);
 const trackerCalls = [];
 
-function request(provider, number, merchantId = "merchant_alpha", origin = ORIGIN) {
+function request(provider, number, sessionToken = "merchant-alpha-session", origin = ORIGIN) {
   return new Request(ORIGIN + "/api/merchant/carriers/" + provider + "/track", {
     method: "POST",
     headers: {
       Origin: origin,
-      "Content-Type": "application/json",
-      "X-Test-Merchant": merchantId
+      Cookie: "test-session=" + sessionToken,
+      "Content-Type": "application/json"
     },
     body: JSON.stringify({ number })
   });
 }
 
-function createTrackerFactory(options) {
+function trackerFactory(options) {
   trackerCalls.push(options);
   return {
     track: async (input, context) => {
@@ -66,19 +62,17 @@ function createTrackerFactory(options) {
 }
 
 const handler = createMerchantAdapterTrackHandler({
-  createVault: async request => {
-    const merchantId = request.headers.get("X-Test-Merchant");
-    return {
-      user: { id: merchantId },
-      resolveCredentials: async ({ provider }) => merchantCredentials[merchantId]?.[provider] ?? null
-    };
+  resolveSession: async request => {
+    const token = request.headers.get("Cookie")?.split("=").at(-1);
+    return sessions.get(token) ?? null;
   },
   consumeRateLimit: async () => quota,
-  trackerFactory: createTrackerFactory
+  trackerFactory,
+  fetchFactory: () => async () => new Response("ok")
 });
 
 const upsResponse = await handler({
-  request: request("ups", "1ZTEST000000000000", "merchant_alpha"),
+  request: request("ups", "1ZTEST000000000000"),
   env,
   params: { provider: "ups" }
 });
@@ -89,88 +83,64 @@ assert.equal(upsBody.provider, "ups");
 assert.equal(upsBody.carrier, "UPS");
 assert.equal(upsBody.status, "in_transit");
 assert.equal(upsBody.events.length, 1);
-assert.equal(JSON.stringify(upsBody).includes("alpha-ups-secret"), false);
-assert.equal(trackerCalls[0].env.UPS_CLIENT_ID, "alpha-ups-id");
-assert.equal(trackerCalls[0].env.UPS_CLIENT_SECRET, "alpha-ups-secret");
-assert.equal(trackerCalls[0].env.UPS_API_URL, "https://wwwcie.ups.com");
-assert.deepEqual(trackerCalls[0].providers, []);
+
+assert.equal(trackerCalls[0].env, env, "Use ExportFlow's app-level adapter environment unchanged");
+assert.equal(typeof trackerCalls[0].fetcher, "function");
+assert.equal(trackerCalls[0].trawlUrl, env.EXPORTFLOW_TRAWL_URL);
+assert.deepEqual(trackerCalls[0].providers, [], "Do not forward merchant parcel IDs to universal providers");
+assert.equal(trackerCalls[0].userAgent, "ExportFlow-Merchant/1.0");
 assert.deepEqual(trackerCalls[1].input, {
   number: "1ZTEST000000000000",
   carrier: "ups"
 });
+assert.equal(trackerCalls[1].context.budgetMs, 25_000);
 
 const fedexResponse = await handler({
-  request: request("fedex", "999999999999", "merchant_beta"),
+  request: request("fedex", "999999999999", "merchant-beta-session"),
   env,
   params: { provider: "fedex" }
 });
 assert.equal(fedexResponse.status, 200);
-const fedexBody = await fedexResponse.json();
-assert.equal(fedexBody.provider, "fedex");
-assert.equal(trackerCalls[2].env.FEDEX_API_KEY, "beta-fedex-key");
-assert.equal(trackerCalls[2].env.FEDEX_SECRET_KEY, "beta-fedex-secret");
-assert.equal(trackerCalls[2].env.FEDEX_API_URL, "https://apis-sandbox.fedex.com");
-assert.deepEqual(trackerCalls[2].providers, []);
-assert.equal(JSON.stringify(fedexBody).includes("beta-fedex-secret"), false);
-
-assert.deepEqual(adapterEnvironment("ups", merchantCredentials.merchant_beta.ups), {
-  UPS_CLIENT_ID: "beta-ups-id",
-  UPS_CLIENT_SECRET: "beta-ups-secret",
-  UPS_API_URL: "https://wwwcie.ups.com"
-});
-assert.deepEqual(adapterEnvironment("fedex", merchantCredentials.merchant_alpha.fedex), {
-  FEDEX_API_KEY: "alpha-fedex-key",
-  FEDEX_SECRET_KEY: "alpha-fedex-secret",
-  FEDEX_API_URL: "https://apis-sandbox.fedex.com"
+assert.equal((await fedexResponse.json()).provider, "fedex");
+assert.equal(trackerCalls[2].env, env);
+assert.equal(trackerCalls[2].providers.length, 0);
+assert.deepEqual(trackerCalls[3].input, {
+  number: "999999999999",
+  carrier: "fedex"
 });
 
-let vaultCalls = 0;
 let trackerCallsAfterDenied = 0;
-const forbidden = createMerchantAdapterTrackHandler({
-  createVault: async () => { vaultCalls += 1; throw new Error("must-not-run"); },
+const denied = createMerchantAdapterTrackHandler({
+  resolveSession: async () => null,
   consumeRateLimit: async () => quota,
   trackerFactory: () => { trackerCallsAfterDenied += 1; }
 });
-const wrongOrigin = await forbidden({
-  request: request("ups", "1ZTEST000000000000", "merchant_alpha", "https://attacker.invalid"),
-  env,
-  params: { provider: "ups" }
-});
-assert.equal(wrongOrigin.status, 403);
-assert.equal(vaultCalls, 0);
-assert.equal(trackerCallsAfterDenied, 0);
-
-const noSession = createMerchantAdapterTrackHandler({
-  createVault: async () => { throw new OfficialApiCredentialVaultError("unauthenticated", 401); },
-  consumeRateLimit: async () => quota
-});
-const unauthenticated = await noSession({
-  request: request("ups", "1ZTEST000000000000"),
+const unauthenticated = await denied({
+  request: request("ups", "1ZTEST000000000000", "missing-session"),
   env,
   params: { provider: "ups" }
 });
 assert.equal(unauthenticated.status, 401);
+assert.equal((await unauthenticated.json()).error, "unauthenticated");
+assert.equal(trackerCallsAfterDenied, 0);
 
-const noCredentials = createMerchantAdapterTrackHandler({
-  createVault: async () => ({
-    user: { id: "merchant_empty" },
-    resolveCredentials: async () => null
-  }),
-  consumeRateLimit: async () => quota
+let limiterCalls = 0;
+const wrongOrigin = createMerchantAdapterTrackHandler({
+  resolveSession: async () => { throw new Error("must-not-run"); },
+  consumeRateLimit: async () => { limiterCalls += 1; return quota; },
+  trackerFactory: () => { trackerCallsAfterDenied += 1; }
 });
-const disconnected = await noCredentials({
-  request: request("fedex", "999999999999"),
+const forbiddenOrigin = await wrongOrigin({
+  request: request("ups", "1ZTEST000000000000", "merchant-alpha-session", "https://attacker.invalid"),
   env,
-  params: { provider: "fedex" }
+  params: { provider: "ups" }
 });
-assert.equal(disconnected.status, 409);
-assert.equal((await disconnected.json()).error, "carrier_not_connected");
+assert.equal(forbiddenOrigin.status, 403);
+assert.equal(limiterCalls, 0);
+assert.equal(trackerCallsAfterDenied, 0);
 
 const rateLimited = createMerchantAdapterTrackHandler({
-  createVault: async () => ({
-    user: { id: "merchant_alpha" },
-    resolveCredentials: async () => merchantCredentials.merchant_alpha.ups
-  }),
+  resolveSession: async () => sessions.get("merchant-alpha-session"),
   consumeRateLimit: async () => ({ ...quota, allowed: false }),
   trackerFactory: () => { trackerCallsAfterDenied += 1; }
 });
@@ -190,23 +160,20 @@ const unsupported = await handler({
 assert.equal(unsupported.status, 400);
 
 const invalidInput = await handler({
-  request: request("ups", "  \u0000  "),
+  request: request("ups", "  \\u0000  "),
   env,
   params: { provider: "ups" }
 });
 assert.equal(invalidInput.status, 400);
 
 const failedLookup = createMerchantAdapterTrackHandler({
-  createVault: async () => ({
-    user: { id: "merchant_alpha" },
-    resolveCredentials: async () => merchantCredentials.merchant_alpha.ups
-  }),
+  resolveSession: async () => sessions.get("merchant-alpha-session"),
   consumeRateLimit: async () => quota,
   trackerFactory: () => ({
     track: async () => {
       throw Object.assign(new Error("private upstream details"), {
-        name: "TrackingError",
-        attempts: [{ source: "ups", kind: "transport", durationMs: 14 }]
+        name: "ChallengeError",
+        attempts: [{ source: "ups", kind: "challenge", durationMs: 14 }]
       });
     }
   })
@@ -216,10 +183,29 @@ const failed = await failedLookup({
   env,
   params: { provider: "ups" }
 });
-assert.equal(failed.status, 502);
+assert.equal(failed.status, 503);
 const failedBody = await failed.json();
-assert.equal(failedBody.error, "carrier_lookup_failed");
+assert.equal(failedBody.error, "carrier_verification_required");
 assert.equal(JSON.stringify(failedBody).includes("private upstream details"), false);
-assert.equal(JSON.stringify(failedBody).includes("alpha-ups-secret"), false);
 
-console.log("Merchant adapter route tests passed: UPS/FedEx existing-adapter configuration, per-tenant credentials, selected-carrier-only lookups, auth, origin, rate limits and redacted errors.");
+const noTrawlEnv = { MERCHANT_APP_ORIGIN: ORIGIN };
+const noTrawlTracker = [];
+const noTrawlHandler = createMerchantAdapterTrackHandler({
+  resolveSession: async () => sessions.get("merchant-alpha-session"),
+  consumeRateLimit: async () => quota,
+  trackerFactory: options => {
+    noTrawlTracker.push(options);
+    return { track: async () => { throw Object.assign(new Error("challenge"), { name: "ChallengeError" }); } };
+  },
+  fetchFactory: () => async () => new Response("ok")
+});
+const noTrawlResult = await noTrawlHandler({
+  request: request("fedex", "999999999999"),
+  env: noTrawlEnv,
+  params: { provider: "fedex" }
+});
+assert.equal(noTrawlResult.status, 503);
+assert.equal("trawlUrl" in noTrawlTracker[0], false,
+  "Do not invent or inject a Trawl endpoint when no server-side route is configured");
+
+console.log("Merchant adapter route tests passed: app-configured built-in adapters, merchant session isolation, selected-carrier-only lookups, origin checks, global rate limits and safe errors.");
