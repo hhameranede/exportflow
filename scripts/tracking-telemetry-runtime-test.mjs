@@ -107,26 +107,38 @@ async function reservePort() {
 }
 
 async function waitForReady(baseUrl) {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+  let lastResponse = "No HTTP response received yet.";
+  let lastError = null;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     if (pagesProcess.exitCode !== null) {
-      throw new Error("Wrangler Pages dev exited before readiness.\n" + output);
+      throw new Error("Wrangler Pages dev exited before readiness (exit " +
+        pagesProcess.exitCode + "). Last response: " + lastResponse +
+        (lastError ? "; last fetch error: " + lastError : "") + "\n" + output);
     }
     try {
       const response = await fetch(baseUrl + "/api/__telemetry_runtime_test", {
-        signal: AbortSignal.timeout(1_500)
+        signal: AbortSignal.timeout(2_000)
       });
+      const body = await response.text();
+      lastResponse = "HTTP " + response.status + " " + body.slice(0, 2_000);
       if (response.ok) {
-        const data = await response.json();
+        let data;
+        try {
+          data = JSON.parse(body);
+        } catch {
+          throw new Error("Readiness route returned non-JSON response: " + lastResponse);
+        }
         if (data.ready === true && data.binding === true) return;
       }
-    } catch {
-      // Wrangler is still starting.
+    } catch (error) {
+      lastError = error?.message || String(error);
     }
     await sleep(250);
   }
-  throw new Error("Timed out waiting for local Pages/D1 runtime.\n" + output);
+  throw new Error("Timed out waiting for local Pages/D1 runtime after 30 seconds. " +
+    "Last response: " + lastResponse +
+    (lastError ? "; last fetch error: " + lastError : "") + "\n" + output);
 }
-
 async function waitForRow(baseUrl, requestId) {
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const response = await fetch(
