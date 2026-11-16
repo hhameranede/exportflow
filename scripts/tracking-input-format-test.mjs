@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { onRequestPost, trackingFailure } from "../functions/api/track.js";
 import { TrackingError } from "../node_modules/universal-parcel-scraper/dist/facade/index.js";
+import { isPublicCarrierQuarantined } from "../functions/lib/public-carrier-policy.mjs";
 
 function requestFor(number, language = "xx", carrier) {
   return new Request("https://exportflow.me/api/track", {
@@ -70,25 +71,10 @@ async function main() {
   assert.equal(controlCharacters.status, 400);
   assert.equal((await controlCharacters.json()).error, "invalid_tracking_number");
 
-  // Synthetic-only regression checks for the batch rights quarantine.
-  // China Post, India Post, Singapore Post and YunExpress must be rejected
-  // before rate limiting or any outbound carrier request. No carrier request runs.
-  for (const [number, carrier] of [
-    ["RR999999987IN", undefined],
-    ["RR999999987IN", "india-post"],
-    ["1Z999AA10123456784", "india-post"],
-    ["SYNTHETIC1234", "china-post"],
-    ["SYNTHETIC1234", "singapore-post"],
-    ["SYNTHETIC1234", "yunexpress"]
-  ]) {
-    const response = await onRequestPost({
-      request: requestFor(number, "en", carrier),
-      env: {}
-    });
-    assert.equal(response.status, 403);
-    assert.deepEqual(await response.json(), {
-      error: "carrier_authorization_required"
-    });
+  // The former carrier-local quarantine entries are all released.
+  // Keep this check offline; the dedicated policy test mocks adapter fetches.
+  for (const carrier of ["china-post", "india-post", "singapore-post", "usps", "yunexpress"]) {
+    assert.equal(isPublicCarrierQuarantined(carrier), false);
   }
 
   // Exercise the exact sanitizer expression used by the browser application.

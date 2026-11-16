@@ -4,7 +4,7 @@ import { COUNTRY_CODES } from "../functions/lib/country-codes.mjs";
 import { localeForCountry, localeForVisitor, onRequest } from "../functions/_middleware.js";
 
 const [
-  html, css, js, translationsSource, coverageHtml, coverageJs, trackApi, coverageApi, build,
+  html, css, js, translationsSource, coverageHtml, coverageJs, trackApi, carrierPolicy, coverageApi, build,
   robots, sitemap, headers, carriersApi, privacyHtml, termsHtml, middleware
 ] = await Promise.all([
   readFile("index.html", "utf8"),
@@ -14,6 +14,7 @@ const [
   readFile("coverage/index.html", "utf8"),
   readFile("coverage.js", "utf8"),
   readFile("functions/api/track.js", "utf8"),
+  readFile("functions/lib/public-carrier-policy.mjs", "utf8"),
   readFile("functions/api/coverage.js", "utf8"),
   readFile("scripts/build.mjs", "utf8"),
   readFile("robots.txt", "utf8"),
@@ -80,10 +81,10 @@ assert.ok(css.includes(".form-error[hidden]") && css.includes("display: none !im
 
 assert.match(js, /postcodeInput\.value\.trim\(\)/, "Optional postcode should be submitted to the API");
 assert.match(js, /renderTimeline/, "Live scan history should be rendered into the timeline");
-assert.match(trackApi, /carrier_authorization_required/, "Restricted public carrier sources must return a dedicated authorization error");
-assert.match(trackApi, /isPublicCarrierQuarantined\(selectedCarrier\)/, "Only the selected carrier should be checked against the public source policy");
+assert.match(trackApi, /isPublicCarrierQuarantined\(selectedCarrier\)/, "The local carrier release switch must be applied consistently");
+assert.match(carrierPolicy, /const QUARANTINED_PUBLIC_CARRIERS = new Set\(\)/, "No carrier may be locally quarantined in this release");
+assert.doesNotMatch(carrierPolicy, /"china-post"|"india-post"|"singapore-post"|"usps"|"yunexpress"/, "Former local quarantine IDs must stay released");
 assert.doesNotMatch(trackApi, /ambiguousBlockedCandidate/, "An unrelated ambiguous candidate must not block another carrier");
-assert.match(js, /carrier_authorization_required: "errorCarrierAuthorizationRequired"/, "The browser must localize the restricted-source error");
 assert.match(trackApi, /createTracker/, "Tracking API must use the upstream parcel engine");
 assert.match(trackApi, /safeEventPoint\(event\.point\)/, "Carrier scan coordinates should be validated before projection");
 assert.match(js, /renderShipmentMap/, "Live tracking should render its map panel");
