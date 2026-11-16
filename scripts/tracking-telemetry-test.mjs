@@ -1,9 +1,21 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   persistTrackingEvent,
   sanitizeTrackingEvent,
   scheduleTrackingEvent
 } from "../functions/lib/tracking-telemetry.mjs";
+
+// Lock the D1 binding to Pages Preview only. Do not add a root or production
+// binding: the latter would attach telemetry persistence to live Production.
+const wranglerConfig = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
+assert.match(wranglerConfig, /^\[\[env\.preview\.d1_databases\]\]$/m);
+assert.match(wranglerConfig, /^binding = "EXPORTFLOW_TELEMETRY_DB"$/m);
+assert.match(wranglerConfig, /^database_name = "exportflow-tracking-telemetry-preview-db"$/m);
+assert.match(wranglerConfig, /^database_id = "decef588-a198-4bdd-9764-e0ce2e2caaee"$/m);
+assert.doesNotMatch(wranglerConfig, /^\[\[d1_databases\]\]$/m);
+assert.doesNotMatch(wranglerConfig, /^\[\[env\.production\.d1_databases\]\]$/m);
+assert.doesNotMatch(wranglerConfig, /exportflow-tracking-telemetry-production-db/);
 
 const now = new Date("2026-11-16T12:00:00.000Z");
 const requestId = "7a1b2c3d-4e5f-4678-9abc-def012345678";

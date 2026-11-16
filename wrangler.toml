@@ -3,3 +3,10 @@ name = "exportflow"
 pages_build_output_dir = "./dist"
 compatibility_date = "2026-11-05"
 compatibility_flags = ["nodejs_compat"]
+
+# Preview-only telemetry storage. Keep this out of the top-level and production
+# configuration so Production never receives this binding by inheritance.
+[[env.preview.d1_databases]]
+binding = "EXPORTFLOW_TELEMETRY_DB"
+database_name = "exportflow-tracking-telemetry-preview-db"
+database_id = "decef588-a198-4bdd-9764-e0ce2e2caaee"
