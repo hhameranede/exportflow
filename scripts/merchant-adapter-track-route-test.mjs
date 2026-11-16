@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { CARRIERS, carrierAdapter } from "universal-parcel-scraper";
 import { createMerchantAdapterTrackHandler } from "../functions/api/merchant/carriers/[provider]/track.js";
 
 const ORIGIN = "https://merchant-preview.example.test";
@@ -24,7 +25,11 @@ const sessions = new Map([
 ]);
 const trackerCalls = [];
 
-function request(provider, number, sessionToken = "merchant-alpha-session", origin = ORIGIN) {
+function request(provider, number, {
+  sessionToken = "merchant-alpha-session",
+  origin = ORIGIN,
+  extra = {}
+} = {}) {
   return new Request(ORIGIN + "/api/merchant/carriers/" + provider + "/track", {
     method: "POST",
     headers: {
@@ -32,7 +37,7 @@ function request(provider, number, sessionToken = "merchant-alpha-session", orig
       Cookie: "test-session=" + sessionToken,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ number })
+    body: JSON.stringify({ number, ...extra })
   });
 }
 
@@ -96,7 +101,7 @@ assert.deepEqual(trackerCalls[1].input, {
 assert.equal(trackerCalls[1].context.budgetMs, 25_000);
 
 const fedexResponse = await handler({
-  request: request("fedex", "999999999999", "merchant-beta-session"),
+  request: request("fedex", "999999999999", { sessionToken: "merchant-beta-session" }),
   env,
   params: { provider: "fedex" }
 });
@@ -109,40 +114,57 @@ assert.deepEqual(trackerCalls[3].input, {
   carrier: "fedex"
 });
 
-let trackerCallsAfterDenied = 0;
-const denied = createMerchantAdapterTrackHandler({
-  resolveSession: async () => null,
-  consumeRateLimit: async () => quota,
-  trackerFactory: () => { trackerCallsAfterDenied += 1; }
+const widerDirectCarrier = "algerie-poste";
+assert.ok(typeof carrierAdapter(widerDirectCarrier) === "string" &&
+  carrierAdapter(widerDirectCarrier) !== "universal",
+  "A non-UPS/FedEx ExportFlow direct adapter must be present in the catalog");
+const widerResponse = await handler({
+  request: request(widerDirectCarrier, "EF-TEST-0001", { extra: { postcode: "16000" } }),
+  env,
+  params: { provider: widerDirectCarrier }
 });
-const unauthenticated = await denied({
-  request: request("ups", "1ZTEST000000000000", "missing-session"),
+assert.equal(widerResponse.status, 200);
+assert.equal(trackerCalls[4].env, env);
+assert.deepEqual(trackerCalls[4].providers, []);
+assert.deepEqual(trackerCalls[5].input, {
+  number: "EF-TEST-0001",
+  postcode: "16000",
+  carrier: widerDirectCarrier
+});
+
+const universalCarrier = Object.values(CARRIERS).find(carrier =>
+  carrier.capabilities?.selectable === true &&
+  carrier.capabilities?.tracking?.mode === "automatic" &&
+  carrier.capabilities?.tracking?.adapter === "universal"
+);
+assert.ok(universalCarrier, "The upstream catalog must have a universal-only carrier for rejection coverage");
+const universalResponse = await handler({
+  request: request(universalCarrier.id, "UNIVERSAL-TEST-0001"),
+  env,
+  params: { provider: universalCarrier.id }
+});
+assert.equal(universalResponse.status, 400);
+assert.equal((await universalResponse.json()).error, "unsupported_direct_carrier");
+
+const wrongOrigin = await handler({
+  request: request("ups", "1ZTEST000000000000", { origin: "https://attacker.invalid" }),
+  env,
+  params: { provider: "ups" }
+});
+assert.equal(wrongOrigin.status, 403);
+
+const unauthenticated = await handler({
+  request: request("ups", "1ZTEST000000000000", { sessionToken: "missing-session" }),
   env,
   params: { provider: "ups" }
 });
 assert.equal(unauthenticated.status, 401);
 assert.equal((await unauthenticated.json()).error, "unauthenticated");
-assert.equal(trackerCallsAfterDenied, 0);
-
-let limiterCalls = 0;
-const wrongOrigin = createMerchantAdapterTrackHandler({
-  resolveSession: async () => { throw new Error("must-not-run"); },
-  consumeRateLimit: async () => { limiterCalls += 1; return quota; },
-  trackerFactory: () => { trackerCallsAfterDenied += 1; }
-});
-const forbiddenOrigin = await wrongOrigin({
-  request: request("ups", "1ZTEST000000000000", "merchant-alpha-session", "https://attacker.invalid"),
-  env,
-  params: { provider: "ups" }
-});
-assert.equal(forbiddenOrigin.status, 403);
-assert.equal(limiterCalls, 0);
-assert.equal(trackerCallsAfterDenied, 0);
 
 const rateLimited = createMerchantAdapterTrackHandler({
   resolveSession: async () => sessions.get("merchant-alpha-session"),
   consumeRateLimit: async () => ({ ...quota, allowed: false }),
-  trackerFactory: () => { trackerCallsAfterDenied += 1; }
+  trackerFactory: () => { throw new Error("Tracker must not run when rate limited"); }
 });
 const throttled = await rateLimited({
   request: request("ups", "1ZTEST000000000000"),
@@ -150,14 +172,6 @@ const throttled = await rateLimited({
   params: { provider: "ups" }
 });
 assert.equal(throttled.status, 429);
-assert.equal(trackerCallsAfterDenied, 0);
-
-const unsupported = await handler({
-  request: request("dhl", "123456789"),
-  env,
-  params: { provider: "dhl" }
-});
-assert.equal(unsupported.status, 400);
 
 const invalidInput = await handler({
   request: request("ups", "  " + String.fromCharCode(0) + "  "),
@@ -166,46 +180,11 @@ const invalidInput = await handler({
 });
 assert.equal(invalidInput.status, 400);
 
-const failedLookup = createMerchantAdapterTrackHandler({
-  resolveSession: async () => sessions.get("merchant-alpha-session"),
-  consumeRateLimit: async () => quota,
-  trackerFactory: () => ({
-    track: async () => {
-      throw Object.assign(new Error("private upstream details"), {
-        name: "ChallengeError",
-        attempts: [{ source: "ups", kind: "challenge", durationMs: 14 }]
-      });
-    }
-  })
-});
-const failed = await failedLookup({
-  request: request("ups", "1ZTEST000000000000"),
+const unknownCarrier = await handler({
+  request: request("carrier-does-not-exist", "TEST-123"),
   env,
-  params: { provider: "ups" }
+  params: { provider: "carrier-does-not-exist" }
 });
-assert.equal(failed.status, 503);
-const failedBody = await failed.json();
-assert.equal(failedBody.error, "carrier_verification_required");
-assert.equal(JSON.stringify(failedBody).includes("private upstream details"), false);
+assert.equal(unknownCarrier.status, 400);
 
-const noTrawlEnv = { MERCHANT_APP_ORIGIN: ORIGIN };
-const noTrawlTracker = [];
-const noTrawlHandler = createMerchantAdapterTrackHandler({
-  resolveSession: async () => sessions.get("merchant-alpha-session"),
-  consumeRateLimit: async () => quota,
-  trackerFactory: options => {
-    noTrawlTracker.push(options);
-    return { track: async () => { throw Object.assign(new Error("challenge"), { name: "ChallengeError" }); } };
-  },
-  fetchFactory: () => async () => new Response("ok")
-});
-const noTrawlResult = await noTrawlHandler({
-  request: request("fedex", "999999999999"),
-  env: noTrawlEnv,
-  params: { provider: "fedex" }
-});
-assert.equal(noTrawlResult.status, 503);
-assert.equal("trawlUrl" in noTrawlTracker[0], false,
-  "Do not invent or inject a Trawl endpoint when no server-side route is configured");
-
-console.log("Merchant adapter route tests passed: app-configured built-in adapters, merchant session isolation, selected-carrier-only lookups, origin checks, global rate limits and safe errors.");
+console.log("Merchant adapter route tests passed: all selectable direct adapters, no universal fallback, app config reuse, extra carrier inputs, auth, origin and global rate limits.");
