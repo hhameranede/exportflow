@@ -28,6 +28,7 @@ if (root) {
       merchant_auth_not_configured: "Merchant sign-in is not configured in this environment yet.",
       credential_vault_not_configured: "The encrypted credential vault is not configured in this environment yet.",
       carrier_not_connected: "Connect this carrier account before tracking a shipment.",
+      consent_required: "Confirm that you own or are authorized to manage this carrier account before saving credentials.",
       carrier_lookup_failed: "The carrier adapter could not return a tracking result. Check the number and try again.",
       carrier_lookup_timeout: "The carrier adapter timed out. Try again later.",
       carrier_rate_limited: "The carrier rate limit was reached. Try again later.",
