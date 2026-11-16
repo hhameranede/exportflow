@@ -24,7 +24,7 @@ Regression coverage remains for Google OAuth/session behavior, credential encryp
 - This branch includes the current main state as its first-parent base.
 - Merchant D1, the migration journal and the global Durable Object rate limiter are bound under env.preview only.
 - The Google OAuth callback remains bound to the Preview origin:
-  https://feat-merchant-official-api-p.exportflow-aja.pages.dev/api/merchant/auth/google/callback
+  https://integration-merchant-officia.exportflow-aja.pages.dev/api/merchant/auth/google/callback
 - No Production D1 binding, Production migration, secret update, DNS change, access-control change or Pages configuration change is part of this work.
 
 ## Preview configuration and verification
