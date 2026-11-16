@@ -114,34 +114,50 @@ export function createOfficialApiCredentialStatusHandler({
 
 export const onRequestGet = createOfficialApiCredentialStatusHandler();
 
-export async function onRequestPost({ request, env, params }) {
-  if (!trustedSameOrigin(request, env)) return jsonResponse({ error: "origin_forbidden" }, 403);
-  const provider = String(params?.provider || "").trim().toLowerCase();
-  if (!allowedProvider(provider)) return jsonResponse({ error: "unsupported_provider" }, 400);
+export function createOfficialApiCredentialMutationHandlers({
+  createVault = createSessionBoundOfficialApiCredentialVault
+} = {}) {
+  return Object.freeze({
+    async onRequestPost({ request, env, params } = {}) {
+      if (!request || request.method !== "POST") {
+        return jsonResponse({ error: "method_not_allowed" }, 405);
+      }
+      if (!trustedSameOrigin(request, env)) return jsonResponse({ error: "origin_forbidden" }, 403);
+      const provider = String(params?.provider || "").trim().toLowerCase();
+      if (!allowedProvider(provider)) return jsonResponse({ error: "unsupported_provider" }, 400);
 
-  try {
-    const vault = await createSessionBoundOfficialApiCredentialVault(request, env);
-    const payload = await readPayload(request);
-    const result = await vault.save({
-      provider,
-      credentials: payload.credentials,
-      consent: payload.consent
-    });
-    return jsonResponse(result, 201);
-  } catch (error) {
-    if ([400, 413, 415].includes(error?.status)) return jsonResponse({ error: error.message }, error.status);
-    return officialApiCredentialVaultErrorResponse(error);
-  }
+      try {
+        const vault = await createVault(request, env);
+        const payload = await readPayload(request);
+        const result = await vault.save({
+          provider,
+          credentials: payload.credentials,
+          consent: payload.consent
+        });
+        return jsonResponse(result, 201);
+      } catch (error) {
+        if ([400, 413, 415].includes(error?.status)) return jsonResponse({ error: error.message }, error.status);
+        return officialApiCredentialVaultErrorResponse(error);
+      }
+    },
+
+    async onRequestDelete({ request, env, params } = {}) {
+      if (!request || request.method !== "DELETE") {
+        return jsonResponse({ error: "method_not_allowed" }, 405);
+      }
+      if (!trustedSameOrigin(request, env)) return jsonResponse({ error: "origin_forbidden" }, 403);
+      const provider = String(params?.provider || "").trim().toLowerCase();
+      if (!allowedProvider(provider)) return jsonResponse({ error: "unsupported_provider" }, 400);
+      try {
+        const vault = await createVault(request, env);
+        return jsonResponse(await vault.revoke({ provider }));
+      } catch (error) {
+        return officialApiCredentialVaultErrorResponse(error);
+      }
+    }
+  });
 }
 
-export async function onRequestDelete({ request, env, params }) {
-  if (!trustedSameOrigin(request, env)) return jsonResponse({ error: "origin_forbidden" }, 403);
-  const provider = String(params?.provider || "").trim().toLowerCase();
-  if (!allowedProvider(provider)) return jsonResponse({ error: "unsupported_provider" }, 400);
-  try {
-    const vault = await createSessionBoundOfficialApiCredentialVault(request, env);
-    return jsonResponse(await vault.revoke({ provider }));
-  } catch (error) {
-    return officialApiCredentialVaultErrorResponse(error);
-  }
-}
+const credentialMutations = createOfficialApiCredentialMutationHandlers();
+export const onRequestPost = credentialMutations.onRequestPost;
+export const onRequestDelete = credentialMutations.onRequestDelete;
