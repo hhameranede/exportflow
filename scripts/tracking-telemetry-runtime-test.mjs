@@ -23,7 +23,7 @@ let output = "";
 
 const routeSource = `import { scheduleTrackingEvent } from "../lib/tracking-telemetry.mjs";
 
-const MIGRATION_SQL = ${JSON.stringify(migrationSql)};
+const MIGRATION_SQL = ${JSON.stringify(migrationSql.replace(/^\\s*--.*$/gm, "").trim())};
 
 export async function onRequest(context) {
   const database = context.env?.EXPORTFLOW_TELEMETRY_DB;
