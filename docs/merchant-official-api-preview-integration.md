@@ -1,46 +1,43 @@
-# Merchant Workspace — adapter-based tracking Preview
+# Merchant Workspace — existing-adapter tracking
 
 ## Current implementation
 
-The Merchant Workspace provides Google OAuth sign-in, revocable D1 sessions, an AES-256-GCM merchant credential vault, metadata-only connection status, credential save/disconnect, and shipment tracking through the existing universal-parcel-scraper carrier adapters.
+The Merchant Workspace uses Google OAuth and revocable D1 merchant sessions. A signed-in merchant submits a carrier and tracking number; ExportFlow runs its already-installed `universal-parcel-scraper` adapter with the same server-side environment as the public tracker.
 
-- POST /api/merchant/carriers/{provider}/track accepts a bounded tracking-number payload for ups or fedex.
-- The route resolves credentials from the signed-in merchant's vault entry. Credentials are merchant/provider/scope-bound and are never returned to the browser.
-- Each lookup creates a fresh createTracker({ env, providers: [] }) instance. The existing UPS or FedEx adapter receives only the selected merchant's credentials. providers: [] disables universal aggregator fallbacks, so the tracking number is sent only through the selected direct carrier adapter.
-- The route uses the official non-production API origin for this Preview branch: UPS CIE (https://wwwcie.ups.com) or FedEx Sandbox (https://apis-sandbox.fedex.com).
-- The route returns a bounded, sanitized status/timeline. It does not store the tracking number, expose credentials, or return raw upstream errors.
-- The tracking route enforces same-origin requests, authenticated merchant sessions, a global rate limit, a 25-second request budget, bounded JSON input and no-store responses.
+- `POST /api/merchant/carriers/{provider}/track` currently allows UPS and FedEx.
+- The route resolves the authenticated merchant session directly. It does not require an encrypted merchant carrier-credential record.
+- Each lookup creates a fresh `createTracker({ env, fetcher, trawlUrl?, providers: [] })` instance.
+- The selected built-in carrier adapter receives the tracking number. `providers: []` disables universal-provider fallbacks, so no third-party universal aggregator is sent the parcel identifier.
+- The adapter reads only ExportFlow's server-side environment. No carrier API key or secret is requested from or returned to the merchant's browser.
+- The route returns a bounded, sanitized status/timeline. It does not store the tracking number or return raw upstream errors.
+- Same-origin checks, authenticated merchant sessions, global rate limiting, a 25-second request budget, bounded JSON input and no-store responses remain enforced.
 
-## Removed test-only flow
+## Carrier adapter availability
 
-The separate /mock simulated-fixture route, fixed-reference /sandbox credential-check route, Mock/Sandbox buttons and their dedicated route tests were removed. The UI no longer claims that saving a credential proves carrier connectivity. A connection status means only that encrypted credentials are stored; a successful shipment lookup is the adapter result.
+- UPS has an existing direct tracking path and can use an ExportFlow-managed official API configuration when one is present. Direct carrier requests may still be challenged or rate-limited by UPS.
+- FedEx's built-in adapter needs either an ExportFlow-managed official API configuration or the existing browser/Trawl service. The current Preview environment has no `EXPORTFLOW_TRAWL_URL` or FedEx API credentials configured, so a live FedEx response is not currently verified and may return a carrier verification/unavailable error. This is a server-side readiness gap, not a reason to collect each merchant's keys.
+- A passing route test confirms adapter configuration and isolation; it is not proof of a live carrier reply.
 
-Regression coverage remains for Google OAuth/session behavior, credential encryption and revocation, migration safety, tenant isolation, consent, origin validation, rate limiting and the new adapter-backed tracking route.
+## Removed merchant credential-entry flow
 
-## Branch and environment boundary
+The user-facing UPS/FedEx API-key forms and their connection-status gating have been removed. The legacy credential vault and its endpoints/migrations remain isolated for any future owner-approved use, but the current Merchant tracking route does not call them and does not need the vault key-ring secret.
+
+The separate mock fixture, fixed-reference sandbox credential-check, and Mock/Sandbox buttons remain absent. A successful lookup is the only evidence that the selected adapter returned tracking data.
+
+## Security and environment boundary
+
+- Merchant OAuth/session identity remains required; private API access is not anonymous.
+- Each request is sent only through the selected built-in carrier adapter. The merchant route deliberately disables universal-provider fallbacks.
+- The merchant tracking number is bounded, not written to browser storage, and omitted from diagnostics.
+- Merchant D1, session data and global rate-limit bindings remain Preview-only.
+- The route uses the server's existing `EXPORTFLOW_TRAWL_URL` when configured, without changing Pages settings or secrets.
+- No Production D1 binding, Production migration, secret update, DNS change, access-control change or Pages configuration change is part of this change.
+
+## Branch and verification boundary
 
 - Repository: hhameranede/exportflow.
 - Review PR: https://github.com/hhameranede/exportflow/pull/67
-- This branch includes the current main state as its first-parent base.
-- Merchant D1, the migration journal and the global Durable Object rate limiter are bound under env.preview only.
-- The Google OAuth callback remains bound to the Preview origin:
-  https://integration-merchant-officia.exportflow-aja.pages.dev/api/merchant/auth/google/callback
-- No Production D1 binding, Production migration, secret update, DNS change, access-control change or Pages configuration change is part of this work.
-
-## Preview configuration and verification
-
-The November 12 project record confirmed that the Preview Google OAuth and AES-256 key-ring secrets were configured and owner sign-in was completed. The scoped Preview D1 migration was applied previously; it recorded zero Merchant accounts, sessions, credentials and audit rows at that time.
-
-The new CI tests inject a tracker factory to verify that the route passes the correct credential names, fixed Preview API origins and selected carrier to the existing tracker, while proving separate merchant requests receive separate credentials. They do not claim a live carrier response. A real adapter lookup against the carrier Sandbox still requires an authenticated Preview session with a saved carrier account and a valid carrier-approved Sandbox test reference.
-
-## Explicitly not claimed
-
-- A saved credential is not a verified live connection.
-- A passing unit test is not proof of a successful real carrier lookup.
-- This Preview Sandbox route is not Production carrier routing.
-- No public visitor shipment lookup, production enablement, analytics persistence, billing or webhooks are added by this change.
-
-
-## Read-only Preview readback — 2026-11-16
-
-The Preview Merchant D1 migration journal contains `0001_official_api_credentials.sql`. A read-only count check found one merchant user, one unrevoked and unexpired session, zero saved official carrier credentials, one merchant security event and zero provider credential audit events. This confirms the migration and database records exist; it does not independently prove a fresh browser OAuth flow or a successful carrier adapter response.
+- Preview OAuth callback:
+  `https://integration-merchant-officia.exportflow-aja.pages.dev/api/merchant/auth/google/callback`
+- Unit and route tests inject the tracker factory. They verify app-level adapter environment reuse, selected-carrier-only routing, merchant session isolation, origin checks, rate limiting and sanitized errors; they do not claim a live carrier response.
+- No production tracking path is changed by this feature branch.
