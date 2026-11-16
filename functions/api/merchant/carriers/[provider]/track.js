@@ -8,6 +8,7 @@ import {
   merchantIdentityErrorResponse
 } from "../../../../lib/merchant-identity.mjs";
 import { createCloudflareFetch } from "../../../../lib/cloudflare-fetch.mjs";
+import { isPublicCarrierQuarantined } from "../../../../lib/public-carrier-policy.mjs";
 import {
   consumeGlobalRateLimit,
   globalRateLimitHeaders
@@ -204,7 +205,8 @@ export function createMerchantAdapterTrackHandler({
   resolveSession = resolveMerchantSession,
   consumeRateLimit = consumeGlobalRateLimit,
   trackerFactory = createTracker,
-  fetchFactory = createCloudflareFetch
+  fetchFactory = createCloudflareFetch,
+  isCarrierQuarantined = isPublicCarrierQuarantined
 } = {}) {
   return async function onRequestPost({ request, env, params } = {}) {
     if (!request || request.method !== "POST") {
@@ -215,7 +217,7 @@ export function createMerchantAdapterTrackHandler({
     }
 
     const provider = String(params?.provider || "").trim().toLowerCase();
-    if (!isDirectSelectableCarrier(provider)) {
+    if (isCarrierQuarantined(provider) || !isDirectSelectableCarrier(provider)) {
       return jsonResponse({ error: "unsupported_direct_carrier" }, 400);
     }
 
