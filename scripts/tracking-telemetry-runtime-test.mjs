@@ -35,7 +35,9 @@ export async function onRequest(context) {
   if (context.request.method === "GET" && !url.searchParams.has("requestId")) {
     // Apply the repository migration to the isolated local D1 database only.
     const migrationStatements = MIGRATION_SQL.split(";").map(statement => statement.trim()).filter(Boolean);
-    assertMigrationStatements(migrationStatements);
+    if (migrationStatements.length !== 3) {
+      throw new Error("Expected exactly three telemetry schema statements; received " + migrationStatements.length);
+    }
     for (const statement of migrationStatements) {
       await database.prepare(statement).run();
     }
@@ -94,12 +96,6 @@ export async function onRequest(context) {
   return Response.json({ error: "method_not_allowed" }, { status: 405 });
 }
 `;
-
-function assertMigrationStatements(statements) {
-  if (statements.length !== 3) {
-    throw new Error("Expected exactly three telemetry schema statements; received " + statements.length);
-  }
-}
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
