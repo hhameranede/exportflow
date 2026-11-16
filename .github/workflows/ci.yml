@@ -51,10 +51,12 @@ jobs:
           node --check functions/api/merchant/session.js
           node --check 'functions/api/merchant/carriers/[provider]/official-credentials.js'
           node --check 'functions/api/merchant/carriers/[provider]/track.js'
+          node --check functions/api/merchant/carrier-catalog.js
           node --check scripts/merchant-identity-test.mjs
           node --check scripts/official-api-credential-vault-test.mjs
           node --check scripts/official-api-credentials-route-test.mjs
           node --check scripts/merchant-adapter-track-route-test.mjs
+          node --check scripts/merchant-carrier-catalog-test.mjs
           node --check scripts/merchant-official-api-ui-test.mjs
       - name: Run regression tests
         run: npm test
