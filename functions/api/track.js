@@ -3,6 +3,7 @@ import { parseTrackingInput } from "universal-parcel-scraper";
 import { isPublicCarrierQuarantined } from "../lib/public-carrier-policy.mjs";
 import { createCloudflareFetch } from "../lib/cloudflare-fetch.mjs";
 import { safeEventPoint } from "../lib/coordinates.mjs";
+import { scheduleTrackingEvent } from "../lib/tracking-telemetry.mjs";
 
 const MAX_BODY_CHARS = 4_096;
 const MAX_NUMBER_LENGTH = 256;
@@ -146,6 +147,11 @@ function emitTrackingLog(record) {
   }
 }
 
+function emitTrackingDiagnostic(context, env, record) {
+  emitTrackingLog(record);
+  scheduleTrackingEvent(context, env, record);
+}
+
 export function trackingSuccessSummary(response, durationMs) {
   const result = response?.result ?? {};
   return {
@@ -284,7 +290,8 @@ export function trackingFailure(error, env = {}, requestId = null) {
   return withRequestId(json({ error: "tracking_unavailable" }, 502), requestId);
 }
 
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost(context) {
+  const { request, env } = context;
   if (request.method !== "POST") {
     return json({ error: "method_not_allowed" }, 405, { Allow: "POST" });
   }
@@ -384,7 +391,7 @@ export async function onRequestPost({ request, env }) {
     });
     const durationMs = Date.now() - lookupStartedAt;
     const summary = trackingSuccessSummary(result, durationMs);
-    emitTrackingLog({
+    emitTrackingDiagnostic(context, env, {
       event: "exportflow.tracking.lookup",
       requestId,
       ...summary
@@ -393,7 +400,7 @@ export async function onRequestPost({ request, env }) {
   } catch (error) {
     const durationMs = Date.now() - lookupStartedAt;
     const summary = trackingLogSummary(error, env, selectedCarrier);
-    emitTrackingLog({
+    emitTrackingDiagnostic(context, env, {
       event: "exportflow.tracking.lookup",
       requestId,
       outcome: "failure",
