@@ -6,50 +6,71 @@ import {
   isPublicCarrierQuarantined
 } from "../functions/lib/public-carrier-policy.mjs";
 
-assert.equal(isPublicCarrierQuarantined("USPS"), true);
-assert.equal(isPublicCarrierQuarantined("ups"), false);
+const formerlyQuarantined = [
+  "china-post",
+  "india-post",
+  "singapore-post",
+  "usps",
+  "yunexpress"
+];
 
-// This known postal reference is ambiguous across several carriers. USPS may
-// appear as a candidate, but the selected carrier remains unknown; candidate
-// membership alone must never trigger the public-route rights gate.
+for (const carrier of formerlyQuarantined) {
+  assert.equal(
+    isPublicCarrierQuarantined(carrier),
+    false,
+    carrier + " must not be blocked by ExportFlow's local policy"
+  );
+}
+
+assert.equal(isPublicCarrierQuarantined("UPS"), false);
+assert.deepEqual(
+  filterPublicCarrierIds(["ups", ...formerlyQuarantined, "fedex"]),
+  ["ups", ...formerlyQuarantined, "fedex"]
+);
+
+// Detection stays offline and a candidate appearing in an ambiguous match
+// must not be treated as a selected carrier.
 const ambiguous = parseTrackingInput("9361289722660264016923");
 assert.equal(ambiguous.carrier, "unknown");
 assert.ok(ambiguous.candidates.includes("usps"));
 assert.equal(isPublicCarrierQuarantined(ambiguous.carrier), false);
 
-assert.deepEqual(
-  filterPublicCarrierIds(["ups", "usps", "fedex", "yunexpress"]),
-  ["ups", "fedex"]
-);
+const samples = [
+  ["LX123456789CN", "china-post"],
+  ["RR999999987IN", "india-post"],
+  ["RR123456789SG", "singapore-post"],
+  ["9361289722660264016923", "usps"],
+  ["YT1234567890123456", "yunexpress"]
+];
 
 const originalFetch = globalThis.fetch;
 let upstreamCalls = 0;
 globalThis.fetch = async () => {
   upstreamCalls += 1;
-  throw new Error("The restricted route must not make an upstream request");
+  throw new Error("Offline carrier fixture: no network access is permitted in this test");
 };
 
 try {
-  const request = new Request("https://exportflow.me/api/track", {
-    method: "POST",
-    headers: {
-      Origin: "https://exportflow.me",
-      "Content-Type": "application/json",
-      Accept: "application/json"
-    },
-    body: JSON.stringify({
-      number: "TEST-TRACKING-0001",
-      carrier: "usps"
-    })
-  });
-  const response = await onRequestPost({ request, env: {} });
-  assert.equal(response.status, 403);
-  assert.deepEqual(await response.json(), {
-    error: "carrier_authorization_required"
-  });
-  assert.equal(upstreamCalls, 0, "A blocked public route must not contact the carrier");
+  for (const [number, carrier] of samples) {
+    const request = new Request("https://exportflow.me/api/track", {
+      method: "POST",
+      headers: {
+        Origin: "https://exportflow.me",
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify({ number, carrier, language: "en" })
+    });
+    const response = await onRequestPost({ request, env: {} });
+    assert.notEqual(
+      response.status,
+      403,
+      carrier + " must pass the ExportFlow-local quarantine gate"
+    );
+  }
+  assert.ok(upstreamCalls > 0, "At least one former local hold must reach the mocked adapter fetch");
 } finally {
   globalThis.fetch = originalFetch;
 }
 
-console.log("Public carrier policy tests passed: USPS is blocked before network access and other carrier IDs remain available.");
+console.log("Public carrier policy tests passed: no carrier IDs are locally quarantined; outbound fetches remained mocked.");
