@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#FAF9F6">
-  <meta name="description" content="Manage merchant carrier connections and track shipments through ExportFlow carrier adapters.">
+  <meta name="description" content="Track merchant shipments through ExportFlow's existing carrier adapters.">
   <meta name="robots" content="noindex,nofollow,noarchive">
   <meta name="googlebot" content="noindex,nofollow,noarchive">
   <title>Merchant Workspace — ExportFlow</title>
   <link rel="canonical" href="https://exportflow.me/merchant/">
   <link rel="icon" href="/favicon.svg?v=20261106" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css?v=merchant-adapter-20261116-01">
+  <link rel="stylesheet" href="/styles.css?v=merchant-adapter-20261116-02">
 </head>
 <body>
   <header class="site-header">
@@ -26,15 +26,15 @@
   <main class="page-shell" style="max-width:1080px;margin:0 auto;padding:clamp(24px,5vw,64px) 20px 80px">
     <section class="hero-content" aria-labelledby="merchantTitle">
       <p class="eyebrow"><span class="eyebrow-index">WORKSPACE</span><span>MERCHANT TRACKING</span></p>
-      <h1 id="merchantTitle">Your carrier accounts.<br><em>Your shipments in one place.</em></h1>
-      <p class="body-copy">Connect an account you manage, then track a shipment through ExportFlow's existing carrier adapter. Your API credentials stay encrypted on the server and are never returned to this page.</p>
+      <h1 id="merchantTitle">Your carrier adapters.<br><em>Your shipments in one place.</em></h1>
+      <p class="body-copy">Sign in with Google and track shipments through ExportFlow's existing carrier adapters. You do not need to enter or store carrier API credentials.</p>
     </section>
 
     <section id="merchantWorkspace" class="official-api-section" aria-labelledby="merchantWorkspaceTitle">
       <div class="official-api-heading">
-        <p class="eyebrow">MERCHANT IDENTITY / CARRIER CONNECTIONS</p>
-        <h2 id="merchantWorkspaceTitle">Your connected carriers</h2>
-        <p class="official-api-description">Sign in with Google to manage your UPS and FedEx connections. The status below confirms that credentials are saved; the adapter makes the carrier request only when you track a shipment.</p>
+        <p class="eyebrow">MERCHANT IDENTITY / CARRIER TRACKING</p>
+        <h2 id="merchantWorkspaceTitle">Your merchant workspace</h2>
+        <p class="official-api-description">Your Google sign-in protects your workspace. ExportFlow selects the built-in adapter for the carrier you choose and uses only that adapter for the lookup. No third-party universal tracking fallback receives your tracking number.</p>
       </div>
 
       <div class="official-api-account">
@@ -49,68 +49,16 @@
       </div>
 
       <div id="merchantAuthNotice" class="merchant-notice" role="status" aria-live="polite" style="margin-top:14px">
-        Sign in before connecting a carrier or tracking a shipment.
+        Sign in before tracking a merchant shipment.
       </div>
 
       <div id="merchantConnections" hidden>
-        <div class="official-api-grid">
-          <article class="official-api-card" data-provider-panel="ups" data-connected="false">
-            <div class="official-api-card-heading">
-              <div><p class="eyebrow">UPS ADAPTER</p><h3>UPS</h3></div>
-              <span class="official-api-provider-label">Merchant account</span>
-            </div>
-            <p class="official-api-description">Connect the UPS CIE developer credentials for the UPS account you manage. ExportFlow encrypts them server-side and passes them to the existing UPS adapter for each Preview lookup.</p>
-            <form class="official-api-form">
-              <label>Client ID
-                <input name="clientId" type="password" autocomplete="off" maxlength="512" required>
-              </label>
-              <label>Client Secret
-                <input name="clientSecret" type="password" autocomplete="new-password" maxlength="512" required>
-              </label>
-              <label class="official-api-consent">
-                <input name="consent" type="checkbox" required>
-                I own this UPS account or am authorized to manage these API credentials.
-              </label>
-              <button class="primary-button" type="submit">Save encrypted credentials</button>
-            </form>
-            <div class="official-api-actions">
-              <button type="button" data-action="disconnect" disabled>Disconnect</button>
-            </div>
-            <p data-provider-status class="merchant-status" role="status" aria-live="polite">Sign in to check connection status.</p>
-          </article>
-
-          <article class="official-api-card" data-provider-panel="fedex" data-connected="false">
-            <div class="official-api-card-heading">
-              <div><p class="eyebrow">FEDEX ADAPTER</p><h3>FedEx</h3></div>
-              <span class="official-api-provider-label">Merchant account</span>
-            </div>
-            <p class="official-api-description">Connect the FedEx Sandbox API Key and Secret Key for the FedEx account you manage. ExportFlow encrypts them server-side and passes them to the existing FedEx adapter for each Preview lookup.</p>
-            <form class="official-api-form">
-              <label>API Key
-                <input name="apiKey" type="password" autocomplete="off" maxlength="512" required>
-              </label>
-              <label>Secret Key
-                <input name="apiSecret" type="password" autocomplete="new-password" maxlength="512" required>
-              </label>
-              <label class="official-api-consent">
-                <input name="consent" type="checkbox" required>
-                I own this FedEx account or am authorized to manage these API credentials.
-              </label>
-              <button class="primary-button" type="submit">Save encrypted credentials</button>
-            </form>
-            <div class="official-api-actions">
-              <button type="button" data-action="disconnect" disabled>Disconnect</button>
-            </div>
-            <p data-provider-status class="merchant-status" role="status" aria-live="polite">Sign in to check connection status.</p>
-          </article>
-        </div>
-
-        <section class="official-api-card" aria-labelledby="merchantTrackTitle" style="margin-top:22px">
+        <section class="official-api-card" aria-labelledby="merchantTrackTitle">
           <div class="official-api-card-heading">
             <div><p class="eyebrow">EXISTING CARRIER ADAPTERS</p><h3 id="merchantTrackTitle">Track a shipment</h3></div>
-            <span class="official-api-provider-label">Preview sandbox adapter request</span>
+            <span class="official-api-provider-label">ExportFlow-managed adapter</span>
           </div>
-          <p class="official-api-description">In Preview, requests use the selected existing carrier adapter with its non-production API environment (UPS CIE or FedEx Sandbox). Connect matching sandbox credentials, then enter a carrier-approved test shipment reference. No separate key-check or simulated-test step is used.</p>
+          <p class="official-api-description">Choose a carrier and enter your tracking number. The selected built-in adapter uses ExportFlow's server-side configuration. Availability can vary by carrier and upstream verification; no merchant API keys are required.</p>
           <form id="merchantTrackingForm" class="official-api-form">
             <label>Carrier
               <select id="merchantTrackingCarrier" name="provider" required>
@@ -123,22 +71,22 @@
             </label>
             <button id="merchantTrackButton" class="primary-button" type="submit" disabled>Track shipment</button>
           </form>
-          <p id="merchantTrackingStatus" class="merchant-status" role="status" aria-live="polite">Connect a carrier account to start tracking.</p>
+          <p id="merchantTrackingStatus" class="merchant-status" role="status" aria-live="polite">Choose a carrier and enter a tracking number.</p>
           <div id="merchantTrackingResult" hidden>
             <p id="merchantTrackingSummary" class="merchant-status" role="status"></p>
             <ol id="merchantTrackingEvents" class="merchant-events" aria-label="Shipment tracking events"></ol>
           </div>
         </section>
 
-        <p class="official-api-footnote">Each lookup is authenticated to the signed-in merchant, rate-limited, and sent only to the selected carrier adapter. Tracking numbers and credentials are not written to browser storage or returned in diagnostic output.</p>
+        <p class="official-api-footnote">Every lookup requires the signed-in merchant session, is rate-limited, and is sent only to the selected carrier adapter. Tracking numbers are not written to browser storage or returned in diagnostic output.</p>
       </div>
     </section>
   </main>
 
   <footer class="site-footer">
-    <p>ExportFlow Merchant Workspace — encrypted account connections and adapter-based shipment tracking.</p>
+    <p>ExportFlow Merchant Workspace — private merchant access and existing-adapter shipment tracking.</p>
     <nav aria-label="Footer"><a href="/privacy/">Privacy</a><a href="/">Home</a></nav>
   </footer>
-  <script src="/merchant-official-api.js?v=merchant-adapter-20261116-01" defer></script>
+  <script src="/merchant-official-api.js?v=merchant-adapter-20261116-02" defer></script>
 </body>
 </html>
