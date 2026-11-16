@@ -1,22 +1,29 @@
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
   existsSync,
+  readFileSync,
   unlinkSync,
   writeFileSync
 } from "node:fs";
 import net from "node:net";
-import os from "node:os";
 import path from "node:path";
 
 const projectRoot = process.cwd();
 const routePath = path.join(projectRoot, "functions", "api", "__telemetry_runtime_test.js");
 const cli = process.platform === "win32" ? "npx.cmd" : "npx";
 const wranglerArgs = ["--yes", "wrangler@3.114.17"];
+const previewDatabaseId = "decef588-a198-4bdd-9764-e0ce2e2caaee";
+const migrationSql = readFileSync(
+  path.join(projectRoot, "migrations", "telemetry", "0001_create_tracking_events.sql"),
+  "utf8"
+);
 let pagesProcess;
 let output = "";
 
 const routeSource = `import { scheduleTrackingEvent } from "../lib/tracking-telemetry.mjs";
+
+const MIGRATION_SQL = ${JSON.stringify(migrationSql)};
 
 export async function onRequest(context) {
   const database = context.env?.EXPORTFLOW_TELEMETRY_DB;
@@ -26,6 +33,8 @@ export async function onRequest(context) {
 
   const url = new URL(context.request.url);
   if (context.request.method === "GET" && !url.searchParams.has("requestId")) {
+    // Apply the repository migration to the isolated local D1 database only.
+    await database.exec(MIGRATION_SQL);
     return Response.json({ ready: true, binding: true });
   }
 
@@ -97,35 +106,6 @@ async function reservePort() {
   });
 }
 
-function runLocalMigration() {
-  const args = [
-    ...wranglerArgs,
-    "d1", "migrations", "apply",
-    "exportflow-tracking-telemetry-preview-db",
-    "--local",
-    "--env", "preview"
-  ];
-  const result = spawnSync(cli, args, {
-    cwd: projectRoot,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      WRANGLER_SEND_METRICS: "false",
-      NO_COLOR: "1"
-    },
-    timeout: 120_000,
-    maxBuffer: 8 * 1024 * 1024
-  });
-  if (result.error) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(
-      "Local-only D1 migration failed.\n" +
-      (result.stdout || "") + "\n" + (result.stderr || "")
-    );
-  }
-  return (result.stdout || "") + (result.stderr || "");
-}
-
 async function waitForReady(baseUrl) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     if (pagesProcess.exitCode !== null) {
@@ -176,9 +156,6 @@ try {
     throw new Error("Refusing to overwrite existing file: " + routePath);
   }
 
-  // Both the migration command and Pages dev explicitly use --local and the
-  // same default .wrangler/state directory. No Cloudflare API token is needed.
-  const migrationOutput = runLocalMigration();
   writeFileSync(routePath, routeSource, { flag: "wx" });
 
   const port = await reservePort();
@@ -187,7 +164,7 @@ try {
     ...wranglerArgs,
     "pages", "dev", "dist",
     "--local",
-    "--env", "preview",
+    "--d1", `EXPORTFLOW_TELEMETRY_DB=${previewDatabaseId}`,
     "--ip", "127.0.0.1",
     "--port", String(port)
   ];
@@ -231,7 +208,7 @@ try {
   }]);
 
   console.log("Local Pages runtime D1 persistence test passed.");
-  console.log("Verified: Preview binding resolution, context.waitUntil(), real local D1 batch write, migration and privacy allow-list.");
+  console.log("Verified: local D1 binding, migration SQL, context.waitUntil(), real D1 batch write and privacy allow-list.");
   console.log("No remote D1 database or carrier API was contacted.");
 } catch (error) {
   console.error(error?.stack || error);
