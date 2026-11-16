@@ -59,7 +59,7 @@
               <div><p class="eyebrow">UPS ADAPTER</p><h3>UPS</h3></div>
               <span class="official-api-provider-label">Merchant account</span>
             </div>
-            <p class="official-api-description">Connect the UPS Developer App credentials for the UPS account you manage. ExportFlow encrypts them server-side and passes them to the existing UPS adapter for each lookup.</p>
+            <p class="official-api-description">Connect the UPS CIE developer credentials for the UPS account you manage. ExportFlow encrypts them server-side and passes them to the existing UPS adapter for each Preview lookup.</p>
             <form class="official-api-form">
               <label>Client ID
                 <input name="clientId" type="password" autocomplete="off" maxlength="512" required>
@@ -84,7 +84,7 @@
               <div><p class="eyebrow">FEDEX ADAPTER</p><h3>FedEx</h3></div>
               <span class="official-api-provider-label">Merchant account</span>
             </div>
-            <p class="official-api-description">Connect the FedEx Developer API Key and Secret Key for the FedEx account you manage. ExportFlow encrypts them server-side and passes them to the existing FedEx adapter for each lookup.</p>
+            <p class="official-api-description">Connect the FedEx Sandbox API Key and Secret Key for the FedEx account you manage. ExportFlow encrypts them server-side and passes them to the existing FedEx adapter for each Preview lookup.</p>
             <form class="official-api-form">
               <label>API Key
                 <input name="apiKey" type="password" autocomplete="off" maxlength="512" required>
@@ -108,9 +108,9 @@
         <section class="official-api-card" aria-labelledby="merchantTrackTitle" style="margin-top:22px">
           <div class="official-api-card-heading">
             <div><p class="eyebrow">EXISTING CARRIER ADAPTERS</p><h3 id="merchantTrackTitle">Track a shipment</h3></div>
-            <span class="official-api-provider-label">Live adapter request</span>
+            <span class="official-api-provider-label">Preview sandbox adapter request</span>
           </div>
-          <p class="official-api-description">Choose the carrier connected to this merchant account and enter a shipment tracking number. ExportFlow routes the request to that carrier's adapter without a separate key-check or simulated-test step.</p>
+          <p class="official-api-description">In Preview, requests use the selected existing carrier adapter with its non-production API environment (UPS CIE or FedEx Sandbox). Connect matching sandbox credentials, then enter a carrier-approved test shipment reference. No separate key-check or simulated-test step is used.</p>
           <form id="merchantTrackingForm" class="official-api-form">
             <label>Carrier
               <select id="merchantTrackingCarrier" name="provider" required>
