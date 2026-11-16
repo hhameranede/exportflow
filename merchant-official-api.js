@@ -142,7 +142,7 @@ if (root) {
       const result = await requestJson("/api/merchant/carriers/" + provider + "/official-credentials");
       panel.dataset.connected = result.connected === true ? "true" : "false";
       setText(status, result.connected === true
-        ? "Credentials saved securely. Shipment lookups use the existing " + provider.toUpperCase() + " adapter."
+        ? "Credentials saved securely. Preview lookups use the existing " + provider.toUpperCase() + " adapter and its non-production carrier API."
         : "No credentials saved. Connect the carrier account you manage.");
     } catch (error) {
       panel.dataset.connected = "false";
@@ -255,7 +255,7 @@ if (root) {
           headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({ credentials, consent: true })
         });
-        setText(status, "Credentials saved securely. The existing adapter will use them for shipment lookups.");
+        setText(status, "Credentials saved securely. Preview lookups use the existing adapter and its non-production carrier API.");
         panel.dataset.connected = "true";
         form.reset();
       } catch (error) {
