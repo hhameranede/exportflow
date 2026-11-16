@@ -3593,3 +3593,47 @@ body.coverage-page .coverage-footer a:hover { color: var(--ef-coral); }
   .directory-browser { padding: 20px 14px; border-radius: 20px; }
   .directory-card { padding: 18px; }
 }
+
+
+/* Merchant Workspace components */
+.official-api-section{margin-top:38px;padding:clamp(18px,3vw,28px);border:1px solid var(--ef-border-light);border-radius:var(--radius-xl);background:var(--ef-surface-white);box-shadow:var(--shadow-subtle)}
+.official-api-heading{max-width:760px}
+.official-api-heading h2{margin:4px 0 8px;color:var(--ef-navy);font:700 clamp(24px,4vw,32px)/1.2 var(--font-family-display)}
+.official-api-account{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:22px;padding:16px;border:1px solid var(--ef-border-light);border-radius:var(--radius-md);background:var(--ef-cream)}
+.official-api-account-copy{min-width:0}
+.official-api-account-copy strong{color:var(--ef-navy);font-size:14px}
+.official-api-account-copy p{margin:4px 0 0;overflow-wrap:anywhere}
+.official-api-account-actions,.official-api-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.official-api-account-actions button,.official-api-actions button,.official-api-form button{min-height:42px;padding:9px 14px;border:1px solid var(--ef-border-light);border-radius:10px;background:var(--ef-surface-white);color:var(--ef-navy);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.official-api-account-actions .primary-button,.official-api-form .primary-button{border-color:var(--ef-coral);background:var(--ef-coral);color:#fff}
+.official-api-section button:disabled{opacity:.48;cursor:not-allowed}
+.official-api-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:18px}
+.official-api-card{display:flex;min-width:0;flex-direction:column;gap:12px;padding:18px;border:1px solid var(--ef-border-light);border-radius:var(--radius-lg);background:var(--ef-surface-white)}
+.official-api-card-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.official-api-card-heading .eyebrow{margin:0 0 4px}
+.official-api-card-heading h3{margin:0;color:var(--ef-navy);font:700 22px/1.2 var(--font-family-display)}
+.official-api-provider-label{max-width:145px;color:var(--ef-text-muted);font-size:11px;line-height:1.4;text-align:end}
+.official-api-description,.official-api-footnote{margin:0;color:var(--ef-text-secondary);font-size:13px;line-height:1.6}
+.official-api-form{display:grid;gap:12px}
+.official-api-form label:not(.official-api-consent){display:grid;gap:6px;color:var(--ef-text-main);font-size:12px;font-weight:700}
+.official-api-form input:not([type=checkbox]){box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;border:1px solid var(--ef-input-border);border-radius:9px;background:#fff;color:var(--ef-text-main);font:inherit;font-size:14px}
+.official-api-form input:focus{outline:none;border-color:var(--ef-coral);box-shadow:0 0 0 3px var(--ef-coral-glow)}
+.official-api-consent{display:flex;align-items:flex-start;gap:9px;color:var(--ef-text-secondary);font-size:12px;font-weight:500;line-height:1.5}
+.official-api-consent input{flex:0 0 auto;margin:2px 0 0}
+.official-api-card [data-provider-status]{min-height:36px;padding:9px 10px;border-radius:9px;background:var(--ef-paper)}
+.official-api-footnote{margin-top:16px;padding-top:14px;border-top:1px solid var(--ef-border-light)}
+@media(max-width:760px){.official-api-grid{grid-template-columns:minmax(0,1fr)}.official-api-account{align-items:flex-start;flex-direction:column}.official-api-provider-label{max-width:120px}}
+
+
+
+
+@media(max-width:760px){}
+
+/* Merchant adapter tracking timeline */
+.official-api-form select{box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;border:1px solid var(--ef-input-border);border-radius:9px;background:#fff;color:var(--ef-text-main);font:inherit;font-size:14px}
+.official-api-form select:focus{outline:none;border-color:var(--ef-coral);box-shadow:0 0 0 3px var(--ef-coral-glow)}
+.merchant-events{display:grid;gap:10px;margin:12px 0 0;padding:0;list-style:none}
+.merchant-event{min-width:0;padding:13px 14px;border:1px solid var(--ef-border-light);border-radius:10px;background:var(--ef-paper)}
+.merchant-event strong{display:block;color:var(--ef-navy);font-size:13px;text-transform:capitalize}
+.merchant-event p{margin:5px 0 0;color:var(--ef-text-secondary);font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.merchant-event .merchant-event-meta{color:var(--ef-text-muted);font-size:11px}

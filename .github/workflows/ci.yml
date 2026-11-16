@@ -42,6 +42,20 @@ jobs:
           node --check scripts/stage-third-party-licenses.mjs
           node --check scripts/third-party-licenses-test.mjs
           node --check functions/lib/country-codes.mjs
+          node --check merchant-official-api.js
+          node --check functions/lib/merchant-identity.mjs
+          node --check functions/lib/official-api-credential-vault.mjs
+          node --check functions/lib/global-rate-limiter.mjs
+          node --check functions/api/merchant/auth/google/start.js
+          node --check functions/api/merchant/auth/google/callback.js
+          node --check functions/api/merchant/session.js
+          node --check 'functions/api/merchant/carriers/[provider]/official-credentials.js'
+          node --check 'functions/api/merchant/carriers/[provider]/track.js'
+          node --check scripts/merchant-identity-test.mjs
+          node --check scripts/official-api-credential-vault-test.mjs
+          node --check scripts/official-api-credentials-route-test.mjs
+          node --check scripts/merchant-adapter-track-route-test.mjs
+          node --check scripts/merchant-official-api-ui-test.mjs
       - name: Run regression tests
         run: npm test
       - name: Build Cloudflare Pages output
@@ -60,6 +74,8 @@ jobs:
           test -s dist/translations.js
           test -s dist/coverage.js
           test -s dist/company-directory.js
+          test -s dist/merchant-official-api.js
+          test -s dist/merchant/index.html
           test -s dist/robots.txt
           test -s dist/sitemap.xml
           test -s dist/favicon.svg

@@ -1,0 +1,4 @@
+export const GLOBAL_RATE_WINDOW_MS = 60_000;
+export const GLOBAL_RATE_REQUESTS_PER_WINDOW = 12;
+export const GLOBAL_RATE_IDLE_TTL_MS = 15 * 60_000;
+export const GLOBAL_RATE_OBJECT_PROTOCOL = "v1";
