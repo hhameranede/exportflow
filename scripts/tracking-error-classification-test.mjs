@@ -99,6 +99,18 @@ assert.equal(JSON.stringify(safeLogFailure).includes("PRIVATE-TRACKING-ID"), fal
 assert.equal(JSON.stringify(safeLogFailure).includes("PRIVATE-POSTCODE"), false);
 assert.equal(JSON.stringify(safeLogFailure).includes("private upstream payload"), false);
 
+const oversizedFailure = trackingLogSummary(new TrackingError(
+  Array.from({ length: 20 }, (_, index) => ({
+    source: `adapter-${index}`,
+    kind: "transport",
+    durationMs: index,
+    trackingNumber: "PRIVATE-TRACKING-ID"
+  })),
+  { kind: "transport" }
+), {}, "DHL Express");
+assert.equal(oversizedFailure.attempts.length, 12);
+assert.equal(JSON.stringify(oversizedFailure).includes("PRIVATE-TRACKING-ID"), false);
+
 const safeLogSuccess = trackingSuccessSummary({
   carrier: "UPS",
   source: "UPS",

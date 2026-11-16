@@ -166,7 +166,7 @@ export function trackingSuccessSummary(response, durationMs) {
 
 export function trackingLogSummary(error, env = {}, selectedCarrier) {
   const attempts = error instanceof TrackingError && Array.isArray(error.attempts)
-    ? error.attempts.map(attempt => ({
+    ? error.attempts.slice(0, 12).map(attempt => ({
       carrier: safeIdentifier(attempt?.source),
       failureKind: safeIdentifier(attempt?.kind),
       durationMs: Number.isFinite(attempt?.durationMs) ? Math.max(0, Math.round(attempt.durationMs)) : null
