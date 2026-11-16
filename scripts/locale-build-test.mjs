@@ -24,7 +24,7 @@ for (const locale of locales) {
   }
 }
 
-const trustPageNames = ["about", "contact", "privacy", "terms", "cookies", "security", "disclaimer", "companies"];
+const trustPageNames = ["about", "contact", "privacy", "terms", "cookies", "security", "disclaimer"];
 for (const pageName of trustPageNames) {
   const page = await readFile("dist/" + pageName + "/index.html", "utf8");
   assert.ok(page.includes('<link rel="canonical"'), pageName + " page must retain its canonical URL");
@@ -37,12 +37,11 @@ assert.ok(licensesPage.includes("/licenses/manifest.json"));
 
 const sitemap = await readFile("dist/sitemap.xml", "utf8");
 const locations = [...sitemap.matchAll(/<loc>(https:\/\/exportflow\.me\/[^<]*)<\/loc>/g)].map(match => match[1]);
-assert.equal(locations.length, 25, "Built sitemap must include sixteen localized routes, eight company/trust pages and the license notices page");
+assert.equal(locations.length, 24, "Built sitemap must include sixteen localized routes, seven trust pages and the license notices page");
 assert.ok(sitemap.includes('xmlns:xhtml="http://www.w3.org/1999/xhtml"'));
 assert.ok(locations.includes("https://exportflow.me/privacy/"));
 assert.ok(locations.includes("https://exportflow.me/terms/"));
 assert.ok(locations.includes("https://exportflow.me/licenses/"));
-assert.ok(locations.includes("https://exportflow.me/companies/"));
 for (const pageName of trustPageNames) {
   assert.ok(locations.includes("https://exportflow.me/" + pageName + "/"), "Built sitemap must include " + pageName);
 }
