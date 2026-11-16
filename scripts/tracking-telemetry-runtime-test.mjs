@@ -102,6 +102,7 @@ function runLocalMigration() {
     ...wranglerArgs,
     "d1", "migrations", "apply",
     "exportflow-tracking-telemetry-preview-db",
+    "--local",
     "--env", "preview"
   ];
   const result = spawnSync(cli, args, {
@@ -175,8 +176,8 @@ try {
     throw new Error("Refusing to overwrite existing file: " + routePath);
   }
 
-  // The D1 migration command explicitly uses --local. Pages dev runs against
-  // local resources by default; this test must never use --remote or call a carrier.
+  // Both the migration command and Pages dev explicitly use --local and the
+  // same default .wrangler/state directory. No Cloudflare API token is needed.
   const migrationOutput = runLocalMigration();
   writeFileSync(routePath, routeSource, { flag: "wx" });
 
