@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#FAF9F6">
-  <meta name="description" content="Track merchant shipments through ExportFlow's existing carrier adapters.">
+  <meta name="description" content="Track merchant shipments through ExportFlow's existing direct carrier adapters.">
   <meta name="robots" content="noindex,nofollow,noarchive">
   <meta name="googlebot" content="noindex,nofollow,noarchive">
   <title>Merchant Workspace — ExportFlow</title>
   <link rel="canonical" href="https://exportflow.me/merchant/">
   <link rel="icon" href="/favicon.svg?v=20261106" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css?v=merchant-adapter-20261116-02">
+  <link rel="stylesheet" href="/styles.css?v=merchant-adapter-20261116-03">
 </head>
 <body>
   <header class="site-header">
@@ -27,14 +27,14 @@
     <section class="hero-content" aria-labelledby="merchantTitle">
       <p class="eyebrow"><span class="eyebrow-index">WORKSPACE</span><span>MERCHANT TRACKING</span></p>
       <h1 id="merchantTitle">Your carrier adapters.<br><em>Your shipments in one place.</em></h1>
-      <p class="body-copy">Sign in with Google and track shipments through ExportFlow's existing carrier adapters. You do not need to enter or store carrier API credentials.</p>
+      <p class="body-copy">Sign in with Google and track shipments through ExportFlow's existing direct carrier adapters. No carrier API keys are collected from merchants.</p>
     </section>
 
     <section id="merchantWorkspace" class="official-api-section" aria-labelledby="merchantWorkspaceTitle">
       <div class="official-api-heading">
         <p class="eyebrow">MERCHANT IDENTITY / CARRIER TRACKING</p>
         <h2 id="merchantWorkspaceTitle">Your merchant workspace</h2>
-        <p class="official-api-description">Your Google sign-in protects your workspace. ExportFlow selects the built-in adapter for the carrier you choose and uses only that adapter for the lookup. No third-party universal tracking fallback receives your tracking number.</p>
+        <p class="official-api-description">Your Google sign-in protects your workspace. Choose from ExportFlow's built-in direct adapters. Universal tracking fallbacks and link-only carriers are not used in this workspace.</p>
       </div>
 
       <div class="official-api-account">
@@ -55,38 +55,42 @@
       <div id="merchantConnections" hidden>
         <section class="official-api-card" aria-labelledby="merchantTrackTitle">
           <div class="official-api-card-heading">
-            <div><p class="eyebrow">EXISTING CARRIER ADAPTERS</p><h3 id="merchantTrackTitle">Track a shipment</h3></div>
-            <span class="official-api-provider-label">ExportFlow-managed adapter</span>
+            <div><p class="eyebrow">BUILT-IN DIRECT ADAPTERS</p><h3 id="merchantTrackTitle">Track a shipment</h3></div>
+            <span class="official-api-provider-label">ExportFlow-managed adapters</span>
           </div>
-          <p class="official-api-description">Choose a carrier and enter your tracking number. The selected built-in adapter uses ExportFlow's server-side configuration. Availability can vary by carrier and upstream verification; no merchant API keys are required.</p>
+          <p class="official-api-description">Search the direct carrier catalog, select the carrier, and enter its tracking number. Some carriers ask for an extra delivery postcode or a carrier-issued tracking link. These values are used for this lookup only.</p>
           <form id="merchantTrackingForm" class="official-api-form">
+            <label>Search carriers
+              <input id="merchantCarrierSearch" type="search" autocomplete="off" maxlength="120" placeholder="Search by carrier name or ID">
+            </label>
+            <p id="merchantCarrierCount" class="merchant-status" role="status" aria-live="polite">Loading direct carrier adapters…</p>
             <label>Carrier
               <select id="merchantTrackingCarrier" name="provider" required>
-                <option value="ups">UPS</option>
-                <option value="fedex">FedEx</option>
+                <option value="">Loading direct adapters…</option>
               </select>
             </label>
             <label>Tracking number
               <input id="merchantTrackingNumber" name="number" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="256" placeholder="Enter your shipment tracking number" required>
             </label>
+            <div id="merchantAdditionalFields" class="official-api-form" aria-live="polite"></div>
             <button id="merchantTrackButton" class="primary-button" type="submit" disabled>Track shipment</button>
           </form>
-          <p id="merchantTrackingStatus" class="merchant-status" role="status" aria-live="polite">Choose a carrier and enter a tracking number.</p>
+          <p id="merchantTrackingStatus" class="merchant-status" role="status" aria-live="polite">Choose a direct carrier and enter a tracking number.</p>
           <div id="merchantTrackingResult" hidden>
             <p id="merchantTrackingSummary" class="merchant-status" role="status"></p>
             <ol id="merchantTrackingEvents" class="merchant-events" aria-label="Shipment tracking events"></ol>
           </div>
         </section>
 
-        <p class="official-api-footnote">Every lookup requires the signed-in merchant session, is rate-limited, and is sent only to the selected carrier adapter. Tracking numbers are not written to browser storage or returned in diagnostic output.</p>
+        <p class="official-api-footnote">Every lookup requires the signed-in merchant session, is rate-limited, and is sent only to the selected direct adapter. Tracking numbers and any extra parcel details are not written to browser storage or returned in diagnostic output. Carrier availability can vary by upstream verification and configuration.</p>
       </div>
     </section>
   </main>
 
   <footer class="site-footer">
-    <p>ExportFlow Merchant Workspace — private merchant access and existing-adapter shipment tracking.</p>
+    <p>ExportFlow Merchant Workspace — private merchant access and existing direct-adapter shipment tracking.</p>
     <nav aria-label="Footer"><a href="/privacy/">Privacy</a><a href="/">Home</a></nav>
   </footer>
-  <script src="/merchant-official-api.js?v=merchant-adapter-20261116-02" defer></script>
+  <script src="/merchant-official-api.js?v=merchant-adapter-20261116-03" defer></script>
 </body>
 </html>
