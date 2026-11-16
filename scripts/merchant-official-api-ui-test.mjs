@@ -1,16 +1,21 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [html, script, build, statusRoute, trackRoute] = await Promise.all([
+const [html, script, build, statusRoute, trackRoute, wrangler] = await Promise.all([
   readFile("merchant/index.html", "utf8"),
   readFile("merchant-official-api.js", "utf8"),
   readFile("scripts/build.mjs", "utf8"),
   readFile("functions/api/merchant/carriers/[provider]/official-credentials.js", "utf8"),
-  readFile("functions/api/merchant/carriers/[provider]/track.js", "utf8")
+  readFile("functions/api/merchant/carriers/[provider]/track.js", "utf8"),
+  readFile("wrangler.toml", "utf8")
 ]);
 
 assert.ok(html.includes('name="robots" content="noindex,nofollow,noarchive"'));
 assert.ok(html.includes('id="merchantWorkspace"'));
+assert.ok(wrangler.includes('MERCHANT_APP_ORIGIN = "https://integration-merchant-officia.exportflow-aja.pages.dev"'),
+  "Preview OAuth and same-origin validation must use the current integration branch alias");
+assert.ok(!wrangler.includes("feat-merchant-official-api-p.exportflow-aja.pages.dev"),
+  "Do not keep the retired feature-branch Preview origin in Wrangler config");
 assert.ok(html.includes('id="merchantSignIn"'));
 assert.ok(html.includes('id="merchantSignOut"'));
 assert.ok(html.includes('data-provider-panel="ups"'));
