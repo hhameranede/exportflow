@@ -2,9 +2,18 @@
 
 ## Status
 
-The sink is implemented but **disabled by default**. No database, binding, Pages setting, secret, or Production configuration is created or changed by this code change.
+The sink is implemented but **disabled by default**. Two dedicated D1 databases have been provisioned and the schema migration applied. The Pages project has no D1 binding in either environment, so application telemetry is not being written yet.
 
-The Pages Function writes only when the private `EXPORTFLOW_TELEMETRY_DB` D1 binding exists and the Pages execution context exposes `waitUntil`. Preview and Production should use separate D1 databases behind the same binding name.
+The Pages Function writes only when the private `EXPORTFLOW_TELEMETRY_DB` D1 binding exists and the Pages execution context exposes `waitUntil`. Preview and Production must use separate D1 databases behind the same binding name.
+
+## Dedicated databases
+
+| Environment | Database | UUID | State |
+|---|---|---|---|
+| Preview | `exportflow-tracking-telemetry-preview-db` | `decef588-a198-4bdd-9764-e0ce2e2caaee` | Created; migration applied; binding not configured |
+| Production | `exportflow-tracking-telemetry-production-db` | `9f90b381-7635-4857-b9f9-fa3a3d23b64b` | Created; migration applied; binding not configured |
+
+Both schemas were inspected through the D1 API. The table and two supporting indexes are present in both databases. Row count is zero in each database. A synthetic fixture insert/read/delete round trip passed against Preview and the test row was deleted. No shipment reference or personal data was used.
 
 ## Persisted fields
 
@@ -22,24 +31,22 @@ It does not store shipment/tracking numbers, postcodes, IP addresses, request bo
 ## Runtime behavior
 
 - Persistence runs through `context.waitUntil()`, so the tracking response does not wait for D1.
-- The write is a parameterized D1 batch: prune expired rows, then insert one event with `INSERT OR IGNORE`.
-- Retention is 14 days. Expired rows are pruned on the next telemetry write (lazy cleanup); no Cron Trigger is created.
+- The write is a parameterized D1 batch: prune expired records, then insert one event with `INSERT OR IGNORE`.
+- Each row has a 14-day expiry timestamp. Expired rows are physically pruned on the next telemetry write (lazy cleanup); if writes stop, expired records may remain stored until a later write. No Cron Trigger is created.
 - Missing binding, unavailable `waitUntil`, or D1 failure is fail-open and must not change the tracking result.
 - No public read API or user-facing telemetry endpoint is added. Reads should use authenticated Cloudflare D1 tooling only.
 
-## Provisioning gate
+## Current binding state
 
-Before enabling:
-1. Create dedicated ExportFlow telemetry D1 databases, keeping Preview separate from Production.
-2. Apply `migrations/telemetry/0001_create_tracking_events.sql` only to those new databases.
-3. Configure the private `EXPORTFLOW_TELEMETRY_DB` binding for each Pages environment, pointing to its matching database.
-4. Verify D1 quotas and storage available across the account first.
-5. Run a Preview-only test and inspect the persisted row for redaction before considering Production enablement.
-
-The current repository has no D1 binding in `wrangler.toml`, and the Pages project currently reports no D1 bindings in either environment. Existing ExportFlow D1 databases contain other project data and are intentionally not reused.
+- The Pages project currently reports no D1 bindings in either environment.
+- The next step requires a separate approved Pages configuration change: bind Preview to `decef588-a198-4bdd-9764-e0ce2e2caaee` using the name `EXPORTFLOW_TELEMETRY_DB`.
+- Keep Production unbound until Preview runtime persistence and redaction are verified. Then consider a separate Production binding to `9f90b381-7635-4857-b9f9-fa3a3d23b64b`.
+- Existing ExportFlow intelligence databases are not reused.
 
 ## Cost and limits
 
-D1 pricing is usage-based. The Cloudflare Workers Free allowance currently lists 5 million rows read/day, 100,000 rows written/day, and 5 GB total storage. Those allowances are shared at account level; the account's current D1 consumption and entitlement have not been verified in this change. When free daily limits are exceeded, D1 queries fail until reset. The sink is best-effort so such failures do not affect tracking.
+Cloudflare D1 metrics for 2026-11-16, queried account-wide before provisioning these two new databases, showed 110,229 rows read, 2,997 rows written and approximately 4.47 MiB across the three existing databases. This was a partial-day snapshot. The official Workers Free allowances are 5 million rows read/day, 100,000 rows written/day, 5 GB total storage and 10 databases; Workers Paid includes 100,000 databases, 25 billion rows read/month, 50 million rows written/month and 5 GB included storage. The current Workers billing entitlement itself was not independently read. The account now has five D1 databases total, including the two dedicated telemetry databases.
 
-No database was created and no billable feature was enabled as part of this implementation.
+References: [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), [D1 metrics and analytics](https://developers.cloudflare.com/d1/observability/metrics-analytics/), [D1 billing](https://developers.cloudflare.com/d1/observability/billing/).
+
+No D1 binding was configured and no telemetry from live tracking requests has been persisted. No paid ingestion, Pages settings, secrets, Access policies, DNS or Production deployment were changed.
