@@ -356,14 +356,11 @@ export async function onRequestPost(context) {
     return json({ error: "invalid_language" }, 400);
   }
 
-  // Apply the route-specific rights gate before rate limiting or any carrier
-  // request. The policy includes explicit terms conflicts and unresolved
-  // public third-party display routes held pending evidence.
+  // Consult the owner-controlled local release switch. Its quarantine list
+  // is currently empty, so no carrier is blocked by ExportFlow here. This does
+  // not override provider authentication, challenges, rate limits or outages.
   const detection = carrier ? null : parseTrackingInput(number);
   const selectedCarrier = carrier || detection?.carrier;
-  // Block only the carrier selected with confidence (or explicitly supplied).
-  // An unrelated quarantined carrier appearing among ambiguous candidates must
-  // not prevent another carrier's adapter from being tried.
   if (isPublicCarrierQuarantined(selectedCarrier)) {
     return json({ error: "carrier_authorization_required" }, 403);
   }
