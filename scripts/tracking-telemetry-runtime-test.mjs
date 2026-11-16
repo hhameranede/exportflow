@@ -105,7 +105,6 @@ function runLocalMigration() {
     ...wranglerArgs,
     "d1", "migrations", "apply",
     "exportflow-tracking-telemetry-preview-db",
-    "--local",
     "--env", "preview",
     "--persist-to", stateDirectory,
     "--yes"
@@ -181,8 +180,8 @@ try {
     throw new Error("Refusing to overwrite existing file: " + routePath);
   }
 
-  // Both CLI operations explicitly use --local. This test must never connect
-  // to the remote Preview D1 database or issue a carrier-provider request.
+  // The D1 migration command explicitly uses --local. Pages dev runs against
+  // local resources by default; this test must never use --remote or call a carrier.
   const migrationOutput = runLocalMigration();
   writeFileSync(routePath, routeSource, { flag: "wx" });
 
