@@ -160,7 +160,7 @@ const unsupported = await handler({
 assert.equal(unsupported.status, 400);
 
 const invalidInput = await handler({
-  request: request("ups", "  \\u0000  "),
+  request: request("ups", "  " + String.fromCharCode(0) + "  "),
   env,
   params: { provider: "ups" }
 });
