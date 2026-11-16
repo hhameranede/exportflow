@@ -106,8 +106,7 @@ function runLocalMigration() {
     "d1", "migrations", "apply",
     "exportflow-tracking-telemetry-preview-db",
     "--env", "preview",
-    "--persist-to", stateDirectory,
-    "--yes"
+    "--persist-to", stateDirectory
   ];
   const result = spawnSync(cli, args, {
     cwd: projectRoot,
