@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { TrackingError } from "../node_modules/universal-parcel-scraper/dist/facade/index.js";
-import { trackingFailure } from "../functions/api/track.js";
+import {
+  trackingFailure,
+  trackingLogSummary,
+  trackingSuccessSummary
+} from "../functions/api/track.js";
 
 async function classify(error, env = {}) {
   const response = trackingFailure(error, env);
@@ -73,6 +77,61 @@ assert.equal(notFound.body.error, "not_found");
 const invalidInput = await classify(new TypeError("Invalid tracking number"));
 assert.equal(invalidInput.status, 400);
 assert.equal(invalidInput.body.error, "invalid_input");
+
+const safeLogFailure = trackingLogSummary(new TrackingError([
+  {
+    source: "DHL Express",
+    kind: "transport",
+    durationMs: 12,
+    trackingNumber: "PRIVATE-TRACKING-ID",
+    postcode: "PRIVATE-POSTCODE",
+    message: "private upstream payload"
+  }
+], { kind: "transport" }), {}, "DHL Express");
+assert.deepEqual(safeLogFailure, {
+  carrier: "dhl-express",
+  errorClass: "carrier_unavailable",
+  attempts: [
+    { carrier: "dhl-express", failureKind: "transport", durationMs: 12 }
+  ]
+});
+assert.equal(JSON.stringify(safeLogFailure).includes("PRIVATE-TRACKING-ID"), false);
+assert.equal(JSON.stringify(safeLogFailure).includes("PRIVATE-POSTCODE"), false);
+assert.equal(JSON.stringify(safeLogFailure).includes("private upstream payload"), false);
+
+const oversizedFailure = trackingLogSummary(new TrackingError(
+  Array.from({ length: 20 }, (_, index) => ({
+    source: `adapter-${index}`,
+    kind: "transport",
+    durationMs: index,
+    trackingNumber: "PRIVATE-TRACKING-ID"
+  })),
+  { kind: "transport" }
+), {}, "DHL Express");
+assert.equal(oversizedFailure.attempts.length, 12);
+assert.equal(JSON.stringify(oversizedFailure).includes("PRIVATE-TRACKING-ID"), false);
+
+const safeLogSuccess = trackingSuccessSummary({
+  carrier: "UPS",
+  source: "UPS",
+  result: {
+    current_stage: "delivered",
+    events: [{ description: "private event", location: "private location" }]
+  }
+}, 123);
+assert.deepEqual(safeLogSuccess, {
+  outcome: "success",
+  carrier: "ups",
+  source: "ups",
+  status: "delivered",
+  durationMs: 123,
+  eventCount: 1
+});
+assert.equal(JSON.stringify(safeLogSuccess).includes("private event"), false);
+assert.equal(JSON.stringify(safeLogSuccess).includes("private location"), false);
+
+const requestIdResponse = trackingFailure(new Error("private diagnostic"), {}, "test-request-id");
+assert.equal(requestIdResponse.headers.get("X-Request-ID"), "test-request-id");
 
 const malformedPayload = await classify(new SyntaxError("private carrier payload"));
 assert.equal(malformedPayload.status, 502);
