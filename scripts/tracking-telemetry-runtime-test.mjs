@@ -144,12 +144,14 @@ async function waitForRow(baseUrl, requestId) {
 }
 
 async function stopPages() {
-  if (!pagesProcess || pagesProcess.exitCode !== null) return;
+  if (!pagesProcess) return;
 
   const signalProcessTree = signal => {
     try {
       if (process.platform === "win32" || !pagesProcess.pid) {
-        pagesProcess.kill(signal);
+        if (pagesProcess.exitCode === null && pagesProcess.signalCode === null) {
+          pagesProcess.kill(signal);
+        }
       } else {
         // npx launches Wrangler as a child process. Kill the whole detached
         // process group so workerd/Wrangler cannot keep the CI runner alive.
@@ -160,13 +162,15 @@ async function stopPages() {
     }
   };
 
-  const exited = new Promise(resolve => pagesProcess.once("exit", resolve));
+  const exited = new Promise(resolve => {
+    if (pagesProcess.exitCode !== null || pagesProcess.signalCode !== null) resolve();
+    else pagesProcess.once("exit", resolve);
+  });
   signalProcessTree("SIGTERM");
-  await Promise.race([exited, sleep(3_000)]);
-  if (pagesProcess.exitCode === null) {
-    signalProcessTree("SIGKILL");
-    await Promise.race([exited, sleep(1_000)]);
-  }
+  await Promise.race([exited, sleep(1_500)]);
+  // Also terminate any grandchildren if npx itself exited first.
+  signalProcessTree("SIGKILL");
+  await Promise.race([exited, sleep(1_500)]);
 }
 
 try {
@@ -201,18 +205,22 @@ try {
   pagesProcess.stderr.on("data", chunk => { output = (output + chunk.toString()).slice(-12_000); });
   pagesProcess.once("error", error => { output += "\n" + error.message; });
 
+  console.log("Starting local Pages runtime with an isolated D1 binding.");
   await waitForReady(baseUrl);
+  console.log("Local Pages runtime and D1 binding are ready.");
 
   const canaryResponse = await fetch(baseUrl + "/api/__telemetry_runtime_test", {
     method: "POST",
     signal: AbortSignal.timeout(5_000)
   });
   assert.equal(canaryResponse.status, 202);
+  console.log("Synthetic telemetry canary accepted by the Pages Function.");
   const canary = await canaryResponse.json();
   assert.equal(canary.scheduled, true);
   assert.match(canary.requestId, /^[0-9a-f-]{36}$/i);
 
   const persisted = await waitForRow(baseUrl, canary.requestId);
+  console.log("D1 canary row became readable after waitUntil.");
   assert.equal(persisted.persisted, true);
   assert.equal(persisted.containsPrivateData, false);
   assert.equal(persisted.outcome, "failure");
