@@ -31,7 +31,7 @@ Regression coverage remains for Google OAuth/session behavior, credential encryp
 
 The November 12 project record confirmed that the Preview Google OAuth and AES-256 key-ring secrets were configured and owner sign-in was completed. The scoped Preview D1 migration was applied previously; it recorded zero Merchant accounts, sessions, credentials and audit rows at that time.
 
-The new CI tests inject a tracker factory to verify that the route passes the correct credential names, fixed Preview API origins and selected carrier to the existing tracker, while proving separate merchant requests receive separate credentials. They do not claim a live carrier response. A live adapter lookup still requires an authenticated Preview session with a saved carrier account and a valid carrier-approved Sandbox test reference.
+The new CI tests inject a tracker factory to verify that the route passes the correct credential names, fixed Preview API origins and selected carrier to the existing tracker, while proving separate merchant requests receive separate credentials. They do not claim a live carrier response. A real adapter lookup against the carrier Sandbox still requires an authenticated Preview session with a saved carrier account and a valid carrier-approved Sandbox test reference.
 
 ## Explicitly not claimed
 
@@ -39,3 +39,8 @@ The new CI tests inject a tracker factory to verify that the route passes the co
 - A passing unit test is not proof of a successful real carrier lookup.
 - This Preview Sandbox route is not Production carrier routing.
 - No public visitor shipment lookup, production enablement, analytics persistence, billing or webhooks are added by this change.
+
+
+## Read-only Preview readback — 2026-11-16
+
+The Preview Merchant D1 migration journal contains `0001_official_api_credentials.sql`. A read-only count check found one merchant user, one unrevoked and unexpired session, zero saved official carrier credentials, one merchant security event and zero provider credential audit events. This confirms the migration and database records exist; it does not independently prove a fresh browser OAuth flow or a successful carrier adapter response.
