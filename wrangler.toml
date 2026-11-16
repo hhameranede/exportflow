@@ -16,7 +16,7 @@ migrations_dir = "migrations/telemetry"
 # Merchant workspace: D1/session and limiter bindings are Preview-only.
 [env.preview.vars]
 EXPORTFLOW_ENV = "preview"
-MERCHANT_APP_ORIGIN = "https://feat-merchant-official-api-p.exportflow-aja.pages.dev"
+MERCHANT_APP_ORIGIN = "https://integration-merchant-officia.exportflow-aja.pages.dev"
 
 [[env.preview.d1_databases]]
 binding = "MERCHANT_DB"
