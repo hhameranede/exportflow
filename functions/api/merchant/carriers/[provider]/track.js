@@ -1,5 +1,9 @@
 import { createTracker } from "../../../../../node_modules/universal-parcel-scraper/dist/facade/index.js";
 import {
+  carrierAdapter,
+  carrierDefinition
+} from "universal-parcel-scraper";
+import {
   resolveMerchantSession,
   merchantIdentityErrorResponse
 } from "../../../../lib/merchant-identity.mjs";
@@ -9,8 +13,7 @@ import {
   globalRateLimitHeaders
 } from "../../../../lib/global-rate-limiter.mjs";
 
-const PROVIDERS = new Set(["ups", "fedex"]);
-const MAX_BODY_BYTES = 4 * 1024;
+const MAX_BODY_BYTES = 8 * 1024;
 const TRACKING_BUDGET_MS = 25_000;
 
 function jsonResponse(body, status = 200, extraHeaders = {}) {
@@ -36,6 +39,20 @@ function trustedSameOrigin(request, env) {
     if ((parsed.protocol !== "https:" && !local) || parsed.origin !== env.MERCHANT_APP_ORIGIN) return false;
     return request.headers.get("Origin") === parsed.origin &&
       new URL(request.url).origin === parsed.origin;
+  } catch {
+    return false;
+  }
+}
+
+function isDirectSelectableCarrier(carrierId) {
+  try {
+    const definition = carrierDefinition(carrierId);
+    const adapterId = carrierAdapter(carrierId);
+    return definition.selectable === true &&
+      definition.tracking?.mode === "automatic" &&
+      typeof adapterId === "string" &&
+      adapterId.length > 0 &&
+      adapterId !== "universal";
   } catch {
     return false;
   }
@@ -83,8 +100,10 @@ async function readPayload(request) {
   } catch {
     throw Object.assign(new Error("invalid_request_body"), { status: 400 });
   }
+
+  const allowedKeys = new Set(["number", "trackingUrl", "postcode", "postcodeCountry"]);
   if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
-      Object.keys(payload).some(key => key !== "number") ||
+      Object.keys(payload).some(key => !allowedKeys.has(key)) ||
       typeof payload.number !== "string") {
     throw Object.assign(new Error("invalid_request_body"), { status: 400 });
   }
@@ -93,7 +112,29 @@ async function readPayload(request) {
   if (!number || number.length > 256 || /[\u0000-\u001F\u007F-\u009F]/.test(number)) {
     throw Object.assign(new Error("invalid_tracking_number"), { status: 400 });
   }
-  return { number };
+
+  const optionalText = (key, maxLength) => {
+    if (payload[key] === undefined || payload[key] === null || payload[key] === "") return undefined;
+    if (typeof payload[key] !== "string" || payload[key].length > maxLength ||
+        /[\u0000-\u001F\u007F-\u009F]/.test(payload[key])) {
+      throw Object.assign(new Error("invalid_" + key), { status: 400 });
+    }
+    return payload[key].trim();
+  };
+
+  const trackingUrl = optionalText("trackingUrl", 4096);
+  const postcode = optionalText("postcode", 128);
+  const postcodeCountry = optionalText("postcodeCountry", 2);
+  if (postcodeCountry && !/^[A-Za-z]{2}$/.test(postcodeCountry)) {
+    throw Object.assign(new Error("invalid_postcodeCountry"), { status: 400 });
+  }
+
+  return {
+    number,
+    ...(trackingUrl ? { trackingUrl } : {}),
+    ...(postcode ? { postcode } : {}),
+    ...(postcodeCountry ? { postcodeCountry: postcodeCountry.toUpperCase() } : {})
+  };
 }
 
 function safeText(value, maxLength = 240) {
@@ -140,13 +181,19 @@ function trackingFailureResponse(error) {
   const attempts = safeAttempts(error);
   const kinds = attempts.map(attempt => attempt.kind);
   const challenge = kinds.includes("challenge") || error?.name === "ChallengeError";
+  const inputRequired = kinds.includes("input_required") || error?.name === "InputRequiredError";
+  const invalidInput = error?.name === "InvalidInputError" ||
+    error instanceof TypeError ||
+    kinds.includes("invalid_input");
   const status = error?.name === "RateLimitedError" || kinds.includes("rate_limited") ? 429
     : error?.name === "TimeoutError" || error?.name === "AbortError" || kinds.includes("budget") ? 504
-    : error?.name === "InvalidInputError" || kinds.includes("invalid_input") ? 400
+    : inputRequired ? 422
+    : invalidInput ? 400
     : challenge ? 503
     : 502;
   const code = status === 429 ? "carrier_rate_limited"
     : status === 504 ? "carrier_lookup_timeout"
+    : status === 422 ? "carrier_input_required"
     : status === 400 ? "invalid_tracking_number"
     : status === 503 ? "carrier_verification_required"
     : "carrier_lookup_failed";
@@ -168,8 +215,8 @@ export function createMerchantAdapterTrackHandler({
     }
 
     const provider = String(params?.provider || "").trim().toLowerCase();
-    if (!PROVIDERS.has(provider)) {
-      return jsonResponse({ error: "unsupported_provider" }, 400);
+    if (!isDirectSelectableCarrier(provider)) {
+      return jsonResponse({ error: "unsupported_direct_carrier" }, 400);
     }
 
     let payload;
@@ -208,17 +255,16 @@ export function createMerchantAdapterTrackHandler({
         ? env.EXPORTFLOW_TRAWL_URL.trim()
         : "";
       const tracker = trackerFactory({
-        // Use the same server-side adapter configuration as public ExportFlow tracking.
-        // No merchant-supplied credentials and no browser-visible secrets are involved.
+        // Reuse ExportFlow's server-side adapter configuration; no merchant carrier keys are collected.
         env,
         fetcher: fetchFactory(),
         ...(trawlUrl ? { trawlUrl } : {}),
-        // Keep merchant parcel IDs on the selected carrier adapter only.
+        // The chosen direct adapter alone receives the merchant's parcel identifier.
         providers: [],
         userAgent: "ExportFlow-Merchant/1.0"
       });
       const response = await tracker.track(
-        { number: payload.number, carrier: provider },
+        payload.carrier ? { ...payload, carrier: provider } : { ...payload, carrier: provider },
         {
           budgetMs: TRACKING_BUDGET_MS,
           signal: AbortSignal.any([
