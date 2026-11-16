@@ -40,8 +40,8 @@ jobs:
           node --check scripts/stage-third-party-licenses.mjs
           node --check scripts/third-party-licenses-test.mjs
           node --check functions/lib/country-codes.mjs
-          node --check 'functions/api/merchant/carriers/[provider]/mock.js'
-          node --check scripts/official-api-mock-route-test.mjs
+          node --check 'functions/api/merchant/carriers/[provider]/track.js'
+          node --check scripts/merchant-adapter-track-route-test.mjs
           node --check scripts/datadog-ci-test-events.cjs
       - name: Run regression tests with optional Datadog Test Visibility
         env:

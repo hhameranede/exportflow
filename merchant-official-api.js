@@ -1,13 +1,19 @@
-const root = document.getElementById("officialApiSandbox");
+const root = document.getElementById("merchantWorkspace");
 
 if (root) {
-  const signInButton = root.querySelector("#officialApiSignIn");
-  const signOutButton = root.querySelector("#officialApiSignOut");
-  const accountStatus = root.querySelector("#officialApiAccountStatus");
-  const providerSection = root.querySelector("#officialApiConnections");
-  const authNotice = root.querySelector("#officialApiAuthNotice");
-  const mockStatus = root.querySelector("#officialApiMockStatus");
-  const mockButtons = root.querySelectorAll('[data-action="mock"]');
+  const signInButton = root.querySelector("#merchantSignIn");
+  const signOutButton = root.querySelector("#merchantSignOut");
+  const accountStatus = root.querySelector("#merchantAccountStatus");
+  const connectionSection = root.querySelector("#merchantConnections");
+  const authNotice = root.querySelector("#merchantAuthNotice");
+  const trackingForm = root.querySelector("#merchantTrackingForm");
+  const trackingCarrier = root.querySelector("#merchantTrackingCarrier");
+  const trackingNumber = root.querySelector("#merchantTrackingNumber");
+  const trackingButton = root.querySelector("#merchantTrackButton");
+  const trackingStatus = root.querySelector("#merchantTrackingStatus");
+  const trackingResult = root.querySelector("#merchantTrackingResult");
+  const trackingSummary = root.querySelector("#merchantTrackingSummary");
+  const trackingEvents = root.querySelector("#merchantTrackingEvents");
   const providers = ["ups", "fedex"];
   let authenticated = false;
   let busy = false;
@@ -18,19 +24,20 @@ if (root) {
 
   function messageFor(code) {
     const messages = {
-      unauthenticated: "Sign in before connecting a carrier account.",
+      unauthenticated: "Sign in before using your merchant workspace.",
       merchant_auth_not_configured: "Merchant sign-in is not configured in this environment yet.",
       credential_vault_not_configured: "The encrypted credential vault is not configured in this environment yet.",
-      carrier_not_connected: "Connect your own carrier account before running the Sandbox check.",
-      carrier_sandbox_unavailable: "The carrier Sandbox could not complete the check. Verify the Sandbox credentials and try again.",
-      carrier_sandbox_rate_limited: "The carrier Sandbox rate limit was reached. Try again later.",
-      global_rate_limiter_unavailable: "The secure request limiter is unavailable. No Sandbox request was sent.",
-      global_rate_limiter_not_configured: "The secure request limiter is not configured. No Sandbox request was sent.",
+      carrier_not_connected: "Connect this carrier account before tracking a shipment.",
+      carrier_lookup_failed: "The carrier adapter could not return a tracking result. Check the number and try again.",
+      carrier_lookup_timeout: "The carrier adapter timed out. Try again later.",
+      carrier_rate_limited: "The carrier rate limit was reached. Try again later.",
+      global_rate_limiter_unavailable: "The secure request limiter is unavailable. No carrier request was sent.",
+      global_rate_limiter_not_configured: "The secure request limiter is not configured. No carrier request was sent.",
       forbidden: "This merchant account is not permitted to use this connection.",
       origin_forbidden: "The request origin was not accepted.",
       credential_decryption_failed: "The saved credentials could not be opened. Reconnect the carrier account.",
       vault_unavailable: "The credential vault is temporarily unavailable.",
-      simulated_test_invalid_response: "The simulated test returned an unexpected response. No official carrier test was run."
+      invalid_tracking_number: "Enter a valid tracking number for the selected carrier."
     };
     return messages[code] || "The request could not be completed (" + String(code || "unknown_error") + ").";
   }
@@ -51,34 +58,80 @@ if (root) {
     return data;
   }
 
-  function setBusy(value) {
-    busy = value;
-    root.querySelectorAll("button").forEach(button => {
-      if (button.dataset.stayEnabled === "true") return;
-      button.disabled = value || (button.dataset.authOnly === "true" && !authenticated);
-    });
-    updateProviderControls();
+  function selectedProviderConnected() {
+    const panel = root.querySelector('[data-provider-panel="' + trackingCarrier.value + '"]');
+    return panel?.dataset.connected === "true";
   }
 
-  function updateProviderControls() {
-    const connectedPanels = root.querySelectorAll("[data-provider-panel]");
-    connectedPanels.forEach(panel => {
-      const enabled = authenticated && !busy;
+  function updateControls() {
+    root.querySelectorAll("button").forEach(button => {
+      if (button.dataset.stayEnabled === "true") return;
+      button.disabled = busy || (!authenticated && button !== signInButton);
+    });
+
+    root.querySelectorAll("[data-provider-panel]").forEach(panel => {
       const connected = panel.dataset.connected === "true";
       const form = panel.querySelector("form");
-      const submit = form?.querySelector('button[type="submit"]');
-      const test = panel.querySelector('[data-action="sandbox"]');
+      if (form) form.querySelectorAll("input, button").forEach(control => {
+        control.disabled = !authenticated || busy;
+      });
       const disconnect = panel.querySelector('[data-action="disconnect"]');
-      if (form) form.querySelectorAll("input, button").forEach(control => { control.disabled = !enabled; });
-      if (submit) submit.disabled = !enabled;
-      if (test) test.disabled = !enabled || !connected;
-      if (disconnect) disconnect.disabled = !enabled || !connected;
+      if (disconnect) disconnect.disabled = !authenticated || busy || !connected;
     });
-    mockButtons.forEach(button => { button.disabled = !authenticated || busy; });
+
+    if (trackingForm) {
+      trackingForm.querySelectorAll("input, select, button").forEach(control => {
+        control.disabled = !authenticated || busy;
+      });
+    }
+    if (trackingButton) trackingButton.disabled = !authenticated || busy || !selectedProviderConnected();
     if (signInButton) signInButton.hidden = authenticated;
     if (signOutButton) signOutButton.hidden = !authenticated;
-    if (providerSection) providerSection.hidden = !authenticated;
+    if (connectionSection) connectionSection.hidden = !authenticated;
     if (authNotice) authNotice.hidden = authenticated;
+  }
+
+  function setBusy(value) {
+    busy = value;
+    updateControls();
+  }
+
+  function clearTrackingResult() {
+    trackingResult.hidden = true;
+    setText(trackingSummary, "");
+    trackingEvents.replaceChildren();
+  }
+
+  function renderTrackingResult(result) {
+    clearTrackingResult();
+    const carrier = String(result.carrier || result.provider || "").toUpperCase();
+    const status = String(result.status || "unknown").replaceAll("_", " ");
+    const delivery = result.expectedDelivery ? " · Expected delivery: " + result.expectedDelivery : "";
+    setText(trackingSummary,
+      carrier + " · " + status + delivery + " · Source: " + String(result.source || "carrier adapter"));
+
+    const events = Array.isArray(result.events) ? result.events : [];
+    events.forEach(event => {
+      const item = document.createElement("li");
+      item.className = "merchant-event";
+      const heading = document.createElement("strong");
+      heading.textContent = String(event.stage || "update").replaceAll("_", " ");
+      const description = document.createElement("p");
+      description.textContent = String(event.description || "Carrier update");
+      const metadata = document.createElement("p");
+      metadata.className = "merchant-event-meta";
+      metadata.textContent = [event.time, event.location].filter(value => typeof value === "string" && value).join(" · ");
+      item.append(heading, description, metadata);
+      trackingEvents.append(item);
+    });
+
+    if (events.length === 0) {
+      const item = document.createElement("li");
+      item.className = "merchant-event";
+      item.textContent = "The carrier returned a status without a scan timeline.";
+      trackingEvents.append(item);
+    }
+    trackingResult.hidden = false;
   }
 
   async function refreshProvider(provider) {
@@ -89,13 +142,12 @@ if (root) {
       const result = await requestJson("/api/merchant/carriers/" + provider + "/official-credentials");
       panel.dataset.connected = result.connected === true ? "true" : "false";
       setText(status, result.connected === true
-        ? "Connected for official Sandbox tests only."
-        : "Not connected. Add your own Sandbox credentials below.");
+        ? "Credentials saved securely. Shipment lookups use the existing " + provider.toUpperCase() + " adapter."
+        : "No credentials saved. Connect the carrier account you manage.");
     } catch (error) {
       panel.dataset.connected = "false";
       setText(status, messageFor(error.message));
     }
-    updateProviderControls();
   }
 
   async function loadSession() {
@@ -113,7 +165,7 @@ if (root) {
         setText(accountStatus, "Signed in as " + (data.user?.email || "merchant account"));
         await Promise.all(providers.map(refreshProvider));
       } else if (response.status === 401) {
-        setText(accountStatus, "Sign in to manage your own carrier Sandbox connections.");
+        setText(accountStatus, "Sign in to manage your carrier connections and shipments.");
       } else {
         setText(accountStatus, messageFor(data.error || "merchant_auth_not_configured"));
       }
@@ -121,7 +173,7 @@ if (root) {
       authenticated = false;
       setText(accountStatus, "Merchant sign-in status is temporarily unavailable.");
     }
-    updateProviderControls();
+    updateControls();
     if (signInButton && /not configured/i.test(accountStatus.textContent)) {
       signInButton.disabled = true;
     }
@@ -149,40 +201,42 @@ if (root) {
   signOutButton?.addEventListener("click", async () => {
     setBusy(true);
     try {
-      await requestJson("/api/merchant/session", { method: "DELETE", headers: { Accept: "application/json" } });
-      authenticated = false;
-      setText(accountStatus, "Signed out. Your device-only watchlist is unchanged.");
-      providers.forEach(provider => {
-        const panel = root.querySelector('[data-provider-panel="' + provider + '"]');
-        if (panel) {
-          panel.dataset.connected = "false";
-          setText(panel.querySelector("[data-provider-status]"), "Sign in to view this connection.");
-        }
+      await requestJson("/api/merchant/session", {
+        method: "DELETE",
+        headers: { Accept: "application/json" }
       });
+      authenticated = false;
+      root.querySelectorAll("[data-provider-panel]").forEach(panel => {
+        panel.dataset.connected = "false";
+        setText(panel.querySelector("[data-provider-status]"), "Sign in to view this connection.");
+      });
+      clearTrackingResult();
+      setText(accountStatus, "Signed out.");
+      setText(trackingStatus, "Sign in to track a shipment.");
     } catch (error) {
       setText(accountStatus, messageFor(error.message));
     } finally {
       setBusy(false);
-      updateProviderControls();
     }
   });
 
   providers.forEach(provider => {
     const panel = root.querySelector('[data-provider-panel="' + provider + '"]');
     const form = panel?.querySelector("form");
-    const testButton = panel?.querySelector('[data-action="sandbox"]');
     const disconnectButton = panel?.querySelector('[data-action="disconnect"]');
     const status = panel?.querySelector("[data-provider-status]");
 
     form?.addEventListener("submit", async event => {
       event.preventDefault();
       if (!authenticated || busy) return;
+
       const fields = provider === "ups" ? ["clientId", "clientSecret"] : ["apiKey", "apiSecret"];
       const consentInput = form.elements.namedItem("consent");
       if (!consentInput || consentInput.checked !== true) {
         setText(status, "Confirm that you own or are authorized to manage this carrier account.");
         return;
       }
+
       const credentials = {};
       for (const field of fields) {
         const input = form.elements.namedItem(field);
@@ -192,15 +246,16 @@ if (root) {
         setText(status, "Enter both required credential fields.");
         return;
       }
+
       setBusy(true);
-      setText(status, "Saving credentials securely…");
+      setText(status, "Saving credentials in the encrypted merchant vault…");
       try {
         await requestJson("/api/merchant/carriers/" + provider + "/official-credentials", {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({ credentials, consent: true })
         });
-        setText(status, "Credentials saved in the encrypted merchant vault. Run the Sandbox check when ready.");
+        setText(status, "Credentials saved securely. The existing adapter will use them for shipment lookups.");
         panel.dataset.connected = "true";
         form.reset();
       } catch (error) {
@@ -212,29 +267,9 @@ if (root) {
       }
     });
 
-    testButton?.addEventListener("click", async () => {
-      if (!authenticated || busy || panel.dataset.connected !== "true") return;
-      setBusy(true);
-      setText(status, "Checking the official non-production Sandbox…");
-      try {
-        const result = await requestJson("/api/merchant/carriers/" + provider + "/sandbox", {
-          method: "POST",
-          headers: { Accept: "application/json" }
-        });
-        setText(status, result.result === "passed"
-          ? "Sandbox connection passed using the fixed synthetic test reference. No real shipment was queried."
-          : "Sandbox returned an unexpected result.");
-      } catch (error) {
-        setText(status, messageFor(error.message));
-      } finally {
-        setBusy(false);
-        await refreshProvider(provider);
-      }
-    });
-
     disconnectButton?.addEventListener("click", async () => {
       if (!authenticated || busy || panel.dataset.connected !== "true") return;
-      if (!window.confirm("Disconnect this carrier account and delete its saved Sandbox credentials?")) return;
+      if (!window.confirm("Disconnect this carrier account and delete its saved credentials?")) return;
       setBusy(true);
       setText(status, "Disconnecting carrier account…");
       try {
@@ -253,41 +288,45 @@ if (root) {
     });
   });
 
-  mockButtons.forEach(button => {
-    button.addEventListener("click", async () => {
-      const provider = button.dataset.provider;
-      if (!providers.includes(provider) || !authenticated || busy) return;
-      setBusy(true);
-      setText(mockStatus, "Running the " + provider.toUpperCase() + " simulated test…");
-      try {
-        const result = await requestJson("/api/merchant/carriers/" + provider + "/mock", {
-          method: "POST",
-          headers: { Accept: "application/json" }
-        });
-        if (
-          result.provider !== provider ||
-          result.environment !== "simulated" ||
-          result.result !== "passed" ||
-          result.outboundRequests !== 0 ||
-          result.realShipmentLookup !== false ||
-          !Array.isArray(result.events)
-        ) {
-          throw new Error("simulated_test_invalid_response");
-        }
-        const eventLabels = result.events.map(event => event.label).filter(label => typeof label === "string");
-        setText(mockStatus,
-          provider.toUpperCase() + " simulated test passed. No request was sent to carrier APIs. " +
-          eventLabels.join(" → "));
-      } catch (error) {
-        setText(mockStatus, messageFor(error.message));
-      } finally {
-        setBusy(false);
-      }
-    });
+  trackingCarrier?.addEventListener("change", updateControls);
+
+  trackingForm?.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!authenticated || busy) return;
+
+    const provider = trackingCarrier.value;
+    const number = trackingNumber.value.trim();
+    if (!providers.includes(provider) || !selectedProviderConnected()) {
+      setText(trackingStatus, messageFor("carrier_not_connected"));
+      return;
+    }
+    if (!number) {
+      setText(trackingStatus, messageFor("invalid_tracking_number"));
+      return;
+    }
+
+    clearTrackingResult();
+    setBusy(true);
+    setText(trackingStatus, "Sending the lookup through the " + provider.toUpperCase() + " carrier adapter…");
+    try {
+      const result = await requestJson("/api/merchant/carriers/" + provider + "/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ number })
+      });
+      renderTrackingResult(result);
+      setText(trackingStatus, "Carrier adapter returned a tracking response.");
+    } catch (error) {
+      setText(trackingStatus, messageFor(error.message));
+    } finally {
+      setBusy(false);
+    }
   });
 
   const authResult = new URLSearchParams(window.location.search).get("auth");
   if (authResult === "success") setText(accountStatus, "Sign-in completed. Loading your merchant account…");
-  if (authResult?.startsWith("failed")) setText(accountStatus, "Sign-in was not completed. Check the merchant account configuration and try again.");
+  if (authResult?.startsWith("failed")) {
+    setText(accountStatus, "Sign-in was not completed. Check the merchant account configuration and try again.");
+  }
   loadSession();
 }

@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#FAF9F6">
-  <meta name="description" content="Manage your own FedEx and UPS official non-production Sandbox connections in ExportFlow.">
+  <meta name="description" content="Manage merchant carrier connections and track shipments through ExportFlow carrier adapters.">
   <meta name="robots" content="noindex,nofollow,noarchive">
   <meta name="googlebot" content="noindex,nofollow,noarchive">
-  <title>Merchant Sandbox Console — ExportFlow</title>
+  <title>Merchant Workspace — ExportFlow</title>
   <link rel="canonical" href="https://exportflow.me/merchant/">
   <link rel="icon" href="/favicon.svg?v=20261106" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css?v=ef-mock-tests-20261112-01">
+  <link rel="stylesheet" href="/styles.css?v=merchant-adapter-20261116-01">
 </head>
 <body>
   <header class="site-header">
@@ -22,105 +22,123 @@
     </nav>
     <span class="field-label">MERCHANT WORKSPACE</span>
   </header>
+
   <main class="page-shell" style="max-width:1080px;margin:0 auto;padding:clamp(24px,5vw,64px) 20px 80px">
     <section class="hero-content" aria-labelledby="merchantTitle">
-      <p class="eyebrow"><span class="eyebrow-index">WORKSPACE</span><span>SIMULATED TESTS / OFFICIAL SANDBOX</span></p>
-      <h1 id="merchantTitle">Your carrier accounts.<br><em>Your controlled tests.</em></h1>
-      <p class="body-copy">Official Sandbox connections are optional and require carrier accounts you own or are authorized to manage. You can also run credential-free simulated tests: they use ExportFlow fixtures only, never contact UPS or FedEx, and never query real shipments.</p>
+      <p class="eyebrow"><span class="eyebrow-index">WORKSPACE</span><span>MERCHANT TRACKING</span></p>
+      <h1 id="merchantTitle">Your carrier accounts.<br><em>Your shipments in one place.</em></h1>
+      <p class="body-copy">Connect an account you manage, then track a shipment through ExportFlow's existing carrier adapter. Your API credentials stay encrypted on the server and are never returned to this page.</p>
     </section>
 
-    <section id="officialApiSandbox" class="official-api-section" aria-labelledby="officialApiTitle">
+    <section id="merchantWorkspace" class="official-api-section" aria-labelledby="merchantWorkspaceTitle">
       <div class="official-api-heading">
-        <p class="eyebrow">MERCHANT IDENTITY / SANDBOX CONNECTIONS</p>
-        <h2 id="officialApiTitle">Official carrier connections</h2>
-        <p class="official-api-description">Sign in with Google to manage your own UPS and FedEx non-production credentials. Secret values are never returned to this page and are not stored in browser storage.</p>
+        <p class="eyebrow">MERCHANT IDENTITY / CARRIER CONNECTIONS</p>
+        <h2 id="merchantWorkspaceTitle">Your connected carriers</h2>
+        <p class="official-api-description">Sign in with Google to manage your UPS and FedEx connections. The status below confirms that credentials are saved; the adapter makes the carrier request only when you track a shipment.</p>
       </div>
 
       <div class="official-api-account">
         <div class="official-api-account-copy">
           <strong>Merchant account</strong>
-          <p id="officialApiAccountStatus" role="status" aria-live="polite">Checking merchant sign-in…</p>
+          <p id="merchantAccountStatus" role="status" aria-live="polite">Checking merchant sign-in…</p>
         </div>
         <div class="official-api-account-actions">
-          <button class="primary-button" id="officialApiSignIn" type="button">Continue with Google</button>
-          <button id="officialApiSignOut" type="button" hidden>Sign out</button>
+          <button class="primary-button" id="merchantSignIn" type="button">Continue with Google</button>
+          <button id="merchantSignOut" type="button" hidden>Sign out</button>
         </div>
       </div>
 
-      <div id="officialApiAuthNotice" class="merchant-notice" role="status" aria-live="polite" style="margin-top:14px">
-        Sign in before connecting a carrier. The Sandbox actions remain unavailable until the merchant account is authenticated and configured.
+      <div id="merchantAuthNotice" class="merchant-notice" role="status" aria-live="polite" style="margin-top:14px">
+        Sign in before connecting a carrier or tracking a shipment.
       </div>
 
-      <div id="officialApiConnections" class="official-api-grid" hidden>
-        <article class="official-api-card official-api-mock-card" id="officialApiMockTests" aria-labelledby="officialApiMockTitle">
-          <div class="official-api-card-heading">
-            <div><p class="eyebrow">SIMULATED TEST MODE</p><h3 id="officialApiMockTitle">Test without carrier credentials</h3></div>
-            <span class="official-api-provider-label">No carrier requests</span>
-          </div>
-          <p class="official-api-description">Run deterministic UPS and FedEx fixtures using ExportFlow's own test data. No carrier account, API key, credential vault, or external carrier request is used.</p>
-          <div class="official-api-actions">
-            <button type="button" data-action="mock" data-provider="ups">Run UPS simulated test</button>
-            <button type="button" data-action="mock" data-provider="fedex">Run FedEx simulated test</button>
-          </div>
-          <p id="officialApiMockStatus" class="merchant-status" role="status" aria-live="polite">Sign in to run local simulated tests. Official Sandbox connections are optional.</p>
-        </article>
-        <article class="official-api-card" data-provider-panel="ups" data-connected="false">
-          <div class="official-api-card-heading">
-            <div><p class="eyebrow">OFFICIAL SANDBOX</p><h3>UPS</h3></div>
-            <span class="official-api-provider-label">Merchant-owned account</span>
-          </div>
-          <p class="official-api-description">Connect your UPS developer-app Client ID and Client Secret for fixed synthetic tests against the official UPS CIE Sandbox.</p>
-          <form class="official-api-form">
-            <label>Client ID
-              <input name="clientId" type="password" autocomplete="off" maxlength="512" required>
-            </label>
-            <label>Client Secret
-              <input name="clientSecret" type="password" autocomplete="new-password" maxlength="512" required>
-            </label>
-            <label class="official-api-consent">
-              <input name="consent" type="checkbox" required>
-              I own this UPS account or am authorized to manage its Sandbox credentials.
-            </label>
-            <button class="primary-button" type="submit">Save encrypted credentials</button>
-          </form>
-          <div class="official-api-actions">
-            <button type="button" data-action="sandbox" disabled>Run Sandbox check</button>
-            <button type="button" data-action="disconnect" disabled>Disconnect</button>
-          </div>
-          <p data-provider-status class="merchant-status" role="status" aria-live="polite">Sign in to check connection status.</p>
-        </article>
+      <div id="merchantConnections" hidden>
+        <div class="official-api-grid">
+          <article class="official-api-card" data-provider-panel="ups" data-connected="false">
+            <div class="official-api-card-heading">
+              <div><p class="eyebrow">UPS ADAPTER</p><h3>UPS</h3></div>
+              <span class="official-api-provider-label">Merchant account</span>
+            </div>
+            <p class="official-api-description">Connect the UPS Developer App credentials for the UPS account you manage. ExportFlow encrypts them server-side and passes them to the existing UPS adapter for each lookup.</p>
+            <form class="official-api-form">
+              <label>Client ID
+                <input name="clientId" type="password" autocomplete="off" maxlength="512" required>
+              </label>
+              <label>Client Secret
+                <input name="clientSecret" type="password" autocomplete="new-password" maxlength="512" required>
+              </label>
+              <label class="official-api-consent">
+                <input name="consent" type="checkbox" required>
+                I own this UPS account or am authorized to manage these API credentials.
+              </label>
+              <button class="primary-button" type="submit">Save encrypted credentials</button>
+            </form>
+            <div class="official-api-actions">
+              <button type="button" data-action="disconnect" disabled>Disconnect</button>
+            </div>
+            <p data-provider-status class="merchant-status" role="status" aria-live="polite">Sign in to check connection status.</p>
+          </article>
 
-        <article class="official-api-card" data-provider-panel="fedex" data-connected="false">
+          <article class="official-api-card" data-provider-panel="fedex" data-connected="false">
+            <div class="official-api-card-heading">
+              <div><p class="eyebrow">FEDEX ADAPTER</p><h3>FedEx</h3></div>
+              <span class="official-api-provider-label">Merchant account</span>
+            </div>
+            <p class="official-api-description">Connect the FedEx Developer API Key and Secret Key for the FedEx account you manage. ExportFlow encrypts them server-side and passes them to the existing FedEx adapter for each lookup.</p>
+            <form class="official-api-form">
+              <label>API Key
+                <input name="apiKey" type="password" autocomplete="off" maxlength="512" required>
+              </label>
+              <label>Secret Key
+                <input name="apiSecret" type="password" autocomplete="new-password" maxlength="512" required>
+              </label>
+              <label class="official-api-consent">
+                <input name="consent" type="checkbox" required>
+                I own this FedEx account or am authorized to manage these API credentials.
+              </label>
+              <button class="primary-button" type="submit">Save encrypted credentials</button>
+            </form>
+            <div class="official-api-actions">
+              <button type="button" data-action="disconnect" disabled>Disconnect</button>
+            </div>
+            <p data-provider-status class="merchant-status" role="status" aria-live="polite">Sign in to check connection status.</p>
+          </article>
+        </div>
+
+        <section class="official-api-card" aria-labelledby="merchantTrackTitle" style="margin-top:22px">
           <div class="official-api-card-heading">
-            <div><p class="eyebrow">OFFICIAL SANDBOX</p><h3>FedEx</h3></div>
-            <span class="official-api-provider-label">Merchant-owned account</span>
+            <div><p class="eyebrow">EXISTING CARRIER ADAPTERS</p><h3 id="merchantTrackTitle">Track a shipment</h3></div>
+            <span class="official-api-provider-label">Live adapter request</span>
           </div>
-          <p class="official-api-description">Connect your FedEx Developer Portal API Key and Secret Key for fixed synthetic tests against the official FedEx Sandbox.</p>
-          <form class="official-api-form">
-            <label>API Key
-              <input name="apiKey" type="password" autocomplete="off" maxlength="512" required>
+          <p class="official-api-description">Choose the carrier connected to this merchant account and enter a shipment tracking number. ExportFlow routes the request to that carrier's adapter without a separate key-check or simulated-test step.</p>
+          <form id="merchantTrackingForm" class="official-api-form">
+            <label>Carrier
+              <select id="merchantTrackingCarrier" name="provider" required>
+                <option value="ups">UPS</option>
+                <option value="fedex">FedEx</option>
+              </select>
             </label>
-            <label>Secret Key
-              <input name="apiSecret" type="password" autocomplete="new-password" maxlength="512" required>
+            <label>Tracking number
+              <input id="merchantTrackingNumber" name="number" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="256" placeholder="Enter your shipment tracking number" required>
             </label>
-            <label class="official-api-consent">
-              <input name="consent" type="checkbox" required>
-              I own this FedEx account or am authorized to manage its Sandbox credentials.
-            </label>
-            <button class="primary-button" type="submit">Save encrypted credentials</button>
+            <button id="merchantTrackButton" class="primary-button" type="submit" disabled>Track shipment</button>
           </form>
-          <div class="official-api-actions">
-            <button type="button" data-action="sandbox" disabled>Run Sandbox check</button>
-            <button type="button" data-action="disconnect" disabled>Disconnect</button>
+          <p id="merchantTrackingStatus" class="merchant-status" role="status" aria-live="polite">Connect a carrier account to start tracking.</p>
+          <div id="merchantTrackingResult" hidden>
+            <p id="merchantTrackingSummary" class="merchant-status" role="status"></p>
+            <ol id="merchantTrackingEvents" class="merchant-events" aria-label="Shipment tracking events"></ol>
           </div>
-          <p data-provider-status class="merchant-status" role="status" aria-live="polite">Sign in to check connection status.</p>
-        </article>
+        </section>
+
+        <p class="official-api-footnote">Each lookup is authenticated to the signed-in merchant, rate-limited, and sent only to the selected carrier adapter. Tracking numbers and credentials are not written to browser storage or returned in diagnostic output.</p>
       </div>
-
-      <p class="official-api-footnote">Scope is limited to official non-production Sandbox checks using synthetic references. No carrier CAPTCHA, bot protection, public tracking restrictions, or third-party data rights are bypassed. A successful Sandbox test is not proof of Production authorization or public shipment-display rights.</p>
     </section>
   </main>
-  <footer class="site-footer"><p>ExportFlow Merchant Workspace — simulated fixtures and optional official non-production APIs.</p><nav aria-label="Footer"><a href="/privacy/">Privacy</a><a href="/">Home</a></nav></footer>
-  <script src="/merchant-official-api.js?v=ef-mock-tests-20261112-01" defer></script>
+
+  <footer class="site-footer">
+    <p>ExportFlow Merchant Workspace — encrypted account connections and adapter-based shipment tracking.</p>
+    <nav aria-label="Footer"><a href="/privacy/">Privacy</a><a href="/">Home</a></nav>
+  </footer>
+  <script src="/merchant-official-api.js?v=merchant-adapter-20261116-01" defer></script>
 </body>
 </html>
