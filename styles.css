@@ -3462,3 +3462,12 @@ body.coverage-page .coverage-footer a:hover { color: var(--ef-coral); }
 .official-api-mock-card .eyebrow{color:var(--ef-coral)}
 .official-api-mock-card #officialApiMockStatus{min-height:36px;padding:9px 10px;border-radius:9px;background:var(--ef-paper);overflow-wrap:anywhere}
 @media(max-width:760px){.official-api-mock-card{grid-column:auto}}
+
+/* Merchant adapter tracking timeline */
+.official-api-form select{box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;border:1px solid var(--ef-input-border);border-radius:9px;background:#fff;color:var(--ef-text-main);font:inherit;font-size:14px}
+.official-api-form select:focus{outline:none;border-color:var(--ef-coral);box-shadow:0 0 0 3px var(--ef-coral-glow)}
+.merchant-events{display:grid;gap:10px;margin:12px 0 0;padding:0;list-style:none}
+.merchant-event{min-width:0;padding:13px 14px;border:1px solid var(--ef-border-light);border-radius:10px;background:var(--ef-paper)}
+.merchant-event strong{display:block;color:var(--ef-navy);font-size:13px;text-transform:capitalize}
+.merchant-event p{margin:5px 0 0;color:var(--ef-text-secondary);font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.merchant-event .merchant-event-meta{color:var(--ef-text-muted);font-size:11px}
