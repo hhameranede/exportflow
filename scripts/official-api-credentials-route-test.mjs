@@ -90,13 +90,16 @@ const saved = await mutations.onRequestPost({
 });
 assert.equal(saved.status, 201);
 assert.equal(saved.headers.get("Cache-Control"), "no-store, private");
-assert.deepEqual(await saved.json(), {
+const savedBody = await saved.json();
+assert.deepEqual(savedBody, {
   provider: "fedex",
   connected: true,
   scope: "sandbox_track",
   consentedAt: "2026-11-16T16:00:00.000Z",
   updatedAt: "2026-11-16T16:00:00.000Z"
 });
+assert.equal(JSON.stringify(savedBody).includes("fedex-preview-secret"), false,
+  "Credential mutation responses must never echo secret values");
 assert.deepEqual(mutationCalls[0], {
   action: "save",
   input: {
@@ -105,8 +108,6 @@ assert.deepEqual(mutationCalls[0], {
     consent: true
   }
 });
-assert.equal(JSON.stringify(await saved.clone().json()).includes("fedex-preview-secret"), false,
-  "Credential mutation responses must never echo secret values");
 
 const revoked = await mutations.onRequestDelete({
   request: deleteRequest("/api/merchant/carriers/fedex/official-credentials"),
