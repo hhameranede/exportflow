@@ -71,8 +71,11 @@ async function readPayload(request) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
       Object.keys(payload).some(key => !["credentials", "consent"].includes(key)) ||
       !payload.credentials || typeof payload.credentials !== "object" || Array.isArray(payload.credentials) ||
-      payload.consent !== true) {
+      typeof payload.consent !== "boolean") {
     throw Object.assign(new Error("invalid_request_body"), { status: 400 });
+  }
+  if (payload.consent !== true) {
+    throw Object.assign(new Error("consent_required"), { status: 400 });
   }
   return payload;
 }
