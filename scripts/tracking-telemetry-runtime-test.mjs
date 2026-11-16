@@ -144,11 +144,29 @@ async function waitForRow(baseUrl, requestId) {
 }
 
 async function stopPages() {
-  if (!pagesProcess || pagesProcess.exitCode !== null || pagesProcess.killed) return;
+  if (!pagesProcess || pagesProcess.exitCode !== null) return;
+
+  const signalProcessTree = signal => {
+    try {
+      if (process.platform === "win32" || !pagesProcess.pid) {
+        pagesProcess.kill(signal);
+      } else {
+        // npx launches Wrangler as a child process. Kill the whole detached
+        // process group so workerd/Wrangler cannot keep the CI runner alive.
+        process.kill(-pagesProcess.pid, signal);
+      }
+    } catch (error) {
+      if (error?.code !== "ESRCH") throw error;
+    }
+  };
+
   const exited = new Promise(resolve => pagesProcess.once("exit", resolve));
-  pagesProcess.kill("SIGTERM");
-  await Promise.race([exited, sleep(5_000)]);
-  if (pagesProcess.exitCode === null) pagesProcess.kill("SIGKILL");
+  signalProcessTree("SIGTERM");
+  await Promise.race([exited, sleep(3_000)]);
+  if (pagesProcess.exitCode === null) {
+    signalProcessTree("SIGKILL");
+    await Promise.race([exited, sleep(1_000)]);
+  }
 }
 
 try {
@@ -176,7 +194,8 @@ try {
       WRANGLER_SEND_METRICS: "false",
       NO_COLOR: "1"
     },
-    stdio: ["ignore", "pipe", "pipe"]
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: process.platform !== "win32"
   });
   pagesProcess.stdout.on("data", chunk => { output = (output + chunk.toString()).slice(-12_000); });
   pagesProcess.stderr.on("data", chunk => { output = (output + chunk.toString()).slice(-12_000); });
