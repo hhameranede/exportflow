@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import {
   existsSync,
-  mkdtempSync,
-  rmSync,
   unlinkSync,
   writeFileSync
 } from "node:fs";
@@ -13,7 +11,6 @@ import path from "node:path";
 
 const projectRoot = process.cwd();
 const routePath = path.join(projectRoot, "functions", "api", "__telemetry_runtime_test.js");
-const stateDirectory = mkdtempSync(path.join(os.tmpdir(), "exportflow-telemetry-local-"));
 const cli = process.platform === "win32" ? "npx.cmd" : "npx";
 const wranglerArgs = ["--yes", "wrangler@3.114.17"];
 let pagesProcess;
@@ -105,8 +102,7 @@ function runLocalMigration() {
     ...wranglerArgs,
     "d1", "migrations", "apply",
     "exportflow-tracking-telemetry-preview-db",
-    "--env", "preview",
-    "--persist-to", stateDirectory
+    "--env", "preview"
   ];
   const result = spawnSync(cli, args, {
     cwd: projectRoot,
@@ -192,8 +188,7 @@ try {
     "--local",
     "--env", "preview",
     "--ip", "127.0.0.1",
-    "--port", String(port),
-    "--persist-to", stateDirectory
+    "--port", String(port)
   ];
 
   pagesProcess = spawn(cli, args, {
@@ -244,5 +239,4 @@ try {
 } finally {
   await stopPages();
   if (existsSync(routePath)) unlinkSync(routePath);
-  rmSync(stateDirectory, { recursive: true, force: true });
 }
