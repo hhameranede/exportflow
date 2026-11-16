@@ -1,17 +1,15 @@
 import { createTracker } from "../../../../../node_modules/universal-parcel-scraper/dist/facade/index.js";
 import {
-  createSessionBoundOfficialApiCredentialVault,
-  officialApiCredentialVaultErrorResponse
-} from "../../../../lib/official-api-credential-vault.mjs";
+  resolveMerchantSession,
+  merchantIdentityErrorResponse
+} from "../../../../lib/merchant-identity.mjs";
+import { createCloudflareFetch } from "../../../../lib/cloudflare-fetch.mjs";
 import {
   consumeGlobalRateLimit,
   globalRateLimitHeaders
 } from "../../../../lib/global-rate-limiter.mjs";
 
-const PROVIDERS = Object.freeze({
-  ups: Object.freeze({ endpoint: "https://wwwcie.ups.com" }),
-  fedex: Object.freeze({ endpoint: "https://apis-sandbox.fedex.com" })
-});
+const PROVIDERS = new Set(["ups", "fedex"]);
 const MAX_BODY_BYTES = 4 * 1024;
 const TRACKING_BUDGET_MS = 25_000;
 
@@ -98,30 +96,6 @@ async function readPayload(request) {
   return { number };
 }
 
-/**
- * Each request gets a fresh Tracker and a merchant-scoped credential object.
- * The existing UPS/FedEx adapter reads these standard environment keys; no
- * merchant secret is placed in Worker-global state or shared with another tenant.
- */
-export function adapterEnvironment(provider, credentials) {
-  const definition = PROVIDERS[provider];
-  if (!definition) throw new Error("unsupported_provider");
-
-  if (provider === "ups") {
-    return Object.freeze({
-      UPS_CLIENT_ID: credentials.clientId,
-      UPS_CLIENT_SECRET: credentials.clientSecret,
-      UPS_API_URL: definition.endpoint
-    });
-  }
-
-  return Object.freeze({
-    FEDEX_API_KEY: credentials.apiKey,
-    FEDEX_SECRET_KEY: credentials.apiSecret,
-    FEDEX_API_URL: definition.endpoint
-  });
-}
-
 function safeText(value, maxLength = 240) {
   return typeof value === "string"
     ? value.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, maxLength)
@@ -165,21 +139,25 @@ function safeAttempts(error) {
 function trackingFailureResponse(error) {
   const attempts = safeAttempts(error);
   const kinds = attempts.map(attempt => attempt.kind);
+  const challenge = kinds.includes("challenge") || error?.name === "ChallengeError";
   const status = error?.name === "RateLimitedError" || kinds.includes("rate_limited") ? 429
     : error?.name === "TimeoutError" || error?.name === "AbortError" || kinds.includes("budget") ? 504
     : error?.name === "InvalidInputError" || kinds.includes("invalid_input") ? 400
+    : challenge ? 503
     : 502;
   const code = status === 429 ? "carrier_rate_limited"
     : status === 504 ? "carrier_lookup_timeout"
     : status === 400 ? "invalid_tracking_number"
+    : status === 503 ? "carrier_verification_required"
     : "carrier_lookup_failed";
   return jsonResponse({ error: code, attempts }, status);
 }
 
 export function createMerchantAdapterTrackHandler({
-  createVault = createSessionBoundOfficialApiCredentialVault,
+  resolveSession = resolveMerchantSession,
   consumeRateLimit = consumeGlobalRateLimit,
-  trackerFactory = createTracker
+  trackerFactory = createTracker,
+  fetchFactory = createCloudflareFetch
 } = {}) {
   return async function onRequestPost({ request, env, params } = {}) {
     if (!request || request.method !== "POST") {
@@ -190,7 +168,7 @@ export function createMerchantAdapterTrackHandler({
     }
 
     const provider = String(params?.provider || "").trim().toLowerCase();
-    if (!Object.hasOwn(PROVIDERS, provider)) {
+    if (!PROVIDERS.has(provider)) {
       return jsonResponse({ error: "unsupported_provider" }, 400);
     }
 
@@ -202,15 +180,14 @@ export function createMerchantAdapterTrackHandler({
       return jsonResponse({ error: error?.message || "invalid_request_body" }, status);
     }
 
-    let vault;
+    let session;
     try {
-      vault = await createVault(request, env);
+      session = await resolveSession(request, env?.MERCHANT_DB);
     } catch (error) {
-      return officialApiCredentialVaultErrorResponse(error);
+      return merchantIdentityErrorResponse(error);
     }
-    if (typeof vault?.user?.id !== "string" || !vault.user.id ||
-        typeof vault.resolveCredentials !== "function") {
-      return jsonResponse({ error: "merchant_session_invalid" }, 401);
+    if (typeof session?.user?.id !== "string" || !session.user.id) {
+      return jsonResponse({ error: "unauthenticated" }, 401);
     }
 
     let quota;
@@ -226,18 +203,17 @@ export function createMerchantAdapterTrackHandler({
       return jsonResponse({ error: "rate_limited" }, 429, globalRateLimitHeaders(quota));
     }
 
-    let credentials;
     try {
-      credentials = await vault.resolveCredentials({ provider });
-    } catch (error) {
-      return officialApiCredentialVaultErrorResponse(error);
-    }
-    if (!credentials) return jsonResponse({ error: "carrier_not_connected" }, 409);
-
-    try {
+      const trawlUrl = typeof env?.EXPORTFLOW_TRAWL_URL === "string"
+        ? env.EXPORTFLOW_TRAWL_URL.trim()
+        : "";
       const tracker = trackerFactory({
-        env: adapterEnvironment(provider, credentials),
-        // Only the selected carrier adapter may receive this merchant's parcel ID.
+        // Use the same server-side adapter configuration as public ExportFlow tracking.
+        // No merchant-supplied credentials and no browser-visible secrets are involved.
+        env,
+        fetcher: fetchFactory(),
+        ...(trawlUrl ? { trawlUrl } : {}),
+        // Keep merchant parcel IDs on the selected carrier adapter only.
         providers: [],
         userAgent: "ExportFlow-Merchant/1.0"
       });
