@@ -2,18 +2,16 @@
 
 ## Status
 
-The sink is implemented but **disabled by default**. Two dedicated D1 databases have been provisioned and the schema migration applied. The Pages project has no D1 binding in either environment, so application telemetry is not being written yet.
-
-The Pages Function writes only when the private `EXPORTFLOW_TELEMETRY_DB` D1 binding exists and the Pages execution context exposes `waitUntil`. Preview and Production must use separate D1 databases behind the same binding name.
+The optional D1 sink is implemented. A dedicated Preview D1 database is now bound to Cloudflare Pages Preview as `EXPORTFLOW_TELEMETRY_DB`. Production remains unbound. Runtime persistence must still be verified with a real Pages Function invocation; the existing Cloudflare Access policy protects Preview deployment URLs.
 
 ## Dedicated databases
 
 | Environment | Database | UUID | State |
 |---|---|---|---|
-| Preview | `exportflow-tracking-telemetry-preview-db` | `decef588-a198-4bdd-9764-e0ce2e2caaee` | Created; migration applied; binding not configured |
-| Production | `exportflow-tracking-telemetry-production-db` | `9f90b381-7635-4857-b9f9-fa3a3d23b64b` | Created; migration applied; binding not configured |
+| Preview | `exportflow-tracking-telemetry-preview-db` | `decef588-a198-4bdd-9764-e0ce2e2caaee` | Created; migration applied; Pages Preview binding configured |
+| Production | `exportflow-tracking-telemetry-production-db` | `9f90b381-7635-4857-b9f9-fa3a3d23b64b` | Created; migration applied; Pages Production remains unbound |
 
-Both schemas were inspected through the D1 API. The table and two supporting indexes are present in both databases. Row count is zero in each database. A synthetic fixture insert/read/delete round trip passed against Preview and the test row was deleted. No shipment reference or personal data was used.
+Both schemas were inspected through the D1 API. The table and two supporting indexes are present in both databases. A synthetic fixture insert/read/delete round trip passed against Preview and the test row was deleted. Both databases were subsequently verified at zero rows. No shipment reference or personal data was used.
 
 ## Persisted fields
 
@@ -38,15 +36,16 @@ It does not store shipment/tracking numbers, postcodes, IP addresses, request bo
 
 ## Current binding state
 
-- The Pages project currently reports no D1 bindings in either environment.
-- The next step requires a separate approved Pages configuration change: bind Preview to `decef588-a198-4bdd-9764-e0ce2e2caaee` using the name `EXPORTFLOW_TELEMETRY_DB`.
-- Keep Production unbound until Preview runtime persistence and redaction are verified. Then consider a separate Production binding to `9f90b381-7635-4857-b9f9-fa3a3d23b64b`.
+- Cloudflare Pages Preview has `EXPORTFLOW_TELEMETRY_DB` bound to `decef588-a198-4bdd-9764-e0ce2e2caaee`.
+- Cloudflare Pages Production has no D1 telemetry binding. This remains intentionally unconfigured until Preview application-level persistence is verified.
+- The Pages project update preserved existing Preview compatibility date/flags and existing environment variable names. Production config was not modified.
+- The Preview binding takes effect in a deployment created after the configuration update. The current Preview branch is being rebuilt to test this exact binding.
 - Existing ExportFlow intelligence databases are not reused.
 
 ## Cost and limits
 
-Cloudflare D1 metrics for 2026-11-16, queried account-wide before provisioning these two new databases, showed 110,229 rows read, 2,997 rows written and approximately 4.47 MiB across the three existing databases. This was a partial-day snapshot. The official Workers Free allowances are 5 million rows read/day, 100,000 rows written/day, 5 GB total storage and 10 databases; Workers Paid includes 100,000 databases, 25 billion rows read/month, 50 million rows written/month and 5 GB included storage. The current Workers billing entitlement itself was not independently read. The account now has five D1 databases total, including the two dedicated telemetry databases.
+Cloudflare D1 metrics for 2026-11-16 showed 110,259 rows read and 3,012 rows written account-wide after database provisioning and the synthetic test. The two new telemetry databases currently contain zero rows. The official Workers Free allowances are 5 million rows read/day, 100,000 rows written/day, 5 GB total storage and 10 databases; Workers Paid includes 100,000 databases, 25 billion rows read/month, 50 million rows written/month and 5 GB included storage. The active Workers billing entitlement itself was not independently read. The account now has five D1 databases total, including the two dedicated telemetry databases.
 
 References: [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), [D1 metrics and analytics](https://developers.cloudflare.com/d1/observability/metrics-analytics/), [D1 billing](https://developers.cloudflare.com/d1/observability/billing/).
 
-No D1 binding was configured and no telemetry from live tracking requests has been persisted. No paid ingestion, Pages settings, secrets, Access policies, DNS or Production deployment were changed.
+No Production D1 binding, Production deployment, paid ingestion, secret, Access policy, DNS or permission change was performed.
