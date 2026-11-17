@@ -66,6 +66,11 @@ export async function parseDefuddleHtml(html, sourceUrl) {
     markdown: true,
     useAsync: false,
     debug: false,
+    // Fail closed if any extractor attempts network access, even if a future
+    // Defuddle version regresses its useAsync:false behavior.
+    fetch: async () => {
+      throw new Error("Network access is disabled in ExportFlow parser mode.");
+    },
   }).parse();
 
   return {
