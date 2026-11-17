@@ -6,6 +6,15 @@ const repeatedText = (label, count = 30) =>
     " describes reliable retrieval, source evidence, bounded processing, and content provenance.",
   ).join(" ");
 
+const DOM_GLOBALS = ["window", "document", "DOMParser", "Node", "getComputedStyle"];
+const readDomGlobalFlags = () => Object.fromEntries(
+  DOM_GLOBALS.map((name) => [name, Object.prototype.hasOwnProperty.call(globalThis, name)]),
+);
+
+const jsonLdArticleBody =
+  "<p>" + repeatedText("Structured JSON-LD article", 45) + "</p>" +
+  '<img src="javascript:alert(1)" onerror="alert(2)">';
+
 const FIXTURES = [
   {
     id: "article-multilingual",
@@ -69,6 +78,21 @@ const FIXTURES = [
       "</article></main><footer>Cart, account and footer navigation.</footer></body></html>",
     ].join(""),
   },
+  {
+    id: "jsonld-articlebody-fallback",
+    url: "https://news.example.org/workerd/jsonld-fallback",
+    html: [
+      "<!doctype html><html><head><title>Structured Article Fallback</title>",
+      '<script type="application/ld+json">',
+      JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "Article",
+        headline: "Structured Article Fallback",
+        articleBody: jsonLdArticleBody,
+      }),
+      "</script></head><body><p>Thin page shell.</p></body></html>",
+    ].join(""),
+  },
 ];
 
 export default {
@@ -79,15 +103,20 @@ export default {
 
     const results = [];
     for (const fixture of FIXTURES) {
+      const globalsBefore = readDomGlobalFlags();
       const start = performance.now();
       const parsed = await parseDefuddleHtml(fixture.html, fixture.url);
+      const workerElapsedMs = Math.round((performance.now() - start) * 100) / 100;
+      const globalsAfter = readDomGlobalFlags();
       results.push({
         id: fixture.id,
         title: parsed.title,
         markdown: parsed.markdown,
         wordCount: parsed.wordCount,
         parseTimeMs: parsed.parseTimeMs,
-        workerElapsedMs: Math.round((performance.now() - start) * 100) / 100,
+        workerElapsedMs,
+        globalsBefore,
+        globalsAfter,
       });
     }
 
