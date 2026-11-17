@@ -164,3 +164,56 @@ test("Defuddle full-bundle integration parses locally without making extra netwo
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test("default fetch path uses ExportFlow GET and manual redirect handling", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (url, init) => {
+    calls++;
+    assert.equal(url, sourceUrl);
+    assert.equal(init.method, "GET");
+    assert.equal(init.redirect, "manual");
+    return new Response(html, {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+  };
+  try {
+    const adapter = createDefuddleAdapter({
+      parseHtml: async () => ({ markdown: "# Locally parsed", title: "Locally parsed", wordCount: 2 }),
+    });
+    const result = await adapter.execute({ url: sourceUrl });
+    assert.equal(calls, 1);
+    assert.equal(result.status, "succeeded");
+    assert.equal(result.data.markdown, "# Locally parsed");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("default fetch path blocks a redirect to a private destination before a second request", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (_url, init) => {
+    calls++;
+    assert.equal(init.method, "GET");
+    assert.equal(init.redirect, "manual");
+    return new Response(null, {
+      status: 302,
+      headers: { location: "http://127.0.0.1/admin" },
+    });
+  };
+  try {
+    const adapter = createDefuddleAdapter({
+      parseHtml: async () => ({ markdown: "must not parse" }),
+    });
+    await assert.rejects(
+      adapter.execute({ url: sourceUrl }),
+      (error) => error.code === "REDIRECT_NOT_ALLOWED",
+    );
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
