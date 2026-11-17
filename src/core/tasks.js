@@ -83,18 +83,18 @@ export async function executeWebTask(input, options = {}) {
     }
 
     const operation = input.operation === undefined ? "fetch" : input.operation;
-    if (!["fetch", "map", "crawl", "extract", "search"].includes(operation)) {
+    if (!["fetch", "map", "crawl", "extract", "search", "research"].includes(operation)) {
       throw Object.assign(new TypeError("Unsupported task operation."), { code: "UNSUPPORTED_OPERATION" });
     }
-    const url = operation === "search" ? null : validatePublicHttpUrl(input.url);
-    if (operation === "search" && (typeof input.query !== "string" || !input.query.trim() || input.query.length > 1024)) {
+    const url = ["search", "research"].includes(operation) ? null : validatePublicHttpUrl(input.url);
+    if (["search", "research"].includes(operation) && (typeof input.query !== "string" || !input.query.trim() || input.query.length > 1024)) {
       throw Object.assign(new TypeError("Search query must contain 1 to 1024 characters."), { code: "INVALID_QUERY" });
     }
-    if (operation === "search" && (input.requiresJavascript === true || input.requiresInteraction === true)) {
+    if (["search", "research"].includes(operation) && (input.requiresJavascript === true || input.requiresInteraction === true)) {
       throw Object.assign(new TypeError("Search operations cannot require browser execution."), { code: "INVALID_TASK" });
     }
-    const route = operation === "search"
-      ? { path: "http", reason: "Search adapters return ranked public URLs directly.", escalationAllowed: false }
+    const route = ["search", "research"].includes(operation)
+      ? { path: "http", reason: "Discovery tasks return public URLs for bounded retrieval.", escalationAllowed: false }
       : chooseExecutionPath({
           requiresJavascript: input.requiresJavascript === true,
           requiresInteraction: input.requiresInteraction === true,
@@ -103,6 +103,42 @@ export async function executeWebTask(input, options = {}) {
 
     startedAt = now();
     events.push(event("task.started", startedAt, { executionPath: route.path }));
+
+    if (operation === "research") {
+      const researchAdapter = options.researchAdapter;
+      if (!researchAdapter || typeof researchAdapter.execute !== "function") {
+        const completedAt = now();
+        const result = normalizeResult({
+          status: "failed",
+          data: null,
+          warnings: ["Research pipeline is not configured; no search or fetch request was made."],
+        });
+        events.push(event("task.unsupported", completedAt, { reason: "research_pipeline_unavailable" }));
+        return buildTask({
+          id, goal, state: "unsupported", execution, createdAt, startedAt,
+          completedAt, events, result,
+        });
+      }
+      execution.adapterId = researchAdapter.id || "web.research.v1";
+      const result = await researchAdapter.execute({
+        query: input.query,
+        schema: input.schema,
+        limit: input.limit,
+        candidateLimit: input.candidateLimit,
+      });
+      const completedAt = now();
+      const state = result.status === "succeeded"
+        ? "succeeded"
+        : result.status === "partial"
+          ? "partial"
+          : "failed";
+      if (state === "succeeded") events.push(event("task.succeeded", completedAt));
+      else if (state === "partial") events.push(event("task.partial", completedAt, { reason: "required_or_optional_fields_missing" }));
+      else events.push(event("task.failed", completedAt, { reason: "research_failed" }));
+      return buildTask({
+        id, goal, state, execution, createdAt, startedAt, completedAt, events, result,
+      });
+    }
 
     if (operation === "search") {
       const searchAdapter = options.searchAdapter;

@@ -6,6 +6,7 @@ import { crawlWebsite, extractSitemapLocations, isAllowedByRobots, mapWebsite, p
 import { ExtractionError, extractFromStructuredSources, extractStructuredData, validateExtractionSchema } from "../src/core/extract.js";
 import { BrowserAdapterError, createBrowserAdapter } from "../src/core/browser-render.js";
 import { SearchAdapterError, createSearchAdapter } from "../src/core/search.js";
+import { ResearchPipelineError, createResearchPipeline } from "../src/core/research.js";
 import { EGRESS_POLICY, EgressPolicyError, validateEgressTarget } from "../src/core/egress-guard.js";
 import { normalizeResult } from "../src/core/result.js";
 import { registerAdapter, getAdapterCatalog, executeAdapter } from "../src/core/adapters.js";
@@ -1125,6 +1126,213 @@ test("task executor keeps search unsupported when its AI binding is not configur
   const task = await executeWebTask(
     { goal: "Search for a public website", operation: "search", query: "some topic" },
     { idFactory: () => "task-search-disabled" },
+  );
+  assert.equal(task.state, "unsupported");
+  assert.equal(task.events.at(-1).type, "task.unsupported");
+});
+
+
+test("research pipeline completes Search to Fetch to Extract with normalized evidence", async () => {
+  const searchAdapter = createSearchAdapter({
+    webSearch: async () => ({
+      items: [{ url: "https://shop.example.com/item/42", title: "Example product", description: "Untrusted search snippet" }],
+      metadata: { requestId: "search-fixture", latencyMs: 8 },
+    }),
+  });
+  const calls = [];
+  const pipeline = createResearchPipeline({
+    searchAdapter,
+    runAdapter: async (id, input) => {
+      calls.push({ id, input });
+      assert.equal(id, "http.fetch.v1");
+      return {
+        status: "succeeded",
+        data: {
+          status: 200,
+          contentType: "text/html; charset=utf-8",
+          body: '<html><head><script type="application/ld+json">{"@type":"Product","name":"Fixture Item","offers":{"price":"12.50","priceCurrency":"USD"}}</script></head></html>',
+          bytes: 160,
+          finalUrl: input.url,
+        },
+        sources: [{
+          url: input.url,
+          retrievedAt: "2026-11-17T00:00:00.000Z",
+          title: null,
+          evidence: [{ type: "http_response", status: 200, contentType: "text/html; charset=utf-8" }],
+        }],
+        warnings: [],
+      };
+    },
+    now: () => "2026-11-17T00:00:01.000Z",
+  });
+  const result = await pipeline.execute({
+    query: "example fixture product",
+    schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", "x-source": "jsonld:name" },
+        price: { type: "number", "x-source": "jsonld:offers.price" },
+        currency: { type: "string", "x-source": "jsonld:offers.priceCurrency" },
+      },
+      required: ["name", "price"],
+    },
+  });
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.data.provider, "ceramic");
+  assert.equal(result.data.searchRequestId, "search-fixture");
+  assert.deepEqual(result.data.fields, { name: "Fixture Item", price: 12.5, currency: "USD" });
+  assert.equal(result.data.attempts.length, 1);
+  assert.equal(calls.length, 1);
+  assert.equal(result.sources[0].url, "https://shop.example.com/item/42");
+  assert.ok(result.sources[0].evidence.some((item) => item.type === "search_result"));
+  assert.ok(result.sources[0].evidence.some((item) => item.type === "http_response"));
+  assert.equal(result.sources[0].evidence.filter((item) => item.type === "extracted_field").length, 3);
+});
+
+test("research pipeline tries the next bounded search result when the first source cannot be fetched", async () => {
+  const searchAdapter = createSearchAdapter({
+    webSearch: async () => ({
+      items: [
+        { url: "https://first.example.com/item", title: "First" },
+        { url: "https://second.example.com/item", title: "Second" },
+      ],
+    }),
+  });
+  const calls = [];
+  const pipeline = createResearchPipeline({
+    searchAdapter,
+    runAdapter: async (id, input) => {
+      calls.push(input.url);
+      if (input.url === "https://first.example.com/item") throw new Error("private upstream detail");
+      return {
+        status: "succeeded",
+        data: {
+          status: 200,
+          contentType: "application/json",
+          body: '{"id":"second-item"}',
+          finalUrl: input.url,
+        },
+        sources: [],
+        warnings: [],
+      };
+    },
+  });
+  const result = await pipeline.execute({
+    query: "find item",
+    candidateLimit: 2,
+    schema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+  });
+  assert.deepEqual(calls, ["https://first.example.com/item", "https://second.example.com/item"]);
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.data.selectedUrl, "https://second.example.com/item");
+  assert.equal(result.data.fields.id, "second-item");
+  assert.equal(result.data.attempts[0].reason, "UPSTREAM_FETCH_FAILED");
+});
+
+test("research pipeline escalates to an injected Browser adapter only when required fields are missing", async () => {
+  const searchAdapter = createSearchAdapter({
+    webSearch: async () => ({ items: [{ url: "https://app.example.com/", title: "Dynamic app" }] }),
+  });
+  let browserCalls = 0;
+  const pipeline = createResearchPipeline({
+    searchAdapter,
+    runAdapter: async (_id, input) => ({
+      status: "succeeded",
+      data: { status: 200, contentType: "text/html", body: "<html><body>Loading</body></html>", finalUrl: input.url },
+      sources: [],
+      warnings: [],
+    }),
+    browserAdapter: {
+      execute: async ({ url }) => {
+        browserCalls++;
+        return {
+          status: "succeeded",
+          data: {
+            url,
+            html: '<script type="application/ld+json">{"name":"Rendered item","sku":"SKU-9"}</script>',
+            title: "Rendered",
+          },
+          sources: [{ url, evidence: [{ type: "browser_rendered_page" }] }],
+          warnings: [],
+        };
+      },
+    },
+  });
+  const result = await pipeline.execute({
+    query: "find rendered item",
+    schema: {
+      type: "object",
+      properties: { name: { type: "string" }, sku: { type: "string" } },
+      required: ["name", "sku"],
+    },
+  });
+  assert.equal(browserCalls, 1);
+  assert.equal(result.status, "succeeded");
+  assert.deepEqual(result.data.fields, { name: "Rendered item", sku: "SKU-9" });
+  assert.equal(result.data.browserEscalated, true);
+  assert.ok(result.sources[0].evidence.some((item) => item.type === "browser_rendered_page"));
+});
+
+test("research pipeline does not attempt Browser escalation when no Browser adapter is injected", async () => {
+  const searchAdapter = createSearchAdapter({
+    webSearch: async () => ({ items: [{ url: "https://example.com/", title: "Page" }] }),
+  });
+  const pipeline = createResearchPipeline({
+    searchAdapter,
+    runAdapter: async (_id, input) => ({
+      status: "succeeded",
+      data: { status: 200, contentType: "text/html", body: "<html></html>", finalUrl: input.url },
+      sources: [],
+      warnings: [],
+    }),
+  });
+  const result = await pipeline.execute({
+    query: "find page",
+    schema: { type: "object", properties: { requiredValue: { type: "string" } }, required: ["requiredValue"] },
+  });
+  assert.equal(result.status, "failed");
+  assert.equal(result.data.browserEscalated, false);
+  assert.ok(result.warnings.some((warning) => warning.includes("Browser rendering is not configured")));
+});
+
+test("research pipeline validates schema before calling Search", async () => {
+  let called = false;
+  const pipeline = createResearchPipeline({
+    searchAdapter: { execute: async () => { called = true; return { data: { results: [] } }; } },
+    runAdapter: async () => { throw new Error("must not fetch"); },
+  });
+  await assert.rejects(
+    pipeline.execute({ query: "find", schema: { type: "object", properties: { value: { type: "unknown" } } } }),
+    (error) => error instanceof ResearchPipelineError && error.code === "INVALID_SCHEMA",
+  );
+  assert.equal(called, false);
+});
+
+test("task executor dispatches query-only research tasks to an injected Research pipeline", async () => {
+  let received;
+  const schema = { type: "object", properties: { name: { type: "string" } } };
+  const task = await executeWebTask(
+    { goal: "Find and understand a product", operation: "research", query: "sample product", schema, candidateLimit: 2 },
+    {
+      idFactory: () => "task-research-0001",
+      researchAdapter: {
+        id: "web.research.v1",
+        execute: async (input) => {
+          received = input;
+          return { status: "partial", data: { fields: { name: "Product" } }, sources: [], warnings: [] };
+        },
+      },
+    },
+  );
+  assert.equal(task.state, "partial");
+  assert.equal(task.execution.adapterId, "web.research.v1");
+  assert.deepEqual(received, { query: "sample product", schema, limit: undefined, candidateLimit: 2 });
+});
+
+test("task executor keeps research unsupported when no pipeline is configured", async () => {
+  const task = await executeWebTask(
+    { goal: "Research a topic", operation: "research", query: "some topic", schema: { type: "object", properties: { title: { type: "string" } } } },
+    { idFactory: () => "task-research-disabled" },
   );
   assert.equal(task.state, "unsupported");
   assert.equal(task.events.at(-1).type, "task.unsupported");

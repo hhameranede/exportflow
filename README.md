@@ -41,6 +41,14 @@ The Cloudflare Worker provides the public homepage, health/platform endpoints, a
 - Requests are capped at 10 results, the provider is fixed when the adapter is created, and results are revalidated, deduplicated, ranked, and returned with source provenance.
 - Cloudflare Web Search API is in open beta, supports Ceramic.ai, Exa, and Linkup, and does not paginate. The factory is not registered or live because no AI binding or AI Gateway credits have been configured for this Worker.
 
+## Research pipeline
+
+- `web.research.v1` is an internal orchestration factory for Search → Fetch → Extract.
+- It searches once, considers at most three ranked candidate URLs, revalidates each URL, and retrieves pages through the bounded HTTP adapter.
+- Deterministic schema extraction returns field-level evidence. Missing required fields can trigger Browser rendering only when a separately injected Browser adapter is present; otherwise the result stays partial/failed with an explicit warning.
+- Search snippets are never treated as instructions or as verified page content. Source pages are fetched before their fields are trusted.
+- The pipeline is not registered by default and is not exposed through HTTP/MCP. It requires injected Search and Fetch adapters; no AI binding or Browser binding is configured in the live Worker.
+
 ## Internal task execution
 - Creates a task ID and an in-memory lifecycle event sequence (`accepted`, `started`, `succeeded`, `partial`, `failed`, or `unsupported`).
 - Routes `fetch`, `map`, `crawl`, and `extract` tasks to their matching internal adapters.
