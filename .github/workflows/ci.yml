@@ -12,8 +12,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: npm install --package-lock=false --ignore-scripts --no-audit --no-fund
+      - run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm audit --omit=dev
       - run: npm test
         env:
           EXPORTFLOW_DEFUDDLE_INTEGRATION: "1"
       - run: npm run check
+      - uses: actions/upload-artifact@v4
+        with:
+          name: defuddle-spike-lockfile
+          path: package-lock.json
+          retention-days: 3
