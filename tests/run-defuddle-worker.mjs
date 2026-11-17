@@ -53,17 +53,41 @@ try {
   const result = await response.json();
 
   assert.equal(result.parserVersion, "0.19.6");
-  assert.match(result.markdown, /This is the primary article paragraph/);
-  assert.match(result.markdown, /هذا نص عربي/);
-  assert.match(result.markdown, /Fetch through ExportFlow and parse locally/);
-  assert.match(result.markdown, /\| Layer \| Role \|/);
-  assert.doesNotMatch(result.markdown, /javascript:|onclick=|onerror=|<script/i);
-  assert.ok(result.wordCount > 100);
+  assert.equal(result.fixtures.length, 3);
 
-  process.stdout.write(
-    "workerd Defuddle smoke test passed: version=" +
-    result.parserVersion + ", words=" + result.wordCount + "\n",
-  );
+  const article = result.fixtures.find((item) => item.id === "article-multilingual");
+  const docs = result.fixtures.find((item) => item.id === "technical-documentation");
+  const product = result.fixtures.find((item) => item.id === "product-detail");
+
+  assert.ok(article && docs && product);
+  assert.match(article.markdown, /This is the primary article paragraph/);
+  assert.match(article.markdown, /هذا نص عربي/);
+  assert.match(article.markdown, /Fetch through ExportFlow and parse locally/);
+  assert.match(article.markdown, /\| Layer \| Role \|/);
+  assert.doesNotMatch(article.markdown, /javascript:|onclick=|onerror=|<script/i);
+  assert.ok(article.wordCount > 100);
+
+  assert.match(docs.markdown, /API Reference/);
+  assert.match(docs.markdown, /timeoutMs/);
+  assert.match(docs.markdown, /maxBytes/);
+  assert.match(docs.markdown, /await fetch/);
+  assert.ok(docs.wordCount > 100);
+
+  assert.match(product.markdown, /Research Notebook/);
+  assert.match(product.markdown, /Specifications/);
+  assert.match(product.markdown, /Acid-free paper/);
+  assert.ok(product.wordCount > 100);
+
+  for (const fixture of result.fixtures) {
+    assert.ok(Number.isFinite(fixture.workerElapsedMs) && fixture.workerElapsedMs > 0);
+    process.stdout.write(
+      "workerd Defuddle " + fixture.id +
+      ": words=" + fixture.wordCount +
+      ", parserMs=" + fixture.parseTimeMs +
+      ", workerMs=" + fixture.workerElapsedMs + "\n",
+    );
+  }
+  process.stdout.write("workerd Defuddle smoke tests passed: version=" + result.parserVersion + "\n");
 } catch (error) {
   process.stderr.write(String(error) + "\n" + output);
   process.exitCode = 1;
