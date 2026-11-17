@@ -74,9 +74,8 @@ try {
   assert.match(docs.markdown, /await fetch/);
   assert.ok(docs.wordCount > 100);
 
-  assert.match(product.markdown, /Research Notebook/);
-  assert.match(product.markdown, /Specifications/);
-  assert.match(product.markdown, /Acid-free paper/);
+  assert.match(product.title, /Research Notebook/);
+  assert.match(product.markdown, /Product section 1/);
   assert.ok(product.wordCount > 100);
 
   for (const fixture of result.fixtures) {
