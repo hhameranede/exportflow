@@ -1,8 +1,0 @@
-User-agent: *
-Allow: /
-Allow: /api/coverage
-Disallow: /api/track
-Disallow: /api/carriers
-Disallow: /api/health
-
-Sitemap: https://exportflow.me/sitemap.xml

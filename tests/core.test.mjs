@@ -1,0 +1,10 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {chooseExecutionPath} from "../src/core/router.js";
+import {normalizeResult} from "../src/core/result.js";
+import {registerAdapter,getAdapterCatalog} from "../src/core/adapters.js";
+test("static tasks use direct HTTP",()=>{assert.equal(chooseExecutionPath({}).path,"http");assert.equal(chooseExecutionPath({requiresJavascript:false}).path,"http");});
+test("rendering or interaction selects browser",()=>{assert.equal(chooseExecutionPath({requiresJavascript:true}).path,"browser");assert.equal(chooseExecutionPath({requiresInteraction:true}).path,"browser");});
+test("normalizes sources and warnings",()=>{const r=normalizeResult({data:{price:12},sources:[{url:"https://example.com/item"}],warnings:["sample"]});assert.equal(r.status,"succeeded");assert.equal(r.sources.length,1);assert.deepEqual(r.warnings,["sample"]);});
+test("rejects unsafe source URLs and invalid status",()=>{assert.throws(()=>normalizeResult({sources:[{url:"javascript:alert(1)"}]}));assert.throws(()=>normalizeResult({status:"unknown"}));});
+test("adapter catalog omits executable functions",()=>{registerAdapter({id:"fixture-http",family:"http",capabilities:["fetch"],execute:async()=>({})});assert.equal(getAdapterCatalog()[0].id,"fixture-http");assert.equal("execute" in getAdapterCatalog()[0],false);});

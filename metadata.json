@@ -1,8 +1,0 @@
-{
-  "name": "ExportFlow",
-  "description": "Worldwide parcel tracking directory and live shipment timeline.",
-  "permissions": [],
-  "capabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
-}

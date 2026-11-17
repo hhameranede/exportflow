@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ExportFlow">
-  <rect width="64" height="64" rx="15" fill="#F4F1EA"/>
-  <path d="M11 21.5 32 11l21 10.5v24L32 56 11 45.5v-24Z" fill="none" stroke="#121827" stroke-width="4" stroke-linejoin="round"/>
-  <path d="m11.8 21.8 20.2 10.3 20.2-10.3M32 32.1V55" fill="none" stroke="#121827" stroke-width="4" stroke-linejoin="round"/>
-  <path d="m22.5 15.8 20.8 10.5" fill="none" stroke="#FF684A" stroke-width="5" stroke-linecap="round"/>
-</svg>

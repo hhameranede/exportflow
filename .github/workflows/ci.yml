@@ -1,83 +1,16 @@
-name: Verify ExportFlow
-
+name: Worker CI
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
-
-permissions:
-  contents: read
-
-concurrency:
-  group: exportflow-ci-${{ github.ref }}
-  cancel-in-progress: true
-
+ push:
+  branches: [main]
+ pull_request:
+  branches: [main]
 jobs:
-  quality:
-    name: Check, test and build
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-      - name: Install dependencies (frozen npm lockfile)
-        run: npm ci --no-audit --no-fund --foreground-scripts
-      - name: Check JavaScript syntax
-        run: |
-          node --check app.js
-          node --check translations.js
-          node --check coverage.js
-          node --check company-directory.js
-          node --check functions/api/track.js
-          node --check functions/api/carriers.js
-          node --check functions/api/coverage.js
-          node --check functions/api/health.js
-          node --check functions/_middleware.js
-          node --check scripts/locale-build-test.mjs
-          node --check scripts/stage-third-party-licenses.mjs
-          node --check scripts/third-party-licenses-test.mjs
-          node --check functions/lib/country-codes.mjs
-      - name: Run regression tests
-        run: npm test
-      - name: Build Cloudflare Pages output
-        run: npm run build
-      - name: Verify local Pages runtime D1 persistence
-        run: node scripts/tracking-telemetry-runtime-test.mjs
-      - name: Verify localized SEO pages and hreflang sitemap
-        run: node scripts/locale-build-test.mjs
-      - name: Bundle Pages Functions with production Wrangler
-        run: npx --yes wrangler@3.114.17 pages functions build functions --outdir .wrangler/pages-functions
-      - name: Verify all public build artifacts
-        run: |
-          test -s dist/index.html
-          test -s dist/styles.css
-          test -s dist/app.js
-          test -s dist/translations.js
-          test -s dist/coverage.js
-          test -s dist/company-directory.js
-          test -s dist/robots.txt
-          test -s dist/sitemap.xml
-          test -s dist/favicon.svg
-          test -s dist/favicon-32x32.png
-          test -s dist/apple-touch-icon.png
-          test -s dist/site.webmanifest
-          test -s dist/og-image-20261106.png
-          test -s dist/coverage/index.html
-          test -s dist/companies/index.html
-          test -s dist/about/index.html
-          test -s dist/contact/index.html
-          test -s dist/privacy/index.html
-          test -s dist/terms/index.html
-          test -s dist/cookies/index.html
-          test -s dist/security/index.html
-          test -s dist/disclaimer/index.html
-          test -s dist/licenses/index.html
-          test -s dist/licenses/manifest.json
-          test -s dist/licenses/THIRD_PARTY_NOTICES.md
-          test -s dist/licenses/EXPORTFLOW_MODIFICATIONS.md
-          node scripts/third-party-licenses-test.mjs
+ test:
+  runs-on: ubuntu-latest
+  steps:
+   - uses: actions/checkout@v4
+   - uses: actions/setup-node@v4
+     with:
+      node-version: 24
+   - run: npm test
+   - run: npm run check
