@@ -98,7 +98,7 @@ console.log("Merchant adapter integration passed: authenticated route -> real Ex
 
 // FedEx's official API adapter must use the explicitly configured Sandbox origin.
 // This is a deterministic route/facade/adapter integration fixture, not a live FedEx call.
-const FEDEX_TRACKING_NUMBER = "999999999999";
+const FEDEX_TRACKING_NUMBER = "449044304137821";
 const FEDEX_SANDBOX_ORIGIN = "https://apis-sandbox.fedex.com";
 const FEDEX_API_RESPONSE = {
   transactionId: "00000000-0000-4000-8000-000000000000",
