@@ -34,7 +34,12 @@ function validateInput(input) {
   if (!input.schema || typeof input.schema !== "object" || Array.isArray(input.schema)) {
     throw new ResearchPipelineError("INVALID_SCHEMA", "A structured extraction schema is required.");
   }
-  const schema = validateExtractionSchema(input.schema);
+  let schema;
+  try {
+    schema = validateExtractionSchema(input.schema);
+  } catch {
+    throw new ResearchPipelineError("INVALID_SCHEMA", "Research schema failed validation.", 400);
+  }
   return {
     query: input.query.trim(),
     limit: input.limit,
