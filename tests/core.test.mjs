@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chooseExecutionPath } from "../src/core/router.js";
+import { executeWebTask } from "../src/core/tasks.js";
 import { EGRESS_POLICY, EgressPolicyError, validateEgressTarget } from "../src/core/egress-guard.js";
 import { normalizeResult } from "../src/core/result.js";
 import { registerAdapter, getAdapterCatalog, executeAdapter } from "../src/core/adapters.js";
@@ -236,4 +237,105 @@ test("HTTP fetch adapter is registered and returns normalized evidence", async (
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("internal HTTP task executor runs the direct adapter and returns lifecycle evidence", async () => {
+  const originalFetch = globalThis.fetch;
+  const times = ["2026-11-17T14:10:00.000Z", "2026-11-17T14:10:01.000Z", "2026-11-17T14:10:02.000Z"];
+  globalThis.fetch = async () => response("research content", {
+    headers: { "content-type": "text/plain; charset=utf-8" },
+  });
+  try {
+    const task = await executeWebTask(
+      { goal: "Read the public page", url: "https://example.com/research" },
+      { idFactory: () => "task-test-0001", now: () => times.shift() },
+    );
+    assert.equal(task.id, "task-test-0001");
+    assert.equal(task.state, "succeeded");
+    assert.equal(task.execution.path, "http");
+    assert.equal(task.execution.adapterId, "http.fetch.v1");
+    assert.equal(task.result.data.body, "research content");
+    assert.equal(task.result.sources[0].url, "https://example.com/research");
+    assert.deepEqual(task.events.map((item) => item.type), [
+      "task.accepted", "task.started", "task.succeeded",
+    ]);
+    assert.equal(task.timestamps.completedAt, "2026-11-17T14:10:02.000Z");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("internal task executor reports Browser work as unsupported without making a request", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = async () => {
+    fetchCalls++;
+    return response("should not run");
+  };
+  try {
+    const task = await executeWebTask(
+      { goal: "Render the dynamic page", url: "https://example.com/app", requiresJavascript: true },
+      { idFactory: () => "task-browser-0001" },
+    );
+    assert.equal(task.state, "unsupported");
+    assert.equal(task.execution.path, "browser");
+    assert.equal(task.execution.adapterId, null);
+    assert.equal(task.result.status, "failed");
+    assert.equal(fetchCalls, 0);
+    assert.ok(task.result.warnings[0].includes("Browser execution is not connected"));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("internal task executor fails closed for disallowed URLs before fetching", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = async () => {
+    fetchCalls++;
+    return response("should not run");
+  };
+  try {
+    const task = await executeWebTask(
+      { goal: "Read a local destination", url: "http://127.0.0.1/" },
+      { idFactory: () => "task-unsafe-0001" },
+    );
+    assert.equal(task.state, "failed");
+    assert.equal(task.result.data.errorCode, "URL_NOT_ALLOWED");
+    assert.equal(fetchCalls, 0);
+    assert.equal(task.events.at(-1).type, "task.failed");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("internal task executor sanitizes upstream failures and does not expose exception text", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new Error("sensitive upstream detail");
+  };
+  try {
+    const task = await executeWebTask(
+      { goal: "Read the public page", url: "https://example.com/" },
+      { idFactory: () => "task-error-0001" },
+    );
+    assert.equal(task.state, "failed");
+    assert.equal(task.result.data.errorCode, "UPSTREAM_FETCH_FAILED");
+    assert.equal(JSON.stringify(task).includes("sensitive upstream detail"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("internal task executor validates the goal and boolean routing flags", async () => {
+  const missingGoal = await executeWebTask(
+    { url: "https://example.com/" },
+    { idFactory: () => "task-invalid-0001" },
+  );
+  const invalidFlag = await executeWebTask(
+    { goal: "Read page", url: "https://example.com/", requiresJavascript: "true" },
+    { idFactory: () => "task-invalid-0002" },
+  );
+  assert.equal(missingGoal.result.data.errorCode, "INVALID_GOAL");
+  assert.equal(invalidFlag.result.data.errorCode, "INVALID_TASK");
 });
