@@ -285,7 +285,7 @@ test("internal task executor reports Browser work as unsupported without making 
     assert.equal(task.execution.adapterId, null);
     assert.equal(task.result.status, "failed");
     assert.equal(fetchCalls, 0);
-    assert.ok(task.result.warnings[0].includes("Browser execution is not connected"));
+    assert.ok(task.result.warnings[0].includes("Browser Run binding is not configured"));
   } finally {
     globalThis.fetch = originalFetch;
   }
