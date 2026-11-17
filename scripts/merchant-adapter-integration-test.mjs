@@ -82,7 +82,7 @@ assert.equal(body.events.length, 1);
 assert.equal(body.events[0].stage, "delivered");
 assert.equal(body.events[0].description, "Distribué");
 assert.equal(body.events[0].location, "SAMPLE TOWN EMS");
-assert.equal(body.events[0].time, "2026-05-14T11:20:00");
+assert.match(body.events[0].time, /^2026-05-14T11:20:00(?:[+-]\\d{2}:\\d{2})?$/,\n  "The EMS wall-clock time must be preserved, with an optional resolved offset");
 assert.equal(JSON.stringify(body).includes(TRACKING_NUMBER), false,
   "The projected merchant response must not echo the parcel identifier");
 assert.deepEqual(outbound, [{
