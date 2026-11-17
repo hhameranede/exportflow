@@ -448,7 +448,7 @@ test("mapWebsite refuses cross-origin redirects of robots.txt and start page", a
   await assert.rejects(
     mapWebsite({ url: "https://example.com/" }, {
       fetchResource: async (url) => url.endsWith("/robots.txt")
-        ? { status: 200, body: "", bytes: 0, contentType: "text/plain", finalUrl: "https://outside.example/robots.txt" }
+        ? { status: 200, body: "", bytes: 0, contentType: "text/plain", finalUrl: "https://external-test.com/robots.txt" }
         : { status: 200, body: "", bytes: 0, contentType: "text/html", finalUrl: url },
     }),
     (error) => error.code === "ROBOTS_REDIRECT_OUT_OF_SCOPE",
@@ -458,7 +458,7 @@ test("mapWebsite refuses cross-origin redirects of robots.txt and start page", a
       fetchResource: async (url) => {
         if (url.endsWith("/robots.txt")) return { status: 200, body: "", bytes: 0, contentType: "text/plain", finalUrl: url };
         if (url.endsWith("/sitemap.xml")) return { status: 404, body: "", bytes: 0, contentType: "text/plain", finalUrl: url };
-        return { status: 200, body: "", bytes: 0, contentType: "text/html", finalUrl: "https://outside.example/" };
+        return { status: 200, body: "", bytes: 0, contentType: "text/html", finalUrl: "https://external-test.com/" };
       },
     }),
     (error) => error.code === "PAGE_REDIRECT_OUT_OF_SCOPE",

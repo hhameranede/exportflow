@@ -230,9 +230,6 @@ async function getRobotsPolicy(origin, fetchResource) {
     if (robotsFinal.origin !== origin) {
       throw new MapCrawlError("ROBOTS_REDIRECT_OUT_OF_SCOPE", "robots.txt redirected outside the requested origin.", 403);
     }
-    if (response.status >= 500) {
-      throw new MapCrawlError("ROBOTS_UNREACHABLE", "robots.txt returned a server error.", 503);
-    }
     return {
       policy: parseRobotsTxt(response.body, "ExportFlowBot"),
       status: response.status,
