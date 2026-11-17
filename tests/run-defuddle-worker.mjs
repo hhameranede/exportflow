@@ -53,13 +53,14 @@ try {
   const result = await response.json();
 
   assert.equal(result.parserVersion, "0.19.6");
-  assert.equal(result.fixtures.length, 3);
+  assert.equal(result.fixtures.length, 4);
 
   const article = result.fixtures.find((item) => item.id === "article-multilingual");
   const docs = result.fixtures.find((item) => item.id === "technical-documentation");
   const product = result.fixtures.find((item) => item.id === "product-detail");
+  const jsonLd = result.fixtures.find((item) => item.id === "jsonld-articlebody-fallback");
 
-  assert.ok(article && docs && product);
+  assert.ok(article && docs && product && jsonLd);
   assert.match(article.markdown, /This is the primary article paragraph/);
   assert.match(article.markdown, /هذا نص عربي/);
   assert.match(article.markdown, /Fetch through ExportFlow and parse locally/);
@@ -78,7 +79,12 @@ try {
   assert.match(product.markdown, /Product section 1/);
   assert.ok(product.wordCount > 100);
 
+  assert.match(jsonLd.markdown, /Structured JSON-LD article section 1/);
+  assert.doesNotMatch(jsonLd.markdown, /javascript:|onerror=|<script/i);
+  assert.ok(jsonLd.wordCount > 100);
+
   for (const fixture of result.fixtures) {
+    assert.deepEqual(fixture.globalsAfter, fixture.globalsBefore);
     assert.ok(Number.isFinite(fixture.workerElapsedMs) && fixture.workerElapsedMs > 0);
     process.stdout.write(
       "workerd Defuddle " + fixture.id +
