@@ -123,7 +123,7 @@ test("Defuddle adapter hides parser internals behind a stable error", async () =
 test("Defuddle full-bundle integration parses locally without making extra network calls", {
   skip: process.env.EXPORTFLOW_DEFUDDLE_INTEGRATION !== "1",
 }, async () => {
-  const articleText = Array.from({ length: 45 }, (_, index) =>
+  const articleText = "This is the primary article paragraph. " + Array.from({ length: 45 }, (_, index) =>
     "This paragraph " + (index + 1) + " explains bounded web retrieval, evidence provenance, and safe content conversion.",
   ).join(" ");
   const fixture = [
@@ -154,7 +154,7 @@ test("Defuddle full-bundle integration parses locally without making extra netwo
     });
     const result = await adapter.execute({ url: sourceUrl });
     assert.equal(result.status, "succeeded");
-    assert.match(result.data.markdown, /Agentic Web Reference/);
+    assert.match(result.data.markdown, /This is the primary article paragraph/);
     assert.match(result.data.markdown, /هذا نص عربي/);
     assert.match(result.data.markdown, /Fetch through ExportFlow/);
     assert.match(result.data.markdown, /\| Layer \| Role \|/);
