@@ -235,46 +235,72 @@ export function createResearchPipeline({
           continue;
         }
 
-        let extracted = extractFetchedContent(fetched, validated, finalUrl);
-        let browserResult = null;
-        if (extracted.missingRequired.length && browserAdapter &&
-            typeof browserAdapter.execute === "function") {
-          try {
-            browserResult = await browserAdapter.execute({
-              url: finalUrl,
-              goal: "Render this page to complete the requested structured extraction.",
-              requiresInteraction: false,
-            });
-            if (browserResult.status === "succeeded" && typeof browserResult.data?.html === "string") {
-              const rendered = extractFromStructuredSources({
-                html: browserResult.data.html,
-                url: browserResult.data.url || finalUrl,
-                contentType: "text/html",
-                schema: validated.rawSchema,
-              });
-              extracted = mergeBrowserExtraction(extracted, rendered, validated.schema);
-            } else {
-              warnings.push("Browser escalation did not return a renderable HTML page.");
-            }
-          } catch {
-            warnings.push("Browser escalation was attempted but did not complete.");
-          }
-        } else if (extracted.missingRequired.length) {
-          warnings.push("Required fields remain missing; Browser rendering is not configured for this task.");
-        }
-
+        const extracted = extractFetchedContent(fetched, validated, finalUrl);
         const attempt = {
           url: finalUrl,
-          stage: browserResult ? "browser-extract" : "fetch-extract",
+          stage: "fetch-extract",
           status: extracted.status,
           fieldsFound: Object.keys(extracted.data).length,
           missingRequired: [...extracted.missingRequired],
         };
         attempts.push(attempt);
-        if (!best || Object.keys(extracted.data).length > Object.keys(best.extracted.data).length) {
-          best = { candidate, finalUrl, fetched, extracted, browserResult, attempt };
+
+        const requiredFound = validated.schema.required.length - extracted.missingRequired.length;
+        const bestRequiredFound = best
+          ? validated.schema.required.length - best.extracted.missingRequired.length
+          : -1;
+        const fieldsFound = Object.keys(extracted.data).length;
+        const bestFieldsFound = best ? Object.keys(best.extracted.data).length : -1;
+        if (!best || requiredFound > bestRequiredFound ||
+            (requiredFound === bestRequiredFound && fieldsFound > bestFieldsFound)) {
+          best = { candidate, finalUrl, fetched, extracted, browserResult: null, attempt };
         }
+
         if (extracted.missingRequired.length === 0 && extracted.status !== "failed") break;
+      }
+
+      // Browser escalation is a single bounded attempt against the best static candidate.
+      let browserEscalated = false;
+      if (best && best.extracted.missingRequired.length && browserAdapter &&
+          typeof browserAdapter.execute === "function") {
+        browserEscalated = true;
+        try {
+          const browserResult = await browserAdapter.execute({
+            url: best.finalUrl,
+            goal: "Render this page to complete the requested structured extraction.",
+            requiresInteraction: false,
+          });
+          best.browserResult = browserResult;
+          const html = browserResult.data?.html;
+          if (browserResult.status === "succeeded" && typeof html === "string") {
+            const htmlBytes = new TextEncoder().encode(html).byteLength;
+            const renderedUrl = validatePublicHttpUrl(browserResult.data.url || best.finalUrl);
+            if (renderedUrl.origin !== new URL(best.finalUrl).origin) {
+              warnings.push("Browser rendering returned a page outside the selected origin; rendered content was ignored.");
+            } else if (htmlBytes > 524_288) {
+              warnings.push("Browser rendered HTML exceeded the extraction size limit and was ignored.");
+            } else {
+              const rendered = extractFromStructuredSources({
+                html,
+                url: renderedUrl.href,
+                contentType: "text/html",
+                schema: validated.rawSchema,
+              });
+              best.extracted = mergeBrowserExtraction(best.extracted, rendered, validated.schema);
+              best.browserEvidenceAccepted = true;
+            }
+          } else {
+            warnings.push("Browser escalation did not return a renderable HTML page.");
+          }
+        } catch {
+          warnings.push("Browser escalation was attempted but did not complete.");
+        }
+        best.attempt.stage = "browser-extract";
+        best.attempt.status = best.extracted.status;
+        best.attempt.fieldsFound = Object.keys(best.extracted.data).length;
+        best.attempt.missingRequired = [...best.extracted.missingRequired];
+      } else if (best?.extracted.missingRequired.length) {
+        warnings.push("Required fields remain missing; Browser rendering is not configured for this task.");
       }
 
       if (!best) {
@@ -306,7 +332,7 @@ export function createResearchPipeline({
           nodeIndex: field.nodeIndex,
         })),
       ];
-      if (best.browserResult?.sources?.[0]?.evidence) {
+      if (best.browserEvidenceAccepted && best.browserResult?.sources?.[0]?.evidence) {
         evidence.push(...best.browserResult.sources[0].evidence);
       }
 
@@ -326,7 +352,7 @@ export function createResearchPipeline({
           missingFields: best.extracted.missingFields,
           missingRequired: best.extracted.missingRequired,
           attempts,
-          browserEscalated: Boolean(best.browserResult),
+          browserEscalated,
         },
         sources: [{
           url: best.finalUrl,

@@ -44,9 +44,9 @@ The Cloudflare Worker provides the public homepage, health/platform endpoints, a
 ## Research pipeline
 
 - `web.research.v1` is an internal orchestration factory for Search → Fetch → Extract.
-- It searches once, considers at most three ranked candidate URLs, revalidates each URL, and retrieves pages through the bounded HTTP adapter.
+- It searches once, considers at most three ranked candidate URLs, revalidates each URL, and retrieves pages through the bounded HTTP adapter. Browser escalation is limited to one attempt after comparing static candidates.
 - Deterministic schema extraction returns field-level evidence. Missing required fields can trigger Browser rendering only when a separately injected Browser adapter is present; otherwise the result stays partial/failed with an explicit warning.
-- Search snippets are never treated as instructions or as verified page content. Source pages are fetched before their fields are trusted.
+- Search snippets are never treated as instructions or as verified page content. Source pages are fetched before their fields are trusted. Rendered HTML is accepted only when its URL remains on the selected public origin and its size stays within 512 KiB.
 - The pipeline is not registered by default and is not exposed through HTTP/MCP. It requires injected Search and Fetch adapters; no AI binding or Browser binding is configured in the live Worker.
 
 ## Internal task execution

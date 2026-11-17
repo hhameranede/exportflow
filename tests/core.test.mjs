@@ -1132,61 +1132,54 @@ test("task executor keeps search unsupported when its AI binding is not configur
 });
 
 
-test("research pipeline completes Search to Fetch to Extract with normalized evidence", async () => {
-  const searchAdapter = createSearchAdapter({
-    webSearch: async () => ({
-      items: [{ url: "https://shop.example.com/item/42", title: "Example product", description: "Untrusted search snippet" }],
-      metadata: { requestId: "search-fixture", latencyMs: 8 },
-    }),
-  });
-  const calls = [];
-  const pipeline = createResearchPipeline({
-    searchAdapter,
-    runAdapter: async (id, input) => {
-      calls.push({ id, input });
-      assert.equal(id, "http.fetch.v1");
-      return {
-        status: "succeeded",
-        data: {
-          status: 200,
-          contentType: "text/html; charset=utf-8",
-          body: '<html><head><script type="application/ld+json">{"@type":"Product","name":"Fixture Item","offers":{"price":"12.50","priceCurrency":"USD"}}</script></head></html>',
-          bytes: 160,
-          finalUrl: input.url,
+test("research pipeline completes Search to Fetch to Extract through the registered HTTP adapter", async () => {
+  const originalFetch = globalThis.fetch;
+  let outboundCalls = 0;
+  globalThis.fetch = async (url, init) => {
+    outboundCalls++;
+    assert.equal(url, "https://shop.example.com/item/42");
+    assert.equal(init.method, "GET");
+    return new Response(
+      '<html><head><script type="application/ld+json">{"@type":"Product","name":"Fixture Item","offers":{"price":"12.50","priceCurrency":"USD"}}</script></head></html>',
+      { status: 200, headers: { "content-type": "text/html; charset=utf-8" } },
+    );
+  };
+  try {
+    const searchAdapter = createSearchAdapter({
+      webSearch: async () => ({
+        items: [{ url: "https://shop.example.com/item/42", title: "Example product", description: "Untrusted search snippet" }],
+        metadata: { requestId: "search-fixture", latencyMs: 8 },
+      }),
+    });
+    const pipeline = createResearchPipeline({
+      searchAdapter,
+      now: () => "2026-11-17T00:00:01.000Z",
+    });
+    const result = await pipeline.execute({
+      query: "example fixture product",
+      schema: {
+        type: "object",
+        properties: {
+          name: { type: "string", "x-source": "jsonld:name" },
+          price: { type: "number", "x-source": "jsonld:offers.price" },
+          currency: { type: "string", "x-source": "jsonld:offers.priceCurrency" },
         },
-        sources: [{
-          url: input.url,
-          retrievedAt: "2026-11-17T00:00:00.000Z",
-          title: null,
-          evidence: [{ type: "http_response", status: 200, contentType: "text/html; charset=utf-8" }],
-        }],
-        warnings: [],
-      };
-    },
-    now: () => "2026-11-17T00:00:01.000Z",
-  });
-  const result = await pipeline.execute({
-    query: "example fixture product",
-    schema: {
-      type: "object",
-      properties: {
-        name: { type: "string", "x-source": "jsonld:name" },
-        price: { type: "number", "x-source": "jsonld:offers.price" },
-        currency: { type: "string", "x-source": "jsonld:offers.priceCurrency" },
+        required: ["name", "price"],
       },
-      required: ["name", "price"],
-    },
-  });
-  assert.equal(result.status, "succeeded");
-  assert.equal(result.data.provider, "ceramic");
-  assert.equal(result.data.searchRequestId, "search-fixture");
-  assert.deepEqual(result.data.fields, { name: "Fixture Item", price: 12.5, currency: "USD" });
-  assert.equal(result.data.attempts.length, 1);
-  assert.equal(calls.length, 1);
-  assert.equal(result.sources[0].url, "https://shop.example.com/item/42");
-  assert.ok(result.sources[0].evidence.some((item) => item.type === "search_result"));
-  assert.ok(result.sources[0].evidence.some((item) => item.type === "http_response"));
-  assert.equal(result.sources[0].evidence.filter((item) => item.type === "extracted_field").length, 3);
+    });
+    assert.equal(result.status, "succeeded");
+    assert.equal(result.data.provider, "ceramic");
+    assert.equal(result.data.searchRequestId, "search-fixture");
+    assert.deepEqual(result.data.fields, { name: "Fixture Item", price: 12.5, currency: "USD" });
+    assert.equal(result.data.attempts.length, 1);
+    assert.equal(outboundCalls, 1);
+    assert.equal(result.sources[0].url, "https://shop.example.com/item/42");
+    assert.ok(result.sources[0].evidence.some((item) => item.type === "search_result"));
+    assert.ok(result.sources[0].evidence.some((item) => item.type === "http_response"));
+    assert.equal(result.sources[0].evidence.filter((item) => item.type === "extracted_field").length, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("research pipeline tries the next bounded search result when the first source cannot be fetched", async () => {
@@ -1336,4 +1329,62 @@ test("task executor keeps research unsupported when no pipeline is configured", 
   );
   assert.equal(task.state, "unsupported");
   assert.equal(task.events.at(-1).type, "task.unsupported");
+});
+
+
+test("research pipeline attempts Browser escalation only once after comparing static candidates", async () => {
+  const searchAdapter = createSearchAdapter({
+    webSearch: async () => ({
+      items: [
+        { url: "https://first.example.com/", title: "First" },
+        { url: "https://second.example.com/", title: "Second" },
+      ],
+    }),
+  });
+  const fetchCalls = [];
+  let browserCalls = 0;
+  const pipeline = createResearchPipeline({
+    searchAdapter,
+    runAdapter: async (_id, input) => {
+      fetchCalls.push(input.url);
+      return {
+        status: "succeeded",
+        data: {
+          status: 200,
+          contentType: "text/html",
+          body: "<html></html>",
+          finalUrl: input.url,
+        },
+        sources: [],
+        warnings: [],
+      };
+    },
+    browserAdapter: {
+      execute: async ({ url }) => {
+        browserCalls++;
+        return {
+          status: "succeeded",
+          data: {
+            url,
+            html: '<script type="application/ld+json">{"name":"Browser value"}</script>',
+          },
+          sources: [],
+          warnings: [],
+        };
+      },
+    },
+  });
+  const result = await pipeline.execute({
+    query: "find a name",
+    candidateLimit: 2,
+    schema: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    },
+  });
+  assert.equal(fetchCalls.length, 2);
+  assert.equal(browserCalls, 1);
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.data.browserEscalated, true);
 });
