@@ -4,6 +4,7 @@ import { chooseExecutionPath } from "../src/core/router.js";
 import { executeWebTask } from "../src/core/tasks.js";
 import { crawlWebsite, extractSitemapLocations, isAllowedByRobots, mapWebsite, parseRobotsTxt } from "../src/core/map-crawl.js";
 import { ExtractionError, extractFromStructuredSources, extractStructuredData, validateExtractionSchema } from "../src/core/extract.js";
+import { BrowserAdapterError, createBrowserAdapter } from "../src/core/browser-render.js";
 import { EGRESS_POLICY, EgressPolicyError, validateEgressTarget } from "../src/core/egress-guard.js";
 import { normalizeResult } from "../src/core/result.js";
 import { registerAdapter, getAdapterCatalog, executeAdapter } from "../src/core/adapters.js";
@@ -833,4 +834,176 @@ test("task executor preserves partial extraction results as a partial task state
   assert.equal(task.state, "partial");
   assert.equal(task.result.status, "partial");
   assert.equal(task.events.at(-1).type, "task.partial");
+});
+
+
+test("browser adapter requires an explicitly injected Browser Run binding", async () => {
+  const adapter = createBrowserAdapter({
+    fetchResource: async () => ({ status: 200, body: "", finalUrl: "https://example.com/robots.txt" }),
+  });
+  await assert.rejects(
+    adapter.execute({ url: "https://example.com/" }),
+    (error) => error instanceof BrowserAdapterError && error.code === "BROWSER_UNAVAILABLE",
+  );
+});
+
+test("browser adapter rejects robots-disallowed navigation before creating a session", async () => {
+  let launchCalls = 0;
+  const adapter = createBrowserAdapter({
+    browserBinding: {},
+    puppeteer: { launch: async () => { launchCalls++; throw new Error("must not launch"); } },
+    fetchResource: async (url) => ({
+      status: 200, finalUrl: url, body: "User-agent: *\nDisallow: /private",
+      contentType: "text/plain", bytes: 45,
+    }),
+  });
+  await assert.rejects(
+    adapter.execute({ url: "https://example.com/private/page" }),
+    (error) => error instanceof BrowserAdapterError && error.code === "ROBOTS_DISALLOWED_TARGET",
+  );
+  assert.equal(launchCalls, 0);
+});
+
+test("browser adapter applies exact-host guardrails and blocks off-origin, private and robots-disallowed requests", async () => {
+  const binding = { kind: "fake-browser-binding" };
+  let launchOptions;
+  let userAgent;
+  let requestHandler;
+  let closeCalls = 0;
+  const browser = {
+    newPage: async () => ({
+      setUserAgent: async (value) => { userAgent = value; },
+      setRequestInterception: async (enabled) => { assert.equal(enabled, true); },
+      on: (eventName, handler) => {
+        assert.equal(eventName, "request");
+        requestHandler = handler;
+      },
+      goto: async (url, options) => {
+        assert.equal(url, "https://example.com/");
+        assert.equal(options.waitUntil, "domcontentloaded");
+        assert.equal(options.timeout, 15_000);
+        const makeRequest = (value) => {
+          const calls = [];
+          return {
+            url: () => value,
+            continue: async () => { calls.push("continue"); },
+            abort: async () => { calls.push("abort"); },
+            calls,
+          };
+        };
+        const requests = [
+          makeRequest("https://example.com/app.js"),
+          makeRequest("https://cdn.example.net/lib.js"),
+          makeRequest("http://127.0.0.1/admin"),
+          makeRequest("https://example.com/private/secret.css"),
+        ];
+        for (const request of requests) await requestHandler(request);
+        browser.requestResults = requests.map((item) => item.calls[0]);
+        return { status: () => 200 };
+      },
+      url: () => "https://example.com/",
+      content: async () => "<html><title>Rendered page</title><body>JS content</body></html>",
+      title: async () => "Rendered page",
+    }),
+    close: async () => { closeCalls++; },
+  };
+  const adapter = createBrowserAdapter({
+    browserBinding: binding,
+    puppeteer: {
+      launch: async (receivedBinding, options) => {
+        assert.equal(receivedBinding, binding);
+        launchOptions = options;
+        return browser;
+      },
+    },
+    fetchResource: async (url) => ({
+      status: 200, finalUrl: url, body: "User-agent: *\nDisallow: /private",
+      contentType: "text/plain", bytes: 40, retrievedAt: "2026-11-17T00:00:00.000Z",
+    }),
+    now: () => "2026-11-17T00:00:01.000Z",
+  });
+  const result = await adapter.execute({ url: "https://example.com/" });
+  assert.deepEqual(launchOptions.guardrails, { allowedDomains: ["example.com"] });
+  assert.equal(userAgent, "ExportFlowBot/0.1 (+https://exportflow.me)");
+  assert.deepEqual(browser.requestResults, ["continue", "abort", "abort", "abort"]);
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.data.url, "https://example.com/");
+  assert.equal(result.data.title, "Rendered page");
+  assert.equal(result.data.blockedRequests, 3);
+  assert.equal(result.sources[0].evidence[0].type, "browser_rendered_page");
+  assert.equal(closeCalls, 1);
+});
+
+test("browser adapter closes the browser session after navigation failure", async () => {
+  let closeCalls = 0;
+  const adapter = createBrowserAdapter({
+    browserBinding: {},
+    puppeteer: {
+      launch: async () => ({
+        newPage: async () => ({
+          setUserAgent: async () => {},
+          setRequestInterception: async () => {},
+          on: () => {},
+          goto: async () => { throw new Error("private session detail"); },
+        }),
+        close: async () => { closeCalls++; },
+      }),
+    },
+    fetchResource: async (url) => ({
+      status: 200, finalUrl: url, body: "", contentType: "text/plain", bytes: 0,
+    }),
+  });
+  await assert.rejects(
+    adapter.execute({ url: "https://example.com/" }),
+    (error) => error instanceof BrowserAdapterError && error.code === "BROWSER_RENDER_FAILED" &&
+      !error.message.includes("private session detail"),
+  );
+  assert.equal(closeCalls, 1);
+});
+
+test("task executor routes JavaScript rendering to an injected Browser adapter", async () => {
+  let received;
+  const task = await executeWebTask(
+    { goal: "Render the dynamic page", url: "https://example.com/app", requiresJavascript: true },
+    {
+      idFactory: () => "task-browser-render-01",
+      browserAdapter: {
+        id: "web.browser.v1",
+        execute: async (input) => {
+          received = input;
+          return { status: "succeeded", data: { title: "Rendered" }, sources: [], warnings: [] };
+        },
+      },
+    },
+  );
+  assert.equal(task.state, "succeeded");
+  assert.equal(task.execution.adapterId, "web.browser.v1");
+  assert.equal(received.url, "https://example.com/app");
+});
+
+test("task executor keeps user-directed browser interactions unsupported", async () => {
+  let called = false;
+  const task = await executeWebTask(
+    { goal: "Click through a multi-step workflow", url: "https://example.com/", requiresInteraction: true },
+    {
+      idFactory: () => "task-browser-action-01",
+      browserAdapter: { execute: async () => { called = true; return { status: "succeeded" }; } },
+    },
+  );
+  assert.equal(task.state, "unsupported");
+  assert.equal(called, false);
+  assert.equal(task.events.at(-1).type, "task.unsupported");
+});
+
+test("task executor reports a missing Browser Run binding as unsupported", async () => {
+  const unavailableAdapter = createBrowserAdapter({});
+  const task = await executeWebTask(
+    { goal: "Render the page", url: "https://example.com/", requiresJavascript: true },
+    {
+      idFactory: () => "task-browser-no-binding",
+      browserAdapter: unavailableAdapter,
+    },
+  );
+  assert.equal(task.state, "unsupported");
+  assert.equal(task.events.at(-1).type, "task.unsupported");
 });

@@ -50,9 +50,9 @@ function buildTask({
  * Executes one bounded web task inside the Worker.
  *
  * This is an internal Core primitive, not an HTTP/MCP endpoint. It keeps no
- * durable state, accepts no upstream credentials or caller-supplied headers,
- * and only invokes the installed direct HTTP adapter. Browser work is
- * explicitly reported as unsupported until a reviewed browser adapter exists.
+ * durable state and accepts no caller-supplied credentials or headers.
+ * Browser rendering can run only through an explicitly injected internal adapter;
+ * user-directed browser interactions remain unsupported.
  */
 export async function executeWebTask(input, options = {}) {
   const now = options.now || (() => new Date().toISOString());
@@ -97,16 +97,54 @@ export async function executeWebTask(input, options = {}) {
     events.push(event("task.started", startedAt, { executionPath: route.path }));
 
     if (route.path === "browser") {
+      const browserAdapter = options.browserAdapter;
+      if (input.requiresInteraction === true || !browserAdapter || typeof browserAdapter.execute !== "function") {
+        const completedAt = now();
+        const reason = input.requiresInteraction === true
+          ? "browser_interaction_not_implemented"
+          : "browser_adapter_unavailable";
+        const message = input.requiresInteraction === true
+          ? "User-directed browser interactions are not connected; no interaction was performed."
+          : "Browser Run binding is not configured; no browser navigation was performed.";
+        const result = normalizeResult({ status: "failed", data: null, warnings: [message] });
+        events.push(event("task.unsupported", completedAt, { reason }));
+        return buildTask({
+          id, goal, state: "unsupported", execution, createdAt, startedAt,
+          completedAt, events, result,
+        });
+      }
+
+      execution.adapterId = browserAdapter.id || "web.browser.v1";
+      let browserResult;
+      try {
+        browserResult = await browserAdapter.execute({ url: url.href, goal, requiresInteraction: false });
+      } catch (error) {
+        if (error?.code === "BROWSER_UNAVAILABLE") {
+          const completedAt = now();
+          const unsupportedResult = normalizeResult({
+            status: "failed",
+            data: null,
+            warnings: ["Browser Run binding is not configured; no browser navigation was performed."],
+          });
+          events.push(event("task.unsupported", completedAt, { reason: "browser_binding_unavailable" }));
+          return buildTask({
+            id, goal, state: "unsupported", execution, createdAt, startedAt,
+            completedAt, events, result: unsupportedResult,
+          });
+        }
+        throw error;
+      }
       const completedAt = now();
-      const result = normalizeResult({
-        status: "failed",
-        data: null,
-        warnings: ["Browser execution is not connected; no browser action was performed."],
-      });
-      events.push(event("task.unsupported", completedAt, { reason: "browser_adapter_unavailable" }));
+      const state = browserResult.status === "succeeded"
+        ? "succeeded"
+        : browserResult.status === "partial"
+          ? "partial"
+          : "failed";
+      if (state === "succeeded") events.push(event("task.succeeded", completedAt));
+      else if (state === "partial") events.push(event("task.partial", completedAt, { reason: "partial_browser_result" }));
+      else events.push(event("task.failed", completedAt, { reason: "browser_render_failed" }));
       return buildTask({
-        id, goal, state: "unsupported", execution, createdAt, startedAt,
-        completedAt, events, result,
+        id, goal, state, execution, createdAt, startedAt, completedAt, events, result: browserResult,
       });
     }
 

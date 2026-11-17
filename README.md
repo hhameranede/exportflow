@@ -28,6 +28,12 @@ The Cloudflare Worker provides the public homepage, health/platform endpoints, a
 - Schema limits: 16 KiB, 20 properties, up to 8 source paths per field; JSON-LD limits are 20 blocks, 128 KiB per block, and 100 nodes.
 - The extractor does not fetch remote JSON-LD contexts and never executes page scripts.
 
+## Browser rendering adapter
+- The Core contains a factory for a Cloudflare Browser Run session adapter. It uses an injected Browser binding and Puppeteer-compatible client; the current Worker has no Browser Run binding configured, so this adapter is not registered or available to live tasks.
+- Render-only navigation is limited to the exact requested hostname using Browser Run session guardrails, same-origin request interception, robots rules, a 15-second navigation budget, 30 browser requests, and a 512 KiB HTML output cap.
+- User-directed click/type workflows remain unsupported. The session closes after each render.
+- Browser Run Free allowance is 10 minutes/day; do not enable a binding or run live browser sessions until the private-destination/DNS-rebinding boundary is separately verified and the binding configuration is explicitly authorized.
+
 ## Internal task execution
 - Creates a task ID and an in-memory lifecycle event sequence (`accepted`, `started`, `succeeded`, `partial`, `failed`, or `unsupported`).
 - Routes `fetch`, `map`, `crawl`, and `extract` tasks to their matching internal adapters.
