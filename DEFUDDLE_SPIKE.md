@@ -5,77 +5,68 @@ This branch evaluates Defuddle `0.19.6` as a **local HTML-to-Markdown parser**, 
 ## Architecture boundary
 
 1. `createDefuddleAdapter()` validates the requested URL with ExportFlow's existing egress policy.
-2. The default `fetchResource` is ExportFlow's `fetchPublicResource()`, retaining its GET-only behavior, redirect revalidation, 8-second timeout and 1 MiB response cap.
-3. Only the bounded HTML body is passed to `parseDefuddleHtml()`; the final URL is passed as document metadata for relative-link resolution.
-4. Defuddle's synchronous `parse()` path is used with `useAsync: false`; `parseAsync()` is not used. The parser receives no network client and never owns the fetch stage.
-5. The adapter returns Markdown, selected metadata, source URL, retrieval time and HTTP/content-extraction evidence. Markdown is untrusted source content and must not be rendered as trusted HTML.
+2. The default `fetchResource` is ExportFlow's `fetchPublicResource()`, retaining GET-only behavior, per-hop redirect revalidation, an 8-second timeout and 1 MiB response cap.
+3. Only bounded, already-fetched HTML is passed to the parser; the final URL is metadata for relative-link resolution.
+4. Defuddle uses the synchronous full-bundle `parse()` path with `useAsync: false`. A fail-closed injected `fetch` throws if any extractor attempts network access.
+5. LinkeDOM compatibility globals are initialized once at module load; incoming page HTML is always parsed into a request-local Document. The parser does not put the page HTML into a shared global document.
+6. Results contain untrusted Markdown, selected metadata and HTTP/content-extraction provenance. Consumers must never render this Markdown as trusted HTML.
 
-The adapter is deliberately **not registered** in the shared adapter catalog and no public MCP/HTTP tool is added in this spike. It is an internal candidate only.
+The adapter is deliberately **not registered** in the shared adapter catalog and no public MCP/HTTP tool is added in this spike.
 
 ## Versions
 
 - `defuddle`: exact pin `0.19.6` (MIT)
 - `linkedom`: exact pin `0.18.15` (ISC)
+- `wrangler`: exact dev pin `4.164.0`, only for local Workerd verification
 
-The branch's package install is intentionally an experimental registry install and does not yet contain a committed lockfile. A reproducible lockfile and full transitive license/advisory review remain mandatory before merging or production use.
+## Verified CI — 17 November 2026
 
-## Tests
+Latest verified run: [Worker CI #687](https://github.com/hhameranede/exportflow/actions/runs/44189579109), commit `55eb84131fc62c83bc5adb49c63ad4d2d8779218`.
 
-`npm test` runs unit tests for input validation, bounded bytes, content type, result provenance and error handling. The real package/runtime fixture is enabled in CI with `EXPORTFLOW_DEFUDDLE_INTEGRATION=1`; it checks headings, Arabic text, tables, unsafe link/attribute removal, and that parsing makes no extra `fetch()` calls.
-
-Local validation should use Node 24 (the repository engine and CI version):
-
-```sh
-npm install --package-lock=false --ignore-scripts --no-audit --no-fund
-npm test
-npm run check
-```
-
-The local tool environment used to prepare this spike had Node `22.16.0` and npm registry DNS failures (`EAI_AGAIN`), so real Defuddle installation and execution could not be claimed locally. The GitHub Actions CI job installs packages and runs the actual integration fixture on Node 24.
-
-## Explicit non-goals
-
-- No use of `defuddle.md` or any other hosted conversion endpoint.
-- No copied upstream URL fetcher, redirect logic, API-key billing, KV, Durable Object or Stripe code.
-- No automatic registration, public tool exposure, Browser Run, authenticated browsing or JavaScript execution of page content.
-- No merge, deployment, Cloudflare binding/secret/DNS/permission change, Production change or paid service activation.
-
-
-## Verified CI and local Workerd results — 17 November 2026
-
-Latest verified run: [Worker CI #681](https://github.com/hhameranede/exportflow/actions/runs/44186260223), branch head `5259afa16aba3f32fa150de76ed1c7327b55b671).
-
-- Node 24 dependency install and `npm ci`: passed.
-- Full `npm audit`: **0 vulnerabilities** at the time of the run.
+- Node 24 install and `npm ci`: passed.
+- Full `npm audit`: **0 vulnerabilities**.
 - Node test suite: **85 passed, 0 failed, 0 skipped**.
 - `npm run check`: passed.
-- Local Wrangler/Workerd run: passed in the Cloudflare-compatible runtime using compatibility date `2026-11-17`, with no `nodejs_compat` flag and no Cloudflare account/deployment.
-- Three fixture categories passed:
-  - Multilingual article: 423 words; Defuddle parser timing 32 ms, whole Worker handler 83 ms.
-  - Technical documentation: 423 words; parser 13 ms, Worker handler 16 ms.
-  - Product detail: 390 words; parser 8 ms, Worker handler 8 ms.
-- These are synthetic fixtures and single-run local timings, not measurements from arbitrary live websites, not a production performance guarantee, and not a substitute for CPU/memory/load testing.
+- Wrangler/Workerd local runtime test: passed on compatibility date `2026-11-17`, without `nodejs_compat`, Cloudflare credentials, bindings or deployment.
+- Four synthetic fixture categories passed:
+  - Article with Arabic + table: 423 words; parser 39 ms / Worker handler 70 ms.
+  - Technical docs with code + table: 423 words; parser 16 ms / Worker handler 19 ms.
+  - Product detail: 390 words; parser 10 ms / Worker handler 10 ms.
+  - JSON-LD `articleBody` fallback with unsafe URI/event-handler payload: 675 words; parser 5 ms / Worker handler 17 ms.
+- Tests also verify unsafe link/event-handler/template sanitization, redirect-to-loopback rejection before a second request, no extra parser network calls, and stable global DOM state after one-time module initialization.
+- These are synthetic single-run measurements, not live-web coverage or a production SLA. Near-limit, concurrency and CPU/memory testing remain open.
 
 ## Dependency inventory and license notes
 
-The generated npm lock contains 118 package entries: 27 runtime/transitive production packages and 91 development packages.
+The generated lockfile has 118 package entries (excluding the root project). The production dependency closure has 21 packages:
+- MIT: 9
+- BSD-2-Clause: 8
+- ISC: 3
+- Apache-2.0: 1
 
-Runtime dependency licenses recorded in the lock:
-- MIT: 10 packages
-- BSD-2-Clause: 13 packages
-- ISC: 3 packages
-- Apache-2.0: 1 package
+The separate Wrangler/dev toolchain includes optional platform packages with LGPL-3.0-or-later and combined Apache/LGPL/MIT license identifiers. Keep them outside the production dependency graph and account for them in the development SBOM/notices. The full lock inventory is not uniformly MIT-licensed.
 
-The Wrangler development toolchain adds optional, dev-only Sharp platform packages with LGPL-3.0-or-later or combined Apache/LGPL/MIT identifiers. They are not in the production dependency graph, but must remain accounted for in development-toolchain notices/SBOM and any redistribution of the test toolchain. No package with an unclassified/missing SPDX license field appeared in the generated lock.
+CI now bootstraps and commits the lockfile **once** to this isolated PR branch when it is absent. Subsequent runs use tracked-lock `npm ci` directly. It also emits a CycloneDX SBOM artifact for review.
 
-The generated `package-lock.json` was uploaded as workflow artifact `defuddle-spike-lockfile` (run #681, artifact ID `14375590257`) and downloaded for inspection. It is **not yet committed to the branch**. The PR must not be merged until this generated lock is committed and a subsequent `npm ci` run proves the repository is reproducible from the tracked lockfile.
+## Security advisory review
+
+- Defuddle `0.19.6` changelog records a fix for unsafe HTML/links/event handlers in Markdown output (GHSA-6frv-jcwm-xqcj).
+- `0.19.4` records additional sanitization hardening for templates and unsafe content roots.
+- Exact upstream GHSA affected ranges, including the JSON-LD fallback and site-extractor advisories, still require reconciliation against the pinned version and adversarial regression coverage. A zero-vulnerability `npm audit` result does not replace this review.
 
 ## Remaining merge gates
 
-1. Commit the exact generated lockfile; rerun tests from `npm ci` using the committed lock.
-2. Generate and retain a CycloneDX SBOM (or equivalent) and archive third-party license notices.
-3. Reconcile all upstream GHSA affected-version ranges against the final lock and add adversarial HTML regression/fuzz fixtures; `npm audit` returning zero does not replace this review.
-4. Run larger 1 MiB and near-budget HTML fixtures, concurrency/CPU/memory profiling, and comparative extraction-quality tests on a representative set of live-page snapshots whose reuse is permitted.
-5. Only after those gates pass, decide whether to register an internal adapter. Public MCP/API exposure, Cloudflare Preview deployment and Production remain separate approval gates.
+1. Verify that the CI bootstrap commit placed the exact generated `package-lock.json` on this branch; then verify a subsequent CI run passes with `npm ci` and does not regenerate the lockfile.
+2. Inspect and retain the CycloneDX SBOM and required third-party notices, including dev-toolchain licenses.
+3. Reconcile exact upstream GHSA ranges and add adversarial HTML regression/fuzz cases.
+4. Profile near-limit HTML, concurrent requests, CPU/memory and extraction quality on a broader set of permissible live-page snapshots.
+5. Review the final diff before any merge decision.
 
-Current status: promising parser-only candidate with successful Node + Workerd smoke tests; **not yet approved for merge or production**.
+## Explicit non-goals
+
+- No hosted `defuddle.md` endpoint or upstream URL-fetch wrapper.
+- No copied billing, KV, Durable Object, Stripe or browser infrastructure.
+- No automatic registration or public tool exposure.
+- No merge, deployment, Cloudflare binding/secret/DNS/permission change, Production change or paid service activation.
+
+Current status: promising parser-only candidate with passing Node and local Workerd checks; **not yet approved for merge or production**.
