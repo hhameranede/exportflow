@@ -84,7 +84,7 @@ export async function executeWebTask(input, options = {}) {
 
     const url = validatePublicHttpUrl(input.url);
     const operation = input.operation === undefined ? "fetch" : input.operation;
-    if (!["fetch", "map", "crawl"].includes(operation)) {
+    if (!["fetch", "map", "crawl", "extract"].includes(operation)) {
       throw Object.assign(new TypeError("Unsupported task operation."), { code: "UNSUPPORTED_OPERATION" });
     }
     const route = chooseExecutionPath({
@@ -114,7 +114,9 @@ export async function executeWebTask(input, options = {}) {
       ? "http.fetch.v1"
       : operation === "map"
         ? "web.map.v1"
-        : "web.crawl.v1";
+        : operation === "crawl"
+          ? "web.crawl.v1"
+          : "web.extract.v1";
     execution.adapterId = adapterId;
     const adapterInput = { url: url.href };
     if (operation === "map" && input.maxUrls !== undefined) adapterInput.maxUrls = input.maxUrls;
@@ -122,6 +124,7 @@ export async function executeWebTask(input, options = {}) {
       if (input.maxPages !== undefined) adapterInput.maxPages = input.maxPages;
       if (input.maxDepth !== undefined) adapterInput.maxDepth = input.maxDepth;
     }
+    if (operation === "extract") adapterInput.schema = input.schema;
     const result = await runAdapter(adapterId, adapterInput);
     const completedAt = now();
     const state = result.status === "succeeded"

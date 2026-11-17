@@ -30,7 +30,7 @@ The Cloudflare Worker provides the public homepage, health/platform endpoints, a
 
 ## Internal task execution
 - Creates a task ID and an in-memory lifecycle event sequence (`accepted`, `started`, `succeeded`, `partial`, `failed`, or `unsupported`).
-- Routes static retrieval to `http.fetch.v1`.
+- Routes `fetch`, `map`, `crawl`, and `extract` tasks to their matching internal adapters.
 - Reports JavaScript/rendering/interaction tasks as `unsupported` until a reviewed Browser adapter is connected; it does not simulate a browser action.
 - Returns normalized result data, source provenance, timestamps, and warnings.
 - Does not persist tasks, create queues, or accept caller-supplied credentials or arbitrary request headers.
