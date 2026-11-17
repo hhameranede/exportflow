@@ -82,19 +82,58 @@ export async function executeWebTask(input, options = {}) {
       throw Object.assign(new TypeError("requiresInteraction must be a boolean."), { code: "INVALID_TASK" });
     }
 
-    const url = validatePublicHttpUrl(input.url);
     const operation = input.operation === undefined ? "fetch" : input.operation;
-    if (!["fetch", "map", "crawl", "extract"].includes(operation)) {
+    if (!["fetch", "map", "crawl", "extract", "search"].includes(operation)) {
       throw Object.assign(new TypeError("Unsupported task operation."), { code: "UNSUPPORTED_OPERATION" });
     }
-    const route = chooseExecutionPath({
-      requiresJavascript: input.requiresJavascript === true,
-      requiresInteraction: input.requiresInteraction === true,
-    });
+    const url = operation === "search" ? null : validatePublicHttpUrl(input.url);
+    if (operation === "search" && (typeof input.query !== "string" || !input.query.trim() || input.query.length > 1024)) {
+      throw Object.assign(new TypeError("Search query must contain 1 to 1024 characters."), { code: "INVALID_QUERY" });
+    }
+    if (operation === "search" && (input.requiresJavascript === true || input.requiresInteraction === true)) {
+      throw Object.assign(new TypeError("Search operations cannot require browser execution."), { code: "INVALID_TASK" });
+    }
+    const route = operation === "search"
+      ? { path: "http", reason: "Search adapters return ranked public URLs directly.", escalationAllowed: false }
+      : chooseExecutionPath({
+          requiresJavascript: input.requiresJavascript === true,
+          requiresInteraction: input.requiresInteraction === true,
+        });
     execution = { path: route.path, operation, adapterId: null, reason: route.reason };
 
     startedAt = now();
     events.push(event("task.started", startedAt, { executionPath: route.path }));
+
+    if (operation === "search") {
+      const searchAdapter = options.searchAdapter;
+      if (!searchAdapter || typeof searchAdapter.execute !== "function") {
+        const completedAt = now();
+        const result = normalizeResult({
+          status: "failed",
+          data: null,
+          warnings: ["Cloudflare Web Search binding is not configured; no search request was made."],
+        });
+        events.push(event("task.unsupported", completedAt, { reason: "search_adapter_unavailable" }));
+        return buildTask({
+          id, goal, state: "unsupported", execution, createdAt, startedAt,
+          completedAt, events, result,
+        });
+      }
+      execution.adapterId = searchAdapter.id || "web.search.v1";
+      const result = await searchAdapter.execute({ query: input.query, limit: input.limit });
+      const completedAt = now();
+      const state = result.status === "succeeded"
+        ? "succeeded"
+        : result.status === "partial"
+          ? "partial"
+          : "failed";
+      if (state === "succeeded") events.push(event("task.succeeded", completedAt));
+      else if (state === "partial") events.push(event("task.partial", completedAt, { reason: "partial_search_result" }));
+      else events.push(event("task.failed", completedAt, { reason: "search_failed" }));
+      return buildTask({
+        id, goal, state, execution, createdAt, startedAt, completedAt, events, result,
+      });
+    }
 
     if (route.path === "browser") {
       const browserAdapter = options.browserAdapter;

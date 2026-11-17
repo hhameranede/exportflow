@@ -8,6 +8,6 @@
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/index.js && node --check src/core/router.js && node --check src/core/adapters.js && node --check src/core/result.js && node --check src/core/egress-guard.js && node --check src/core/http-fetch.js && node --check src/core/tasks.js && node --check src/core/map-crawl.js && node --check src/core/extract.js && node --check src/core/browser-render.js"
+    "check": "node --check src/index.js && node --check src/core/router.js && node --check src/core/adapters.js && node --check src/core/result.js && node --check src/core/egress-guard.js && node --check src/core/http-fetch.js && node --check src/core/tasks.js && node --check src/core/map-crawl.js && node --check src/core/extract.js && node --check src/core/browser-render.js && node --check src/core/search.js"
   }
 }

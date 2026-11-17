@@ -5,6 +5,7 @@ import { executeWebTask } from "../src/core/tasks.js";
 import { crawlWebsite, extractSitemapLocations, isAllowedByRobots, mapWebsite, parseRobotsTxt } from "../src/core/map-crawl.js";
 import { ExtractionError, extractFromStructuredSources, extractStructuredData, validateExtractionSchema } from "../src/core/extract.js";
 import { BrowserAdapterError, createBrowserAdapter } from "../src/core/browser-render.js";
+import { SearchAdapterError, createSearchAdapter } from "../src/core/search.js";
 import { EGRESS_POLICY, EgressPolicyError, validateEgressTarget } from "../src/core/egress-guard.js";
 import { normalizeResult } from "../src/core/result.js";
 import { registerAdapter, getAdapterCatalog, executeAdapter } from "../src/core/adapters.js";
@@ -1003,6 +1004,127 @@ test("task executor reports a missing Browser Run binding as unsupported", async
       idFactory: () => "task-browser-no-binding",
       browserAdapter: unavailableAdapter,
     },
+  );
+  assert.equal(task.state, "unsupported");
+  assert.equal(task.events.at(-1).type, "task.unsupported");
+});
+
+
+test("search adapter calls Cloudflare Web Search with a fixed provider and bounded result limit", async () => {
+  let request;
+  const adapter = createSearchAdapter({
+    webSearch: async (input) => {
+      request = input;
+      return {
+        items: [
+          { url: "https://example.com/one", title: "One", description: "First result" },
+          { url: "https://example.com/two", title: "Two", description: "Second result" },
+        ],
+        metadata: { requestId: "req-123", latencyMs: 42 },
+      };
+    },
+    now: () => "2026-11-17T00:00:00.000Z",
+  });
+  const result = await adapter.execute({ query: "  cloudflare workers  ", limit: 2 });
+  assert.deepEqual(request, {
+    gatewayId: "default",
+    query: "cloudflare workers",
+    provider: "ceramic",
+    limit: 2,
+  });
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.data.resultCount, 2);
+  assert.equal(result.data.requestId, "req-123");
+  assert.equal(result.data.results[0].rank, 1);
+  assert.equal(result.sources[0].evidence[0].query, "cloudflare workers");
+  assert.equal(result.sources[0].url, "https://example.com/one");
+});
+
+test("search adapter drops unsafe and duplicate result URLs", async () => {
+  const adapter = createSearchAdapter({
+    webSearch: async () => ({
+      items: [
+        { url: "https://example.com/page", title: "Valid" },
+        { url: "https://example.com/page#fragment", title: "Duplicate after normalization" },
+        { url: "http://127.0.0.1/admin", title: "Local" },
+        { url: "javascript:alert(1)", title: "Unsafe" },
+      ],
+    }),
+  });
+  const result = await adapter.execute({ query: "sample query" });
+  assert.equal(result.data.resultCount, 1);
+  assert.equal(result.data.results[0].title, "Valid");
+  assert.ok(result.warnings.some((warning) => warning.includes("invalid, unsafe, or duplicate")));
+});
+
+test("search adapter accepts zero results as a successful search operation", async () => {
+  const adapter = createSearchAdapter({ webSearch: async () => ({ items: [], metadata: {} }) });
+  const result = await adapter.execute({ query: "no matching pages" });
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.data.resultCount, 0);
+  assert.ok(result.warnings.some((warning) => warning.includes("no usable")));
+});
+
+test("search adapter validates queries, limits, and configured providers", async () => {
+  const adapter = createSearchAdapter({ webSearch: async () => ({ items: [] }) });
+  await assert.rejects(
+    adapter.execute({ query: "" }),
+    (error) => error instanceof SearchAdapterError && error.code === "INVALID_QUERY",
+  );
+  await assert.rejects(
+    adapter.execute({ query: "valid", limit: 11 }),
+    (error) => error instanceof SearchAdapterError && error.code === "INVALID_LIMIT",
+  );
+  assert.throws(
+    () => createSearchAdapter({ provider: "unknown", webSearch: async () => ({ items: [] }) }),
+    (error) => error instanceof SearchAdapterError && error.code === "INVALID_PROVIDER",
+  );
+});
+
+test("search adapter returns a clear unavailable error without a Worker AI binding", async () => {
+  const adapter = createSearchAdapter({});
+  await assert.rejects(
+    adapter.execute({ query: "cloudflare workers" }),
+    (error) => error instanceof SearchAdapterError && error.code === "SEARCH_UNAVAILABLE",
+  );
+});
+
+test("search adapter does not leak upstream error details", async () => {
+  const adapter = createSearchAdapter({
+    webSearch: async () => { throw new Error("sensitive provider credential detail"); },
+  });
+  await assert.rejects(
+    adapter.execute({ query: "cloudflare" }),
+    (error) => error instanceof SearchAdapterError &&
+      error.code === "SEARCH_PROVIDER_FAILED" &&
+      !error.message.includes("sensitive provider credential detail"),
+  );
+});
+
+test("task executor dispatches query-only search operations to an injected Search adapter", async () => {
+  let received;
+  const task = await executeWebTask(
+    { goal: "Find official Cloudflare docs", operation: "search", query: "Cloudflare Workers docs", limit: 4 },
+    {
+      idFactory: () => "task-search-0001",
+      searchAdapter: {
+        id: "web.search.v1",
+        execute: async (input) => {
+          received = input;
+          return { status: "succeeded", data: { resultCount: 0 }, sources: [], warnings: [] };
+        },
+      },
+    },
+  );
+  assert.equal(task.state, "succeeded");
+  assert.equal(task.execution.adapterId, "web.search.v1");
+  assert.deepEqual(received, { query: "Cloudflare Workers docs", limit: 4 });
+});
+
+test("task executor keeps search unsupported when its AI binding is not configured", async () => {
+  const task = await executeWebTask(
+    { goal: "Search for a public website", operation: "search", query: "some topic" },
+    { idFactory: () => "task-search-disabled" },
   );
   assert.equal(task.state, "unsupported");
   assert.equal(task.events.at(-1).type, "task.unsupported");

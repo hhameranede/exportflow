@@ -34,6 +34,13 @@ The Cloudflare Worker provides the public homepage, health/platform endpoints, a
 - User-directed click/type workflows remain unsupported. The session closes after each render.
 - Browser Run Free allowance is 10 minutes/day; do not enable a binding or run live browser sessions until the private-destination/DNS-rebinding boundary is separately verified and the binding configuration is explicitly authorized.
 
+## Search adapter
+
+- The Core contains a factory for Cloudflare Web Search API via an injected Worker AI binding and AI Gateway. It does not require a provider-specific API key when using AI Gateway credits.
+- Default provider: Ceramic.ai, with a documented price of $0.25 per 1,000 requests and Zero Data Retention. Search runs through AI Gateway and consumes its credits; this is not a free/no-cost search source.
+- Requests are capped at 10 results, the provider is fixed when the adapter is created, and results are revalidated, deduplicated, ranked, and returned with source provenance.
+- Cloudflare Web Search API is in open beta, supports Ceramic.ai, Exa, and Linkup, and does not paginate. The factory is not registered or live because no AI binding or AI Gateway credits have been configured for this Worker.
+
 ## Internal task execution
 - Creates a task ID and an in-memory lifecycle event sequence (`accepted`, `started`, `succeeded`, `partial`, `failed`, or `unsupported`).
 - Routes `fetch`, `map`, `crawl`, and `extract` tasks to their matching internal adapters.
