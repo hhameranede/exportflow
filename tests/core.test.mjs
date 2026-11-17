@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { chooseExecutionPath } from "../src/core/router.js";
 import { executeWebTask } from "../src/core/tasks.js";
 import { crawlWebsite, extractSitemapLocations, isAllowedByRobots, mapWebsite, parseRobotsTxt } from "../src/core/map-crawl.js";
+import { ExtractionError, extractFromStructuredSources, extractStructuredData, validateExtractionSchema } from "../src/core/extract.js";
 import { EGRESS_POLICY, EgressPolicyError, validateEgressTarget } from "../src/core/egress-guard.js";
 import { normalizeResult } from "../src/core/result.js";
 import { registerAdapter, getAdapterCatalog, executeAdapter } from "../src/core/adapters.js";
@@ -591,4 +592,245 @@ test("HTTP fetch applies the bounded crawler User-Agent option", async () => {
     },
   });
   assert.equal(seenHeaders["user-agent"], "ExportFlowBot/0.1 (+https://exportflow.me)");
+});
+
+
+test("schema extraction reads JSON-LD, OpenGraph, title and canonical with field-level evidence", () => {
+  const html = [
+    "<html><head>",
+    "<title>Fallback title</title>",
+    '<meta property="og:title" content="Widget overview">',
+    '<link rel="canonical" href="/products/widget">',
+    '<script type="application/ld+json">{"@type":"Product","name":"Widget","description":"A test item","offers":{"price":"19.95","priceCurrency":"USD"}}</script>',
+    "</head><body><p>Untrusted page instructions are just content.</p></body></html>",
+  ].join("");
+  const result = extractFromStructuredSources({
+    html,
+    url: "https://shop.example.com/products/widget",
+    contentType: "text/html",
+    schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", "x-source": "jsonld:name" },
+        price: { type: "number", "x-source": "jsonld:offers.price" },
+        currency: { type: "string", "x-source": "jsonld:offers.priceCurrency" },
+        title: { type: "string", "x-source": "meta:og:title" },
+        canonical: { type: "string", "x-source": "page:canonical" },
+      },
+      required: ["name", "price"],
+    },
+  });
+  assert.equal(result.status, "succeeded");
+  assert.deepEqual(result.data, {
+    name: "Widget",
+    price: 19.95,
+    currency: "USD",
+    title: "Widget overview",
+    canonical: "https://shop.example.com/products/widget",
+  });
+  assert.equal(result.fieldEvidence.length, 5);
+  assert.equal(result.fieldEvidence[0].sourceType, "jsonld");
+  assert.equal(result.fieldEvidence[0].blockIndex, 0);
+  assert.equal(result.fieldEvidence[1].path, "offers.price");
+});
+
+test("schema extraction resolves JSON-LD graphs and array-valued nested offers", () => {
+  const result = extractFromStructuredSources({
+    json: {
+      "@context": "https://schema.org",
+      "@graph": [
+        { "@type": "Product", "name": "Graph item", "offers": [{ "price": "5.25" }] },
+      ],
+    },
+    url: "https://example.com/product",
+    contentType: "application/json",
+    schema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        price: { type: "number", "x-source": "jsonld:offers.price" },
+      },
+      required: ["name", "price"],
+    },
+  });
+  assert.equal(result.status, "succeeded");
+  assert.deepEqual(result.data, { name: "Graph item", price: 5.25 });
+  assert.equal(result.fieldEvidence[1].sourceType, "jsonld");
+});
+
+test("schema extraction uses page metadata aliases but never guesses missing values", () => {
+  const result = extractFromStructuredSources({
+    html: "<title>Example title</title><meta name=\"description\" content=\"Short summary\"><p>Text says price is 99</p>",
+    url: "https://example.com/",
+    contentType: "text/html",
+    schema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        description: { type: "string" },
+        price: { type: "number" },
+      },
+      required: ["title", "price"],
+    },
+  });
+  assert.equal(result.status, "partial");
+  assert.deepEqual(result.data, { title: "Example title", description: "Short summary" });
+  assert.deepEqual(result.missingFields, ["price"]);
+  assert.deepEqual(result.missingRequired, ["price"]);
+});
+
+test("schema validation rejects unsupported types, unsafe source paths and oversized schemas", () => {
+  assert.throws(
+    () => validateExtractionSchema({ type: "object", properties: { value: { type: "function" } } }),
+    (error) => error instanceof ExtractionError && error.code === "INVALID_SCHEMA",
+  );
+  assert.throws(
+    () => validateExtractionSchema({ type: "object", properties: { value: { type: "string", "x-source": "jsonld:__proto__.polluted" } } }),
+    (error) => error instanceof ExtractionError && error.code === "INVALID_SCHEMA",
+  );
+  const hugeSchema = {
+    type: "object",
+    properties: { value: { type: "string", description: "x".repeat(17_000) } },
+  };
+  assert.throws(
+    () => validateExtractionSchema(hugeSchema),
+    (error) => error instanceof ExtractionError && error.code === "INVALID_SCHEMA",
+  );
+});
+
+test("schema extraction returns normalized result and field-level source evidence", async () => {
+  const schema = {
+    type: "object",
+    properties: { name: { type: "string", "x-source": "jsonld:name" } },
+    required: ["name"],
+  };
+  const result = await extractStructuredData(
+    { url: "https://example.com/item", schema },
+    {
+      fetchResource: async (url) => ({
+        status: 200,
+        finalUrl: url,
+        contentType: "text/html; charset=utf-8",
+        body: '<script type="application/ld+json">{"name":"Test item"}</script>',
+        bytes: 50,
+        retrievedAt: "2026-11-17T00:00:00.000Z",
+      }),
+    },
+  );
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.data.fields.name, "Test item");
+  assert.equal(result.sources[0].url, "https://example.com/item");
+  assert.equal(result.sources[0].evidence[1].type, "extracted_field");
+  assert.equal(result.sources[0].evidence[1].field, "name");
+});
+
+test("schema extraction handles JSON endpoints without HTML parsing", async () => {
+  const result = await extractStructuredData(
+    {
+      url: "https://api.example.com/product",
+      schema: { type: "object", properties: { sku: { type: "string" } }, required: ["sku"] },
+    },
+    {
+      fetchResource: async (url) => ({
+        status: 200, finalUrl: url, contentType: "application/json",
+        body: '{"sku":"SKU-123"}', bytes: 15, retrievedAt: "2026-11-17T00:00:00.000Z",
+      }),
+    },
+  );
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.data.fields.sku, "SKU-123");
+});
+
+test("schema extraction reports HTTP failures without fabricating fields", async () => {
+  const result = await extractStructuredData(
+    {
+      url: "https://example.com/missing",
+      schema: { type: "object", properties: { title: { type: "string" } } },
+    },
+    {
+      fetchResource: async (url) => ({
+        status: 404, finalUrl: url, contentType: "text/html", body: "Not found",
+        bytes: 9, retrievedAt: "2026-11-17T00:00:00.000Z",
+      }),
+    },
+  );
+  assert.equal(result.status, "failed");
+  assert.deepEqual(result.data.fields, {});
+  assert.deepEqual(result.data.missingFields, ["title"]);
+});
+
+test("schema extraction rejects invalid JSON sources and unsupported content types", async () => {
+  await assert.rejects(
+    extractStructuredData(
+      { url: "https://example.com/data", schema: { type: "object", properties: { id: { type: "string" } } } },
+      { fetchResource: async (url) => ({ status: 200, finalUrl: url, contentType: "application/json", body: "{", bytes: 1 }) },
+    ),
+    (error) => error instanceof ExtractionError && error.code === "INVALID_JSON_SOURCE",
+  );
+  await assert.rejects(
+    extractStructuredData(
+      { url: "https://example.com/file", schema: { type: "object", properties: { id: { type: "string" } } } },
+      { fetchResource: async (url) => ({ status: 200, finalUrl: url, contentType: "application/octet-stream", body: "data", bytes: 4 }) },
+    ),
+    (error) => error instanceof ExtractionError && error.code === "UNSUPPORTED_CONTENT_TYPE",
+  );
+});
+
+test("schema extraction validates schema before network access", async () => {
+  let calls = 0;
+  await assert.rejects(
+    extractStructuredData(
+      { url: "https://example.com/", schema: { type: "object", properties: { value: { type: "unknown" } } } },
+      { fetchResource: async () => { calls++; return {}; } },
+    ),
+    (error) => error instanceof ExtractionError && error.code === "INVALID_SCHEMA",
+  );
+  assert.equal(calls, 0);
+});
+
+test("extract adapter is registered with deterministic bounded capabilities", () => {
+  const adapter = getAdapterCatalog().find((item) => item.id === "web.extract.v1");
+  assert.ok(adapter);
+  assert.ok(adapter.capabilities.includes("field-evidence"));
+  assert.ok(adapter.restrictions.includes("no-LLM-inference"));
+  assert.equal(adapter.limits.maxProperties, 20);
+});
+
+test("task executor dispatches extract operations with the caller schema", async () => {
+  let seen;
+  const schema = { type: "object", properties: { name: { type: "string" } } };
+  const task = await executeWebTask(
+    { goal: "Extract product name", url: "https://example.com/product", operation: "extract", schema },
+    {
+      idFactory: () => "task-extract-0001",
+      executeAdapter: async (id, input) => {
+        seen = { id, input };
+        return { status: "succeeded", data: { fields: { name: "Example" } }, sources: [], warnings: [] };
+      },
+    },
+  );
+  assert.equal(task.execution.adapterId, "web.extract.v1");
+  assert.equal(seen.id, "web.extract.v1");
+  assert.deepEqual(seen.input.schema, schema);
+});
+
+
+test("task executor preserves partial extraction results as a partial task state", async () => {
+  const task = await executeWebTask(
+    { goal: "Extract product details", url: "https://example.com/product", operation: "extract", schema: {
+      type: "object", properties: { name: { type: "string" } },
+    } },
+    {
+      idFactory: () => "task-partial-0001",
+      executeAdapter: async () => ({
+        status: "partial",
+        data: { fields: { name: "Product" }, missingFields: ["price"] },
+        sources: [],
+        warnings: ["price was not found"],
+      }),
+    },
+  );
+  assert.equal(task.state, "partial");
+  assert.equal(task.result.status, "partial");
+  assert.equal(task.events.at(-1).type, "task.partial");
 });

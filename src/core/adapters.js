@@ -1,5 +1,6 @@
 import { fetchPublicResource, HTTP_FETCH_LIMITS } from "./http-fetch.js";
 import { normalizeResult } from "./result.js";
+import { extractAdapter } from "./extract.js";
 import { mapWebsite, crawlWebsite, MAP_CRAWL_LIMITS } from "./map-crawl.js";
 
 const registry = new Map();
@@ -159,3 +160,5 @@ registerAdapter({
     });
   },
 });
+
+registerAdapter(extractAdapter);

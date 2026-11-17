@@ -124,9 +124,15 @@ export async function executeWebTask(input, options = {}) {
     }
     const result = await runAdapter(adapterId, adapterInput);
     const completedAt = now();
-    const state = result.status === "succeeded" ? "succeeded" : "failed";
+    const state = result.status === "succeeded"
+      ? "succeeded"
+      : result.status === "partial"
+        ? "partial"
+        : "failed";
     if (state === "succeeded") {
       events.push(event("task.succeeded", completedAt));
+    } else if (state === "partial") {
+      events.push(event("task.partial", completedAt, { reason: "some_fields_missing" }));
     } else {
       events.push(event("task.failed", completedAt, { reason: "upstream_request_failed" }));
     }

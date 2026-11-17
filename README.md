@@ -19,8 +19,17 @@ The Cloudflare Worker provides the public homepage, health/platform endpoints, a
 - It does not traverse off-origin links, carry credentials, or attempt access to authenticated pages.
 - Cloudflare Workers use the runtime `HTMLRewriter` parser; Node tests use a deterministic fallback parser.
 
+## Schema-based extraction
+
+- `web.extract.v1` accepts a bounded JSON Schema object and extracts declared fields from JSON-LD, OpenGraph/meta tags, page title, canonical URL, or explicit `x-source` paths.
+- Returns only values that match the requested field types, `missingFields`, `missingRequired`, and field-level source evidence.
+- Uses deterministic parsing only: no LLM inference, remote `@context` loading, page-script execution, or arbitrary selectors.
+- Supports HTML and JSON sources only; JSON-LD graph traversal, metadata fallbacks, and invalid-block warnings are bounded.
+- Schema limits: 16 KiB, 20 properties, up to 8 source paths per field; JSON-LD limits are 20 blocks, 128 KiB per block, and 100 nodes.
+- The extractor does not fetch remote JSON-LD contexts and never executes page scripts.
+
 ## Internal task execution
-- Creates a task ID and an in-memory lifecycle event sequence.
+- Creates a task ID and an in-memory lifecycle event sequence (`accepted`, `started`, `succeeded`, `partial`, `failed`, or `unsupported`).
 - Routes static retrieval to `http.fetch.v1`.
 - Reports JavaScript/rendering/interaction tasks as `unsupported` until a reviewed Browser adapter is connected; it does not simulate a browser action.
 - Returns normalized result data, source provenance, timestamps, and warnings.
