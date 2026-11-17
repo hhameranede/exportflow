@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chooseExecutionPath } from "../src/core/router.js";
 import { executeWebTask } from "../src/core/tasks.js";
+import { crawlWebsite, extractSitemapLocations, isAllowedByRobots, mapWebsite, parseRobotsTxt } from "../src/core/map-crawl.js";
 import { EGRESS_POLICY, EgressPolicyError, validateEgressTarget } from "../src/core/egress-guard.js";
 import { normalizeResult } from "../src/core/result.js";
 import { registerAdapter, getAdapterCatalog, executeAdapter } from "../src/core/adapters.js";
@@ -338,4 +339,256 @@ test("internal task executor validates the goal and boolean routing flags", asyn
   );
   assert.equal(missingGoal.result.data.errorCode, "INVALID_GOAL");
   assert.equal(invalidFlag.result.data.errorCode, "INVALID_TASK");
+});
+
+
+test("robots parser merges matching groups and applies longest match with Allow tie-break", () => {
+  const policy = parseRobotsTxt([
+    "User-agent: *",
+    "Disallow: /wildcard-only",
+    "User-agent: ExportFlowBot",
+    "Disallow: /private/",
+    "Allow: /private/public/",
+    "Disallow: /same",
+    "Allow: /same",
+    "Disallow: /bot-only/",
+    "User-agent: ExportFlow",
+    "Disallow: /extra/",
+    "Sitemap: https://example.com/sitemap.xml",
+  ].join("\n"));
+  assert.equal(isAllowedByRobots("https://example.com/private/item", policy), false);
+  assert.equal(isAllowedByRobots("https://example.com/private/public/item", policy), true);
+  assert.equal(isAllowedByRobots("https://example.com/same", policy), true);
+  assert.equal(isAllowedByRobots("https://example.com/bot-only/item", policy), false);
+  assert.equal(isAllowedByRobots("https://example.com/extra/item", policy), false);
+  assert.equal(isAllowedByRobots("https://example.com/wildcard-only", policy), true);
+  assert.deepEqual(policy.sitemaps, ["https://example.com/sitemap.xml"]);
+});
+
+test("robots parser uses wildcard group when no product-token group matches", () => {
+  const policy = parseRobotsTxt("User-agent: OtherBot\nDisallow: /secret\n\nUser-agent: *\nDisallow: /hidden");
+  assert.equal(isAllowedByRobots("https://example.com/secret", policy), true);
+  assert.equal(isAllowedByRobots("https://example.com/hidden", policy), false);
+});
+
+test("robots rules support wildcard and end-anchor patterns", () => {
+  const policy = parseRobotsTxt("User-agent: *\nDisallow: /private/*.pdf$");
+  assert.equal(isAllowedByRobots("https://example.com/private/a.pdf", policy), false);
+  assert.equal(isAllowedByRobots("https://example.com/private/a.pdf?download=1", policy), true);
+});
+
+test("empty Disallow is ignored", () => {
+  const policy = parseRobotsTxt("User-agent: *\nDisallow:");
+  assert.equal(isAllowedByRobots("https://example.com/anywhere", policy), true);
+});
+
+test("sitemap parser decodes XML entities and filters off-origin and unsafe URLs", () => {
+  const xml = "<urlset><url><loc>https://example.com/a&amp;b</loc></url><url><loc>https://outside.example/page</loc></url><url><loc>javascript:alert(1)</loc></url></urlset>";
+  assert.deepEqual(extractSitemapLocations(xml, "https://example.com/", 10), ["https://example.com/a&b"]);
+});
+
+test("mapWebsite discovers sitemap URLs and allowed same-origin links", async () => {
+  const calls = [];
+  const fakeFetch = async (url) => {
+    calls.push(url);
+    if (url.endsWith("/robots.txt")) return {
+      status: 200,
+      body: "User-agent: *\nDisallow: /blocked\nSitemap: https://example.com/sitemap.xml",
+      bytes: 70, contentType: "text/plain", finalUrl: url, retrievedAt: "2026-11-17T00:00:00.000Z",
+    };
+    if (url.endsWith("/sitemap.xml")) return {
+      status: 200,
+      body: "<urlset><url><loc>https://example.com/from-sitemap</loc></url><url><loc>https://example.com/blocked/page</loc></url></urlset>",
+      bytes: 120, contentType: "application/xml", finalUrl: url, retrievedAt: "2026-11-17T00:00:01.000Z",
+    };
+    if (url.endsWith("/start")) return {
+      status: 200,
+      body: '<a href="/from-link">Link</a><a href="/blocked/page">No</a><a href="https://outside.example/page">Offsite</a>',
+      bytes: 100, contentType: "text/html", finalUrl: url, retrievedAt: "2026-11-17T00:00:02.000Z",
+    };
+    throw new Error("Unexpected URL " + url);
+  };
+  const result = await mapWebsite({ url: "https://example.com/start" }, { fetchResource: fakeFetch });
+  assert.deepEqual(result.urls.map((item) => item.url), [
+    "https://example.com/from-sitemap",
+    "https://example.com/from-link",
+  ]);
+  assert.equal(result.urls[0].discoveredBy, "sitemap");
+  assert.equal(result.urls[1].discoveredBy, "link");
+  assert.equal(calls.length, 3);
+});
+
+test("mapWebsite fails closed when robots.txt is unreachable", async () => {
+  let pageFetched = false;
+  await assert.rejects(
+    mapWebsite({ url: "https://example.com/" }, {
+      fetchResource: async (url) => {
+        if (url.endsWith("/robots.txt")) throw new Error("network unavailable");
+        pageFetched = true;
+        return {};
+      },
+    }),
+    (error) => error.code === "ROBOTS_UNREACHABLE",
+  );
+  assert.equal(pageFetched, false);
+});
+
+test("mapWebsite fails closed when robots.txt denies or rate-limits", async () => {
+  for (const status of [401, 403, 429, 503]) {
+    await assert.rejects(
+      mapWebsite({ url: "https://example.com/" }, {
+        fetchResource: async () => ({ status, body: "", bytes: 0, contentType: "text/plain" }),
+      }),
+      (error) => error.code === "ROBOTS_UNREACHABLE",
+    );
+  }
+});
+
+test("mapWebsite refuses cross-origin redirects of robots.txt and start page", async () => {
+  await assert.rejects(
+    mapWebsite({ url: "https://example.com/" }, {
+      fetchResource: async (url) => url.endsWith("/robots.txt")
+        ? { status: 200, body: "", bytes: 0, contentType: "text/plain", finalUrl: "https://outside.example/robots.txt" }
+        : { status: 200, body: "", bytes: 0, contentType: "text/html", finalUrl: url },
+    }),
+    (error) => error.code === "ROBOTS_REDIRECT_OUT_OF_SCOPE",
+  );
+  await assert.rejects(
+    mapWebsite({ url: "https://example.com/" }, {
+      fetchResource: async (url) => {
+        if (url.endsWith("/robots.txt")) return { status: 200, body: "", bytes: 0, contentType: "text/plain", finalUrl: url };
+        if (url.endsWith("/sitemap.xml")) return { status: 404, body: "", bytes: 0, contentType: "text/plain", finalUrl: url };
+        return { status: 200, body: "", bytes: 0, contentType: "text/html", finalUrl: "https://outside.example/" };
+      },
+    }),
+    (error) => error.code === "PAGE_REDIRECT_OUT_OF_SCOPE",
+  );
+});
+
+test("mapWebsite validates URL before network requests", async () => {
+  let calls = 0;
+  await assert.rejects(
+    mapWebsite({ url: "http://127.0.0.1/" }, {
+      fetchResource: async () => { calls++; return {}; },
+    }),
+    (error) => error.code === "URL_NOT_ALLOWED",
+  );
+  assert.equal(calls, 0);
+});
+
+test("crawlWebsite respects robots, seeds sitemap pages, and bounds traversal", async () => {
+  const pages = {
+    "https://example.com/robots.txt": {
+      status: 200,
+      body: "User-agent: *\nDisallow: /blocked\nSitemap: https://example.com/sitemap.xml",
+      bytes: 70, contentType: "text/plain",
+    },
+    "https://example.com/sitemap.xml": {
+      status: 200,
+      body: "<urlset><url><loc>https://example.com/from-sitemap</loc></url></urlset>",
+      bytes: 80, contentType: "application/xml",
+    },
+    "https://example.com/": {
+      status: 200,
+      body: '<a href="/one">One</a><a href="/two">Two</a><a href="/blocked">Blocked</a><a href="https://outside.example/x">Offsite</a>',
+      bytes: 100, contentType: "text/html",
+    },
+    "https://example.com/from-sitemap": {
+      status: 200, body: "<p>Sitemap entry</p>", bytes: 40, contentType: "text/html",
+    },
+    "https://example.com/one": {
+      status: 200, body: '<a href="/three">Three</a>', bytes: 70, contentType: "text/html",
+    },
+    "https://example.com/two": {
+      status: 200, body: "<p>Two</p>", bytes: 50, contentType: "text/html",
+    },
+  };
+  const result = await crawlWebsite({ url: "https://example.com/" }, {
+    maxPages: 3,
+    maxDepth: 2,
+    fetchResource: async (url) => {
+      if (!pages[url]) throw new Error("Unexpected URL " + url);
+      return { ...pages[url], finalUrl: url, retrievedAt: "2026-11-17T00:00:00.000Z" };
+    },
+  });
+  assert.equal(result.pageCount, 3);
+  assert.deepEqual(result.pages.map((page) => page.url), [
+    "https://example.com/",
+    "https://example.com/from-sitemap",
+    "https://example.com/one",
+  ]);
+  assert.ok(result.totalBytes <= 1_048_576);
+  assert.equal(result.pages.some((page) => page.url.includes("/blocked")), false);
+  assert.equal(result.pages.some((page) => page.url.includes("outside.example")), false);
+});
+
+test("map and crawl adapters publish bounded limits", () => {
+  const catalog = getAdapterCatalog();
+  const mapAdapter = catalog.find((item) => item.id === "web.map.v1");
+  const crawlAdapter = catalog.find((item) => item.id === "web.crawl.v1");
+  assert.equal(mapAdapter.limits.maxSitemaps, 2);
+  assert.equal(crawlAdapter.limits.maxPages, 5);
+  assert.ok(mapAdapter.restrictions.includes("robots.txt-respected"));
+  assert.ok(crawlAdapter.restrictions.includes("same-origin-only"));
+});
+
+test("task executor dispatches map and crawl to internal adapters", async () => {
+  const seen = [];
+  const runAdapter = async (id, input) => {
+    seen.push({ id, input });
+    return { status: "succeeded", data: { operation: id }, sources: [], warnings: [] };
+  };
+  const mapTask = await executeWebTask(
+    { goal: "Map the website", url: "https://example.com", operation: "map", maxUrls: 10 },
+    { idFactory: () => "task-map-0001", executeAdapter: runAdapter },
+  );
+  const crawlTask = await executeWebTask(
+    { goal: "Crawl a small section", url: "https://example.com", operation: "crawl", maxPages: 3, maxDepth: 1 },
+    { idFactory: () => "task-crawl-0001", executeAdapter: runAdapter },
+  );
+  assert.equal(mapTask.execution.adapterId, "web.map.v1");
+  assert.equal(crawlTask.execution.adapterId, "web.crawl.v1");
+  assert.deepEqual(seen.map((item) => item.id), ["web.map.v1", "web.crawl.v1"]);
+  assert.equal(seen[0].input.maxUrls, 10);
+  assert.equal(seen[1].input.maxPages, 3);
+});
+
+
+test("HTTP fetch can pin redirects to the requested origin", async () => {
+  let calls = 0;
+  await assert.rejects(
+    fetchPublicResource("https://example.com/start", {
+      allowedOrigin: "https://example.com",
+      fetchImpl: async () => {
+        calls++;
+        return response(null, { status: 302, headers: { location: "https://outside.example/final" } });
+      },
+    }),
+    (error) => error instanceof FetchAdapterError && error.code === "REDIRECT_NOT_ALLOWED",
+  );
+  assert.equal(calls, 1);
+});
+
+test("HTTP fetch rejects an initial URL outside the pinned origin", async () => {
+  let calls = 0;
+  await assert.rejects(
+    fetchPublicResource("https://outside.example/start", {
+      allowedOrigin: "https://example.com",
+      fetchImpl: async () => { calls++; return response("no"); },
+    }),
+    (error) => error instanceof FetchAdapterError && error.code === "URL_NOT_ALLOWED",
+  );
+  assert.equal(calls, 0);
+});
+
+test("HTTP fetch applies the bounded crawler User-Agent option", async () => {
+  let seenHeaders;
+  await fetchPublicResource("https://example.com/robots.txt", {
+    userAgent: "ExportFlowBot/0.1 (+https://exportflow.me)",
+    fetchImpl: async (_url, init) => {
+      seenHeaders = init.headers;
+      return response("User-agent: *", { headers: { "content-type": "text/plain" } });
+    },
+  });
+  assert.equal(seenHeaders["user-agent"], "ExportFlowBot/0.1 (+https://exportflow.me)");
 });

@@ -83,11 +83,15 @@ export async function executeWebTask(input, options = {}) {
     }
 
     const url = validatePublicHttpUrl(input.url);
+    const operation = input.operation === undefined ? "fetch" : input.operation;
+    if (!["fetch", "map", "crawl"].includes(operation)) {
+      throw Object.assign(new TypeError("Unsupported task operation."), { code: "UNSUPPORTED_OPERATION" });
+    }
     const route = chooseExecutionPath({
       requiresJavascript: input.requiresJavascript === true,
       requiresInteraction: input.requiresInteraction === true,
     });
-    execution = { path: route.path, adapterId: null, reason: route.reason };
+    execution = { path: route.path, operation, adapterId: null, reason: route.reason };
 
     startedAt = now();
     events.push(event("task.started", startedAt, { executionPath: route.path }));
@@ -106,8 +110,19 @@ export async function executeWebTask(input, options = {}) {
       });
     }
 
-    execution.adapterId = "http.fetch.v1";
-    const result = await runAdapter("http.fetch.v1", { url: url.href });
+    const adapterId = operation === "fetch"
+      ? "http.fetch.v1"
+      : operation === "map"
+        ? "web.map.v1"
+        : "web.crawl.v1";
+    execution.adapterId = adapterId;
+    const adapterInput = { url: url.href };
+    if (operation === "map" && input.maxUrls !== undefined) adapterInput.maxUrls = input.maxUrls;
+    if (operation === "crawl") {
+      if (input.maxPages !== undefined) adapterInput.maxPages = input.maxPages;
+      if (input.maxDepth !== undefined) adapterInput.maxDepth = input.maxDepth;
+    }
+    const result = await runAdapter(adapterId, adapterInput);
     const completedAt = now();
     const state = result.status === "succeeded" ? "succeeded" : "failed";
     if (state === "succeeded") {

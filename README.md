@@ -11,6 +11,14 @@ ExportFlow is a model-agnostic agentic web infrastructure platform for AI agents
 ## Current implementation status
 The Cloudflare Worker provides the public homepage, health/platform endpoints, and routing preview. The Core includes an internal `http.fetch.v1` adapter for bounded direct HTTP retrieval and an internal `executeWebTask()` primitive. Neither is exposed as a public API endpoint.
 
+## Bounded map and crawl
+- `web.map.v1` discovers same-origin URLs from `robots.txt` sitemap declarations, a bounded sitemap fetch, and links from the requested start page.
+- `web.crawl.v1` crawls at most five pages and depth two, with per-page and total byte limits.
+- The crawler identifies itself as `ExportFlowBot/0.1`, applies RFC 9309 user-agent groups and longest-match Allow/Disallow rules, and stops on robots network errors, 401/403/429, and 5xx responses.
+- The HTTP fetch layer pins redirects to the requested origin during mapping/crawling, so an off-origin redirect is rejected before its destination request.
+- It does not traverse off-origin links, carry credentials, or attempt access to authenticated pages.
+- Cloudflare Workers use the runtime `HTMLRewriter` parser; Node tests use a deterministic fallback parser.
+
 ## Internal task execution
 - Creates a task ID and an in-memory lifecycle event sequence.
 - Routes static retrieval to `http.fetch.v1`.
@@ -46,7 +54,7 @@ The fetch adapter and task executor are still internal Core code. Do not expose 
 - No cookies or origin credentials are forwarded.
 
 ## Not connected yet
-Live web search, crawl orchestration, browser automation, hosted MCP, authentication, persistent tasks, queues, streaming progress, and billing are not yet connected.
+Live web search, browser automation, hosted MCP, authentication, persistent tasks, queues, streaming progress, and billing are not yet connected.
 
 ## Development
 Requires Node.js 24+.

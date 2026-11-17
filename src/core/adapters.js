@@ -1,5 +1,6 @@
 import { fetchPublicResource, HTTP_FETCH_LIMITS } from "./http-fetch.js";
 import { normalizeResult } from "./result.js";
+import { mapWebsite, crawlWebsite, MAP_CRAWL_LIMITS } from "./map-crawl.js";
 
 const registry = new Map();
 
@@ -83,6 +84,78 @@ registerAdapter({
         evidence: [{ type: "http_response", status: response.status, contentType: response.contentType }],
       }],
       warnings: response.ok ? [] : ["Upstream returned HTTP " + response.status + "."],
+    });
+  },
+});
+
+
+registerAdapter({
+  id: "web.map.v1",
+  family: "web",
+  capabilities: ["map", "sitemap", "same-origin-links"],
+  authMode: "none",
+  limits: {
+    maxUrls: MAP_CRAWL_LIMITS.maxUrls,
+    maxSitemaps: MAP_CRAWL_LIMITS.maxSitemaps,
+    maxPageBytes: MAP_CRAWL_LIMITS.maxPageBytes,
+  },
+  restrictions: [
+    "same-origin-only",
+    "robots.txt-respected",
+    "bounded-sitemaps",
+    "bounded-link-discovery",
+    "no-authenticated-pages",
+  ],
+  async execute(input = {}) {
+    const mapped = await mapWebsite(input);
+    return normalizeResult({
+      status: mapped.homepage.status >= 200 && mapped.homepage.status < 300 ? "succeeded" : "failed",
+      data: {
+        requestedUrl: mapped.requestedUrl,
+        origin: mapped.origin,
+        robots: mapped.robots,
+        homepage: mapped.homepage,
+        sitemaps: mapped.sitemaps,
+        urls: mapped.urls,
+      },
+      sources: mapped.sources,
+      warnings: mapped.warnings,
+    });
+  },
+});
+
+registerAdapter({
+  id: "web.crawl.v1",
+  family: "web",
+  capabilities: ["crawl", "same-origin", "bounded-pages"],
+  authMode: "none",
+  limits: {
+    maxPages: MAP_CRAWL_LIMITS.maxPages,
+    maxDepth: MAP_CRAWL_LIMITS.maxDepth,
+    maxPageBytes: MAP_CRAWL_LIMITS.maxPageBytes,
+    maxTotalBytes: MAP_CRAWL_LIMITS.maxTotalBytes,
+  },
+  restrictions: [
+    "same-origin-only",
+    "robots.txt-respected",
+    "bounded-pages-and-depth",
+    "bounded-response-bytes",
+    "no-authenticated-pages",
+  ],
+  async execute(input = {}) {
+    const crawled = await crawlWebsite(input);
+    return normalizeResult({
+      status: crawled.pages.length ? "succeeded" : "failed",
+      data: {
+        requestedUrl: crawled.requestedUrl,
+        origin: crawled.origin,
+        robots: crawled.robots,
+        pages: crawled.pages,
+        pageCount: crawled.pageCount,
+        totalBytes: crawled.totalBytes,
+      },
+      sources: crawled.sources,
+      warnings: crawled.warnings,
     });
   },
 });

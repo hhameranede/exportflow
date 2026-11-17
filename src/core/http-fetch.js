@@ -107,6 +107,21 @@ export async function fetchPublicResource(input, options = {}) {
   const timeoutMs = options.timeoutMs ?? HTTP_FETCH_LIMITS.timeoutMs;
   const maxRedirects = options.maxRedirects ?? HTTP_FETCH_LIMITS.maxRedirects;
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  let allowedOrigin = null;
+  if (options.allowedOrigin !== undefined) {
+    try {
+      const parsedOrigin = new URL(options.allowedOrigin);
+      if (!["http:", "https:"].includes(parsedOrigin.protocol) || parsedOrigin.origin !== options.allowedOrigin) {
+        throw new Error("Expected an exact HTTP(S) origin.");
+      }
+      allowedOrigin = parsedOrigin.origin;
+    } catch {
+      throw new FetchAdapterError("INVALID_LIMIT", "Allowed origin must be a valid HTTP(S) origin.", 500);
+    }
+    if (!["http:", "https:"].includes(new URL(allowedOrigin).protocol)) {
+      throw new FetchAdapterError("INVALID_LIMIT", "Allowed origin must use HTTP or HTTPS.", 500);
+    }
+  }
 
   if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > HTTP_FETCH_LIMITS.maxResponseBytes) {
     throw new FetchAdapterError("INVALID_LIMIT", "Response size limit is outside the supported range.", 500);
@@ -122,6 +137,9 @@ export async function fetchPublicResource(input, options = {}) {
   }
 
   let currentUrl = validatePublicHttpUrl(input);
+  if (allowedOrigin && currentUrl.origin !== allowedOrigin) {
+    throw new FetchAdapterError("URL_NOT_ALLOWED", "URL is outside the allowed origin.", 400);
+  }
   const visited = new Set();
   const redirectChain = [];
   const signal = AbortSignal.timeout(timeoutMs);
@@ -142,6 +160,9 @@ export async function fetchPublicResource(input, options = {}) {
         signal,
         headers: {
           accept: "text/html,application/xhtml+xml,application/json,application/xml,text/plain;q=0.9",
+          ...(typeof options.userAgent === "string" && options.userAgent.length <= 200
+            ? { "user-agent": options.userAgent }
+            : {}),
         },
       });
     } catch {
@@ -169,6 +190,9 @@ export async function fetchPublicResource(input, options = {}) {
           throw new FetchAdapterError("REDIRECT_NOT_ALLOWED", "Upstream redirected to a disallowed destination.", 502);
         }
         throw new FetchAdapterError("INVALID_REDIRECT", "Upstream returned an invalid redirect URL.", 502);
+      }
+      if (allowedOrigin && nextUrl.origin !== allowedOrigin) {
+        throw new FetchAdapterError("REDIRECT_NOT_ALLOWED", "Redirect left the allowed origin.", 502);
       }
       if (currentUrl.protocol === "https:" && nextUrl.protocol !== "https:") {
         throw new FetchAdapterError("REDIRECT_DOWNGRADE", "HTTPS redirects cannot downgrade to HTTP.", 502);
