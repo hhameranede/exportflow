@@ -96,86 +96,82 @@ assert.deepEqual(outbound, [{
 
 console.log("Merchant adapter integration passed: authenticated route -> real ExportFlow facade -> installed Algérie Poste adapter -> parsed carrier fixture.");
 
-// FedEx's official API adapter must use the explicitly configured Sandbox origin.
-// This is a deterministic route/facade/adapter integration fixture, not a live FedEx call.
+// FedEx without carrier API credentials uses the installed adapter's browser
+// route through ExportFlow's configured Trawl service. The Trawl HTTP boundary
+// is mocked here; the pinned FedEx adapter and response parser are real.
 const FEDEX_TRACKING_NUMBER = "449044304137821";
-const FEDEX_SANDBOX_ORIGIN = "https://apis-sandbox.fedex.com";
-const FEDEX_API_RESPONSE = {
-  transactionId: "00000000-0000-4000-8000-000000000000",
+const FEDEX_TRACKING_PAGE = `https://www.fedex.com/fedextrack/?trknbr=${FEDEX_TRACKING_NUMBER}`;
+const FEDEX_PAGE_API = "https://api.fedex.com/track/v2/shipments";
+const TRAWL_ORIGIN = "https://trawl-preview.example.test";
+const FEDEX_PAGE_RESPONSE = {
   output: {
-    completeTrackResults: [{
-      trackingNumber: FEDEX_TRACKING_NUMBER,
-      trackResults: [{
-        trackingNumberInfo: { trackingNumber: FEDEX_TRACKING_NUMBER, carrierCode: "FDXE" },
-        latestStatusDetail: { code: "DL", description: "Delivered" },
-        dateAndTimes: [{
-          type: "ACTUAL_DELIVERY",
-          dateTime: "2026-09-02T11:58:00+02:00"
-        }],
-        scanEvents: [{
-          date: "2026-09-02T11:58:00+02:00",
-          eventType: "DL",
-          eventDescription: "Delivered",
-          scanLocation: {
-            city: "ZUERICH",
-            countryCode: "CH",
-            countryName: "Switzerland"
-          }
-        }]
+    packages: [{
+      trackingNbr: FEDEX_TRACKING_NUMBER,
+      trackingQualifier: "",
+      trackingCarrierCd: "FDXE",
+      displayTrackingNbr: FEDEX_TRACKING_NUMBER,
+      keyStatus: "Delivered",
+      keyStatusCD: "DL",
+      statusWithDetails: "Delivered",
+      actDeliveryDt: "2026-09-02T11:58:00+02:00",
+      estDeliveryDt: "2026-09-02T18:00:00+02:00",
+      scanEventList: [{
+        date: "2026-09-02",
+        time: "11:58:00",
+        gmtOffset: "+02:00",
+        scanLocation: "ZUERICH, CH",
+        status: "Delivered",
+        statusCD: "DL",
+        scanDetails: ""
       }]
     }]
   }
 };
 
-const fedexOutbound = [];
-const fedexHandler = createMerchantAdapterTrackHandler({
+const trawlCalls = [];
+const fedexAdapterEnv = {
+  MERCHANT_APP_ORIGIN: ORIGIN,
+  EXPORTFLOW_TRAWL_URL: TRAWL_ORIGIN
+};
+const fedexAdapterHandler = createMerchantAdapterTrackHandler({
   resolveSession: async request => request.headers.get("Cookie") === "test-session=merchant-alpha"
     ? { user: { id: "merchant_alpha" } }
     : null,
   consumeRateLimit: async () => quota,
   fetchFactory: () => async (input, init = {}) => {
     const url = new URL(String(input));
-    const headers = new Headers(init.headers);
-    fedexOutbound.push({
-      url: url.toString(),
-      method: init.method || "GET",
-      authorization: headers.get("Authorization"),
-      body: typeof init.body === "string" ? init.body : ""
+    trawlCalls.push({ url: url.toString(), method: init.method || "GET", body: String(init.body || "") });
+    assert.equal(url.origin, TRAWL_ORIGIN, "The Worker must call ExportFlow's configured browser adapter service");
+    assert.equal(url.pathname, "/scrape");
+    assert.equal(init.method, "POST");
+
+    const scrape = JSON.parse(String(init.body || "{}"));
+    assert.equal(scrape.url, FEDEX_TRACKING_PAGE);
+    assert.equal(scrape.skipHttp, true);
+    assert.equal(scrape.maxTier, 3);
+    assert.ok(scrape.captureResponses.includes(FEDEX_PAGE_API));
+
+    return Response.json({
+      tier: 3,
+      statusCode: 200,
+      url: FEDEX_TRACKING_PAGE,
+      html: "<html><body>FedEx tracking</body></html>",
+      cookies: [],
+      userAgent: "Mozilla/5.0 (fixture browser)",
+      capturedResponses: [{
+        url: FEDEX_PAGE_API,
+        status: 200,
+        headers: {},
+        body: JSON.stringify(FEDEX_PAGE_RESPONSE),
+        truncated: false,
+        base64Encoded: false,
+        error: null
+      }]
     });
-
-    assert.equal(url.origin, FEDEX_SANDBOX_ORIGIN,
-      "FedEx test credentials and requests must never leave the official Sandbox origin");
-
-    if (url.pathname === "/oauth/token") {
-      assert.equal(init.method, "POST");
-      const tokenForm = new URLSearchParams(String(init.body || ""));
-      assert.equal(tokenForm.get("grant_type"), "client_credentials");
-      assert.equal(tokenForm.get("client_id"), "sandbox-test-client-id");
-      assert.equal(tokenForm.get("client_secret"), "sandbox-test-client-secret");
-      return Response.json({
-        access_token: "synthetic-sandbox-access-token",
-        token_type: "bearer",
-        expires_in: 3600
-      });
-    }
-
-    if (url.pathname === "/track/v1/trackingnumbers") {
-      assert.equal(init.method, "POST");
-      assert.equal(headers.get("Authorization"), "Bearer synthetic-sandbox-access-token");
-      const payload = JSON.parse(String(init.body || "{}"));
-      assert.equal(payload.includeDetailedScans, true);
-      assert.equal(
-        payload.trackingInfo?.[0]?.trackingNumberInfo?.trackingNumber,
-        FEDEX_TRACKING_NUMBER
-      );
-      return Response.json(FEDEX_API_RESPONSE);
-    }
-
-    throw new Error("Unexpected FedEx Sandbox endpoint: " + url.pathname);
   }
 });
 
-const fedexResponse = await fedexHandler({
+const fedexAdapterResponse = await fedexAdapterHandler({
   request: new Request(ORIGIN + "/api/merchant/carriers/fedex/track", {
     method: "POST",
     headers: {
@@ -185,34 +181,26 @@ const fedexResponse = await fedexHandler({
     },
     body: JSON.stringify({ number: FEDEX_TRACKING_NUMBER })
   }),
-  env: {
-    MERCHANT_APP_ORIGIN: ORIGIN,
-    FEDEX_API_KEY: "sandbox-test-client-id",
-    FEDEX_SECRET_KEY: "sandbox-test-client-secret",
-    FEDEX_API_URL: FEDEX_SANDBOX_ORIGIN
-  },
+  env: fedexAdapterEnv,
   params: { provider: "fedex" }
 });
 
-assert.equal(fedexResponse.status, 200);
-assert.equal(fedexResponse.headers.get("Cache-Control"), "no-store, private");
-const fedexBody = await fedexResponse.json();
-assert.equal(fedexBody.provider, "fedex");
-assert.equal(fedexBody.status, "delivered");
-assert.equal(fedexBody.events.length, 1);
-assert.equal(fedexBody.events[0].stage, "delivered");
-assert.equal(fedexBody.events[0].description, "Delivered");
-assert.equal(fedexBody.events[0].location, "ZUERICH, CH");
-assert.equal(fedexBody.events[0].time, "2026-09-02T11:58:00+02:00");
-assert.equal(JSON.stringify(fedexBody).includes(FEDEX_TRACKING_NUMBER), false,
+assert.equal(fedexAdapterResponse.status, 200);
+assert.equal(fedexAdapterResponse.headers.get("Cache-Control"), "no-store, private");
+const fedexAdapterBody = await fedexAdapterResponse.json();
+assert.equal(fedexAdapterBody.provider, "fedex");
+assert.equal(fedexAdapterBody.status, "delivered");
+assert.equal(fedexAdapterBody.events.length, 1);
+assert.equal(fedexAdapterBody.events[0].stage, "delivered");
+assert.equal(fedexAdapterBody.events[0].description, "Delivered");
+assert.equal(fedexAdapterBody.events[0].location, "ZUERICH, CH");
+assert.equal(fedexAdapterBody.events[0].time, "2026-09-02T11:58:00+02:00");
+assert.equal(JSON.stringify(fedexAdapterBody).includes(FEDEX_TRACKING_NUMBER), false,
   "The Merchant response must not echo the FedEx parcel identifier");
-assert.deepEqual(fedexOutbound.map(item => ({
-  url: item.url,
-  method: item.method
-})), [
-  { url: FEDEX_SANDBOX_ORIGIN + "/oauth/token", method: "POST" },
-  { url: FEDEX_SANDBOX_ORIGIN + "/track/v1/trackingnumbers", method: "POST" }
-], "The selected FedEx adapter must call only the Sandbox token and Track API endpoints");
+assert.deepEqual(trawlCalls.map(call => ({ url: call.url, method: call.method })), [
+  { url: TRAWL_ORIGIN + "/scrape", method: "POST" }
+], "Without FedEx API credentials, the selected FedEx adapter must use only Trawl");
+assert.equal(Object.keys(fedexAdapterEnv).some(key => /^FEDEX_(?:API_KEY|SECRET_KEY|API_URL)$/.test(key)), false,
+  "The direct-adapter path must not require carrier API credentials");
 
-console.log("Merchant FedEx Sandbox integration fixture passed: authenticated route -> real ExportFlow facade -> pinned FedEx direct adapter -> Sandbox-origin token and Track API fixtures.");
-
+console.log("Merchant FedEx direct-adapter integration fixture passed: authenticated route -> real ExportFlow facade -> pinned FedEx adapter -> Trawl browser capture fixture, with no carrier API keys.");
