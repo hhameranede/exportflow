@@ -9,10 +9,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Bootstrap the spike lockfile once
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "build: pin reproducible Defuddle spike dependencies"
+            git push origin "HEAD:${GITHUB_HEAD_REF}"
+          fi
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm audit
       - run: npm test
@@ -20,8 +33,11 @@ jobs:
           EXPORTFLOW_DEFUDDLE_INTEGRATION: "1"
       - run: npm run check
       - run: npm run test:worker
+      - run: npm sbom --sbom-format cyclonedx > defuddle-spike.sbom.cdx.json
       - uses: actions/upload-artifact@v4
         with:
-          name: defuddle-spike-lockfile
-          path: package-lock.json
+          name: defuddle-spike-build-record
+          path: |
+            package-lock.json
+            defuddle-spike.sbom.cdx.json
           retention-days: 3
