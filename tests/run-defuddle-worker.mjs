@@ -67,7 +67,8 @@ try {
   assert.doesNotMatch(article.markdown, /javascript:|onclick=|onerror=|<script/i);
   assert.ok(article.wordCount > 100);
 
-  assert.match(docs.markdown, /API Reference/);
+  assert.match(docs.markdown, /API section 1/);
+  assert.match(docs.markdown, /Fetch a public resource/);
   assert.match(docs.markdown, /timeoutMs/);
   assert.match(docs.markdown, /maxBytes/);
   assert.match(docs.markdown, /await fetch/);
