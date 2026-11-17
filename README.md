@@ -1,6 +1,6 @@
 # ExportFlow
 
-ExportFlow is being rebuilt as a model-agnostic agentic web infrastructure platform for AI agents.
+ExportFlow is a model-agnostic agentic web infrastructure platform for AI agents.
 
 ## Product foundation
 - **Web data plane:** search, map, direct HTTP fetch, bounded crawl, and structured extraction.
@@ -9,12 +9,29 @@ ExportFlow is being rebuilt as a model-agnostic agentic web infrastructure platf
 - **Developer surface:** remote MCP first, then a versioned REST API and SDKs.
 
 ## Current implementation status
-The Cloudflare Worker provides the public homepage, health/platform endpoints, and routing preview. The Core now includes an internal `http.fetch.v1` adapter for bounded direct HTTP retrieval, registered through the ExportFlow adapter catalog and covered by deterministic tests. It is not exposed as a public API endpoint yet.
+The Cloudflare Worker provides the public homepage, health/platform endpoints, and routing preview. The Core includes an internal `http.fetch.v1` adapter for bounded direct HTTP retrieval, registered through the adapter catalog and covered by deterministic tests. It is not exposed as a public API endpoint.
 
-The adapter allows HTTP(S) hostnames only, rejects IP literals, local/reserved hostname suffixes, credentials, and non-default ports, revalidates each redirect, rejects HTTPS-to-HTTP downgrades, and enforces a 1 MiB text-response cap, an 8-second timeout, and at most three redirects. It does not send cookies or origin credentials.
+## Outbound security model
 
-**Security boundary:** syntactic hostname checks cannot fully prevent DNS rebinding because the Worker has not yet been paired with an egress layer that validates the resolved destination IP at connection time. Keep this adapter internal. Before enabling external callers, implement and verify that egress boundary, authentication, tenant quotas, and rate limits. Do not expose an unauthenticated open proxy.
+ExportFlow uses two complementary controls:
 
+1. **Application Egress Policy:** validates each destination and redirect. It accepts only HTTP(S), rejects IP literals (including alternate IPv4 spellings), credentials, non-default ports, local/reserved hostnames, and ExportFlow-owned origins.
+2. **Cloudflare Workers runtime egress:** outbound requests must use the native Workers Fetch API. Cloudflare documents that Worker outbound HTTP is routed through its network proxy, which checks that a request targets the public Internet or the Worker's zone origin rather than internal services. We do not perform a separate DNS lookup and then assume the result is pinned to a later connection.
+
+Do not add `cf.resolveOverride` as a generic destination pinning mechanism: Cloudflare documents that it only takes effect when both the request host and override host are within the same Cloudflare zone. Keep every redirect manual and revalidate the destination before following it.
+
+The fetch adapter is still internal Core code. Do not expose it to public callers until authentication, tenant quotas, rate limits, and the production egress behavior have been separately verified.
+
+## HTTP fetch limits
+- GET only; HTTP and HTTPS.
+- Default ports only.
+- At most three manually followed redirects.
+- Redirects are revalidated; HTTPS-to-HTTP downgrade is rejected.
+- Maximum text response: 1 MiB.
+- Timeout: 8 seconds.
+- No cookies or origin credentials are forwarded.
+
+## Not connected yet
 Live web search, crawl orchestration, browser automation, hosted MCP, authentication, persistent tasks, queues, streaming progress, and billing are not yet connected.
 
 ## Development
@@ -30,8 +47,8 @@ Cloudflare Workers only. No Cloudflare Pages application or build pipeline is us
 
 ## Engineering principles
 - Start with direct HTTP and escalate to browser execution only when needed.
-- Keep provider integrations behind ExportFlow-owned adapter contracts.
-- Enforce URL/redirect validation, SSRF protections, resource budgets, authorization, and site policies before enabling outbound execution.
+- Keep providers behind ExportFlow-owned adapter contracts.
+- Enforce URL/redirect policy, Cloudflare runtime egress restrictions, resource budgets, authorization, and site policies before enabling outbound execution.
 - Treat fetched page content as untrusted data, not instructions.
 - Return structured results with source provenance, timestamps, warnings, and evidence.
 - Distinguish proposed, implemented, tested, deployed, and live-verified capabilities.

@@ -1,3 +1,5 @@
+import { EGRESS_POLICY, EgressPolicyError, validateEgressTarget } from "./egress-guard.js";
+
 export class FetchAdapterError extends Error {
   constructor(code, message, httpStatus = 400) {
     super(message);
@@ -8,95 +10,31 @@ export class FetchAdapterError extends Error {
 }
 
 export const HTTP_FETCH_LIMITS = Object.freeze({
-  maxUrlLength: 2048,
+  maxUrlLength: EGRESS_POLICY.maxUrlLength,
   maxResponseBytes: 1_048_576,
   timeoutMs: 8_000,
   maxRedirects: 3,
 });
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
-const BLOCKED_SUFFIXES = [
-  ".localhost",
-  ".local",
-  ".localdomain",
-  ".internal",
-  ".home",
-  ".lan",
-  ".test",
-  ".invalid",
-  ".onion",
-  ".arpa",
-];
-const BLOCKED_HOSTS = new Set([
-  "localhost",
-  "metadata.google.internal",
-  "metadata",
-  "exportflow.me",
-  "www.exportflow.me",
-  "exportflow-platform.hhameranede.workers.dev",
-]);
-
 function invalidUrl(message) {
   return new FetchAdapterError("URL_NOT_ALLOWED", message, 400);
 }
 
-function isIpv4Literal(hostname) {
-  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || /^[0-9.]+$/.test(hostname);
-}
-
-function isBlockedHostname(hostname) {
-  return BLOCKED_HOSTS.has(hostname) ||
-    BLOCKED_SUFFIXES.some((suffix) => hostname.endsWith(suffix));
-}
-
 /**
- * Accepts only canonical public DNS hostnames over HTTP(S).
- * IP literals, local names, credentials, and non-standard ports are denied.
+ * Applies ExportFlow's application-level egress policy.
+ * The network connection itself must use Cloudflare Workers' native fetch()
+ * runtime so its outbound proxy can enforce the platform network boundary.
  */
 export function validatePublicHttpUrl(input) {
-  if (typeof input !== "string" || input.length === 0 || input.length > HTTP_FETCH_LIMITS.maxUrlLength) {
-    throw invalidUrl("URL is missing or exceeds the allowed length.");
-  }
-
-  let url;
   try {
-    url = new URL(input);
-  } catch {
-    throw invalidUrl("URL could not be parsed.");
+    return validateEgressTarget(input);
+  } catch (error) {
+    if (error instanceof EgressPolicyError) {
+      throw invalidUrl(error.message);
+    }
+    throw error;
   }
-
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw invalidUrl("Only HTTP and HTTPS URLs are supported.");
-  }
-  if (url.username || url.password) {
-    throw invalidUrl("URLs containing embedded credentials are not allowed.");
-  }
-  if (url.port) {
-    throw invalidUrl("Only the default HTTP and HTTPS ports are allowed.");
-  }
-
-  const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
-  if (!hostname || hostname.startsWith("[") || hostname.includes(":") || isIpv4Literal(hostname)) {
-    throw invalidUrl("IP-literal and non-domain destinations are not allowed.");
-  }
-  if (!hostname.includes(".") || isBlockedHostname(hostname)) {
-    throw invalidUrl("Local, reserved, and single-label hostnames are not allowed.");
-  }
-
-  const labels = hostname.split(".");
-  const validHostname = labels.every((label) =>
-    label.length > 0 &&
-    label.length <= 63 &&
-    /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label)
-  );
-  if (!validHostname || hostname.length > 253) {
-    throw invalidUrl("Destination must be a valid public DNS hostname.");
-  }
-
-  // Do not allow this service to recursively fetch itself.
-  url.hostname = hostname;
-  url.hash = "";
-  return url;
 }
 
 function isTextContentType(contentType) {

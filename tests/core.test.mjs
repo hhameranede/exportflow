@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chooseExecutionPath } from "../src/core/router.js";
+import { EGRESS_POLICY, EgressPolicyError, validateEgressTarget } from "../src/core/egress-guard.js";
 import { normalizeResult } from "../src/core/result.js";
 import { registerAdapter, getAdapterCatalog, executeAdapter } from "../src/core/adapters.js";
 import {
@@ -65,6 +66,64 @@ test("URL policy rejects local names, IP literals, credentials, and unusual port
   ]) {
     assert.throws(() => validatePublicHttpUrl(value), FetchAdapterError, value);
   }
+});
+
+
+test("egress guard publishes a versioned Cloudflare public-egress policy", () => {
+  assert.equal(EGRESS_POLICY.id, "cloudflare-public-egress-v1");
+  assert.equal(validateEgressTarget("https://example.com/path").hostname, "example.com");
+});
+
+test("egress guard rejects private, reserved, and single-label hostname forms", () => {
+  for (const value of [
+    "http://localhost/",
+    "http://printer.local/",
+    "http://service.internal/",
+    "http://host.cluster.local/",
+    "http://pod.namespace.svc/",
+    "http://test.example/",
+    "http://service.home.arpa/",
+    "http://metadata.google.internal/",
+    "http://metadata.azure.internal/",
+    "http://intranet/",
+  ]) {
+    assert.throws(() => validateEgressTarget(value), EgressPolicyError, value);
+  }
+});
+
+test("egress guard blocks the ExportFlow zone and Worker origins", () => {
+  for (const value of [
+    "https://exportflow.me/",
+    "https://www.exportflow.me/",
+    "https://api.exportflow.me/",
+    "https://internal.exportflow.me/",
+    "https://exportflow-platform.hhameranede.workers.dev/",
+  ]) {
+    assert.throws(() => validateEgressTarget(value), EgressPolicyError, value);
+  }
+});
+
+test("egress guard rejects legacy IP literals, credentials, and non-default ports", () => {
+  for (const value of [
+    "http://127.0.0.1/",
+    "http://2130706433/",
+    "http://0x7f000001/",
+    "http://0177.0.0.1/",
+    "http://[::1]/",
+    "http://[::ffff:127.0.0.1]/",
+    "http://user:pass@example.com/",
+    "https://example.com:8443/",
+    "file:///etc/passwd",
+    "ftp://example.com/",
+  ]) {
+    assert.throws(() => validateEgressTarget(value), EgressPolicyError, value);
+  }
+});
+
+test("egress guard normalizes trailing dots and strips URL fragments", () => {
+  const url = validateEgressTarget("https://EXAMPLE.COM./path?q=1#fragment");
+  assert.equal(url.hostname, "example.com");
+  assert.equal(url.href, "https://example.com/path?q=1");
 });
 
 test("fetch returns bounded text and source metadata", async () => {
