@@ -37,32 +37,18 @@ export async function parseDefuddleHtml(html, sourceUrl) {
     throw new DefuddleAdapterError("INPUT_TOO_LARGE", "HTML input exceeds the configured parser limit.", 413);
   }
 
-  // Import linkedom first, then establish globals before loading Defuddle's
-  // Markdown bundle (Turndown checks for DOM APIs at module initialization).
-  const { DOMParser, parseHTML } = await import("linkedom");
-  const globals = globalThis;
-  if (!globals.DOMParser) globals.DOMParser = DOMParser;
-  if (!globals.window) globals.window = globals;
-  if (!globals.document) globals.document = parseHTML("").document;
-  if (!globals.Node) {
-    globals.Node = Object.freeze({ ELEMENT_NODE: 1, TEXT_NODE: 3 });
-  }
-  if (!globals.getComputedStyle) {
-    globals.getComputedStyle = () => ({ display: "" });
-  }
-
+  // Use Defuddle's Node entrypoint, which applies its LinkeDOM compatibility
+  // layer to this request-local Document. It does not mutate Worker globals.
+  const { parseHTML } = await import("linkedom");
   const { document } = parseHTML(html);
   if (!document.styleSheets) document.styleSheets = [];
   if (document.defaultView && !document.defaultView.getComputedStyle) {
     document.defaultView.getComputedStyle = () => ({ display: "" });
   }
-  // LinkeDOM permits URL assignment; Defuddle uses it for canonical and
-  // relative-link resolution. This is metadata only, never a fetch target.
   document.URL = sourceUrl;
 
-  const { default: Defuddle } = await import("defuddle/full");
-  const parsed = new Defuddle(document, {
-    url: sourceUrl,
+  const { Defuddle } = await import("defuddle/node");
+  const parsed = await Defuddle(document, sourceUrl, {
     markdown: true,
     useAsync: false,
     debug: false,
@@ -71,7 +57,7 @@ export async function parseDefuddleHtml(html, sourceUrl) {
     fetch: async () => {
       throw new Error("Network access is disabled in ExportFlow parser mode.");
     },
-  }).parse();
+  });
 
   return {
     markdown: typeof parsed.content === "string" ? parsed.content : "",
