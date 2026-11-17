@@ -39,3 +39,43 @@ The local tool environment used to prepare this spike had Node `22.16.0` and npm
 - No copied upstream URL fetcher, redirect logic, API-key billing, KV, Durable Object or Stripe code.
 - No automatic registration, public tool exposure, Browser Run, authenticated browsing or JavaScript execution of page content.
 - No merge, deployment, Cloudflare binding/secret/DNS/permission change, Production change or paid service activation.
+
+
+## Verified CI and local Workerd results — 17 November 2026
+
+Latest verified run: [Worker CI #681](https://github.com/hhameranede/exportflow/actions/runs/44186260223), branch head `5259afa16aba3f32fa150de76ed1c7327b55b671).
+
+- Node 24 dependency install and `npm ci`: passed.
+- Full `npm audit`: **0 vulnerabilities** at the time of the run.
+- Node test suite: **85 passed, 0 failed, 0 skipped**.
+- `npm run check`: passed.
+- Local Wrangler/Workerd run: passed in the Cloudflare-compatible runtime using compatibility date `2026-11-17`, with no `nodejs_compat` flag and no Cloudflare account/deployment.
+- Three fixture categories passed:
+  - Multilingual article: 423 words; Defuddle parser timing 32 ms, whole Worker handler 83 ms.
+  - Technical documentation: 423 words; parser 13 ms, Worker handler 16 ms.
+  - Product detail: 390 words; parser 8 ms, Worker handler 8 ms.
+- These are synthetic fixtures and single-run local timings, not measurements from arbitrary live websites, not a production performance guarantee, and not a substitute for CPU/memory/load testing.
+
+## Dependency inventory and license notes
+
+The generated npm lock contains 118 package entries: 27 runtime/transitive production packages and 91 development packages.
+
+Runtime dependency licenses recorded in the lock:
+- MIT: 10 packages
+- BSD-2-Clause: 13 packages
+- ISC: 3 packages
+- Apache-2.0: 1 package
+
+The Wrangler development toolchain adds optional, dev-only Sharp platform packages with LGPL-3.0-or-later or combined Apache/LGPL/MIT identifiers. They are not in the production dependency graph, but must remain accounted for in development-toolchain notices/SBOM and any redistribution of the test toolchain. No package with an unclassified/missing SPDX license field appeared in the generated lock.
+
+The generated `package-lock.json` was uploaded as workflow artifact `defuddle-spike-lockfile` (run #681, artifact ID `14375590257`) and downloaded for inspection. It is **not yet committed to the branch**. The PR must not be merged until this generated lock is committed and a subsequent `npm ci` run proves the repository is reproducible from the tracked lockfile.
+
+## Remaining merge gates
+
+1. Commit the exact generated lockfile; rerun tests from `npm ci` using the committed lock.
+2. Generate and retain a CycloneDX SBOM (or equivalent) and archive third-party license notices.
+3. Reconcile all upstream GHSA affected-version ranges against the final lock and add adversarial HTML regression/fuzz fixtures; `npm audit` returning zero does not replace this review.
+4. Run larger 1 MiB and near-budget HTML fixtures, concurrency/CPU/memory profiling, and comparative extraction-quality tests on a representative set of live-page snapshots whose reuse is permitted.
+5. Only after those gates pass, decide whether to register an internal adapter. Public MCP/API exposure, Cloudflare Preview deployment and Production remain separate approval gates.
+
+Current status: promising parser-only candidate with successful Node + Workerd smoke tests; **not yet approved for merge or production**.
