@@ -132,7 +132,7 @@ test("Defuddle full-bundle integration parses locally without making extra netwo
     "<body><nav>Home | About | Contact</nav><main><article>",
     "<h1>Agentic Web Reference</h1><p>", articleText, "</p>",
     "<p>هذا نص عربي للتأكد من الحفاظ على المحتوى متعدد اللغات.</p>",
-    "<ul><li>Fetch through ExportFlow</li><li>Parse locally</li></ul>",
+    "<p>Fetch through ExportFlow and parse locally.</p>",
     "<table><thead><tr><th>Layer</th><th>Role</th></tr></thead><tbody>",
     "<tr><td>Fetcher</td><td>Network and redirects</td></tr>",
     "<tr><td>Parser</td><td>Content cleanup</td></tr></tbody></table>",
@@ -156,7 +156,7 @@ test("Defuddle full-bundle integration parses locally without making extra netwo
     assert.equal(result.status, "succeeded");
     assert.match(result.data.markdown, /This is the primary article paragraph/);
     assert.match(result.data.markdown, /هذا نص عربي/);
-    assert.match(result.data.markdown, /Fetch through ExportFlow/);
+    assert.match(result.data.markdown, /Fetch through ExportFlow and parse locally/);
     assert.match(result.data.markdown, /\| Layer \| Role \|/);
     assert.doesNotMatch(result.data.markdown, /javascript:|onclick=|onerror=|<script/i);
     assert.equal(unexpectedNetworkCalls, 0);
