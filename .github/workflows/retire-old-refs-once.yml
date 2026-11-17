@@ -1,0 +1,55 @@
+name: One-time legacy branch cleanup
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  remove-legacy-refs:
+    if: github.event.head_commit.message == 'chore: one-time remove legacy branch refs'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete all old branch refs except main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          node --input-type=module <<'NODE'
+          const repository = process.env.REPOSITORY;
+          const token = process.env.GH_TOKEN;
+          const base = `https://api.github.com/repos/${repository}`;
+          const headers = {
+            "Accept": "application/vnd.github+json",
+            "Authorization": `Bearer ${token}`,
+            "X-GitHub-Api-Version": "2022-11-28"
+          };
+          let page = 1;
+          let deleted = 0;
+          const failures = [];
+          while (true) {
+            const response = await fetch(`${base}/branches?per_page=100&page=${page}`, { headers });
+            if (!response.ok) throw new Error(`Branch listing failed: ${response.status} ${await response.text()}`);
+            const branches = await response.json();
+            if (!branches.length) break;
+            for (const branch of branches) {
+              if (branch.name === "main") continue;
+              const encodedRef = branch.name.split("/").map(encodeURIComponent).join("/");
+              const result = await fetch(`${base}/git/refs/heads/${encodedRef}`, { method: "DELETE", headers });
+              if (result.status === 204) {
+                deleted++;
+                console.log(`deleted ${branch.name}`);
+              } else {
+                failures.push({ branch: branch.name, status: result.status, body: await result.text() });
+              }
+            }
+            if (branches.length < 100) break;
+            page++;
+          }
+          const verify = await fetch(`${base}/branches?per_page=100`, { headers });
+          if (!verify.ok) throw new Error(`Verification failed: ${verify.status}`);
+          const remaining = (await verify.json()).map(branch => branch.name);
+          console.log(JSON.stringify({ deleted, failures, remaining }, null, 2));
+          if (remaining.length !== 1 || remaining[0] !== "main" || failures.length) {
+            throw new Error("Legacy branch cleanup did not leave main as the only branch.");
+          }
+          NODE
