@@ -1,5 +1,17 @@
 import { fetchPublicResource, HTTP_FETCH_LIMITS, validatePublicHttpUrl } from "./http-fetch.js";
 import { DOMParser, parseHTML } from "linkedom";
+
+const workerGlobal = globalThis;
+if (!workerGlobal.DOMParser) workerGlobal.DOMParser = DOMParser;
+if (!workerGlobal.window) workerGlobal.window = workerGlobal;
+if (!workerGlobal.document) workerGlobal.document = parseHTML("").document;
+if (!workerGlobal.Node) {
+  workerGlobal.Node = workerGlobal.document.defaultView?.Node ??
+    Object.freeze({ ELEMENT_NODE: 1, TEXT_NODE: 3 });
+}
+if (!workerGlobal.getComputedStyle) {
+  workerGlobal.getComputedStyle = () => ({ display: "" });
+}
 import { normalizeResult } from "./result.js";
 
 export const DEFUDDLE_VERSION = "0.19.6";
@@ -38,21 +50,8 @@ export async function parseDefuddleHtml(html, sourceUrl) {
     throw new DefuddleAdapterError("INPUT_TOO_LARGE", "HTML input exceeds the configured parser limit.", 413);
   }
 
-  // One-time, immutable Worker DOM compatibility globals. The empty global
-  // document is never populated with page HTML; every request gets its own DOM
-  // below, avoiding cross-request document state.
-  const workerGlobal = globalThis;
-  if (!workerGlobal.DOMParser) workerGlobal.DOMParser = DOMParser;
-  if (!workerGlobal.window) workerGlobal.window = workerGlobal;
-  if (!workerGlobal.document) workerGlobal.document = parseHTML("").document;
-  if (!workerGlobal.Node) {
-    workerGlobal.Node = workerGlobal.document.defaultView?.Node ??
-      Object.freeze({ ELEMENT_NODE: 1, TEXT_NODE: 3 });
-  }
-  if (!workerGlobal.getComputedStyle) {
-    workerGlobal.getComputedStyle = () => ({ display: "" });
-  }
-
+  // The global DOM shim is initialized once at module load. The page HTML
+  // below always lives in a separate request-local Document.
   const { document } = parseHTML(html);
   if (!document.styleSheets) document.styleSheets = [];
   if (document.defaultView && !document.defaultView.getComputedStyle) {
