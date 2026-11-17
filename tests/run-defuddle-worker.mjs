@@ -83,8 +83,14 @@ try {
   assert.doesNotMatch(jsonLd.markdown, /javascript:|onerror=|<script/i);
   assert.ok(jsonLd.wordCount > 100);
 
-  for (const fixture of result.fixtures) {
-    assert.deepEqual(fixture.globalsAfter, fixture.globalsBefore);
+  for (let index = 0; index < result.fixtures.length; index++) {
+    const fixture = result.fixtures[index];
+    // The first call may install one-time static DOM compatibility globals.
+    // Every later request must leave the shared global state unchanged.
+    if (index > 0) {
+      assert.deepEqual(fixture.globalsBefore, result.fixtures[index - 1].globalsAfter);
+      assert.deepEqual(fixture.globalsAfter, fixture.globalsBefore);
+    }
     assert.ok(Number.isFinite(fixture.workerElapsedMs) && fixture.workerElapsedMs > 0);
     process.stdout.write(
       "workerd Defuddle " + fixture.id +
