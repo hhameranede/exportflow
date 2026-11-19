@@ -110,8 +110,16 @@ async function checkHomeInteractions(browser) {
 
   const menuButton = page.locator("[data-menu-toggle]");
   assert.equal(await menuButton.count(), 1, "mobile navigation toggle missing");
+  const drawer = page.locator("[data-mobile-drawer]");
   await menuButton.click();
   assert.equal(await menuButton.getAttribute("aria-expanded"), "true", "mobile drawer did not open");
+  assert.ok(await drawer.isVisible(), "mobile drawer is not visible after opening");
+  await page.keyboard.press("Escape");
+  assert.equal(await menuButton.getAttribute("aria-expanded"), "false", "Escape did not close mobile navigation");
+  assert.equal(await drawer.isVisible(), false, "mobile drawer remained visible after Escape");
+
+  await menuButton.click();
+  assert.equal(await menuButton.getAttribute("aria-expanded"), "true", "mobile drawer did not reopen");
   const platformLink = page.locator('[data-mobile-drawer] a[href="/platform"]');
   assert.ok(await platformLink.isVisible(), "mobile Platform link not visible after opening drawer");
   await platformLink.click();
@@ -149,13 +157,16 @@ async function checkPlatformAndUseCases(browser) {
   const layerData = await page.locator("#ef-platform-layers-json").evaluate((node) => JSON.parse(node.textContent || "[]"));
   const expectedLayer = layerData.find((item) => item.id === selectedId);
   assert.ok(expectedLayer, "selected platform layer missing from page data");
-  await selected.click();
-  assert.equal((await page.locator("[data-insp-name]").textContent()).trim(), expectedLayer.name);
+  await selected.focus();
+  await page.keyboard.press("Enter");
+  assert.equal((await page.locator("[data-insp-name]").textContent()).trim(), expectedLayer.name,
+    "keyboard activation did not update the Platform layer inspector");
 
   await page.goto(baseUrl + "/use-cases", { waitUntil: "networkidle" });
   const useCaseToggle = page.locator("[data-uc-toggle]").first();
   const panelId = await useCaseToggle.getAttribute("aria-controls");
-  await useCaseToggle.click();
+  await useCaseToggle.focus();
+  await page.keyboard.press("Enter");
   assert.equal(await useCaseToggle.getAttribute("aria-expanded"), "true", "use-case JSON panel did not expand");
   assert.ok(await page.locator("#" + panelId).isVisible(), "use-case JSON content remained hidden");
   await context.close();
@@ -183,6 +194,17 @@ async function checkFaqInteractions(browser) {
   assert.equal(mismatchedItems, 0, "FAQ filter left questions from other categories visible");
 
   await page.locator('[data-faq-filter="all"]').click();
+
+  const firstFaq = items.first();
+  const firstFaqSummary = firstFaq.locator(".ef-faq-summary");
+  assert.equal(await firstFaq.evaluate((node) => node.open), true, "expected first FAQ item to start expanded");
+  await firstFaqSummary.focus();
+  await page.keyboard.press("Enter");
+  assert.equal(await firstFaq.evaluate((node) => node.open), false, "keyboard Enter did not toggle FAQ details");
+  await firstFaqSummary.focus();
+  await page.keyboard.press("Enter");
+  assert.equal(await firstFaq.evaluate((node) => node.open), true, "keyboard Enter did not reopen FAQ details");
+
   await page.locator("[data-faq-expand-all]").click();
   const closedAfterExpand = await items.evaluateAll((nodes) => nodes.filter((node) => !node.open).length);
   assert.equal(closedAfterExpand, 0, "Expand all did not open every FAQ item");
@@ -204,6 +226,20 @@ async function checkDemoInteractions(browser) {
   const state = page.locator("#demo-task-state");
   const output = page.locator("#demo-json-output");
   const run = page.locator("#demo-run-btn");
+  const externalRequests = [];
+  const pageErrors = [];
+  const consoleErrors = [];
+  page.on("request", (request) => {
+    try {
+      if (new URL(request.url()).origin !== baseUrl) externalRequests.push(request.url());
+    } catch {
+      externalRequests.push(request.url());
+    }
+  });
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
 
   await page.locator("#demo-url").fill("http://localhost./admin");
   await run.click();
@@ -224,6 +260,25 @@ async function checkDemoInteractions(browser) {
   await run.click();
   assert.ok((await output.textContent()).includes("TOO_MANY_REDIRECTS"), "redirect limit did not affect Demo outcome");
 
+  // Exercise every published preset, not only the manually edited limit cases.
+  await page.locator('[data-demo-preset="public-fetch"]').click();
+  assert.equal((await state.textContent()).trim(), "succeeded", "public-fetch preset did not produce its illustrative success");
+
+  await page.locator('[data-demo-preset="redirect-trace"]').click();
+  assert.equal((await state.textContent()).trim(), "succeeded", "redirect-trace preset should fit its default redirect budget");
+  assert.ok((await output.textContent()).includes("docs.example.org/v2/guide"),
+    "redirect-trace preset did not expose its illustrative final URL");
+
+  await page.locator('[data-demo-preset="ssrf-blocked"]').click();
+  assert.equal((await state.textContent()).trim(), "rejected", "ssrf-blocked preset did not reject its private IP");
+  assert.ok((await output.textContent()).includes("URL_NOT_ALLOWED"),
+    "ssrf-blocked preset did not show the URL policy error");
+
+  await page.locator('[data-demo-preset="size-capped"]').click();
+  assert.equal((await state.textContent()).trim(), "failed", "size-capped preset should fail its 100-byte cap");
+  assert.ok((await output.textContent()).includes("RESPONSE_TOO_LARGE"),
+    "size-capped preset did not show the response byte-limit error");
+
   await page.locator('[data-demo-preset="browser-unsupported"]').click();
   assert.equal((await state.textContent()).trim(), "unsupported", "browser preset implied an available browser runtime");
 
@@ -232,6 +287,14 @@ async function checkDemoInteractions(browser) {
   await page.locator('[data-demo-tab="json"]').click();
   assert.equal(await page.locator('[data-demo-panel="json"]').isVisible(), true, "JSON tab did not switch panels");
 
+  await page.locator("#demo-reset-btn").click();
+  assert.equal((await state.textContent()).trim(), "succeeded", "Reset Example did not restore the default public-fetch preset");
+  assert.equal(await page.locator('[data-demo-preset="public-fetch"]').getAttribute("aria-pressed"), "true",
+    "Reset Example did not reactivate the public-fetch preset");
+
+  assert.deepEqual(externalRequests, [], "Demo interacted with a third-party URL instead of remaining illustrative");
+  assert.deepEqual(pageErrors, [], "Demo interactions produced an uncaught browser exception");
+  assert.deepEqual(consoleErrors, [], "Demo interactions produced a browser console error");
   await context.close();
 }
 
@@ -244,7 +307,8 @@ async function checkDeveloperCopy(browser) {
   await page.goto(baseUrl + "/developers", { waitUntil: "networkidle" });
   const copyButton = page.locator("[data-copy-target]").first();
   assert.equal(await copyButton.count(), 1, "developer documentation copy button missing");
-  await copyButton.click();
+  await copyButton.focus();
+  await page.keyboard.press("Enter");
   await page.waitForFunction(() => {
     const button = document.querySelector("[data-copy-target]");
     return button && button.textContent.trim() === "Copied";
