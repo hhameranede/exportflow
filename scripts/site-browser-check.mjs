@@ -269,6 +269,15 @@ async function checkDemoInteractions(browser) {
   assert.ok((await output.textContent()).includes("docs.example.org/v2/guide"),
     "redirect-trace preset did not expose its illustrative final URL");
 
+  // A hostname containing the preset domain as a suffix is not the preset origin.
+  await page.locator("#demo-url").fill("https://docs.example.org.attacker.com/guide");
+  await run.click();
+  const nonMatchingRedirectResult = JSON.parse(await output.textContent());
+  assert.deepEqual(nonMatchingRedirectResult.result.data.redirects, [],
+    "redirect-trace was incorrectly applied to a different hostname");
+  assert.equal(nonMatchingRedirectResult.result.data.finalUrl, "https://docs.example.org.attacker.com/guide",
+    "a non-matching hostname was given the preset final URL");
+
   await page.locator('[data-demo-preset="ssrf-blocked"]').click();
   assert.equal((await state.textContent()).trim(), "rejected", "ssrf-blocked preset did not reject its private IP");
   assert.ok((await output.textContent()).includes("URL_NOT_ALLOWED"),
