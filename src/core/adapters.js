@@ -35,10 +35,10 @@ export function getAdapterCatalog() {
   }));
 }
 
-export async function executeAdapter(id, input) {
+export async function executeAdapter(id, input, options = {}) {
   const adapter = registry.get(id);
   if (!adapter) throw new Error("Unknown adapter: " + id);
-  return adapter.execute(input);
+  return adapter.execute(input, options);
 }
 
 registerAdapter({
@@ -65,16 +65,24 @@ registerAdapter({
     "text-content-only",
     "SSRF-hostname-filters",
   ],
-  async execute(input = {}) {
-    const response = await fetchPublicResource(input.url);
+  async execute(input = {}, options = {}) {
+    const fetchOptions = {};
+    if (input.timeoutMs !== undefined) fetchOptions.timeoutMs = input.timeoutMs;
+    if (input.maxBytes !== undefined) fetchOptions.maxBytes = input.maxBytes;
+    if (input.maxRedirects !== undefined) fetchOptions.maxRedirects = input.maxRedirects;
+    if (typeof options?.fetchImpl === "function") fetchOptions.fetchImpl = options.fetchImpl;
+    if (options?.signal) fetchOptions.signal = options.signal;
+    const response = await fetchPublicResource(input.url, fetchOptions);
     return normalizeResult({
       status: response.ok ? "succeeded" : "failed",
       data: {
         status: response.status,
+        httpStatus: response.status,
         contentType: response.contentType,
         body: response.body,
         bytes: response.bytes,
         originalUrl: response.originalUrl,
+        requestedUrl: response.originalUrl,
         finalUrl: response.finalUrl,
         redirects: response.redirects,
       },
@@ -82,7 +90,13 @@ registerAdapter({
         url: response.finalUrl,
         retrievedAt: response.retrievedAt,
         title: null,
-        evidence: [{ type: "http_response", status: response.status, contentType: response.contentType }],
+        evidence: [{
+          type: "http_response",
+          status: response.status,
+          contentType: response.contentType,
+          bytes: response.bytes,
+          redirectCount: response.redirects.length,
+        }],
       }],
       warnings: response.ok ? [] : ["Upstream returned HTTP " + response.status + "."],
     });

@@ -16,10 +16,49 @@ function event(type, at, details = {}) {
   return { type, at, ...details };
 }
 
-function failureResult(code) {
+const SAFE_ERROR_MESSAGES = Object.freeze({
+  INVALID_TASK: "Task input failed contract validation.",
+  INVALID_GOAL: "Task goal is missing or exceeds the allowed length.",
+  INVALID_QUERY: "Search query must contain 1 to 1024 characters.",
+  INVALID_LIMIT: "One or more execution limits are outside the supported range.",
+  UNSUPPORTED_OPERATION: "Unsupported task operation.",
+  URL_NOT_ALLOWED: "Destination URL is not allowed by the egress policy.",
+  RESPONSE_TOO_LARGE: "Upstream response exceeded the maximum allowed byte limit.",
+  UNSUPPORTED_CONTENT_TYPE: "Upstream returned an unsupported content type.",
+  UPSTREAM_TIMEOUT: "Upstream request timed out.",
+  UPSTREAM_FETCH_FAILED: "Could not retrieve the upstream resource.",
+  TOO_MANY_REDIRECTS: "Upstream exceeded the redirect limit.",
+  REDIRECT_LOOP: "Upstream redirect loop detected.",
+  REDIRECT_NOT_ALLOWED: "Upstream redirected to a disallowed destination.",
+  REDIRECT_DOWNGRADE: "HTTPS redirects cannot downgrade to HTTP.",
+  INVALID_REDIRECT: "Upstream returned an invalid redirect response.",
+  UPSTREAM_HTTP_ERROR: "Upstream returned a non-2xx HTTP status.",
+  BROWSER_INTERACTION_UNAVAILABLE: "User-directed browser interactions are not connected.",
+  BROWSER_UNAVAILABLE: "Browser Run binding is not configured.",
+  SEARCH_UNAVAILABLE: "Cloudflare Web Search binding is not configured.",
+  RESEARCH_UNAVAILABLE: "Research pipeline is not configured.",
+  TASK_EXECUTION_FAILED: "Task execution failed.",
+});
+
+function safeErrorMessage(code) {
+  return SAFE_ERROR_MESSAGES[code] || SAFE_ERROR_MESSAGES.TASK_EXECUTION_FAILED;
+}
+
+function computeDurationMs(startedAt, completedAt, fallbackMs) {
+  if (startedAt && completedAt) {
+    const start = Date.parse(startedAt);
+    const end = Date.parse(completedAt);
+    if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+      return end - start;
+    }
+  }
+  return Math.max(0, fallbackMs);
+}
+
+function failureResult(code, requestedUrl = null) {
   return normalizeResult({
     status: "failed",
-    data: { errorCode: code },
+    data: { errorCode: code, requestedUrl },
     warnings: [`Task failed (${code}).`],
   });
 }
@@ -27,21 +66,27 @@ function failureResult(code) {
 function buildTask({
   id,
   goal,
+  requestedUrl = null,
   state,
   execution,
   createdAt,
   startedAt,
   completedAt,
   events,
+  errors = [],
+  usage = null,
   result,
 }) {
   return {
     id,
     goal,
+    requestedUrl,
     state,
     execution,
     timestamps: { createdAt, startedAt, completedAt },
+    usage,
     events,
+    errors,
     result,
   };
 }
@@ -58,11 +103,13 @@ export async function executeWebTask(input, options = {}) {
   const now = options.now || (() => new Date().toISOString());
   const idFactory = options.idFactory || createId;
   const runAdapter = options.executeAdapter || executeAdapter;
+  const startMs = Date.now();
   const id = idFactory();
   const createdAt = now();
   const events = [event("task.accepted", createdAt)];
   let startedAt = null;
   let goal = "";
+  let requestedUrl = null;
   let execution = null;
 
   try {
@@ -87,6 +134,7 @@ export async function executeWebTask(input, options = {}) {
       throw Object.assign(new TypeError("Unsupported task operation."), { code: "UNSUPPORTED_OPERATION" });
     }
     const url = ["search", "research"].includes(operation) ? null : validatePublicHttpUrl(input.url);
+    requestedUrl = url ? url.href : null;
     if (["search", "research"].includes(operation) && (typeof input.query !== "string" || !input.query.trim() || input.query.length > 1024)) {
       throw Object.assign(new TypeError("Search query must contain 1 to 1024 characters."), { code: "INVALID_QUERY" });
     }
@@ -115,8 +163,23 @@ export async function executeWebTask(input, options = {}) {
         });
         events.push(event("task.unsupported", completedAt, { reason: "research_pipeline_unavailable" }));
         return buildTask({
-          id, goal, state: "unsupported", execution, createdAt, startedAt,
-          completedAt, events, result,
+          id,
+          goal,
+          requestedUrl,
+          state: "unsupported",
+          execution,
+          createdAt,
+          startedAt,
+          completedAt,
+          events,
+          errors: [{ code: "RESEARCH_UNAVAILABLE", message: safeErrorMessage("RESEARCH_UNAVAILABLE") }],
+          usage: {
+            durationMs: computeDurationMs(startedAt, completedAt, Date.now() - startMs),
+            requestsAttempted: 0,
+            responseBytes: 0,
+            cost: null,
+          },
+          result,
         });
       }
       execution.adapterId = researchAdapter.id || "web.research.v1";
@@ -183,9 +246,27 @@ export async function executeWebTask(input, options = {}) {
           : "Browser Run binding is not configured; no browser navigation was performed.";
         const result = normalizeResult({ status: "failed", data: null, warnings: [message] });
         events.push(event("task.unsupported", completedAt, { reason }));
+        const errorCode = input.requiresInteraction === true
+          ? "BROWSER_INTERACTION_UNAVAILABLE"
+          : "BROWSER_UNAVAILABLE";
         return buildTask({
-          id, goal, state: "unsupported", execution, createdAt, startedAt,
-          completedAt, events, result,
+          id,
+          goal,
+          requestedUrl,
+          state: "unsupported",
+          execution,
+          createdAt,
+          startedAt,
+          completedAt,
+          events,
+          errors: [{ code: errorCode, message: safeErrorMessage(errorCode) }],
+          usage: {
+            durationMs: computeDurationMs(startedAt, completedAt, Date.now() - startMs),
+            requestsAttempted: 0,
+            responseBytes: 0,
+            cost: null,
+          },
+          result,
         });
       }
 
@@ -232,28 +313,65 @@ export async function executeWebTask(input, options = {}) {
           : "web.extract.v1";
     execution.adapterId = adapterId;
     const adapterInput = { url: url.href };
+    if (operation === "fetch" && input.limits && typeof input.limits === "object" && !Array.isArray(input.limits)) {
+      if (input.limits.timeoutMs !== undefined) adapterInput.timeoutMs = input.limits.timeoutMs;
+      if (input.limits.maxBytes !== undefined) adapterInput.maxBytes = input.limits.maxBytes;
+      if (input.limits.maxRedirects !== undefined) adapterInput.maxRedirects = input.limits.maxRedirects;
+    }
     if (operation === "map" && input.maxUrls !== undefined) adapterInput.maxUrls = input.maxUrls;
     if (operation === "crawl") {
       if (input.maxPages !== undefined) adapterInput.maxPages = input.maxPages;
       if (input.maxDepth !== undefined) adapterInput.maxDepth = input.maxDepth;
     }
     if (operation === "extract") adapterInput.schema = input.schema;
-    const result = await runAdapter(adapterId, adapterInput);
+    const adapterOptions = {};
+    if (typeof options.fetchImpl === "function") adapterOptions.fetchImpl = options.fetchImpl;
+    if (options.signal) adapterOptions.signal = options.signal;
+    const result = Object.keys(adapterOptions).length
+      ? await runAdapter(adapterId, adapterInput, adapterOptions)
+      : await runAdapter(adapterId, adapterInput);
     const completedAt = now();
     const state = result.status === "succeeded"
       ? "succeeded"
       : result.status === "partial"
         ? "partial"
         : "failed";
+    const errors = [];
     if (state === "succeeded") {
       events.push(event("task.succeeded", completedAt));
     } else if (state === "partial") {
       events.push(event("task.partial", completedAt, { reason: "some_fields_missing" }));
     } else {
       events.push(event("task.failed", completedAt, { reason: "upstream_request_failed" }));
+      if (operation === "fetch" && Number.isInteger(result.data?.status)) {
+        errors.push({
+          code: "UPSTREAM_HTTP_ERROR",
+          message: `Upstream returned HTTP ${result.data.status}.`,
+        });
+      }
     }
+    const redirectsCount = Array.isArray(result.data?.redirects) ? result.data.redirects.length : null;
+    const requestsAttempted = operation === "fetch" && redirectsCount !== null
+      ? 1 + redirectsCount
+      : null;
     return buildTask({
-      id, goal, state, execution, createdAt, startedAt, completedAt, events, result,
+      id,
+      goal,
+      requestedUrl,
+      state,
+      execution,
+      createdAt,
+      startedAt,
+      completedAt,
+      events,
+      errors,
+      usage: {
+        durationMs: computeDurationMs(startedAt, completedAt, Date.now() - startMs),
+        requestsAttempted,
+        responseBytes: Number.isInteger(result.data?.bytes) ? result.data.bytes : null,
+        cost: null,
+      },
+      result,
     });
   } catch (error) {
     const completedAt = now();
@@ -264,13 +382,21 @@ export async function executeWebTask(input, options = {}) {
     return buildTask({
       id,
       goal,
+      requestedUrl,
       state: "failed",
       execution,
       createdAt,
       startedAt,
       completedAt,
       events,
-      result: failureResult(code),
+      errors: [{ code, message: safeErrorMessage(code) }],
+      usage: {
+        durationMs: computeDurationMs(startedAt, completedAt, Date.now() - startMs),
+        requestsAttempted: startedAt ? null : 0,
+        responseBytes: 0,
+        cost: null,
+      },
+      result: failureResult(code, requestedUrl),
     });
   }
 }
