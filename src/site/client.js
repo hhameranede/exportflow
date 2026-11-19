@@ -302,7 +302,7 @@ export const SITE_JS = `(function () {
         });
       }
 
-      var redirects = (preset && preset.illustrativeRedirects && urlCheck.href.indexOf("docs.example.org") !== -1)
+      var redirects = (preset && preset.illustrativeRedirects && new URL(urlCheck.href).hostname === "docs.example.org")
         ? preset.illustrativeRedirects
         : [];
       var finalUrl = redirects.length ? redirects[redirects.length - 1].to : urlCheck.href;
