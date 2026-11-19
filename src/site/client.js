@@ -1,5 +1,9 @@
+import { DEMO_POLICY_SOURCE } from "./demo-policy.js";
+
 export const SITE_JS = `(function () {
   "use strict";
+
+  ${DEMO_POLICY_SOURCE}
 
   // 1. Mobile navigation toggle
   var menuBtn = document.querySelector("[data-menu-toggle]");
@@ -174,61 +178,6 @@ export const SITE_JS = `(function () {
     var jsonOutEl = document.getElementById("demo-json-output");
     var activePresetId = "public-fetch";
 
-    var blockedHostExact = new Set([
-      "localhost",
-      "metadata",
-      "metadata.google.internal",
-      "metadata.azure.internal",
-      "instance-data",
-      "exportflow.me",
-      "exportflow-platform.hhameranede.workers.dev"
-    ]);
-    var blockedSuffixes = [
-      ".localhost", ".local", ".localdomain", ".internal", ".home", ".lan",
-      ".test", ".invalid", ".example", ".onion", ".arpa", ".home.arpa",
-      ".svc", ".cluster.local", ".corp", ".intranet", ".exportflow.me"
-    ];
-
-    function validateUrlForPreview(rawUrl) {
-      if (!rawUrl || rawUrl.length > 2048) {
-        return { ok: false, code: "URL_NOT_ALLOWED", message: "Destination URL is missing or exceeds 2048 characters." };
-      }
-      var parsed;
-      try {
-        parsed = new URL(rawUrl);
-      } catch (_e) {
-        return { ok: false, code: "URL_NOT_ALLOWED", message: "Destination URL could not be parsed." };
-      }
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        return { ok: false, code: "URL_NOT_ALLOWED", message: "Only HTTP and HTTPS protocols are permitted." };
-      }
-      if (parsed.username || parsed.password) {
-        return { ok: false, code: "URL_NOT_ALLOWED", message: "Embedded credentials in URLs are rejected." };
-      }
-      if (parsed.port) {
-        return { ok: false, code: "URL_NOT_ALLOWED", message: "Non-default ports are disallowed by egress policy." };
-      }
-      var host = parsed.hostname.toLowerCase().replace(/\\.$/, "");
-      if (
-        !host ||
-        host.startsWith("[") ||
-        host.indexOf(":") !== -1 ||
-        /^[0-9.]+$/.test(host) ||
-        host.indexOf(".") === -1
-      ) {
-        return { ok: false, code: "URL_NOT_ALLOWED", message: "IP literals and non-public domain forms are blocked by egress policy." };
-      }
-      if (
-        blockedHostExact.has(host) ||
-        blockedSuffixes.some(function (sfx) { return host.endsWith(sfx); })
-      ) {
-        return { ok: false, code: "URL_NOT_ALLOWED", message: "Local, reserved, and ExportFlow-owned hostnames are disallowed." };
-      }
-      parsed.hostname = host;
-      parsed.hash = "";
-      return { ok: true, href: parsed.href };
-    }
-
     function simulateTask() {
       var goal = (goalInput.value || "").trim();
       var rawUrl = (urlInput.value || "").trim();
@@ -353,16 +302,35 @@ export const SITE_JS = `(function () {
         });
       }
 
-      if ((preset && preset.forceOutcome === "RESPONSE_TOO_LARGE") || maxBytes < 300) {
-        stages = ["passed", "passed", "passed", "failed", "passed", "skipped"];
+      var redirects = (preset && preset.illustrativeRedirects && urlCheck.href.indexOf("docs.example.org") !== -1)
+        ? preset.illustrativeRedirects
+        : [];
+      var finalUrl = redirects.length ? redirects[redirects.length - 1].to : urlCheck.href;
+      var body = (preset && preset.illustrativeBody) ||
+        "<!doctype html><html><head><title>Illustrative Public Document</title></head><body><h1>Preview Response</h1><p>Illustrative body for " + urlCheck.href + "</p></body></html>";
+      var bytes = new TextEncoder().encode(body).byteLength;
+      var simulatedDurationMs = (preset && Number.isInteger(preset.illustrativeDurationMs))
+        ? preset.illustrativeDurationMs
+        : 76;
+      var limitFailure = evaluateDemoLimits({
+        timeoutMs: timeoutMs,
+        maxBytes: maxBytes,
+        maxRedirects: maxRedirects,
+        durationMs: simulatedDurationMs,
+        responseBytes: bytes,
+        redirectCount: redirects.length
+      });
+
+      if (limitFailure) {
+        var failureStages = ["passed", "passed", "passed", "failed", "skipped", "skipped"];
         return renderResult({
-          stages: stages,
-          httpStatus: 413,
+          stages: failureStages,
+          httpStatus: limitFailure.httpStatus,
           adapter: "http.fetch.v1",
           state: "failed",
           payload: {
             previewMode: "illustrative_simulation",
-            id: "preview-task-cap-413",
+            id: "preview-task-limit-" + limitFailure.code.toLowerCase(),
             goal: goal,
             requestedUrl: urlCheck.href,
             state: "failed",
@@ -373,31 +341,33 @@ export const SITE_JS = `(function () {
               reason: "Direct HTTP is the lightest suitable first attempt."
             },
             timestamps: { createdAt: ts0, startedAt: ts1, completedAt: ts2 },
-            usage: { durationMs: 18, requestsAttempted: null, responseBytes: 0, cost: null },
+            usage: {
+              durationMs: simulatedDurationMs,
+              requestsAttempted: 1 + Math.min(redirects.length, maxRedirects),
+              responseBytes: bytes,
+              cost: null
+            },
             events: [
               { type: "task.accepted", at: ts0 },
               { type: "task.started", at: ts1, executionPath: "http" },
-              { type: "task.failed", at: ts2, reason: "RESPONSE_TOO_LARGE" }
+              { type: "task.failed", at: ts2, reason: limitFailure.code }
             ],
-            errors: [{ code: "RESPONSE_TOO_LARGE", message: "Upstream response exceeded the maximum allowed byte limit." }],
+            errors: [{ code: limitFailure.code, message: limitFailure.message }],
             result: {
               status: "failed",
-              data: { errorCode: "RESPONSE_TOO_LARGE", requestedUrl: urlCheck.href },
+              data: {
+                errorCode: limitFailure.code,
+                requestedUrl: urlCheck.href,
+                responseBytes: bytes,
+                redirectCount: redirects.length
+              },
               sources: [],
-              warnings: ["Task failed (RESPONSE_TOO_LARGE)."],
+              warnings: ["Task failed (" + limitFailure.code + ")."],
               generatedAt: ts2
             }
           }
         });
       }
-
-      var redirects = (preset && preset.illustrativeRedirects && urlCheck.href.indexOf("docs.example.org") !== -1)
-        ? preset.illustrativeRedirects
-        : [];
-      var finalUrl = redirects.length ? redirects[redirects.length - 1].to : urlCheck.href;
-      var body = (preset && preset.illustrativeBody) ||
-        "<!doctype html><html><head><title>Illustrative Public Document</title></head><body><h1>Preview Response</h1><p>Illustrative body for " + urlCheck.href + "</p></body></html>";
-      var bytes = (preset && preset.illustrativeBytes && urlCheck.href === preset.url) ? preset.illustrativeBytes : body.length;
 
       return renderResult({
         stages: stages,
@@ -418,7 +388,7 @@ export const SITE_JS = `(function () {
           },
           timestamps: { createdAt: ts0, startedAt: ts1, completedAt: ts2 },
           usage: {
-            durationMs: 76,
+            durationMs: simulatedDurationMs,
             requestsAttempted: 1 + redirects.length,
             responseBytes: bytes,
             cost: null

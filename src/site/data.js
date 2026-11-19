@@ -404,7 +404,6 @@ export const DEMO_PRESETS = Object.freeze({
     illustrativeTitle: "Example Domain",
     illustrativeStatus: 200,
     illustrativeContentType: "text/html; charset=utf-8",
-    illustrativeBytes: 577,
     illustrativeRedirects: [],
   },
   "redirect-trace": {
@@ -423,7 +422,6 @@ export const DEMO_PRESETS = Object.freeze({
     illustrativeTitle: "Documentation Index",
     illustrativeStatus: 200,
     illustrativeContentType: "text/html; charset=utf-8",
-    illustrativeBytes: 1840,
     illustrativeRedirects: [
       {
         status: 302,
@@ -455,7 +453,6 @@ export const DEMO_PRESETS = Object.freeze({
     timeoutMs: 8000,
     maxBytes: 100,
     maxRedirects: 3,
-    forceOutcome: "RESPONSE_TOO_LARGE",
   },
   "browser-unsupported": {
     id: "browser-unsupported",
