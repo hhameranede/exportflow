@@ -129,7 +129,7 @@ async function checkHomeInteractions(browser) {
   );
   assert.equal(mismatchedCards, 0, "homepage maturity filter left mismatched capability cards visible");
 
-  const detailToggle = page.locator("[data-cap-toggle]").first();
+  const detailToggle = page.locator('[data-cap-card]:visible [data-cap-toggle]').first();
   const detailId = await detailToggle.getAttribute("aria-controls");
   await detailToggle.click();
   assert.equal(await detailToggle.getAttribute("aria-expanded"), "true", "homepage details did not expand");
