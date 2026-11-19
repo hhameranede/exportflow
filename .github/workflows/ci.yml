@@ -14,3 +14,20 @@ jobs:
       node-version: 24
    - run: npm test
    - run: npm run check
+   - name: Install pinned Playwright and Chromium outside project dependencies
+     run: |
+      npm install --prefix "$RUNNER_TEMP/ef-browser" --no-save --package-lock=false playwright@1.57.0
+      "$RUNNER_TEMP/ef-browser/node_modules/.bin/playwright" install --with-deps chromium
+   - name: Run real Chromium website checks
+     env:
+      PLAYWRIGHT_MODULE: ${{ runner.temp }}/ef-browser/node_modules/playwright/index.mjs
+      SITE_SCREENSHOT_DIR: ${{ runner.temp }}/exportflow-site-screenshots
+     run: node scripts/site-browser-check.mjs
+   - name: Upload browser screenshots
+     if: always()
+     uses: actions/upload-artifact@v4
+     with:
+      name: exportflow-w0-chromium-site-review
+      path: ${{ runner.temp }}/exportflow-site-screenshots
+      if-no-files-found: warn
+      retention-days: 3
