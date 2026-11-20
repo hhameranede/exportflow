@@ -1,5 +1,6 @@
 import { fetchPublicResource } from "./http-fetch.js";
 import { normalizeResult } from "./result.js";
+import { throwIfAborted } from "./cancellation.js";
 
 export const EXTRACTION_LIMITS = Object.freeze({
   maxSchemaBytes: 16_384,
@@ -452,6 +453,7 @@ export async function extractStructuredData(input, options = {}) {
   if (!isPlainObject(input)) {
     throw new ExtractionError("INVALID_INPUT", "Extraction input must be an object.");
   }
+  throwIfAborted(options.signal);
   const url = input.url;
   const schema = validateExtractionSchema(input.schema);
   const fetchResource = options.fetchResource || fetchPublicResource;
@@ -459,7 +461,10 @@ export async function extractStructuredData(input, options = {}) {
     maxBytes: options.maxBytes ?? 1_048_576,
     timeoutMs: options.timeoutMs ?? 8_000,
     maxRedirects: options.maxRedirects ?? 3,
+    signal: options.signal,
+    fetchImpl: options.fetchImpl,
   });
+  throwIfAborted(options.signal);
   if (response.status < 200 || response.status >= 300) {
     return normalizeResult({
       status: "failed",
@@ -565,7 +570,18 @@ export const extractAdapter = Object.freeze({
     "field-level-evidence",
     "bounded-input-schema",
   ],
-  async execute(input = {}) {
-    return extractStructuredData(input);
+  async execute(input = {}, options = {}) {
+    throwIfAborted(options.signal);
+    const fetchResource = (url, fetchOptions = {}) => fetchPublicResource(url, {
+      ...fetchOptions,
+      ...(typeof options.fetchImpl === "function" ? { fetchImpl: options.fetchImpl } : {}),
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+    const result = await extractStructuredData(input, {
+      signal: options.signal,
+      fetchResource,
+    });
+    throwIfAborted(options.signal);
+    return result;
   },
 });
