@@ -213,7 +213,14 @@ export function renderAuthPage(type, t, locale, hrefFor, escapeHtml, arrowRightI
           '<ul class="ef-session-list" data-auth-account-list aria-live="polite"></ul>' +
           '<button type="button" class="ef-google-btn ef-google-btn-sm" data-auth-link-google disabled>' + googleMark() + '<span>' + escapeHtml(c.linkGoogle) + '</span></button>' +
         '</article>' +
-        '<article class="ef-account-card"><div class="ef-account-card-head"><div><h2>Security</h2><p class="ef-acc-card-desc">Your sessions are managed by the ExportFlow authentication service.</p></div></div>' +
+        '<article class="ef-account-card"><div class="ef-account-card-head"><div><h2>Security</h2><p class="ef-acc-card-desc">Change your password when email sign-in is enabled, and sign out securely.</p></div></div>' +
+          '<form class="ef-auth-form" data-account-password-form hidden>' +
+            '<div class="ef-field"><label for="acc-current-password">Current password</label><input id="acc-current-password" name="currentPassword" type="password" autocomplete="current-password" required></div>' +
+            '<div class="ef-field"><label for="acc-new-password">New password</label><input id="acc-new-password" name="newPassword" type="password" autocomplete="new-password" minlength="8" required></div>' +
+            '<div class="ef-field"><label for="acc-confirm-password">Confirm new password</label><input id="acc-confirm-password" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" required></div>' +
+            '<button type="submit" class="ef-btn ef-btn-secondary ef-btn-sm">Change password</button>' +
+            '<p class="ef-form-banner" data-password-change-status role="status" aria-live="polite"></p>' +
+          '</form>' +
           '<button type="button" class="ef-btn ef-btn-secondary ef-btn-sm" data-auth-signout>' + escapeHtml(c.signOut) + '</button>' +
         '</article>' +
       '</div>' +
