@@ -118,6 +118,22 @@ test("cross-origin, missing-Origin, non-POST and mismatched-host requests are de
   assert.deepEqual(await auth.run(getRequest), { allowed: false });
 });
 
+test("expected origin accepts only HTTPS or HTTP loopback development URLs", async () => {
+  const auth = authorizer();
+  assert.deepEqual(
+    await auth.run(ownerRequest(), { expectedOrigin: "ftp://localhost" }),
+    { allowed: false },
+  );
+  assert.deepEqual(
+    await auth.run(ownerRequest(), { expectedOrigin: "http://example.com" }),
+    { allowed: false },
+  );
+  assert.deepEqual(
+    await auth.run(ownerRequest(), { expectedOrigin: "http://localhost:8787" }),
+    { allowed: false },
+  );
+});
+
 test("cross-site Fetch Metadata and identity-provider failures are denied", async () => {
   const auth = authorizer();
   assert.deepEqual(await auth.run(ownerRequest({ "sec-fetch-site": "cross-site" })), { allowed: false });
