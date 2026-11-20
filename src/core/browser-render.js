@@ -1,6 +1,7 @@
 import { normalizeResult } from "./result.js";
 import { FetchAdapterError, fetchPublicResource, validatePublicHttpUrl } from "./http-fetch.js";
 import { EXPORTFLOW_CRAWLER_USER_AGENT, isAllowedByRobots, parseRobotsTxt } from "./map-crawl.js";
+import { awaitWithSignal, throwIfAborted, createTaskCancelledError } from "./cancellation.js";
 
 export const BROWSER_RENDER_LIMITS = Object.freeze({
   navigationTimeoutMs: 15_000,
@@ -19,7 +20,8 @@ export class BrowserAdapterError extends Error {
   }
 }
 
-async function loadRobotsPolicy(url, fetchResource) {
+async function loadRobotsPolicy(url, fetchResource, signal) {
+  throwIfAborted(signal);
   const robotsUrl = new URL("/robots.txt", url.origin).href;
   let response;
   try {
@@ -30,7 +32,9 @@ async function loadRobotsPolicy(url, fetchResource) {
       allowedOrigin: url.origin,
       userAgent: EXPORTFLOW_CRAWLER_USER_AGENT,
     });
-  } catch {
+    throwIfAborted(signal);
+  } catch (error) {
+    if (error?.code === "TASK_CANCELLED" || signal?.aborted) throw createTaskCancelledError();
     throw new BrowserAdapterError("ROBOTS_UNREACHABLE", "robots.txt could not be retrieved; browser navigation was stopped.", 503);
   }
 
@@ -126,7 +130,9 @@ export function createBrowserAdapter({
       "user-interactions-not-implemented",
       "dns-rebinding-runtime-verification-required",
     ],
-    async execute(input = {}) {
+    async execute(input = {}, options = {}) {
+      const signal = options.signal;
+      throwIfAborted(signal);
       let target;
       try {
         target = validatePublicHttpUrl(input.url);
@@ -141,19 +147,42 @@ export function createBrowserAdapter({
         throw new BrowserAdapterError("BROWSER_UNAVAILABLE", "Browser Run binding is not configured for this Worker.", 503);
       }
 
-      const robots = await loadRobotsPolicy(target, fetchResource);
+      const taskFetchResource = (url, fetchOptions = {}) => fetchResource(url, {
+        ...fetchOptions,
+        ...(typeof options.fetchImpl === "function" ? { fetchImpl: options.fetchImpl } : {}),
+        ...(signal ? { signal } : {}),
+      });
+      const robots = await loadRobotsPolicy(target, taskFetchResource, signal);
+      throwIfAborted(signal);
       if (!isAllowedByRobots(target.href, robots.policy)) {
         throw new BrowserAdapterError("ROBOTS_DISALLOWED_TARGET", "The requested page is disallowed by robots.txt.", 403);
       }
 
       let browser;
+      let closePromise = null;
+      const closeBrowser = () => {
+        if (!browser) return Promise.resolve();
+        if (!closePromise) {
+          closePromise = Promise.resolve().then(() => browser.close()).catch(() => {});
+        }
+        return closePromise;
+      };
+      const onAbort = () => { void closeBrowser(); };
       try {
-        browser = await puppeteer.launch(browserBinding, {
+        const launching = Promise.resolve(puppeteer.launch(browserBinding, {
           guardrails: { allowedDomains: [target.hostname] },
+        })).then((instance) => {
+          browser = instance;
+          if (signal?.aborted) void closeBrowser();
+          return instance;
         });
-        const page = await browser.newPage();
-        await page.setUserAgent(EXPORTFLOW_CRAWLER_USER_AGENT);
-        await page.setRequestInterception(true);
+        browser = await awaitWithSignal(launching, signal);
+        signal?.addEventListener("abort", onAbort, { once: true });
+        if (signal?.aborted) onAbort();
+        throwIfAborted(signal);
+        const page = await awaitWithSignal(browser.newPage(), signal);
+        await awaitWithSignal(page.setUserAgent(EXPORTFLOW_CRAWLER_USER_AGENT), signal);
+        await awaitWithSignal(page.setRequestInterception(true), signal);
 
         const gate = makeRequestGate({
           origin: target.origin,
@@ -162,23 +191,26 @@ export function createBrowserAdapter({
         });
         page.on("request", gate.handler);
 
-        const response = await page.goto(target.href, {
+        const response = await awaitWithSignal(page.goto(target.href, {
           waitUntil: "domcontentloaded",
           timeout: BROWSER_RENDER_LIMITS.navigationTimeoutMs,
-        });
+        }), signal);
+        throwIfAborted(signal);
 
         const finalUrl = validatePublicHttpUrl(page.url());
         if (finalUrl.origin !== target.origin) {
           throw new BrowserAdapterError("BROWSER_REDIRECT_OUT_OF_SCOPE", "Browser navigation left the requested origin.", 403);
         }
 
-        const html = await page.content();
+        const html = await awaitWithSignal(page.content(), signal);
+        throwIfAborted(signal);
         const bytes = new TextEncoder().encode(html).byteLength;
         if (bytes > BROWSER_RENDER_LIMITS.maxHtmlBytes) {
           throw new BrowserAdapterError("RESPONSE_TOO_LARGE", "Rendered HTML exceeds the configured size limit.", 413);
         }
 
-        const title = await page.title();
+        const title = await awaitWithSignal(page.title(), signal);
+        throwIfAborted(signal);
         const statusCode = typeof response?.status === "function" ? response.status() : null;
         const retrievedAt = now();
         const warnings = [];
@@ -213,17 +245,15 @@ export function createBrowserAdapter({
           warnings,
         });
       } catch (error) {
+        if (error?.code === "TASK_CANCELLED" || signal?.aborted) throw createTaskCancelledError();
         if (error instanceof BrowserAdapterError) throw error;
         if (error instanceof FetchAdapterError) {
           throw new BrowserAdapterError(error.code, "Browser navigation failed its URL policy.", error.httpStatus);
         }
         throw new BrowserAdapterError("BROWSER_RENDER_FAILED", "Browser rendering failed or exceeded its execution budget.", 502);
       } finally {
-        try {
-          await browser?.close();
-        } catch {
-          // Preserve the original result or error if the session is already closed.
-        }
+        signal?.removeEventListener("abort", onAbort);
+        await closeBrowser();
       }
     },
   });

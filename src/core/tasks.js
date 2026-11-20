@@ -2,6 +2,7 @@ import { chooseExecutionPath } from "./router.js";
 import { executeAdapter } from "./adapters.js";
 import { normalizeResult } from "./result.js";
 import { validatePublicHttpUrl } from "./http-fetch.js";
+import { throwIfAborted } from "./cancellation.js";
 
 const TASK_ID_PATTERN = /^[a-zA-Z0-9_-]{8,64}$/;
 const MAX_GOAL_LENGTH = 2_000;
@@ -26,6 +27,7 @@ const SAFE_ERROR_MESSAGES = Object.freeze({
   RESPONSE_TOO_LARGE: "Upstream response exceeded the maximum allowed byte limit.",
   UNSUPPORTED_CONTENT_TYPE: "Upstream returned an unsupported content type.",
   UPSTREAM_TIMEOUT: "Upstream request timed out.",
+  TASK_CANCELLED: "Task was cancelled by the caller.",
   UPSTREAM_FETCH_FAILED: "Could not retrieve the upstream resource.",
   TOO_MANY_REDIRECTS: "Upstream exceeded the redirect limit.",
   REDIRECT_LOOP: "Upstream redirect loop detected.",
@@ -59,7 +61,7 @@ function failureResult(code, requestedUrl = null) {
   return normalizeResult({
     status: "failed",
     data: { errorCode: code, requestedUrl },
-    warnings: [`Task failed (${code}).`],
+    warnings: [code === "TASK_CANCELLED" ? "Task was cancelled by the caller." : `Task failed (${code}).`],
   });
 }
 
@@ -113,6 +115,7 @@ export async function executeWebTask(input, options = {}) {
   let execution = null;
 
   try {
+    throwIfAborted(options.signal);
     if (!input || typeof input !== "object" || Array.isArray(input)) {
       throw Object.assign(new TypeError("Task input must be an object."), { code: "INVALID_TASK" });
     }
@@ -188,7 +191,8 @@ export async function executeWebTask(input, options = {}) {
         schema: input.schema,
         limit: input.limit,
         candidateLimit: input.candidateLimit,
-      });
+      }, { signal: options.signal, fetchImpl: options.fetchImpl });
+      throwIfAborted(options.signal);
       const completedAt = now();
       const state = result.status === "succeeded"
         ? "succeeded"
@@ -219,7 +223,11 @@ export async function executeWebTask(input, options = {}) {
         });
       }
       execution.adapterId = searchAdapter.id || "web.search.v1";
-      const result = await searchAdapter.execute({ query: input.query, limit: input.limit });
+      const result = await searchAdapter.execute(
+        { query: input.query, limit: input.limit },
+        { signal: options.signal },
+      );
+      throwIfAborted(options.signal);
       const completedAt = now();
       const state = result.status === "succeeded"
         ? "succeeded"
@@ -273,7 +281,11 @@ export async function executeWebTask(input, options = {}) {
       execution.adapterId = browserAdapter.id || "web.browser.v1";
       let browserResult;
       try {
-        browserResult = await browserAdapter.execute({ url: url.href, goal, requiresInteraction: false });
+        browserResult = await browserAdapter.execute(
+          { url: url.href, goal, requiresInteraction: false },
+          { signal: options.signal, fetchImpl: options.fetchImpl },
+        );
+        throwIfAborted(options.signal);
       } catch (error) {
         if (error?.code === "BROWSER_UNAVAILABLE") {
           const completedAt = now();
@@ -327,9 +339,11 @@ export async function executeWebTask(input, options = {}) {
     const adapterOptions = {};
     if (typeof options.fetchImpl === "function") adapterOptions.fetchImpl = options.fetchImpl;
     if (options.signal) adapterOptions.signal = options.signal;
+    throwIfAborted(options.signal);
     const result = Object.keys(adapterOptions).length
       ? await runAdapter(adapterId, adapterInput, adapterOptions)
       : await runAdapter(adapterId, adapterInput);
+    throwIfAborted(options.signal);
     const completedAt = now();
     const state = result.status === "succeeded"
       ? "succeeded"
@@ -378,12 +392,13 @@ export async function executeWebTask(input, options = {}) {
     const code = typeof error?.code === "string" && /^[A-Z0-9_]{2,64}$/.test(error.code)
       ? error.code
       : "TASK_EXECUTION_FAILED";
-    events.push(event("task.failed", completedAt, { reason: code }));
+    const cancelled = code === "TASK_CANCELLED";
+    events.push(event(cancelled ? "task.cancelled" : "task.failed", completedAt, { reason: code }));
     return buildTask({
       id,
       goal,
       requestedUrl,
-      state: "failed",
+      state: cancelled ? "cancelled" : "failed",
       execution,
       createdAt,
       startedAt,

@@ -13,6 +13,7 @@ function makeTaskRequest(body, {
   contentType = "application/json",
   method = "POST",
   headers = {},
+  signal,
 } = {}) {
   const reqHeaders = new Headers(headers);
   if (contentType) reqHeaders.set("content-type", contentType);
@@ -21,6 +22,7 @@ function makeTaskRequest(body, {
     method,
     headers: reqHeaders,
     body: typeof body === "string" ? body : JSON.stringify(body),
+    ...(signal ? { signal } : {}),
   });
 }
 
@@ -172,6 +174,71 @@ test("validateTaskRequest enforces strict numeric limit bounds and disables non-
   assert.deepEqual(valid.limits, { timeoutMs: 2500, maxBytes: 4096, maxRedirects: 1 });
 });
 
+test("POST /api/v1/tasks stops before body parsing when the caller has already aborted", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let fetchCalls = 0;
+  const worker = createWorker({
+    fetchImpl: async () => {
+      fetchCalls++;
+      return new Response("unexpected");
+    },
+  });
+  const response = await worker.fetch(
+    makeTaskRequest({ goal: "Fetch page", url: "https://example.com" }, { signal: controller.signal }),
+    { EXPORTFLOW_API_TOKEN: TEST_TOKEN },
+  );
+
+  assert.equal(response.status, 499);
+  assert.equal((await response.json()).error.code, "TASK_CANCELLED");
+  assert.equal(fetchCalls, 0);
+});
+
+test("POST /api/v1/tasks cancels a pending request-body reader when the caller disconnects", async () => {
+  const controller = new AbortController();
+  let notifyPull;
+  const pullStarted = new Promise((resolve) => {
+    notifyPull = resolve;
+  });
+  let bodyCancelled = false;
+  let fetchCalls = 0;
+  const body = new ReadableStream({
+    pull() {
+      notifyPull();
+    },
+    cancel() {
+      bodyCancelled = true;
+    },
+  }, { highWaterMark: 0 });
+
+  const request = new Request("https://api.exportflow.local/api/v1/tasks", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${TEST_TOKEN}`,
+    },
+    body,
+    duplex: "half",
+    signal: controller.signal,
+  });
+  const worker = createWorker({
+    fetchImpl: async () => {
+      fetchCalls++;
+      return new Response("unexpected");
+    },
+  });
+
+  const pendingResponse = worker.fetch(request, { EXPORTFLOW_API_TOKEN: TEST_TOKEN });
+  await pullStarted;
+  controller.abort();
+  const response = await pendingResponse;
+
+  assert.equal(response.status, 499);
+  assert.equal((await response.json()).error.code, "TASK_CANCELLED");
+  assert.equal(bodyCancelled, true);
+  assert.equal(fetchCalls, 0);
+});
+
 test("POST /api/v1/tasks rejects private, loopback, metadata, and invalid URLs before outbound fetch", async () => {
   let fetchCalls = 0;
   const worker = createWorker({
@@ -251,6 +318,90 @@ test("POST /api/v1/tasks enforces egress redirect validation, redirect limit, st
   assert.equal(timeoutBody.state, "failed");
   assert.equal(timeoutBody.result.data.errorCode, "UPSTREAM_TIMEOUT");
   assert.equal(timeoutBody.errors[0].code, "UPSTREAM_TIMEOUT");
+});
+
+test("POST /api/v1/tasks reports caller abort during upstream Fetch as a cancelled Task", async () => {
+  const controller = new AbortController();
+  const worker = createWorker({
+    fetchImpl: (_url, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => {
+        reject(new DOMException("Aborted", "AbortError"));
+      }, { once: true });
+      controller.abort();
+    }),
+  });
+  const response = await worker.fetch(
+    makeTaskRequest({ goal: "Cancel upstream Fetch", url: "https://example.com/slow" }, { signal: controller.signal }),
+    { EXPORTFLOW_API_TOKEN: TEST_TOKEN },
+  );
+
+  assert.equal(response.status, 499);
+  const task = await response.json();
+  assert.equal(task.state, "cancelled");
+  assert.equal(task.errors[0].code, "TASK_CANCELLED");
+  assert.equal(task.result.data.errorCode, "TASK_CANCELLED");
+  assert.deepEqual(task.events.map((item) => item.type), [
+    "task.accepted",
+    "task.started",
+    "task.cancelled",
+  ]);
+});
+
+test("POST /api/v1/tasks keeps caller abort distinct from timeout while reading response streams", async () => {
+  const controller = new AbortController();
+  let notifyStreamReady;
+  const streamReady = new Promise((resolve) => {
+    notifyStreamReady = resolve;
+  });
+  const worker = createWorker({
+    fetchImpl: async (_url, init) => new Response(new ReadableStream({
+      start(streamController) {
+        init.signal.addEventListener("abort", () => {
+          streamController.error(new DOMException("Aborted", "AbortError"));
+        }, { once: true });
+        notifyStreamReady();
+      },
+    }), {
+      headers: { "content-type": "text/plain" },
+    }),
+  });
+
+  const pendingResponse = worker.fetch(
+    makeTaskRequest({ goal: "Cancel while reading", url: "https://example.com/stream" }, { signal: controller.signal }),
+    { EXPORTFLOW_API_TOKEN: TEST_TOKEN },
+  );
+  await streamReady;
+  controller.abort();
+  const response = await pendingResponse;
+
+  assert.equal(response.status, 499);
+  const task = await response.json();
+  assert.equal(task.state, "cancelled");
+  assert.equal(task.errors[0].code, "TASK_CANCELLED");
+});
+
+test("POST /api/v1/tasks does not follow a redirect after caller cancellation", async () => {
+  const controller = new AbortController();
+  let fetchCalls = 0;
+  const worker = createWorker({
+    fetchImpl: async () => {
+      fetchCalls++;
+      controller.abort();
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://example.com/next" },
+      });
+    },
+  });
+  const response = await worker.fetch(
+    makeTaskRequest({ goal: "Cancel redirect", url: "https://example.com/start" }, { signal: controller.signal }),
+    { EXPORTFLOW_API_TOKEN: TEST_TOKEN },
+  );
+
+  assert.equal(response.status, 499);
+  const task = await response.json();
+  assert.equal(task.state, "cancelled");
+  assert.equal(fetchCalls, 1);
 });
 
 test("POST /api/v1/tasks executes end-to-end bounded HTTP fetch and returns structured evidence & usage", async () => {

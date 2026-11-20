@@ -1,4 +1,5 @@
 import { validatePublicHttpUrl, fetchPublicResource } from "./http-fetch.js";
+import { throwIfAborted, createTaskCancelledError } from "./cancellation.js";
 
 export const MAP_CRAWL_LIMITS = Object.freeze({
   maxPages: 5,
@@ -205,7 +206,8 @@ async function defaultParseHtmlLinks(html) {
   return links;
 }
 
-async function getRobotsPolicy(origin, fetchResource) {
+async function getRobotsPolicy(origin, fetchResource, signal) {
+  throwIfAborted(signal);
   const robotsUrl = new URL("/robots.txt", origin).href;
   try {
     const response = await fetchResource(robotsUrl, {
@@ -215,6 +217,7 @@ async function getRobotsPolicy(origin, fetchResource) {
       userAgent: EXPORTFLOW_CRAWLER_USER_AGENT,
       allowedOrigin: origin,
     });
+    throwIfAborted(signal);
     if ([401, 403, 429].includes(response.status) || response.status >= 500) {
       throw new MapCrawlError("ROBOTS_UNREACHABLE", "robots.txt denied access or returned a server error; crawling was stopped.", 503);
     }
@@ -237,6 +240,7 @@ async function getRobotsPolicy(origin, fetchResource) {
       warnings: [],
     };
   } catch (error) {
+    if (error?.code === "TASK_CANCELLED" || signal?.aborted) throw createTaskCancelledError();
     if (error instanceof MapCrawlError) throw error;
     throw new MapCrawlError("ROBOTS_UNREACHABLE", "robots.txt could not be retrieved; crawling was stopped.", 503);
   }
@@ -252,13 +256,15 @@ function sameOriginUrl(value, baseUrl, expectedOrigin) {
   }
 }
 
-async function fetchSitemaps(policy, origin, fetchResource, warnings, maxUrls) {
+async function fetchSitemaps(policy, origin, fetchResource, warnings, maxUrls, signal) {
+  throwIfAborted(signal);
   const sitemapUrls = parseRobotsSitemaps(policy, origin);
   if (!sitemapUrls.length) sitemapUrls.push(new URL("/sitemap.xml", origin).href);
 
   const urls = [];
   const fetched = [];
   for (const sitemapUrl of sitemapUrls.slice(0, MAP_CRAWL_LIMITS.maxSitemaps)) {
+    throwIfAborted(signal);
     if (urls.length >= maxUrls) break;
     try {
       const response = await fetchResource(sitemapUrl, {
@@ -268,6 +274,7 @@ async function fetchSitemaps(policy, origin, fetchResource, warnings, maxUrls) {
         userAgent: EXPORTFLOW_CRAWLER_USER_AGENT,
       allowedOrigin: origin,
       });
+      throwIfAborted(signal);
       if (response.status < 200 || response.status >= 300) {
         warnings.push("Sitemap returned HTTP " + response.status + ".");
         continue;
@@ -286,7 +293,8 @@ async function fetchSitemaps(policy, origin, fetchResource, warnings, maxUrls) {
       for (const url of extractSitemapLocations(response.body, sitemapUrl, maxUrls - urls.length)) {
         if (isAllowedByRobots(url, policy) && !urls.includes(url)) urls.push(url);
       }
-    } catch {
+    } catch (error) {
+      if (error?.code === "TASK_CANCELLED" || signal?.aborted) throw createTaskCancelledError();
       warnings.push("A sitemap could not be retrieved.");
     }
   }
@@ -332,7 +340,9 @@ async function createSiteContext(input, options) {
   const origin = requestedUrl.origin;
   const fetchResource = options.fetchResource || fetchPublicResource;
   const parser = options.parseHtmlLinks || defaultParseHtmlLinks;
-  const robots = await getRobotsPolicy(origin, fetchResource);
+  throwIfAborted(options.signal);
+  const robots = await getRobotsPolicy(origin, fetchResource, options.signal);
+  throwIfAborted(options.signal);
 
   if (!isAllowedByRobots(requestedUrl.href, robots.policy)) {
     throw new MapCrawlError("ROBOTS_DISALLOWED_TARGET", "The requested page is disallowed by robots.txt.", 403);
@@ -344,7 +354,9 @@ async function createSiteContext(input, options) {
     fetchResource,
     robots.warnings,
     options.maxUrls || MAP_CRAWL_LIMITS.maxUrls,
+    options.signal,
   );
+  throwIfAborted(options.signal);
 
   const homepage = await fetchResource(requestedUrl.href, {
     maxBytes: MAP_CRAWL_LIMITS.maxPageBytes,
@@ -353,6 +365,7 @@ async function createSiteContext(input, options) {
     userAgent: EXPORTFLOW_CRAWLER_USER_AGENT,
     allowedOrigin: origin,
   });
+  throwIfAborted(options.signal);
   const warnings = [...robots.warnings];
   const homepageFinal = validatePublicHttpUrl(homepage.finalUrl || requestedUrl.href);
   if (homepageFinal.origin !== origin) {
@@ -366,6 +379,7 @@ async function createSiteContext(input, options) {
     String(homepage.contentType || "").toLowerCase().includes("text/html")
     ? await pageLinks(homepage.body, homepageFinal.href, origin, robots.policy, parser)
     : [];
+  throwIfAborted(options.signal);
 
   return {
     requestedUrl: requestedUrl.href,
@@ -381,12 +395,15 @@ async function createSiteContext(input, options) {
 }
 
 export async function mapWebsite(input, options = {}) {
+  throwIfAborted(options.signal);
   const maxUrls = validateOptions(options.maxUrls, MAP_CRAWL_LIMITS.maxUrls, 20, "maxUrls");
   const context = await createSiteContext(input, { ...options, maxUrls });
+  throwIfAborted(options.signal);
   const seen = new Set([context.homepage.finalUrl || context.requestedUrl]);
   const urls = [];
 
   for (const url of [...context.sitemap.urls, ...context.links]) {
+    throwIfAborted(options.signal);
     if (url === context.requestedUrl || seen.has(url)) continue;
     seen.add(url);
     urls.push({
@@ -426,6 +443,7 @@ export async function mapWebsite(input, options = {}) {
 }
 
 export async function crawlWebsite(input, options = {}) {
+  throwIfAborted(options.signal);
   const maxPages = validateOptions(options.maxPages, MAP_CRAWL_LIMITS.maxPages, 5, "maxPages");
   const maxDepth = options.maxDepth === undefined ? 1 : options.maxDepth;
   if (!Number.isInteger(maxDepth) || maxDepth < 0 || maxDepth > MAP_CRAWL_LIMITS.maxDepth) {
@@ -436,6 +454,7 @@ export async function crawlWebsite(input, options = {}) {
     ...options,
     maxUrls: Math.max(maxPages * 5, 10),
   });
+  throwIfAborted(options.signal);
   const pages = [];
   const sources = [];
   const warnings = [...context.warnings];
@@ -449,6 +468,7 @@ export async function crawlWebsite(input, options = {}) {
   let totalBytes = 0;
 
   while (queue.length && pages.length < maxPages) {
+    throwIfAborted(options.signal);
     const item = queue.shift();
     if (item.depth > maxDepth) continue;
     if (visited.has(item.url)) continue;
@@ -472,7 +492,9 @@ export async function crawlWebsite(input, options = {}) {
           userAgent: EXPORTFLOW_CRAWLER_USER_AGENT,
           allowedOrigin: context.origin,
         });
-      } catch {
+        throwIfAborted(options.signal);
+      } catch (error) {
+        if (error?.code === "TASK_CANCELLED" || options.signal?.aborted) throw createTaskCancelledError();
         warnings.push("A discovered page could not be retrieved.");
         continue;
       }
@@ -510,7 +532,9 @@ export async function crawlWebsite(input, options = {}) {
     }
 
     const links = await pageLinks(page.body, page.url, context.origin, context.robots.policy, context.parser);
+    throwIfAborted(options.signal);
     for (const link of links) {
+      throwIfAborted(options.signal);
       if (!visited.has(link) && !queue.some((entry) => entry.url === link)) {
         queue.push({ url: link, depth: item.depth + 1, discoveredFrom: page.url });
       }

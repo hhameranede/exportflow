@@ -1,5 +1,6 @@
 import { normalizeResult } from "./result.js";
 import { validatePublicHttpUrl } from "./http-fetch.js";
+import { awaitWithSignal, throwIfAborted, createTaskCancelledError } from "./cancellation.js";
 
 export const SEARCH_LIMITS = Object.freeze({
   maxQueryLength: 1024,
@@ -131,7 +132,8 @@ export function createSearchAdapter({
       "no-pagination",
       "untrusted-result-descriptions",
     ],
-    async execute(input = {}) {
+    async execute(input = {}, options = {}) {
+      throwIfAborted(options.signal);
       const { query, limit } = validateSearchInput(input);
       if (typeof webSearch !== "function") {
         throw new SearchAdapterError("SEARCH_UNAVAILABLE", "Cloudflare Web Search API binding is not configured.", 503);
@@ -139,20 +141,35 @@ export function createSearchAdapter({
 
       let response;
       try {
-        response = await webSearch({ gatewayId, query, provider, limit });
-      } catch {
+        // The Workers AI websearch binding has no signal parameter. Match the
+        // Cloudflare Agents source contract: stop awaiting when the caller aborts.
+        response = await awaitWithSignal(
+          webSearch({ gatewayId, query, provider, limit }),
+          options.signal,
+        );
+      } catch (error) {
+        if (error?.code === "TASK_CANCELLED" || options.signal?.aborted) {
+          throw createTaskCancelledError();
+        }
         throw new SearchAdapterError("SEARCH_PROVIDER_FAILED", "Cloudflare Web Search request failed.", 502);
       }
+      throwIfAborted(options.signal);
       if (response && typeof response.json === "function" && response.ok === false) {
         throw new SearchAdapterError("SEARCH_PROVIDER_HTTP_ERROR", "Cloudflare Web Search returned an error.", 502);
       }
 
       let payload;
       try {
-        payload = response && typeof response.json === "function" ? await response.json() : response;
-      } catch {
+        payload = response && typeof response.json === "function"
+          ? await awaitWithSignal(response.json(), options.signal)
+          : response;
+      } catch (error) {
+        if (error?.code === "TASK_CANCELLED" || options.signal?.aborted) {
+          throw createTaskCancelledError();
+        }
         throw new SearchAdapterError("INVALID_SEARCH_RESPONSE", "Cloudflare Web Search returned invalid JSON.", 502);
       }
+      throwIfAborted(options.signal);
       if (!payload || !Array.isArray(payload.items)) {
         throw new SearchAdapterError("INVALID_SEARCH_RESPONSE", "Cloudflare Web Search response did not include an items array.", 502);
       }
