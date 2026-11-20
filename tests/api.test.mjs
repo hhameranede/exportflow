@@ -83,18 +83,20 @@ function makeTaskRequest(body, {
   });
 }
 
-test("auth fails closed with 503 when EXPORTFLOW_API_TOKEN is missing or whitespace-only", async () => {
+test("tenant API authentication fails closed when the dedicated D1 binding is missing or invalid", async () => {
   const worker = createWorker();
-  const missingRes = await worker.fetch(makeTaskRequest({ goal: "Fetch page", url: "https://example.com" }), {});
-  assert.equal(missingRes.status, 503);
-  assert.equal((await missingRes.json()).error.code, "AUTH_NOT_CONFIGURED");
+  const request = makeTaskRequest({ goal: "Fetch page", url: "https://example.com" });
 
-  const blankRes = await worker.fetch(
+  const missing = await worker.fetch(request, {});
+  assert.equal(missing.status, 503);
+  assert.equal((await missing.json()).error.code, "AUTH_NOT_CONFIGURED");
+
+  const invalidBinding = await worker.fetch(
     makeTaskRequest({ goal: "Fetch page", url: "https://example.com" }),
-    { EXPORTFLOW_API_TOKEN: "   \n  " },
+    { EXPORTFLOW_AUTH_DB: {} },
   );
-  assert.equal(blankRes.status, 503);
-  assert.equal((await blankRes.json()).error.code, "AUTH_NOT_CONFIGURED");
+  assert.equal(invalidBinding.status, 503);
+  assert.equal((await invalidBinding.json()).error.code, "AUTH_NOT_CONFIGURED");
 });
 
 test("auth rejects missing, empty, oversized, malformed, and invalid Bearer tokens with 401", async () => {
@@ -568,4 +570,47 @@ test("Node HTTP server bridges localhost requests safely, enforces body limits, 
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }
+});
+
+test("REST reserves one persistent tenant request and returns plan quota headers", async () => {
+  let fetchCalls = 0;
+  const worker = createWorker({
+    fetchImpl: async () => {
+      fetchCalls++;
+      return new Response("ok", { headers: { "content-type": "text/plain" } });
+    },
+  });
+  const env = makeTestEnv({ requestLimit: 1 });
+
+  const first = await worker.fetch(makeTaskRequest({ goal: "First request", url: "https://example.com/first" }), env);
+  assert.equal(first.status, 200);
+  assert.equal(first.headers.get("x-plan-limit"), "1");
+  assert.equal(first.headers.get("x-plan-remaining"), "0");
+  assert.ok(first.headers.get("x-plan-reset"));
+
+  const second = await worker.fetch(makeTaskRequest({ goal: "Second request", url: "https://example.com/second" }), env);
+  assert.equal(second.status, 429);
+  assert.equal((await second.json()).error.code, "PLAN_QUOTA_EXCEEDED");
+  assert.equal(second.headers.get("x-plan-limit"), "1");
+  assert.equal(second.headers.get("x-plan-remaining"), "0");
+  assert.ok(Number(second.headers.get("retry-after")) >= 1);
+  assert.equal(fetchCalls, 1);
+});
+
+test("invalid task contracts do not consume the persistent tenant request quota", async () => {
+  let fetchCalls = 0;
+  const worker = createWorker({
+    fetchImpl: async () => {
+      fetchCalls++;
+      return new Response("ok", { headers: { "content-type": "text/plain" } });
+    },
+  });
+  const env = makeTestEnv({ requestLimit: 1 });
+
+  const invalid = await worker.fetch(makeTaskRequest({ goal: "", url: "https://example.com/invalid" }), env);
+  assert.equal(invalid.status, 400);
+
+  const valid = await worker.fetch(makeTaskRequest({ goal: "Valid after invalid", url: "https://example.com/valid" }), env);
+  assert.equal(valid.status, 200);
+  assert.equal(fetchCalls, 1);
 });
