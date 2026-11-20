@@ -933,6 +933,9 @@ export const MARKETING_JS = `(function () {
       authMessage(status, "Secure account services are available.", "success");
     }
 
+    var passwordForm = document.querySelector("[data-account-password-form]");
+    if (passwordForm) passwordForm.hidden = !Boolean(config && config.emailPasswordEnabled);
+
     var linkGoogle = document.querySelector("[data-auth-link-google]");
     if (linkGoogle) {
       linkGoogle.disabled = !Boolean(config && config.googleEnabled);
@@ -1254,6 +1257,36 @@ export const MARKETING_JS = `(function () {
           await beginGoogleAuth("link");
         } catch (error) {
           showToast(error.message || "Google linking failed.");
+        }
+      });
+    }
+
+    var passwordForm = document.querySelector("[data-account-password-form]");
+    if (passwordForm) {
+      passwordForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        var currentPassword = String(passwordForm.elements.currentPassword.value || "");
+        var newPassword = String(passwordForm.elements.newPassword.value || "");
+        var confirmPassword = String(passwordForm.elements.confirmPassword.value || "");
+        var status = passwordForm.querySelector("[data-password-change-status]");
+        if (newPassword.length < 8) {
+          authMessage(status, "Use at least 8 characters for the new password.", "error");
+          return;
+        }
+        if (newPassword !== confirmPassword) {
+          authMessage(status, "The new passwords do not match.", "error");
+          return;
+        }
+        try {
+          await authRequest("change-password", "POST", {
+            currentPassword: currentPassword,
+            newPassword: newPassword,
+            revokeOtherSessions: true
+          });
+          passwordForm.reset();
+          authMessage(status, "Password changed. Other active sessions were signed out.", "success");
+        } catch (error) {
+          authMessage(status, error.message || "Could not change your password.", "error");
         }
       });
     }
