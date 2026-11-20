@@ -1,0 +1,196 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createTenantAdminHttpHandler } from "../src/core/tenant-admin-http.js";
+
+const TABLES = [
+  "plan_policies",
+  "tenants",
+  "api_keys",
+  "tenant_request_usage",
+  "tenant_admin_audit_log",
+];
+
+function makeD1(tables = TABLES) {
+  return {
+    prepare(sql) {
+      return {
+        bind(...params) {
+          return {
+            sql,
+            params,
+            async all() { return { results: tables.map((name) => ({ name })) }; },
+          };
+        },
+      };
+    },
+    async batch() { return []; },
+  };
+}
+
+function jsonRequest(path, body = {}, method = "POST") {
+  return new Request("https://exportflow.me" + path, {
+    method,
+    headers: {
+      origin: "https://exportflow.me",
+      "content-type": "application/json",
+    },
+    body: method === "GET" || method === "HEAD" ? undefined : JSON.stringify(body),
+  });
+}
+
+function setup({ owner = { allowed: true, actorId: "owner_123" }, tables = TABLES } = {}) {
+  const calls = { authorization: [], service: [], actions: [] };
+  const handler = createTenantAdminHttpHandler({
+    authorizeOwner: async (request, env) => {
+      calls.authorization.push({ request, env });
+      return owner;
+    },
+    serviceFactory: (options) => {
+      calls.service.push(options);
+      return Object.fromEntries([
+        ["createPlanPolicy", async (input) => { calls.actions.push(["createPlanPolicy", input, await options.authorizeAdmin({ action: "plans:write" })]); return { planCode: input.planCode }; }],
+        ["provisionTenant", async (input) => { calls.actions.push(["provisionTenant", input, await options.authorizeAdmin({ action: "tenants:create" })]); return { tenantId: input.tenantId || "tenant_created", planCode: input.planCode }; }],
+        ["setTenantStatus", async (input) => { calls.actions.push(["setTenantStatus", input, await options.authorizeAdmin({ action: "tenants:status" })]); return { tenantId: input.tenantId, status: input.status }; }],
+        ["assignTenantPlan", async (input) => { calls.actions.push(["assignTenantPlan", input, await options.authorizeAdmin({ action: "tenants:plan" })]); return { tenantId: input.tenantId, planCode: input.planCode }; }],
+        ["issueApiKey", async (input) => { calls.actions.push(["issueApiKey", input, await options.authorizeAdmin({ action: "api_keys:issue" })]); return { tenantId: input.tenantId, keyId: "0123456789abcdef", token: "one-time-test-token", revealOnce: true }; }],
+        ["revokeApiKey", async (input) => { calls.actions.push(["revokeApiKey", input, await options.authorizeAdmin({ action: "api_keys:revoke" })]); return { keyId: input.keyId, status: "revoked" }; }],
+        ["rotateApiKey", async (input) => { calls.actions.push(["rotateApiKey", input, await options.authorizeAdmin({ action: "api_keys:rotate" })]); return { keyId: "fedcba9876543210", revealOnce: true }; }],
+      ]);
+    },
+  });
+  return { handler, calls, env: { EXPORTFLOW_AUTH_DB: makeD1(tables) } };
+}
+
+test("tenant admin handler ignores paths outside its namespace", async () => {
+  const { handler, calls, env } = setup();
+  assert.equal(await handler(jsonRequest("/api/v1/tasks", { goal: "x" }), env), null);
+  assert.equal(calls.authorization.length, 0);
+});
+
+test("unknown admin paths are not routed to tenant service", async () => {
+  const { handler, calls, env } = setup();
+  const response = await handler(jsonRequest("/api/v1/admin/unknown"), env);
+  assert.equal(response.status, 404);
+  assert.equal(calls.authorization.length, 0);
+  assert.equal(calls.service.length, 0);
+});
+
+test("admin routes accept only POST", async () => {
+  const { handler, calls, env } = setup();
+  const response = await handler(jsonRequest("/api/v1/admin/tenants", {}, "GET"), env);
+  assert.equal(response.status, 405);
+  assert.equal(calls.authorization.length, 0);
+});
+
+test("an unverified owner identity is rejected before D1 access", async () => {
+  const { handler, calls, env } = setup({ owner: { allowed: false } });
+  const response = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), env);
+  assert.equal(response.status, 403);
+  assert.equal(calls.service.length, 0);
+  assert.equal(calls.actions.length, 0);
+});
+
+test("admin storage binding and migration readiness fail closed", async () => {
+  const { handler } = setup();
+  const noBinding = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), {});
+  assert.equal(noBinding.status, 503);
+  assert.equal((await noBinding.json()).error.code, "ADMIN_STORAGE_NOT_CONFIGURED");
+
+  const missingAuditTable = await handler(
+    jsonRequest("/api/v1/admin/tenants", { planCode: "free" }),
+    { EXPORTFLOW_AUTH_DB: makeD1(TABLES.filter((name) => name !== "tenant_admin_audit_log")) },
+  );
+  assert.equal(missingAuditTable.status, 503);
+  assert.equal((await missingAuditTable.json()).error.code, "ADMIN_SCHEMA_NOT_READY");
+});
+
+test("plan policy and tenant provisioning routes pass strict validated bodies", async () => {
+  const { handler, calls, env } = setup();
+  const planResponse = await handler(jsonRequest("/api/v1/admin/plan-policies", {
+    planCode: "developer",
+    quotaPeriod: "monthly",
+    requestLimit: 500,
+    policyVersion: "v1",
+  }), env);
+  assert.equal(planResponse.status, 201);
+  assert.deepEqual(calls.actions[0][0], "createPlanPolicy");
+  assert.deepEqual(calls.actions[0][1], {
+    planCode: "developer",
+    quotaPeriod: "monthly",
+    requestLimit: 500,
+    policyVersion: "v1",
+  });
+
+  const tenantResponse = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "developer" }), env);
+  assert.equal(tenantResponse.status, 201);
+  assert.equal(calls.actions[1][0], "provisionTenant");
+  assert.deepEqual(calls.actions[1][1], { planCode: "developer" });
+});
+
+test("tenant status and plan routes bind identifiers from the URL, not the body", async () => {
+  const { handler, calls, env } = setup();
+  const statusResponse = await handler(jsonRequest("/api/v1/admin/tenants/tenant_alpha/status", { status: "suspended" }), env);
+  assert.equal(statusResponse.status, 200);
+  assert.deepEqual(calls.actions[0][1], { tenantId: "tenant_alpha", status: "suspended" });
+
+  const planResponse = await handler(jsonRequest("/api/v1/admin/tenants/tenant_alpha/plan", { planCode: "pro" }), env);
+  assert.equal(planResponse.status, 200);
+  assert.deepEqual(calls.actions[1][1], { tenantId: "tenant_alpha", planCode: "pro" });
+});
+
+test("API key issue, rotate and revoke routes bind tenant and key identifiers safely", async () => {
+  const { handler, calls, env } = setup();
+  const issue = await handler(jsonRequest("/api/v1/admin/tenants/tenant_alpha/api-keys", { scopes: ["tasks:fetch"] }), env);
+  assert.equal(issue.status, 201);
+  assert.equal((await issue.json()).data.revealOnce, true);
+  assert.deepEqual(calls.actions[0][1], { tenantId: "tenant_alpha", scopes: ["tasks:fetch"] });
+
+  const rotate = await handler(jsonRequest("/api/v1/admin/tenants/tenant_alpha/api-keys/0123456789abcdef/rotate", { scopes: ["tasks:map"] }), env);
+  assert.equal(rotate.status, 200);
+  assert.deepEqual(calls.actions[1][1], { tenantId: "tenant_alpha", keyId: "0123456789abcdef", scopes: ["tasks:map"], expiresAt: undefined });
+
+  const revoke = await handler(jsonRequest("/api/v1/admin/tenants/tenant_alpha/api-keys/0123456789abcdef/revoke", {}), env);
+  assert.equal(revoke.status, 200);
+  assert.deepEqual(calls.actions[2][1], { tenantId: "tenant_alpha", keyId: "0123456789abcdef" });
+});
+
+test("admin payloads reject unexpected fields and never reach the service", async () => {
+  const { handler, calls, env } = setup();
+  const response = await handler(jsonRequest("/api/v1/admin/tenants", {
+    planCode: "free",
+    status: "active",
+    actorId: "attacker",
+  }), env);
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error.code, "INVALID_ADMIN_INPUT");
+  assert.equal(calls.service.length, 0);
+});
+
+test("each request gets a new service bound to that request's verified owner identity", async () => {
+  let nextActor = "owner_A";
+  const calls = [];
+  const handler = createTenantAdminHttpHandler({
+    authorizeOwner: async () => ({ allowed: true, actorId: nextActor }),
+    serviceFactory: (options) => {
+      calls.push(options);
+      return { async provisionTenant(input) {
+        return await options.authorizeAdmin({ action: "tenants:create" }).then((identity) => ({ tenantId: input.tenantId || "created", actorId: identity.actorId }));
+      } };
+    },
+  });
+  const env = { EXPORTFLOW_AUTH_DB: makeD1() };
+  const first = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), env);
+  nextActor = "owner_B";
+  const second = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), env);
+  assert.equal((await first.json()).data.actorId, "owner_A");
+  assert.equal((await second.json()).data.actorId, "owner_B");
+  assert.equal(calls.length, 2);
+  assert.notEqual(calls[0], calls[1]);
+});
+
+test("responses are private and never cache one-time API keys", async () => {
+  const { handler, env } = setup();
+  const response = await handler(jsonRequest("/api/v1/admin/tenants/tenant_alpha/api-keys", { scopes: ["tasks:fetch"] }), env);
+  assert.match(response.headers.get("cache-control"), /no-store/);
+  assert.equal(response.headers.get("access-control-allow-origin"), null);
+});
