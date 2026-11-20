@@ -8,7 +8,6 @@ test("authentication remains disabled without a dedicated D1 binding and server 
     authConfigured: false,
     googleEnabled: false,
     emailPasswordEnabled: false,
-    migrationEnabled: false,
   });
 });
 
@@ -49,6 +48,10 @@ test("email/password remains disabled until a Cloudflare Email binding and sende
     EMAIL: { send() {} },
     AUTH_EMAIL_FROM: "accounts@exportflow.me",
   }).emailPasswordEnabled, true);
+  assert.equal(getAuthFeatureStatus({
+    ...base,
+    BETTER_AUTH_URL: "http://example.com",
+  }).authConfigured, false);
 });
 
 test("public auth config returns capability booleans only and never returns credentials", async () => {
@@ -68,7 +71,7 @@ test("public auth config returns capability booleans only and never returns cred
   assert.equal(body.authConfigured, true);
   assert.equal(body.googleEnabled, true);
   assert.equal(body.emailPasswordEnabled, false);
-  assert.equal(body.migrationEnabled, true);
+  assert.equal("migrationEnabled" in body, false);
   assert.equal(JSON.stringify(body).includes("test-client-secret"), false);
   assert.equal(JSON.stringify(body).includes("test-migration-token"), false);
 });
