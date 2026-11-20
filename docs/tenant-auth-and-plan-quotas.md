@@ -47,6 +47,7 @@ The Worker expects a separate D1 binding named `EXPORTFLOW_AUTH_DB`. Apply migra
 
 1. `migrations/0001_tenant_auth_quota.sql`
 2. `migrations/0002_guard_quota_period_transitions.sql`
+3. `migrations/0003_tenant_admin_audit_log.sql`
 
 Tables:
 - `plan_policies`: owner-managed daily/monthly request allowance and policy version.
@@ -57,6 +58,22 @@ Tables:
 The migrations intentionally seed no plan, tenant or API key. Do not invent Free/Developer/Pro allowances. Decide limits and approve the trusted provisioning/revocation workflow before onboarding customers.
 
 The existing dedicated integration-test D1 database has previously received these schema migrations. This PR does not re-apply migrations or change any D1 database. Production currently has no `EXPORTFLOW_AUTH_DB` binding configured.
+
+## Privileged Tenant Lifecycle Service — isolated implementation
+
+The Draft implementation adds `src/core/tenant-admin.js` as an internal D1-backed service. It does not add an HTTP route, public provisioning endpoint, dashboard or production binding.
+
+Supported operations:
+- Create/update owner-managed plan policies with validated periods, positive integer request limits and explicit policy versions.
+- Provision a tenant only when its target plan is active.
+- Issue a scoped API key only for an active tenant on an active plan. The plaintext key is returned once; D1 stores only the salted SHA-256 digest and the audit record excludes both token and digest.
+- Revoke an active key only when both tenant ID and key ID match.
+- Rotate an active key in one D1 batch: revoke the old key, insert the replacement, and append both audit events atomically.
+- Suspend/close tenants and reassign active plans. A closed tenant cannot be reactivated through this service.
+
+Every mutating operation requires an injected `authorizeAdmin` function. The caller must derive the operator identity from a verified server-side session and an explicit owner/admin role; request-body fields, query parameters and caller-supplied headers must never establish authority. Construction fails without this function, and every operation fails closed when it denies access. No Better Auth role mapping or public route is wired in this PR.
+
+Migration `0003_tenant_admin_audit_log.sql` adds an append-only audit table with update/delete guards. Each D1 mutation and its audit event are submitted in the same `D1Database.batch()`; if the batch fails, the operation returns a sanitized 503. The migration has not been applied to any database. The service remains draft-only until the verified owner-role integration and real D1 Binding acceptance are separately reviewed.
 
 ## Quota semantics
 
@@ -80,7 +97,7 @@ The existing dedicated integration-test D1 database has previously received thes
 ## Important exclusions
 
 This implementation does not include:
-- Tenant creation, key provisioning/revocation admin UI or public provisioning endpoint.
+- Public provisioning/admin HTTP endpoint or dashboard, and the verified Better Auth owner/admin role integration.
 - Durable task records or a durable usage-receipt ledger.
 - Cost Router reservation/settlement, EF Credit weights, monetary billing, invoices, checkout, subscriptions, webhooks, top-ups or refunds.
 - Search, Research or Browser runtime enablement.
@@ -88,11 +105,12 @@ This implementation does not include:
 
 ## Required acceptance before customer enablement
 
-1. Choose plan limits, quota period, policy versioning and trusted tenant/key provisioning procedures.
+1. Choose plan limits and policy versioning, and bind the internal lifecycle service to a verified server-side owner/admin identity without trusting caller-controlled fields.
 2. Apply migrations to a dedicated, explicitly approved non-production D1 database only.
 3. Run the actual JavaScript `D1Database` Binding path in an approved Worker Preview/test target, including auth lookup, revocation, expiry, scopes, concurrency, quota exhaustion, policy snapshots, tenant isolation, and fail-closed storage errors.
 4. Verify the same API key and quota policy across both REST and MCP.
-5. Confirm the Production and MCP Workers have the intended separate `EXPORTFLOW_AUTH_DB` binding, without reusing the human account `AUTH_DB`.
-6. Obtain separate owner approval before changing bindings, deploying or enabling live customer keys.
+5. Exercise migration 0003 and tenant plan/create/issue/rotate/revoke/suspend operations against a dedicated test D1 Binding; verify audit immutability, cross-tenant isolation and atomic rollback when audit writes fail.
+6. Confirm the Production and MCP Workers have the intended separate `EXPORTFLOW_AUTH_DB` binding, without reusing the human account `AUTH_DB`.
+7. Obtain separate owner approval before changing bindings, deploying or enabling live customer keys.
 
 Node fixtures and Wrangler dry-run builds are supporting checks only; neither proves Cloudflare D1 Binding runtime acceptance.
