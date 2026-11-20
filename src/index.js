@@ -47,7 +47,7 @@ async function hasQuotaSchema(env) {
   if (typeof db?.prepare !== "function") return false;
   try {
     // This probe runs only after the caller has authenticated successfully.
-    await db.prepare("SELECT 1 FROM tenant_request_usage LIMIT 0").first();
+    await db.prepare("SELECT tenant_id, window_id, plan_code, policy_version, request_limit, requests_used, updated_at FROM tenant_request_usage LIMIT 0").first();
     return true;
   } catch {
     // A binding without the expected quota schema must fail closed.

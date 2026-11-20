@@ -15,7 +15,7 @@ This change replaces the single shared Worker Bearer token with tenant-scoped AP
 
 ## D1 binding and migration
 
-The Worker expects an explicitly configured D1 binding named `EXPORTFLOW_AUTH_DB`. Apply `migrations/0001_tenant_auth_quota.sql` to a dedicated, approved D1 database before adding this binding to any Worker version.
+The Worker expects an explicitly configured D1 binding named `EXPORTFLOW_AUTH_DB`. Apply `migrations/0001_tenant_auth_quota.sql` and then `migrations/0002_guard_quota_period_transitions.sql` to a dedicated, approved D1 database before adding this binding to any Worker version. Both migrations are required for the quota-period reset protection described below.
 
 The migration creates:
 - `plan_policies`: owner-managed daily/monthly request allowance and policy version.
@@ -28,8 +28,8 @@ The migration deliberately inserts no plan rows or tenant records. Do not invent
 ## Platform readiness reporting
 
 - `auth.configured` reports whether the Worker has the D1 binding.
-- `auth.ready` is stricter: the quota table must be queryable and at least one non-expired active API key must join to an active tenant and active plan with the `tasks:fetch` scope.
-- `liveCapabilities` includes `http.fetch.v1` only when that readiness check succeeds. A binding alone, an empty database, an incomplete migration, or a tenant without an eligible key must not be advertised as a live customer capability.
+- `auth.ready` is evaluated for the caller only when a valid API key is supplied: the key must resolve to an active tenant and active plan with the `tasks:fetch` scope, and the quota table must expose every column used by the request-reservation query. The public unauthenticated response always reports `false` and performs no D1 query; readiness does not scan all tenants.
+- `liveCapabilities` includes `http.fetch.v1` only in the authenticated caller's response after key validation and full quota-schema verification. A binding alone, an empty database, or an incomplete migration must not be advertised as a live capability.
 
 ## Public platform readiness
 
@@ -79,7 +79,7 @@ This PR adds only tenant request-count quotas and ephemeral Fetch usage receipts
 
 1. Choose plan request limits and window periods.
 2. Provision plan, tenant and hashed API-key rows through a trusted administrative path; never insert plaintext API keys.
-3. Apply the migration to a dedicated D1 database and verify it with controlled synthetic rows.
+3. Apply migrations `0001_tenant_auth_quota.sql` and `0002_guard_quota_period_transitions.sql` in order to a dedicated D1 database and verify them with controlled synthetic rows.
 4. Add `EXPORTFLOW_AUTH_DB` only to a separately approved isolated Worker/Preview first.
 5. Validate auth, revocation, expiry, scopes, quota concurrency, and fail-closed behavior in the target Worker runtime.
 6. Do not deploy to Production or expose customer keys until the separate release gate is approved.

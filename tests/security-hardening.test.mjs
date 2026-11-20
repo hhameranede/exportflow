@@ -9,7 +9,7 @@ function makeAuthDb({keyExists=true,schemaExists=true}={}){
  const counts={keyLookups:0,quotaSchemaProbes:0};
  const row={key_id:KEY_ID,tenant_id:"tenant_security_test",key_status:"active",expires_at:null,scopes_json:'["tasks:fetch"]',tenant_status:"active",plan_code:"test",plan_status:"active",quota_period:"daily",request_limit:10,policy_version:"test-v1"};
  return {counts,prepare(sql){let params=[];return {bind(...values){params=values;return this;},async first(){
-  if(sql.includes("tenant_request_usage LIMIT 0")){counts.quotaSchemaProbes++;if(!schemaExists)throw new Error("synthetic missing quota table");return null;}
+  if(sql.includes("FROM tenant_request_usage LIMIT 0")){counts.quotaSchemaProbes++;if(sql!=="SELECT tenant_id, window_id, plan_code, policy_version, request_limit, requests_used, updated_at FROM tenant_request_usage LIMIT 0")throw new Error("quota schema probe must validate every required column");if(!schemaExists)throw new Error("synthetic missing quota table");return null;}
   if(sql.includes("FROM api_keys")){counts.keyLookups++;return keyExists&&params[0]===KEY_ID&&params[1]===KEY_HASH?{...row}:null;}
   throw new Error("Unexpected SQL in security test fixture.");
  }};}};
