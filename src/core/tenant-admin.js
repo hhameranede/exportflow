@@ -142,7 +142,7 @@ export function createTenantAdminService({
     }
   }
 
-  async function generateKeyRecord(input, tenantId, action, actorId, createdAt, oldKeyId = null) {
+  async function generateKeyRecord(input, createdAt) {
     const scopes = validateScopes(input.scopes);
     const expiresAt = normalizeExpiry(input.expiresAt, createdAt);
     let generated;
@@ -224,7 +224,7 @@ export function createTenantAdminService({
       }
       const actorId = await requireAdmin("api_keys:issue", "tenant", tenantId);
       const createdAt = timestampFrom(now);
-      const { scopes, expiresAt, generated } = await generateKeyRecord(input, tenantId, "api_keys:issue", actorId, createdAt);
+      const { scopes, expiresAt, generated } = await generateKeyRecord(input, createdAt);
       const results = await commit([
         db.prepare(
           "INSERT INTO api_keys (key_id, tenant_id, key_hash, status, scopes_json, expires_at, created_at) SELECT ?1, ?2, ?3, 'active', ?4, ?5, ?6 FROM tenants AS t JOIN plan_policies AS p ON p.plan_code = t.plan_code WHERE t.tenant_id = ?2 AND t.status = 'active' AND p.status = 'active'"
@@ -250,7 +250,7 @@ export function createTenantAdminService({
       }
       const actorId = await requireAdmin("api_keys:rotate", "api_key", oldKeyId);
       const createdAt = timestampFrom(now);
-      const { scopes, expiresAt, generated } = await generateKeyRecord(input, tenantId, "api_keys:rotate", actorId, createdAt, oldKeyId);
+      const { scopes, expiresAt, generated } = await generateKeyRecord(input, createdAt);
       const results = await commit([
         db.prepare(
           "UPDATE api_keys SET status = 'revoked', revoked_at = ?1 WHERE key_id = ?2 AND tenant_id = ?3 AND status = 'active' AND EXISTS (SELECT 1 FROM tenants AS t JOIN plan_policies AS p ON p.plan_code = t.plan_code WHERE t.tenant_id = ?3 AND t.status = 'active' AND p.status = 'active')"
