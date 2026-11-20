@@ -123,7 +123,8 @@ function createEmailSender(env) {
 
 function buildAuthOptions(env, status) {
   const binding = env.AUTH_DB;
-  const baseUrl = (env.BETTER_AUTH_URL || "https://exportflow.me").trim().replace(/\\/+$/, "");
+  let baseUrl = (env.BETTER_AUTH_URL || "https://exportflow.me").trim();
+  while (baseUrl.endsWith("/")) baseUrl = baseUrl.slice(0, -1);
   const sendAccountEmail = createEmailSender(env);
   const socialProviders = {};
 
