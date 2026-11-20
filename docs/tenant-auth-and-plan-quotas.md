@@ -31,6 +31,12 @@ The migration deliberately inserts no plan rows or tenant records. Do not invent
 - `auth.ready` is stricter: the quota table must be queryable and at least one non-expired active API key must join to an active tenant and active plan with the `tasks:fetch` scope.
 - `liveCapabilities` includes `http.fetch.v1` only when that readiness check succeeds. A binding alone, an empty database, an incomplete migration, or a tenant without an eligible key must not be advertised as a live customer capability.
 
+## Public platform readiness
+
+- Unauthenticated GET /api/v1/platform returns public discovery metadata and performs no D1 queries. It reports auth.configured from binding presence, but auth.ready remains false and liveCapabilities remains empty until a caller presents an API key.
+- An authenticated request to /api/v1/platform validates that caller's API key, tenant, plan and tasks:fetch scope, then probes the quota table. Readiness is per-caller, not a scan of all provisioned tenants.
+- The readiness response is informational only; POST /api/v1/tasks always re-authenticates and atomically reserves quota. Never use cached readiness as authorization.
+
 ## Plan quota semantics
 
 - The plan period and request limit are read from the active server-side plan policy, not supplied by the caller.
@@ -40,6 +46,12 @@ The migration deliberately inserts no plan rows or tenant records. Do not invent
 - A syntactically valid, admitted task consumes one request even if the upstream site subsequently fails. Invalid JSON/contract requests do not consume persistent plan quota, although they do count toward the short-lived per-isolate burst limiter.
 - Exhaustion returns HTTP 429 with `Retry-After` and `X-Plan-Limit`, `X-Plan-Remaining`, and `X-Plan-Reset` headers.
 - Database failures fail closed with HTTP 503. The in-memory 60 requests/minute limiter remains supplementary burst protection only; it is not the plan quota.
+- The daily/monthly period cannot be changed for a plan or reassigned to a tenant during a UTC calendar month in which that tenant has consumed quota. Migration 0002_guard_quota_period_transitions.sql enforces this at the D1 layer; period transitions can occur at the next UTC month boundary. Request-limit and policy-version changes within the same period do not reset an existing window snapshot.
+
+## Pre-authentication abuse protection
+
+- Every POST /api/v1/tasks request passes a per-isolate IP burst guard before key hashing or D1 lookup. It uses Cloudflare's CF-Connecting-IP value and does not trust X-Forwarded-For or X-Real-IP.
+- This Worker-local guard is supplementary and is not a global rate limit. Configure the separate Cloudflare zone Rate Limiting rule described in docs/security/tenant-api-edge-rate-limits.md before public launch.
 
 ## Fetch usage receipts
 
@@ -73,3 +85,6 @@ This PR adds only tenant request-count quotas and ephemeral Fetch usage receipts
 6. Do not deploy to Production or expose customer keys until the separate release gate is approved.
 
 This source change does not add a D1 binding, create or alter a Cloudflare database, seed customer data, create API keys, or change Production.
+
+
+Migration 0002_guard_quota_period_transitions.sql is additive. It is included for review but is not applied to any D1 database by this source patch.

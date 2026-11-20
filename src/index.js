@@ -1,6 +1,7 @@
 import { chooseExecutionPath } from "./core/router.js";
 import { getAdapterCatalog } from "./core/adapters.js";
 import { authenticateRequest, createRateLimiter } from "./core/auth.js";
+import { getClientRateLimitKey, PRE_AUTH_MAX_REQUESTS_PER_ISOLATE, PRE_AUTH_WINDOW_MS } from "./core/client-rate-limit.js";
 import { reservePlanRequest } from "./core/plan-quota.js";
 import { readBoundedJsonBody, TaskContractError, validateTaskRequest } from "./core/task-contract.js";
 import { executeWebTask } from "./core/tasks.js";
@@ -41,35 +42,15 @@ function isAuthConfigured(env) {
   return typeof env?.EXPORTFLOW_AUTH_DB?.prepare === "function";
 }
 
-async function hasLiveFetchTenant(env) {
+async function hasQuotaSchema(env) {
   const db = env?.EXPORTFLOW_AUTH_DB;
   if (typeof db?.prepare !== "function") return false;
-
   try {
-    // Confirm the persistent quota table exists before advertising Fetch as live.
+    // This probe runs only after the caller has authenticated successfully.
     await db.prepare("SELECT 1 FROM tenant_request_usage LIMIT 0").first();
-    const row = await db.prepare(`
-      SELECT 1 AS tenant_auth_ready
-      FROM api_keys AS k
-      JOIN tenants AS t ON t.tenant_id = k.tenant_id
-      JOIN plan_policies AS p ON p.plan_code = t.plan_code
-      WHERE k.status = 'active'
-        AND t.status = 'active'
-        AND p.status = 'active'
-        AND (k.expires_at IS NULL OR k.expires_at > ?1)
-        AND EXISTS (
-          SELECT 1
-          FROM json_each(
-            CASE WHEN json_valid(k.scopes_json) THEN k.scopes_json ELSE '[]' END
-          ) AS scope
-          WHERE scope.value IN ('tasks:fetch', 'tasks:*', '*')
-        )
-      LIMIT 1
-    `).bind(new Date().toISOString()).first();
-
-    return Boolean(row);
+    return true;
   } catch {
-    // A binding without the expected schema or a usable tenant must fail closed.
+    // A binding without the expected quota schema must fail closed.
     return false;
   }
 }
@@ -84,6 +65,10 @@ function taskHttpStatus(task) {
 
 export function createWorker(options = {}) {
   const rateLimiter = options.rateLimiter || createRateLimiter();
+  const preAuthRateLimiter = options.preAuthRateLimiter || createRateLimiter({
+    windowMs: PRE_AUTH_WINDOW_MS,
+    maxRequests: PRE_AUTH_MAX_REQUESTS_PER_ISOLATE,
+  });
 
   return {
     async fetch(request, env = {}) {
@@ -93,6 +78,18 @@ export function createWorker(options = {}) {
         if (url.pathname === "/api/v1/tasks") {
           if (request.method !== "POST") {
             return json({ error: "method_not_allowed" }, 405, { allow: "POST" });
+          }
+
+          // Bound unauthenticated and invalid-key D1 lookups before hashing/querying.
+          // This in-memory limit is per isolate only; the zone-level WAF rule is
+          // the edge guard and must be configured separately.
+          const preAuthRate = preAuthRateLimiter.check(getClientRateLimitKey(request));
+          if (!preAuthRate.allowed) {
+            return json(
+              { error: { code: "RATE_LIMITED", message: "Too many requests; retry later." } },
+              429,
+              { "retry-after": String(preAuthRate.retryAfterSec) },
+            );
           }
 
           const auth = await authenticateRequest(request, env, { requiredScope: "tasks:fetch" });
@@ -185,7 +182,28 @@ export function createWorker(options = {}) {
 
         if (url.pathname === "/api/v1/platform") {
           const authConfigured = isAuthConfigured(env);
-          const fetchReady = authConfigured && await hasLiveFetchTenant(env);
+          let fetchReady = false;
+          // Public discovery metadata never reads D1. Authenticated callers may
+          // request a per-tenant readiness check after API-key validation.
+          if (request.headers.has("authorization")) {
+            const preAuthRate = preAuthRateLimiter.check(getClientRateLimitKey(request));
+            if (!preAuthRate.allowed) {
+              return json(
+                { error: { code: "RATE_LIMITED", message: "Too many requests; retry later." } },
+                429,
+                { "retry-after": String(preAuthRate.retryAfterSec) },
+              );
+            }
+            const auth = await authenticateRequest(request, env, { requiredScope: "tasks:fetch" });
+            if (!auth.ok) {
+              return json(
+                { error: { code: auth.code, message: auth.message } },
+                auth.httpStatus,
+                auth.headers,
+              );
+            }
+            fetchReady = await hasQuotaSchema(env);
+          }
           return json({
             name: "ExportFlow",
             positioning: "Model-agnostic agentic web infrastructure",
