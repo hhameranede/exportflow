@@ -40,6 +40,7 @@ function isAuthConfigured(env) {
 }
 
 function taskHttpStatus(task) {
+  if (task.state === "cancelled") return 499;
   if (task.state === "unsupported") return 501;
   if (task.state === "failed" && task.result?.data?.errorCode) {
     return ERROR_CODE_TO_HTTP_STATUS[task.result.data.errorCode] || 502;
