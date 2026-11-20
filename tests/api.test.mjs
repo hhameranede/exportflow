@@ -521,7 +521,7 @@ test("existing Worker routes remain backward compatible and reflect liveCapabili
   assert.deepEqual(unconfiguredData.liveCapabilities, []);
 
   const configuredPlatform = await worker.fetch(
-    new Request("https://exportflow.local/api/v1/platform"),
+    new Request("https://exportflow.local/api/v1/platform", { headers: { authorization: "Bearer " + TEST_TOKEN } }),
     makeTestEnv(),
   );
   const platformData = await configuredPlatform.json();
@@ -541,7 +541,7 @@ test("existing Worker routes remain backward compatible and reflect liveCapabili
   assert.deepEqual(unprovisionedData.liveCapabilities, []);
 
   const incompleteSchemaPlatform = await worker.fetch(
-    new Request("https://exportflow.local/api/v1/platform"),
+    new Request("https://exportflow.local/api/v1/platform", { headers: { authorization: "Bearer " + TEST_TOKEN } }),
     makeTestEnv({ schemaReady: false }),
   );
   const incompleteSchemaData = await incompleteSchemaPlatform.json();
