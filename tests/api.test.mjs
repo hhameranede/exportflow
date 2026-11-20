@@ -37,6 +37,13 @@ function makeTestEnv({ requestLimit = 10_000, keyStatus = "active", tenantStatus
             const [keyId, keyHash] = params;
             return keyId === TEST_KEY_ID && keyHash === TEST_KEY_HASH ? { ...record } : null;
           }
+          if (sql.includes("SELECT request_limit, requests_used")) {
+            const [tenantId, windowId] = params;
+            const current = usage.get(tenantId + ":" + windowId);
+            return current
+              ? { request_limit: current.request_limit, requests_used: current.requests_used }
+              : null;
+          }
           if (sql.includes("INSERT INTO tenant_request_usage")) {
             const [tenantId, windowId, planCode, policyVersion, limit, updatedAt] = params;
             const usageKey = tenantId + ":" + windowId;
@@ -561,4 +568,60 @@ test("Node HTTP server bridges localhost requests safely, enforces body limits, 
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }
+});
+
+
+test("POST /api/v1/tasks enforces the persistent tenant request quota before outbound Fetch", async () => {
+  let fetchCalls = 0;
+  const worker = createWorker({
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      return new Response("ok", { headers: { "content-type": "text/plain" } });
+    },
+  });
+  const env = makeTestEnv({ requestLimit: 1 });
+
+  const first = await worker.fetch(
+    makeTaskRequest({ goal: "First request", url: "https://example.com/first" }),
+    env,
+  );
+  assert.equal(first.status, 200);
+  assert.equal(first.headers.get("x-plan-limit"), "1");
+  assert.equal(first.headers.get("x-plan-remaining"), "0");
+  assert.ok(first.headers.get("x-plan-reset"));
+
+  const second = await worker.fetch(
+    makeTaskRequest({ goal: "Second request", url: "https://example.com/second" }),
+    env,
+  );
+  assert.equal(second.status, 429);
+  assert.equal((await second.json()).error.code, "PLAN_QUOTA_EXCEEDED");
+  assert.equal(second.headers.get("x-plan-limit"), "1");
+  assert.equal(second.headers.get("x-plan-remaining"), "0");
+  assert.ok(Number(second.headers.get("retry-after")) >= 1);
+  assert.equal(fetchCalls, 1);
+});
+
+test("invalid task contracts do not consume the persistent tenant request quota", async () => {
+  let fetchCalls = 0;
+  const worker = createWorker({
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      return new Response("ok", { headers: { "content-type": "text/plain" } });
+    },
+  });
+  const env = makeTestEnv({ requestLimit: 1 });
+
+  const invalid = await worker.fetch(
+    makeTaskRequest({ goal: "", url: "https://example.com/invalid" }),
+    env,
+  );
+  assert.equal(invalid.status, 400);
+
+  const valid = await worker.fetch(
+    makeTaskRequest({ goal: "Valid after invalid", url: "https://example.com/valid" }),
+    env,
+  );
+  assert.equal(valid.status, 200);
+  assert.equal(fetchCalls, 1);
 });
