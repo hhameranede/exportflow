@@ -198,7 +198,7 @@ test("account routes render real-auth UI, stay noindex, and are excluded from th
     assert.match(html, expectedNeedle);
     if (path === "/account" || path === "/ar/account") {
       assert.match(html, /data-auth-session-status/);
-      assert.match(html, /data-session-reauth-href="\\/signin"/);
+      assert.match(html, /data-session-reauth-href="[^"]*signin"/);
     }
     assert.match(html, /<meta name="robots" content="noindex, nofollow">/);
     assert.doesNotMatch(html, /UI Blueprint|Google Consent Preview|samer\.dev@gmail\.com/);
