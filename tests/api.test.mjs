@@ -12,7 +12,7 @@ const TEST_TOKEN = `ef_live_${TEST_KEY_ID}_${"A".repeat(43)}`;
 const TEST_BAD_TOKEN = `ef_live_${TEST_KEY_ID}_${"B".repeat(43)}`;
 const TEST_KEY_HASH = await hashApiKey(TEST_TOKEN);
 
-function makeTestEnv({ requestLimit = 10_000, keyStatus = "active", tenantStatus = "active", planStatus = "active", scopes = ["tasks:fetch"] } = {}) {
+function makeTestEnv({ requestLimit = 10_000, keyStatus = "active", tenantStatus = "active", planStatus = "active", scopes = ["tasks:fetch"], provisioned = true, schemaReady = true } = {}) {
   const usage = new Map();
   const record = {
     key_id: TEST_KEY_ID,
@@ -33,6 +33,13 @@ function makeTestEnv({ requestLimit = 10_000, keyStatus = "active", tenantStatus
       return {
         bind(...values) { params = values; return this; },
         async first() {
+          if (sql.includes("tenant_request_usage LIMIT 0")) {
+            if (!schemaReady) throw new Error("synthetic missing quota schema");
+            return null;
+          }
+          if (sql.includes("tenant_auth_ready")) {
+            return provisioned ? { tenant_auth_ready: 1 } : null;
+          }
           if (sql.includes("FROM api_keys")) {
             const [keyId, keyHash] = params;
             return keyId === TEST_KEY_ID && keyHash === TEST_KEY_HASH ? { ...record } : null;
@@ -508,15 +515,39 @@ test("existing Worker routes remain backward compatible and reflect liveCapabili
   assert.equal((await health.json()).status, "ok");
 
   const unconfiguredPlatform = await worker.fetch(new Request("https://exportflow.local/api/v1/platform"), {});
-  assert.deepEqual((await unconfiguredPlatform.json()).liveCapabilities, []);
+  const unconfiguredData = await unconfiguredPlatform.json();
+  assert.equal(unconfiguredData.auth.configured, false);
+  assert.equal(unconfiguredData.auth.ready, false);
+  assert.deepEqual(unconfiguredData.liveCapabilities, []);
 
   const configuredPlatform = await worker.fetch(
     new Request("https://exportflow.local/api/v1/platform"),
     makeTestEnv(),
   );
   const platformData = await configuredPlatform.json();
+  assert.equal(platformData.auth.configured, true);
+  assert.equal(platformData.auth.ready, true);
   assert.deepEqual(platformData.liveCapabilities, ["http.fetch.v1"]);
   assert.equal(platformData.endpoints.tasks, "/api/v1/tasks");
+
+  // A present D1 binding alone is not proof that a customer can execute Fetch.
+  const unprovisionedPlatform = await worker.fetch(
+    new Request("https://exportflow.local/api/v1/platform"),
+    makeTestEnv({ provisioned: false }),
+  );
+  const unprovisionedData = await unprovisionedPlatform.json();
+  assert.equal(unprovisionedData.auth.configured, true);
+  assert.equal(unprovisionedData.auth.ready, false);
+  assert.deepEqual(unprovisionedData.liveCapabilities, []);
+
+  const incompleteSchemaPlatform = await worker.fetch(
+    new Request("https://exportflow.local/api/v1/platform"),
+    makeTestEnv({ schemaReady: false }),
+  );
+  const incompleteSchemaData = await incompleteSchemaPlatform.json();
+  assert.equal(incompleteSchemaData.auth.configured, true);
+  assert.equal(incompleteSchemaData.auth.ready, false);
+  assert.deepEqual(incompleteSchemaData.liveCapabilities, []);
 
   const preview = await worker.fetch(new Request("https://exportflow.local/api/v1/router-preview?javascript=true"), {});
   assert.equal((await preview.json()).decision.path, "browser");
