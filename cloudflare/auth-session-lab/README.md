@@ -10,3 +10,7 @@ This isolated Worker validates the actual Better Auth cookie/session path used b
 - Per-run cleanup deletes both the temporary Worker and D1 database, including when runtime checks fail.
 
 Never point this Worker at Production `AUTH_DB`, never use a real user or Google OAuth credential, and never persist the temporary Worker config or generated secrets.
+
+## Per-run isolation
+
+The workflow creates one D1 database and one Worker per `GITHUB_RUN_ID`, stores their identifiers in the runner environment only, and deletes both in an always-run cleanup step. The static Wrangler file is a dummy build template (its D1 UUID is never deployed); the deploy step writes a private, run-specific config file with the actual temporary D1 UUID. Liveness checks retry briefly after deployment to account for Workers.dev propagation.
