@@ -1,6 +1,7 @@
 import { chooseExecutionPath } from "./core/router.js";
 import { getAdapterCatalog } from "./core/adapters.js";
 import { authenticateRequest, createRateLimiter } from "./core/auth.js";
+import { reservePlanRequest } from "./core/plan-quota.js";
 import { readBoundedJsonBody, TaskContractError, validateTaskRequest } from "./core/task-contract.js";
 import { executeWebTask } from "./core/tasks.js";
 import { handleWebsiteRequest } from "./site/router.js";
@@ -36,7 +37,7 @@ function json(data, status = 200, extraHeaders = {}) {
 }
 
 function isAuthConfigured(env) {
-  return typeof env?.EXPORTFLOW_API_TOKEN === "string" && env.EXPORTFLOW_API_TOKEN.trim().length > 0;
+  return typeof env?.EXPORTFLOW_AUTH_DB?.prepare === "function";
 }
 
 function taskHttpStatus(task) {
@@ -60,7 +61,7 @@ export function createWorker(options = {}) {
             return json({ error: "method_not_allowed" }, 405, { allow: "POST" });
           }
 
-          const auth = await authenticateRequest(request, env);
+          const auth = await authenticateRequest(request, env, { requiredScope: "tasks:fetch" });
           if (!auth.ok) {
             return json(
               { error: { code: auth.code, message: auth.message } },
@@ -69,7 +70,7 @@ export function createWorker(options = {}) {
             );
           }
 
-          const rate = rateLimiter.check(auth.clientId);
+          const rate = rateLimiter.check(auth.tenantId);
           if (!rate.allowed) {
             return json(
               { error: { code: "RATE_LIMITED", message: "Too many task requests; retry later." } },
@@ -95,13 +96,43 @@ export function createWorker(options = {}) {
             );
           }
 
+          let quota;
+          try {
+            quota = await reservePlanRequest({
+              db: env.EXPORTFLOW_AUTH_DB,
+              identity: auth,
+            });
+          } catch {
+            return json(
+              { error: { code: "QUOTA_BACKEND_UNAVAILABLE", message: "Plan quota storage is temporarily unavailable." } },
+              503,
+            );
+          }
+
+          if (!quota.allowed) {
+            return json(
+              { error: { code: "PLAN_QUOTA_EXCEEDED", message: "The plan request allowance for this window has been exhausted." } },
+              429,
+              {
+                "retry-after": String(quota.retryAfterSec),
+                "x-plan-limit": String(quota.limit),
+                "x-plan-remaining": "0",
+                "x-plan-reset": quota.resetAt,
+              },
+            );
+          }
+
           const task = await executeWebTask(contract, {
             fetchImpl: options.fetchImpl,
             now: options.now,
             idFactory: options.idFactory,
             signal: request.signal,
           });
-          return json(task, taskHttpStatus(task));
+          return json(task, taskHttpStatus(task), {
+            "x-plan-limit": String(quota.limit),
+            "x-plan-remaining": String(quota.remaining),
+            "x-plan-reset": quota.resetAt,
+          });
         }
 
         if (request.method !== "GET" && request.method !== "HEAD") {
@@ -128,7 +159,7 @@ export function createWorker(options = {}) {
             adapterCatalog: getAdapterCatalog(),
             status: "foundation",
             auth: {
-              mode: "bearer",
+              mode: "tenant-api-key",
               configured: authReady,
             },
             endpoints: {
