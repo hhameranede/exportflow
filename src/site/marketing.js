@@ -740,6 +740,7 @@ export function renderMarketingPage(requestUrl, routePath, locale = "en") {
   const route = ROUTES.find(([path]) => path === routePath) || ROUTES[1];
   const title = route[1];
   const description = route[2];
+  const isAuthRoute = AUTH_ROUTES.some(([authPath]) => authPath === routePath);
 
   const body = `${header(routePath, selectedLocale, t)}${
     routePath === "/" ? homeBody(t, selectedLocale) : genericBody(route, routePath, t, selectedLocale)
@@ -773,7 +774,8 @@ export function renderMarketingPage(requestUrl, routePath, locale = "en") {
     extraHeadHtml,
     ogTitle: routePath === "/" ? `${t.hero} — ExportFlow` : `${title} — ExportFlow`,
     ogEyebrow,
-    includeAlternates: true,
+    includeAlternates: !isAuthRoute,
+    robots: isAuthRoute ? "noindex, nofollow" : null,
   });
 }
 
@@ -826,6 +828,9 @@ export function resolveMarketingRoute(pathname) {
   return { path, locale };
 }
 
-export const MARKETING_PATHS = ROUTES.map(([path]) => path).flatMap((path) =>
-  path === "/" ? ["/"] : [path, ...LANGUAGES.filter((locale) => locale !== "en").map((locale) => `/${locale}${path}`)],
-);
+export const MARKETING_PATHS = ROUTES
+  .filter(([path]) => !AUTH_ROUTES.some(([authPath]) => authPath === path))
+  .map(([path]) => path)
+  .flatMap((path) =>
+    path === "/" ? ["/"] : [path, ...LANGUAGES.filter((locale) => locale !== "en").map((locale) => `/${locale}${path}`)],
+  );
