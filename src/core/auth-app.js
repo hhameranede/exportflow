@@ -10,7 +10,9 @@ function isNonEmptyString(value) {
 function validOrigin(value) {
   try {
     const parsed = new URL(value);
-    return (parsed.protocol === "https:" || parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") && parsed.pathname === "/" && !parsed.search && !parsed.hash;
+    const localHost = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "[::1]";
+    const allowedProtocol = parsed.protocol === "https:" || (parsed.protocol === "http:" && localHost);
+    return allowedProtocol && !parsed.username && !parsed.password && parsed.pathname === "/" && !parsed.search && !parsed.hash;
   } catch {
     return false;
   }
