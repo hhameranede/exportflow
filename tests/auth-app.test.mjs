@@ -53,6 +53,18 @@ test("email/password remains disabled until a Cloudflare Email binding and sende
     ...base,
     BETTER_AUTH_URL: "http://example.com",
   }).authConfigured, false);
+  assert.equal(getAuthFeatureStatus({
+    ...base,
+    BETTER_AUTH_URL: "ftp://localhost/",
+  }).authConfigured, false);
+  assert.equal(getAuthFeatureStatus({
+    ...base,
+    BETTER_AUTH_URL: "https://user:pass@exportflow.me/",
+  }).authConfigured, false);
+  assert.equal(getAuthFeatureStatus({
+    ...base,
+    BETTER_AUTH_URL: "http://localhost:8787/",
+  }).authConfigured, true);
 });
 
 test("public auth config returns capability booleans only and never returns credentials", async () => {
