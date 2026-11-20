@@ -857,7 +857,10 @@ export const MARKETING_JS = `(function () {
     try { data = await response.json(); } catch (_e) {}
     if (!response.ok) {
       var message = data && (data.message || data.error && data.error.message || data.error);
-      throw new Error(typeof message === "string" ? message : "The account service could not complete this request.");
+      var requestError = new Error(typeof message === "string" ? message : "The account service could not complete this request.");
+      requestError.status = response.status;
+      requestError.code = data && (data.code || data.errorCode || data.error && typeof data.error === "object" && data.error.code) || null;
+      throw requestError;
     }
     return data;
   }
@@ -1119,7 +1122,9 @@ export const MARKETING_JS = `(function () {
           showToast("Session revoked.");
           await loadAccountWorkspace();
         } catch (error) {
-          showToast(error.message || "Could not revoke session.");
+          showToast(error.code === "SESSION_NOT_FRESH"
+            ? "Sign in again before managing active sessions."
+            : error.message || "Could not revoke session.");
         }
       });
       action.appendChild(button);
@@ -1203,19 +1208,44 @@ export const MARKETING_JS = `(function () {
       var linkButton = workspace.querySelector("[data-auth-link-google]");
       var hasGoogle = accounts.some(function (account) { return account.providerId === "google"; });
       if (linkButton) linkButton.hidden = !Boolean(authConfig && authConfig.googleEnabled && !hasGoogle);
-      var sessionsResponse = await authRequest("list-sessions");
-      var sessions = Array.isArray(sessionsResponse) ? sessionsResponse : (sessionsResponse && sessionsResponse.sessions) || [];
       var sessionList = workspace.querySelector("[data-auth-session-list]");
-      if (sessionList) {
-        sessionList.textContent = "";
-        sessions.forEach(function (session, index) {
-          sessionList.appendChild(makeSessionRow(session, index, session.id === currentSession.id));
-        });
-        if (!sessions.length) {
-          var emptySession = document.createElement("li");
-          emptySession.className = "ef-session-row";
-          emptySession.textContent = "No active sessions found.";
-          sessionList.appendChild(emptySession);
+      var sessionStatus = workspace.querySelector("[data-auth-session-status]");
+      var revokeAllButton = workspace.querySelector("[data-auth-revoke-all]");
+      if (sessionList) sessionList.textContent = "";
+      if (sessionStatus) {
+        sessionStatus.hidden = true;
+        sessionStatus.textContent = "";
+      }
+      if (revokeAllButton) revokeAllButton.hidden = false;
+
+      try {
+        var sessionsResponse = await authRequest("list-sessions");
+        var sessions = Array.isArray(sessionsResponse) ? sessionsResponse : (sessionsResponse && sessionsResponse.sessions) || [];
+        if (sessionList) {
+          sessions.forEach(function (session, index) {
+            sessionList.appendChild(makeSessionRow(session, index, session.id === currentSession.id));
+          });
+          if (!sessions.length) {
+            var emptySession = document.createElement("li");
+            emptySession.className = "ef-session-row";
+            emptySession.textContent = "No active sessions found.";
+            sessionList.appendChild(emptySession);
+          }
+        }
+      } catch (sessionError) {
+        if (revokeAllButton) revokeAllButton.hidden = true;
+        if (sessionStatus) {
+          sessionStatus.hidden = false;
+          var staleSession = sessionError && sessionError.code === "SESSION_NOT_FRESH";
+          sessionStatus.textContent = sessionStatus.getAttribute(staleSession ? "data-session-stale-message" : "data-session-error-message") ||
+            "Session details are temporarily unavailable.";
+          if (staleSession) {
+            var reauthLink = document.createElement("a");
+            reauthLink.href = sessionStatus.getAttribute("data-session-reauth-href") || "/signin";
+            reauthLink.textContent = sessionStatus.getAttribute("data-session-reauth-label") || "Sign in again";
+            sessionStatus.appendChild(document.createTextNode(" "));
+            sessionStatus.appendChild(reauthLink);
+          }
         }
       }
       if (loading) loading.hidden = true;
@@ -1320,7 +1350,9 @@ export const MARKETING_JS = `(function () {
           showToast("Other sessions have been revoked.");
           await loadAccountWorkspace();
         } catch (error) {
-          showToast(error.message || "Could not revoke other sessions.");
+          showToast(error.code === "SESSION_NOT_FRESH"
+            ? "Sign in again before managing active sessions."
+            : error.message || "Could not revoke other sessions.");
         } finally {
           revokeAll.disabled = false;
         }
