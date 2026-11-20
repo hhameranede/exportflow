@@ -144,6 +144,30 @@ test("public auth capabilities stay disabled until all required Better Auth D1 t
   assert.equal(incompleteBody.googleEnabled, false);
 });
 
+test("public auth config fails closed when the D1 schema readiness query fails", async () => {
+  const response = await handleAuthRequest(
+    new Request("https://exportflow.me/api/auth/config"),
+    {
+      AUTH_DB: {
+        prepare() {
+          return {
+            bind() { return this; },
+            async all() { throw new Error("synthetic schema access failure"); },
+          };
+        },
+        batch() {},
+      },
+      BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
+      GOOGLE_CLIENT_ID: "test-client-id",
+      GOOGLE_CLIENT_SECRET: "test-client-secret",
+    },
+  );
+  const body = await response.json();
+  assert.equal(body.authConfigured, true);
+  assert.equal(body.authReady, false);
+  assert.equal(body.googleEnabled, false);
+});
+
 test("auth configuration endpoint rejects non-GET methods", async () => {
   const response = await handleAuthRequest(
     new Request("https://exportflow.me/api/auth/config", { method: "POST" }),
