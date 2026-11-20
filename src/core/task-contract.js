@@ -42,7 +42,14 @@ function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function throwIfRequestAborted(request) {
+  if (request.signal?.aborted) {
+    throw new TaskContractError("TASK_CANCELLED", "Task request was cancelled by the caller.", 499);
+  }
+}
+
 export async function readBoundedJsonBody(request, maxBytes = TASK_REQUEST_LIMITS.maxBodyBytes) {
+  throwIfRequestAborted(request);
   const contentType = String(request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
   if (contentType !== "application/json") {
     throw new TaskContractError(
@@ -68,10 +75,16 @@ export async function readBoundedJsonBody(request, maxBytes = TASK_REQUEST_LIMIT
   const reader = request.body.getReader();
   const chunks = [];
   let totalBytes = 0;
+  const onRequestAbort = () => {
+    void reader.cancel().catch(() => {});
+  };
+  request.signal?.addEventListener("abort", onRequestAbort, { once: true });
 
   try {
     while (true) {
+      throwIfRequestAborted(request);
       const { done, value } = await reader.read();
+      throwIfRequestAborted(request);
       if (done) break;
       totalBytes += value.byteLength;
       if (totalBytes > maxBytes) {
@@ -87,11 +100,16 @@ export async function readBoundedJsonBody(request, maxBytes = TASK_REQUEST_LIMIT
   } catch (error) {
     await reader.cancel().catch(() => {});
     if (error instanceof TaskContractError) throw error;
+    if (request.signal?.aborted) {
+      throw new TaskContractError("TASK_CANCELLED", "Task request was cancelled by the caller.", 499);
+    }
     throw new TaskContractError("INVALID_BODY", "Could not read request body.", 400);
   } finally {
+    request.signal?.removeEventListener("abort", onRequestAbort);
     reader.releaseLock();
   }
 
+  throwIfRequestAborted(request);
   const merged = new Uint8Array(totalBytes);
   let offset = 0;
   for (const chunk of chunks) {
@@ -105,6 +123,7 @@ export async function readBoundedJsonBody(request, maxBytes = TASK_REQUEST_LIMIT
   } catch {
     throw new TaskContractError("INVALID_JSON", "Request body must be valid UTF-8 JSON.", 400);
   }
+  throwIfRequestAborted(request);
   if (!rawText.trim()) {
     throw new TaskContractError("INVALID_JSON", "Request body must not be empty.", 400);
   }
