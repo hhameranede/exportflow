@@ -7,6 +7,15 @@ function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function isD1Binding(binding) {
+  return Boolean(
+    binding &&
+    typeof binding === "object" &&
+    typeof binding.prepare === "function" &&
+    typeof binding.batch === "function"
+  );
+}
+
 function validOrigin(value) {
   try {
     const parsed = new URL(value);
@@ -44,8 +53,7 @@ export function getAuthFeatureStatus(env = {}) {
     ? env.BETTER_AUTH_URL.trim()
     : "https://exportflow.me";
   const authConfigured = Boolean(
-    env.AUTH_DB &&
-    typeof env.AUTH_DB === "object" &&
+    isD1Binding(env.AUTH_DB) &&
     isNonEmptyString(env.BETTER_AUTH_SECRET) && env.BETTER_AUTH_SECRET.trim().length >= 32 &&
     validOrigin(baseUrl)
   );
