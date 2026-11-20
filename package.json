@@ -9,9 +9,14 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
-    "test": "node --test",
+    "test": "node --test tests/api.test.mjs tests/core.test.mjs",
     "check": "node --check src/index.js && node --check src/server.js && node --check src/site/data.js && node --check src/site/diagrams.js && node --check src/site/styles.js && node --check src/site/client.js && node --check src/site/layout.js && node --check src/site/pages.js && node --check src/site/router.js && node --check src/core/router.js && node --check src/core/adapters.js && node --check src/core/auth.js && node --check src/core/task-contract.js && node --check src/core/result.js && node --check src/core/egress-guard.js && node --check src/core/http-fetch.js && node --check src/core/tasks.js && node --check src/core/map-crawl.js && node --check src/core/extract.js && node --check src/core/browser-render.js && node --check src/core/search.js && node --check src/core/research.js",
     "lint": "npm run check",
-    "build": "npm run check"
+    "build": "npm run check",
+    "test:workerd": "vitest run --config vitest.workerd.config.js"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.8.5",
+    "vitest": "4.1.11"
   }
 }
