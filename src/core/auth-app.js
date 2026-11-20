@@ -10,7 +10,7 @@ function isNonEmptyString(value) {
 function validOrigin(value) {
   try {
     const parsed = new URL(value);
-    return parsed.protocol === "https:" || parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+    return (parsed.protocol === "https:" || parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") && parsed.pathname === "/" && !parsed.search && !parsed.hash;
   } catch {
     return false;
   }
@@ -58,7 +58,6 @@ export function getAuthFeatureStatus(env = {}) {
     authConfigured,
     googleEnabled: authConfigured && googleCredentialsPresent,
     emailPasswordEnabled: authConfigured && Boolean(emailServiceReady),
-    migrationEnabled: authConfigured && isNonEmptyString(env.AUTH_MIGRATION_TOKEN),
   });
 }
 
@@ -147,6 +146,7 @@ export function getAuthInstance(env = {}) {
     options.emailAndPassword = {
       enabled: true,
       requireEmailVerification: true,
+      revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, url }) => {
         await sendAccountEmail({
           to: user.email,
@@ -214,7 +214,7 @@ export async function handleAuthRequest(request, env = {}) {
     if (request.method !== "POST") {
       return textResponse({ error: "method_not_allowed" }, 405);
     }
-    if (!status.migrationEnabled) {
+    if (!status.authConfigured || !isNonEmptyString(env.AUTH_MIGRATION_TOKEN)) {
       return textResponse({ error: "not_found" }, 404);
     }
     const authorization = request.headers.get("authorization") || "";
