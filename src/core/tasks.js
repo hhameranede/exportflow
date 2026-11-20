@@ -26,6 +26,7 @@ const SAFE_ERROR_MESSAGES = Object.freeze({
   RESPONSE_TOO_LARGE: "Upstream response exceeded the maximum allowed byte limit.",
   UNSUPPORTED_CONTENT_TYPE: "Upstream returned an unsupported content type.",
   UPSTREAM_TIMEOUT: "Upstream request timed out.",
+  TASK_CANCELLED: "Task was cancelled by the caller.",
   UPSTREAM_FETCH_FAILED: "Could not retrieve the upstream resource.",
   TOO_MANY_REDIRECTS: "Upstream exceeded the redirect limit.",
   REDIRECT_LOOP: "Upstream redirect loop detected.",
@@ -59,7 +60,7 @@ function failureResult(code, requestedUrl = null) {
   return normalizeResult({
     status: "failed",
     data: { errorCode: code, requestedUrl },
-    warnings: [`Task failed (${code}).`],
+    warnings: [code === "TASK_CANCELLED" ? "Task was cancelled by the caller." : `Task failed (${code}).`],
   });
 }
 
@@ -378,12 +379,13 @@ export async function executeWebTask(input, options = {}) {
     const code = typeof error?.code === "string" && /^[A-Z0-9_]{2,64}$/.test(error.code)
       ? error.code
       : "TASK_EXECUTION_FAILED";
-    events.push(event("task.failed", completedAt, { reason: code }));
+    const cancelled = code === "TASK_CANCELLED";
+    events.push(event(cancelled ? "task.cancelled" : "task.failed", completedAt, { reason: code }));
     return buildTask({
       id,
       goal,
       requestedUrl,
-      state: "failed",
+      state: cancelled ? "cancelled" : "failed",
       execution,
       createdAt,
       startedAt,
