@@ -12,5 +12,27 @@ jobs:
    - uses: actions/setup-node@v4
      with:
       node-version: 24
+   - run: npm install --no-audit --no-fund
    - run: npm test
    - run: npm run check
+   - name: Build isolated Auth Lab bundle (dry-run only)
+     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/auth-lab --config cloudflare/auth-lab/wrangler.toml
+   - name: Locate Wrangler build output
+     run: |
+      echo "Root dist output:"
+      find dist -maxdepth 4 -type f -printf '%p %s bytes\\n' 2>/dev/null || true
+      echo "Lab config-relative output:"
+      find cloudflare/auth-lab -maxdepth 5 -type f -printf '%p %s bytes\\n' 2>/dev/null || true
+      echo "Wrangler internal output:"
+      find .wrangler -maxdepth 5 -type f -printf '%p %s bytes\\n' 2>/dev/null || true
+   - name: Upload isolated Auth Lab bundle artifact
+     uses: actions/upload-artifact@v4
+     with:
+      name: exportflow-auth-lab-bundle-${{ github.sha }}
+      path: |
+       dist/
+       cloudflare/auth-lab/dist/
+       .wrangler/
+      if-no-files-found: error
+      retention-days: 1
+      include-hidden-files: true

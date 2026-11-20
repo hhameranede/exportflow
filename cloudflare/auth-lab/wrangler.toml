@@ -1,0 +1,10 @@
+name = "exportflow-auth-lab"
+main = "../../src/index.js"
+compatibility_date = "2026-11-17"
+workers_dev = false
+preview_urls = false
+
+[[d1_databases]]
+binding = "AUTH_DB"
+database_name = "exportflow-auth-test-20261120"
+database_id = "4dbed731-1191-4ce6-8aec-4955e5082c77"
