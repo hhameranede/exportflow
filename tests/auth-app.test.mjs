@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { getAuthFeatureStatus, handleAuthRequest } from "../src/core/auth-app.js";
+import { createWorker } from "../src/index.js";
 
 test("authentication remains disabled without a dedicated D1 binding and server secret", () => {
   const status = getAuthFeatureStatus({});
@@ -82,6 +83,31 @@ test("auth configuration endpoint rejects non-GET methods", async () => {
     {},
   );
   assert.equal(response.status, 405);
+});
+
+test("Worker routes /api/auth before its generic GET-only fallback", async () => {
+  const worker = createWorker();
+  const config = await worker.fetch(new Request("https://exportflow.me/api/auth/config"));
+  assert.equal(config.status, 200);
+  const configBody = await config.json();
+  assert.equal(configBody.authConfigured, false);
+
+  const session = await worker.fetch(new Request("https://exportflow.me/api/auth/get-session"));
+  assert.equal(session.status, 503);
+  const sessionBody = await session.json();
+  assert.equal(sessionBody.error, "AUTH_NOT_CONFIGURED");
+});
+
+test("weak migration secrets do not expose the schema migration route", async () => {
+  const response = await handleAuthRequest(
+    new Request("https://exportflow.me/api/auth/_ops/migrate", { method: "POST" }),
+    {
+      AUTH_DB: {},
+      BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
+      AUTH_MIGRATION_TOKEN: "short",
+    },
+  );
+  assert.equal(response.status, 404);
 });
 
 test("schema migration route stays hidden unless dedicated auth storage and migration secret are configured", async () => {
