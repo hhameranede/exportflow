@@ -41,7 +41,7 @@ jobs:
    - name: Temporary isolated Tenant Admin D1 runtime acceptance
      run: |
       set -euo pipefail
-      response="$(curl --fail --silent --show-error --connect-timeout 10 --max-time 120 "https://0f3e2365-exportflow-tenant-admin-runtime-lab-20261121.hhameranede.workers.dev/run-admin-e2e-7f3c9a21")"
+      response="$(curl --fail --silent --show-error --connect-timeout 10 --max-time 120 "https://90426f84-exportflow-tenant-admin-runtime-lab-20261121.hhameranede.workers.dev/run-admin-e2e-7f3c9a21")"
       printf '%s\\n' "$response"
       node -e 'const r = JSON.parse(process.argv[1]); if (r.result !== "PASS" || r.failed !== 0) { console.error("Tenant Admin D1 runtime acceptance failed."); process.exit(1); }' "$response"
 
