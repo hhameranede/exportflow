@@ -67,3 +67,16 @@ When enabled, Better Auth requires email verification and sends verification/res
 - Email/password is intentionally disabled until a verified transactional sender exists.
 - Two-factor authentication, organization/team roles, account deletion workflow, billing entitlements, and admin provisioning are not included in this first implementation.
 - The test D1 resource was created separately and is not bound. This branch does not change Worker secrets, bindings, DNS, permissions, Production traffic, or deployments.
+
+## Cloudflare Auth Lab deployment configuration
+
+The isolated Lab uses a separate Wrangler file at `cloudflare/auth-lab/wrangler.toml`. Do not change the root `wrangler.toml` as part of Lab setup: it remains the configuration for `exportflow-platform`.
+
+- Cloudflare Workers Builds root directory: `/cloudflare/auth-lab`
+- Build command: `cd ../.. && npm install --no-audit --no-fund && npm test && npm run check`
+- Deploy command: `cd ../.. && npx wrangler deploy --config cloudflare/auth-lab/wrangler.toml`
+- Previews: disabled
+- The Lab Wrangler config binds only `AUTH_DB` to the isolated D1 database `exportflow-auth-test-20261120`.
+- The config sets `workers_dev = false` and `preview_urls = false`; no public Workers subdomain or Preview URL is enabled.
+
+A build must be connected only to the `exportflow-auth-lab` Worker tag and the account branch `feat/real-google-auth-account-system-20261120`. Never point this build command at the root config or `exportflow-platform`. Keep the Cloudflare Build configuration uncreated until its dedicated Build Token is available and the script tag has been checked.
