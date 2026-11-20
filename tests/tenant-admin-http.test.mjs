@@ -194,3 +194,25 @@ test("responses are private and never cache one-time API keys", async () => {
   assert.match(response.headers.get("cache-control"), /no-store/);
   assert.equal(response.headers.get("access-control-allow-origin"), null);
 });
+
+test("admin body size and content type are enforced before service execution", async () => {
+  const { handler, calls, env } = setup();
+  const oversized = JSON.stringify({ planCode: "free", note: "x".repeat(17_000) });
+  const largeRequest = new Request("https://exportflow.me/api/v1/admin/tenants", {
+    method: "POST",
+    headers: { origin: "https://exportflow.me", "content-type": "application/json" },
+    body: oversized,
+  });
+  const tooLarge = await handler(largeRequest, env);
+  assert.equal(tooLarge.status, 413);
+  assert.equal((await tooLarge.json()).error.code, "PAYLOAD_TOO_LARGE");
+
+  const wrongType = await handler(new Request("https://exportflow.me/api/v1/admin/tenants", {
+    method: "POST",
+    headers: { origin: "https://exportflow.me", "content-type": "text/plain" },
+    body: "{}",
+  }), env);
+  assert.equal(wrongType.status, 415);
+  assert.equal((await wrongType.json()).error.code, "UNSUPPORTED_MEDIA_TYPE");
+  assert.equal(calls.service.length, 0);
+});
