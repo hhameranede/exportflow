@@ -112,7 +112,7 @@ test("plan policy and tenant provisioning routes pass strict validated bodies", 
     requestLimit: 500,
     policyVersion: "v1",
   }), env);
-  assert.equal(planResponse.status, 201);
+  assert.equal(planResponse.status, 200);
   assert.deepEqual(calls.actions[0][0], "createPlanPolicy");
   assert.deepEqual(calls.actions[0][1], {
     planCode: "developer",
