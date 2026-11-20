@@ -168,9 +168,9 @@ test("light-first design system and interactive UX components are served cleanly
   const jsRes = getWebsiteResponse("/assets/marketing.js");
   const js = await jsRes.text();
   assert.match(js, /function getActiveTheme\(\)[\s\S]*return "light";/);
-    assert.match(js, /get-session/);
+  assert.ok(js.includes("get-session"));
   assert.ok(js.includes("sign-in/social"));
-  assert.doesNotMatch(js, /ef_auth_preview|window\\.ExportFlowAuth/);
+  assert.doesNotMatch(js, /ef_auth_preview|window[.]ExportFlowAuth/);
 });
 
 test("account routes render real-auth UI, stay noindex, and are excluded from the sitemap", async () => {
