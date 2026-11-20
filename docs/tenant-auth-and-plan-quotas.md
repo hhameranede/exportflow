@@ -25,6 +25,12 @@ The migration creates:
 
 The migration deliberately inserts no plan rows or tenant records. Do not invent Free/Pro limits during a technical migration. The owner must decide request allowances and have an approved provisioning workflow before any customer API key can work.
 
+## Platform readiness reporting
+
+- `auth.configured` reports whether the Worker has the D1 binding.
+- `auth.ready` is stricter: the quota table must be queryable and at least one non-expired active API key must join to an active tenant and active plan with the `tasks:fetch` scope.
+- `liveCapabilities` includes `http.fetch.v1` only when that readiness check succeeds. A binding alone, an empty database, an incomplete migration, or a tenant without an eligible key must not be advertised as a live customer capability.
+
 ## Plan quota semantics
 
 - The plan period and request limit are read from the active server-side plan policy, not supplied by the caller.
