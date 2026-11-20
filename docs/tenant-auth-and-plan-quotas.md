@@ -66,7 +66,7 @@ The Draft implementation adds `src/core/tenant-admin.js` as an internal D1-backe
 Supported operations:
 - Create/update owner-managed plan policies with validated periods, positive integer request limits and explicit policy versions.
 - Provision a tenant only when its target plan is active.
-- Issue a scoped API key only for an active tenant on an active plan. The plaintext key is returned once; D1 stores only the salted SHA-256 digest and the audit record excludes both token and digest.
+- Issue a scoped API key only for an active tenant on an active plan. The plaintext key is returned once; D1 stores only the domain-separated SHA-256 digest and the audit record excludes both token and digest.
 - Revoke an active key only when both tenant ID and key ID match.
 - Rotate an active key in one D1 batch: revoke the old key, insert the replacement, and append both audit events atomically.
 - Suspend/close tenants and reassign active plans. A closed tenant cannot be reactivated through this service.
