@@ -15,3 +15,12 @@ jobs:
    - run: npm install --no-audit --no-fund
    - run: npm test
    - run: npm run check
+   - name: Build isolated Auth Lab bundle (dry-run only)
+     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/auth-lab --config cloudflare/auth-lab/wrangler.toml
+   - name: Upload isolated Auth Lab bundle artifact
+     uses: actions/upload-artifact@v4
+     with:
+      name: exportflow-auth-lab-bundle-${{ github.sha }}
+      path: dist/auth-lab/
+      if-no-files-found: error
+      retention-days: 1
