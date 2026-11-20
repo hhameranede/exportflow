@@ -1,6 +1,8 @@
 import { chooseExecutionPath } from "./core/router.js";
 import { getAdapterCatalog } from "./core/adapters.js";
 import { authenticateRequest, createRateLimiter } from "./core/auth.js";
+import { getClientRateLimitKey, PRE_AUTH_MAX_REQUESTS_PER_ISOLATE, PRE_AUTH_WINDOW_MS } from "./core/client-rate-limit.js";
+import { reservePlanRequest } from "./core/plan-quota.js";
 import { readBoundedJsonBody, TaskContractError, validateTaskRequest } from "./core/task-contract.js";
 import { executeWebTask } from "./core/tasks.js";
 import { handleWebsiteRequest } from "./site/router.js";
@@ -37,7 +39,20 @@ function json(data, status = 200, extraHeaders = {}) {
 }
 
 function isAuthConfigured(env) {
-  return typeof env?.EXPORTFLOW_API_TOKEN === "string" && env.EXPORTFLOW_API_TOKEN.trim().length > 0;
+  return typeof env?.EXPORTFLOW_AUTH_DB?.prepare === "function";
+}
+
+async function hasQuotaSchema(env) {
+  const db = env?.EXPORTFLOW_AUTH_DB;
+  if (typeof db?.prepare !== "function") return false;
+  try {
+    // This probe runs only after the caller has authenticated successfully.
+    await db.prepare("SELECT tenant_id, window_id, plan_code, policy_version, request_limit, requests_used, updated_at FROM tenant_request_usage LIMIT 0").first();
+    return true;
+  } catch {
+    // A binding without the expected quota schema must fail closed.
+    return false;
+  }
 }
 
 function taskHttpStatus(task) {
@@ -50,6 +65,10 @@ function taskHttpStatus(task) {
 
 export function createWorker(options = {}) {
   const rateLimiter = options.rateLimiter || createRateLimiter();
+  const preAuthRateLimiter = options.preAuthRateLimiter || createRateLimiter({
+    windowMs: PRE_AUTH_WINDOW_MS,
+    maxRequests: PRE_AUTH_MAX_REQUESTS_PER_ISOLATE,
+  });
 
   return {
     async fetch(request, env = {}) {
@@ -61,7 +80,19 @@ export function createWorker(options = {}) {
             return json({ error: "method_not_allowed" }, 405, { allow: "POST" });
           }
 
-          const auth = await authenticateRequest(request, env);
+          // Bound unauthenticated and invalid-key D1 lookups before hashing/querying.
+          // This in-memory limit is per isolate only; the zone-level WAF rule is
+          // the edge guard and must be configured separately.
+          const preAuthRate = preAuthRateLimiter.check(getClientRateLimitKey(request));
+          if (!preAuthRate.allowed) {
+            return json(
+              { error: { code: "RATE_LIMITED", message: "Too many requests; retry later." } },
+              429,
+              { "retry-after": String(preAuthRate.retryAfterSec) },
+            );
+          }
+
+          const auth = await authenticateRequest(request, env, { requiredScope: "tasks:fetch" });
           if (!auth.ok) {
             return json(
               { error: { code: auth.code, message: auth.message } },
@@ -70,7 +101,7 @@ export function createWorker(options = {}) {
             );
           }
 
-          const rate = rateLimiter.check(auth.clientId);
+          const rate = rateLimiter.check(auth.tenantId);
           if (!rate.allowed) {
             return json(
               { error: { code: "RATE_LIMITED", message: "Too many task requests; retry later." } },
@@ -96,13 +127,43 @@ export function createWorker(options = {}) {
             );
           }
 
+          let quota;
+          try {
+            quota = await reservePlanRequest({
+              db: env.EXPORTFLOW_AUTH_DB,
+              identity: auth,
+            });
+          } catch {
+            return json(
+              { error: { code: "QUOTA_BACKEND_UNAVAILABLE", message: "Plan quota storage is temporarily unavailable." } },
+              503,
+            );
+          }
+
+          if (!quota.allowed) {
+            return json(
+              { error: { code: "PLAN_QUOTA_EXCEEDED", message: "The plan request allowance for this window has been exhausted." } },
+              429,
+              {
+                "retry-after": String(quota.retryAfterSec),
+                "x-plan-limit": String(quota.limit),
+                "x-plan-remaining": "0",
+                "x-plan-reset": quota.resetAt,
+              },
+            );
+          }
+
           const task = await executeWebTask(contract, {
             fetchImpl: options.fetchImpl,
             now: options.now,
             idFactory: options.idFactory,
             signal: request.signal,
           });
-          return json(task, taskHttpStatus(task));
+          return json(task, taskHttpStatus(task), {
+            "x-plan-limit": String(quota.limit),
+            "x-plan-remaining": String(quota.remaining),
+            "x-plan-reset": quota.resetAt,
+          });
         }
 
         if (request.method !== "GET" && request.method !== "HEAD") {
@@ -120,7 +181,29 @@ export function createWorker(options = {}) {
         }
 
         if (url.pathname === "/api/v1/platform") {
-          const authReady = isAuthConfigured(env);
+          const authConfigured = isAuthConfigured(env);
+          let fetchReady = false;
+          // Public discovery metadata never reads D1. Authenticated callers may
+          // request a per-tenant readiness check after API-key validation.
+          if (request.headers.has("authorization")) {
+            const preAuthRate = preAuthRateLimiter.check(getClientRateLimitKey(request));
+            if (!preAuthRate.allowed) {
+              return json(
+                { error: { code: "RATE_LIMITED", message: "Too many requests; retry later." } },
+                429,
+                { "retry-after": String(preAuthRate.retryAfterSec) },
+              );
+            }
+            const auth = await authenticateRequest(request, env, { requiredScope: "tasks:fetch" });
+            if (!auth.ok) {
+              return json(
+                { error: { code: auth.code, message: auth.message } },
+                auth.httpStatus,
+                auth.headers,
+              );
+            }
+            fetchReady = await hasQuotaSchema(env);
+          }
           return json({
             name: "ExportFlow",
             positioning: "Model-agnostic agentic web infrastructure",
@@ -129,8 +212,9 @@ export function createWorker(options = {}) {
             adapterCatalog: getAdapterCatalog(),
             status: "foundation",
             auth: {
-              mode: "bearer",
-              configured: authReady,
+              mode: "tenant-api-key",
+              configured: authConfigured,
+              ready: fetchReady,
             },
             endpoints: {
               health: "/api/v1/health",
@@ -138,7 +222,7 @@ export function createWorker(options = {}) {
               routerPreview: "/api/v1/router-preview",
               tasks: "/api/v1/tasks",
             },
-            liveCapabilities: authReady ? ["http.fetch.v1"] : [],
+            liveCapabilities: fetchReady ? ["http.fetch.v1"] : [],
           });
         }
 
