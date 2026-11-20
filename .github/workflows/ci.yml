@@ -43,13 +43,51 @@ jobs:
       if-no-files-found: error
       retention-days: 1
       include-hidden-files: true
-   - name: Generate ephemeral Better Auth lab secrets
+   - name: Create unique temporary Owner Auth D1 and ephemeral secrets
+     env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
      run: |
       set -euo pipefail
+      if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+       echo "::error::Cloudflare test resource token is unavailable."
+       exit 1
+      fi
+      LAB_WORKER_NAME="exportflow-owner-session-lab-${GITHUB_RUN_ID}"
+      LAB_DB_NAME="exportflow-owner-auth-${GITHUB_RUN_ID}"
+      LAB_CONFIG_FILE="cloudflare/auth-session-lab/.wrangler-${GITHUB_RUN_ID}.toml"
+      CREATE_JSON="$RUNNER_TEMP/owner-session-lab-d1-create.json"
+      curl --fail --silent --show-error -X POST \
+       -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+       -H "Content-Type: application/json" \
+       --data "$(node -e 'process.stdout.write(JSON.stringify({name:process.argv[1],read_replication:{mode:"disabled"}}))' "$LAB_DB_NAME")" \
+       "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database" > "$CREATE_JSON"
+      LAB_DB_ID="$(node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(x.success!==true || !x.result?.uuid) process.exit(1); process.stdout.write(x.result.uuid)' "$CREATE_JSON")"
+      cat > "$LAB_CONFIG_FILE" <<EOF
+      name = "$LAB_WORKER_NAME"
+      main = "worker.js"
+      compatibility_date = "2026-11-20"
+      compatibility_flags = ["nodejs_compat"]
+      workers_dev = true
+      preview_urls = false
+      observability = { enabled = false }
+
+      [vars]
+      BETTER_AUTH_URL = "https://$LAB_WORKER_NAME.hhameranede.workers.dev"
+
+      [[d1_databases]]
+      binding = "AUTH_DB"
+      database_name = "$LAB_DB_NAME"
+      database_id = "$LAB_DB_ID"
+      EOF
       AUTH_LAB_SECRET="$(openssl rand -hex 32)"
       SESSION_LAB_TOKEN="$(openssl rand -hex 32)"
       echo "::add-mask::$AUTH_LAB_SECRET"
       echo "::add-mask::$SESSION_LAB_TOKEN"
+      printf 'LAB_WORKER_NAME=%s\n' "$LAB_WORKER_NAME" >> "$GITHUB_ENV"
+      printf 'LAB_DB_NAME=%s\n' "$LAB_DB_NAME" >> "$GITHUB_ENV"
+      printf 'LAB_DB_ID=%s\n' "$LAB_DB_ID" >> "$GITHUB_ENV"
+      printf 'LAB_CONFIG_FILE=%s\n' "$LAB_CONFIG_FILE" >> "$GITHUB_ENV"
       printf 'AUTH_LAB_SECRET=%s\n' "$AUTH_LAB_SECRET" >> "$GITHUB_ENV"
       printf 'SESSION_LAB_TOKEN=%s\n' "$SESSION_LAB_TOKEN" >> "$GITHUB_ENV"
 
@@ -59,18 +97,14 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
      run: |
       set -euo pipefail
-      if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-       echo "::error::Cloudflare test deployment token is unavailable."
-       exit 1
-      fi
-      npx --yes wrangler@4 deploy --config cloudflare/auth-session-lab/wrangler.toml
-      printf '%s' "$AUTH_LAB_SECRET" | npx --yes wrangler@4 secret put BETTER_AUTH_SECRET --config cloudflare/auth-session-lab/wrangler.toml
-      printf '%s' "$SESSION_LAB_TOKEN" | npx --yes wrangler@4 secret put SESSION_LAB_TOKEN --config cloudflare/auth-session-lab/wrangler.toml
+      npx --yes wrangler@4 deploy --config "$LAB_CONFIG_FILE"
+      printf '%s' "$AUTH_LAB_SECRET" | npx --yes wrangler@4 secret put BETTER_AUTH_SECRET --config "$LAB_CONFIG_FILE"
+      printf '%s' "$SESSION_LAB_TOKEN" | npx --yes wrangler@4 secret put SESSION_LAB_TOKEN --config "$LAB_CONFIG_FILE"
 
    - name: Verify real Better Auth owner session cookies against isolated Worker and D1
      run: |
       set -euo pipefail
-      BASE_URL="https://exportflow-owner-session-lab-20261121.hhameranede.workers.dev"
+      BASE_URL="https://${LAB_WORKER_NAME}.hhameranede.workers.dev"
       COOKIE_JAR="$RUNNER_TEMP/owner-session-lab-cookies.txt"
       SIGNUP_JSON="$RUNNER_TEMP/owner-session-lab-signup.json"
       DECISION_JSON="$RUNNER_TEMP/owner-session-lab-decision.json"
@@ -154,13 +188,28 @@ jobs:
       assert_access "expired session denied" false yes "$OWNER_ID" "$BASE_URL" same-origin
       echo "PASS: Better Auth real D1 session-cookie runtime acceptance completed."
 
-   - name: Delete temporary Better Auth session lab Worker
+   - name: Delete temporary Better Auth session lab Worker and D1
      if: always()
      continue-on-error: true
      env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
-     run: npx --yes wrangler@4 delete --config cloudflare/auth-session-lab/wrangler.toml --force
+     run: |
+      set -u
+      if [ -n "${LAB_CONFIG_FILE:-}" ] && [ -f "$LAB_CONFIG_FILE" ]; then
+       npx --yes wrangler@4 delete --config "$LAB_CONFIG_FILE" --force || echo "::warning::Temporary auth lab Worker deletion did not verify."
+      fi
+      if [ -n "${LAB_DB_ID:-}" ] && [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+       if curl --fail --silent --show-error -X DELETE \
+        -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+        "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$LAB_DB_ID" >/dev/null; then
+        echo "Temporary auth lab D1 deleted."
+       else
+        echo "::warning::Temporary auth lab D1 deletion did not verify."
+       fi
+      fi
+      if [ -n "${LAB_CONFIG_FILE:-}" ]; then rm -f "$LAB_CONFIG_FILE"; fi
+
 
  deploy-production:
   needs: test
