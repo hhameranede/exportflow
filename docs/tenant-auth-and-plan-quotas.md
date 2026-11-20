@@ -35,9 +35,27 @@ The migration deliberately inserts no plan rows or tenant records. Do not invent
 - Exhaustion returns HTTP 429 with `Retry-After` and `X-Plan-Limit`, `X-Plan-Remaining`, and `X-Plan-Reset` headers.
 - Database failures fail closed with HTTP 503. The in-memory 60 requests/minute limiter remains supplementary burst protection only; it is not the plan quota.
 
+## Fetch usage receipts
+
+The Fetch task response now includes sanitized, in-memory per-attempt usage receipts under `task.usage.receipts`.
+
+Each outbound Fetch attempt (including each redirect hop) can emit:
+- Attempt number, outcome, and HTTP status when a response exists.
+- Normalized content type and declared Content-Length metadata when valid.
+- Bytes observed at the response stream-reader boundary.
+- I/O-inclusive wall elapsed time and a safe error code, when applicable.
+
+Receipts intentionally omit URLs, hostnames, query strings, headers, response bodies, cookies and credentials. `elapsedMs` is **not CPU time**; `responseBodyBytesRead` is not total wire egress. The observer is best-effort: callback errors must not change Fetch success/failure. Receipts live only in the current Task result; this change does not persist them to D1 or create a durable audit ledger.
+
+The response continues to report `usage.cost: null`. No EF Credit weight, monetary cost, provider charge, or billable amount is inferred from these measurements.
+
 ## Cost Router boundary
 
-The monetary Cost Router budget and provider quota pools remain distinct from the task-count allowance in `tenant_request_usage`. This patch does not claim the existing Cost Router D1 JavaScript adapter has passed Workers D1 Binding runtime acceptance, and it does not wire monetary reservations into Fetch execution.
+The monetary Cost Router budget and shared provider quota pools remain distinct from the task-count allowance in `tenant_request_usage`.
+
+The existing Cost Router D1 adapter did pass a separate, one-shot Cloudflare Workers D1 Binding acceptance using the dedicated `exportflow-cost-router-integration-test` database. That acceptance exercised 11 checks, including reservation, idempotency, settlement/replay, release, concurrent quota contention and cleanup verification. Its temporary harness/binding were removed afterward. It proves only those tested adapter paths in that test run; it does not mean Cost Router is integrated into the current public Fetch execution path or that Production currently has a D1 binding. The active Production Worker settings still report `bindings: []`.
+
+This PR adds only tenant request-count quotas and ephemeral Fetch usage receipts. It does not wire monetary reservations, EF Credit debits, or settlement into Fetch execution.
 
 ## Operational prerequisites and safety
 
