@@ -57,7 +57,7 @@ When enabled, Better Auth requires email verification and sends verification/res
 
 ## Current limitations
 
-- No Google Client ID or Client Secret was found in the checked GitHub source, Notion project pages, Worker secret metadata, or Cloudflare Access identity-provider configuration. The existing Cloudflare Access provider is One-time PIN, not Google OAuth.
+- The current `exportflow-platform` Worker has no Google OAuth secret binding configured. Earlier project history records a Google OAuth client used by the separate Merchant Preview flow (Google Cloud project `478533247081`), whose callback was `/api/merchant/auth/google/callback`. That historical client has not been verified as reusable for developer accounts, and access to its Google Cloud project was previously unavailable. Do not assume it is the same credential set or silently reuse it. The owner of that Google Cloud project must confirm access and either add `https://exportflow.me/api/auth/callback/google` as an authorized redirect URI to the intended Web OAuth client, or create a dedicated Web OAuth client.
 - No dedicated ExportFlow Auth D1 database or AUTH_DB binding exists yet.
 - Email/password is intentionally disabled until a verified transactional sender exists.
 - Two-factor authentication, organization/team roles, account deletion workflow, billing entitlements, and admin provisioning are not included in this first implementation.
