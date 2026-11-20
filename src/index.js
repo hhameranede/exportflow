@@ -40,6 +40,39 @@ function isAuthConfigured(env) {
   return typeof env?.EXPORTFLOW_AUTH_DB?.prepare === "function";
 }
 
+async function hasLiveFetchTenant(env) {
+  const db = env?.EXPORTFLOW_AUTH_DB;
+  if (typeof db?.prepare !== "function") return false;
+
+  try {
+    // Confirm the persistent quota table exists before advertising Fetch as live.
+    await db.prepare("SELECT 1 FROM tenant_request_usage LIMIT 0").first();
+    const row = await db.prepare(`
+      SELECT 1 AS tenant_auth_ready
+      FROM api_keys AS k
+      JOIN tenants AS t ON t.tenant_id = k.tenant_id
+      JOIN plan_policies AS p ON p.plan_code = t.plan_code
+      WHERE k.status = 'active'
+        AND t.status = 'active'
+        AND p.status = 'active'
+        AND (k.expires_at IS NULL OR k.expires_at > ?1)
+        AND EXISTS (
+          SELECT 1
+          FROM json_each(
+            CASE WHEN json_valid(k.scopes_json) THEN k.scopes_json ELSE '[]' END
+          ) AS scope
+          WHERE scope.value IN ('tasks:fetch', 'tasks:*', '*')
+        )
+      LIMIT 1
+    `).bind(new Date().toISOString()).first();
+
+    return Boolean(row);
+  } catch {
+    // A binding without the expected schema or a usable tenant must fail closed.
+    return false;
+  }
+}
+
 function taskHttpStatus(task) {
   if (task.state === "unsupported") return 501;
   if (task.state === "failed" && task.result?.data?.errorCode) {
@@ -150,7 +183,8 @@ export function createWorker(options = {}) {
         }
 
         if (url.pathname === "/api/v1/platform") {
-          const authReady = isAuthConfigured(env);
+          const authConfigured = isAuthConfigured(env);
+          const fetchReady = authConfigured && await hasLiveFetchTenant(env);
           return json({
             name: "ExportFlow",
             positioning: "Model-agnostic agentic web infrastructure",
@@ -160,7 +194,8 @@ export function createWorker(options = {}) {
             status: "foundation",
             auth: {
               mode: "tenant-api-key",
-              configured: authReady,
+              configured: authConfigured,
+              ready: fetchReady,
             },
             endpoints: {
               health: "/api/v1/health",
@@ -168,7 +203,7 @@ export function createWorker(options = {}) {
               routerPreview: "/api/v1/router-preview",
               tasks: "/api/v1/tasks",
             },
-            liveCapabilities: authReady ? ["http.fetch.v1"] : [],
+            liveCapabilities: fetchReady ? ["http.fetch.v1"] : [],
           });
         }
 
