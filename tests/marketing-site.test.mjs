@@ -4,13 +4,14 @@ import { handleWebsiteRequest } from "../src/site/router.js";
 import { MARKETING_PATHS } from "../src/site/marketing.js";
 
 const ORIGIN = "https://exportflow.test";
+const LOCALIZED_PATH = /^\/(en|ar|fr|es|de|pt|zh|ja)\//;
 
 function getWebsiteResponse(path) {
   const request = new Request(new URL(path, ORIGIN));
   return handleWebsiteRequest(request, new URL(request.url));
 }
 
-test("every marketing sitemap route renders one marketing client script and its stylesheet", async () => {
+test("every marketing sitemap route renders one marketing client script and stylesheet", async () => {
   const paths = [...new Set(MARKETING_PATHS)];
   assert.ok(paths.length > 0, "marketing sitemap should expose routes");
 
@@ -22,9 +23,17 @@ test("every marketing sitemap route renders one marketing client script and its 
 
     const html = await response.text();
     const scripts = html.match(/<script src="\/assets\/marketing\.js(?:\?[^"]*)?" defer><\/script>/g) ?? [];
-    assert.equal(scripts.length, 1, `${path} should include marketing-client.js exactly once`);
+    const stylesheets = html.match(/<link rel="stylesheet" href="\/assets\/marketing\.css(?:\?v=2)?">/g) ?? [];
+    assert.equal(scripts.length, 1, `${path} should include the marketing client exactly once`);
+    assert.equal(stylesheets.length, 1, `${path} should include the marketing stylesheet exactly once`);
     assert.doesNotMatch(html, /<script src="\/assets\/site\.js"/);
-    assert.match(html, /<link rel="stylesheet" href="\/assets\/marketing\.css(?:\?v=2)?">/);
+
+    const locale = LOCALIZED_PATH.exec(path)?.[1] ?? "en";
+    if (locale === "ar") {
+      assert.match(html, /<html lang="ar" dir="rtl">/);
+    } else {
+      assert.match(html, new RegExp(`<html lang="${locale}">`));
+    }
   }
 });
 
@@ -59,10 +68,9 @@ test("marketing JavaScript, CSS, and sitemap are served by the website router", 
   assert.equal(sitemap.status, 200);
   assert.match(sitemap.headers.get("content-type") ?? "", /xml/i);
   const xml = await sitemap.text();
-  assert.equal((xml.match(/<loc>/g) ?? []).length, new Set(MARKETING_PATHS).size);
-  for (const path of new Set(MARKETING_PATHS)) {
-    assert.ok(xml.includes(path), `sitemap should include ${path}`);
-  }
+  const locations = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)]
+    .map(([, value]) => new URL(value).pathname);
+  assert.deepEqual(locations, [...new Set(MARKETING_PATHS)]);
 });
 
 test("unknown website paths do not fall through to a marketing page", () => {
