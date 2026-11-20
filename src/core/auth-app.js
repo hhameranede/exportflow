@@ -36,6 +36,32 @@ function htmlEscape(value) {
     .replaceAll("'", "&#39;");
 }
 
+const REQUIRED_AUTH_TABLES = Object.freeze(["user", "session", "account", "verification"]);
+
+async function isAuthSchemaReady(binding) {
+  try {
+    const placeholders = REQUIRED_AUTH_TABLES.map(() => "?").join(", ");
+    const result = await binding
+      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${placeholders})`)
+      .bind(...REQUIRED_AUTH_TABLES)
+      .all();
+    const existing = new Set((result?.results || []).map((row) => row.name));
+    return REQUIRED_AUTH_TABLES.every((name) => existing.has(name));
+  } catch {
+    return false;
+  }
+}
+
+async function getPublicAuthFeatureStatus(env, configuredStatus) {
+  const authReady = configuredStatus.authConfigured && await isAuthSchemaReady(env.AUTH_DB);
+  return Object.freeze({
+    ...configuredStatus,
+    authReady,
+    googleEnabled: configuredStatus.googleEnabled && authReady,
+    emailPasswordEnabled: configuredStatus.emailPasswordEnabled && authReady,
+  });
+}
+
 function textResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -215,7 +241,7 @@ export async function handleAuthRequest(request, env = {}) {
     if (request.method !== "GET") {
       return textResponse({ error: "method_not_allowed" }, 405);
     }
-    return textResponse(status);
+    return textResponse(await getPublicAuthFeatureStatus(env, status));
   }
 
   if (!url.pathname.startsWith("/api/auth/")) return null;
