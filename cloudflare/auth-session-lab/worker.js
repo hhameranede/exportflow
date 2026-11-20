@@ -164,6 +164,15 @@ export default {
       return new Response("Not found", { status: 404 });
     }
 
+    // Temporary, non-sensitive liveness diagnostic used only while the lab Worker exists.
+    if (url.pathname === "/__session_lab/health" && request.method === "GET") {
+      return json({
+        ok: true,
+        sessionLabTokenConfigured: typeof env.SESSION_LAB_TOKEN === "string" && env.SESSION_LAB_TOKEN.length >= 32,
+        authDbBindingPresent: Boolean(env.AUTH_DB && typeof env.AUTH_DB.prepare === "function"),
+      });
+    }
+
     if (!authorizedForLab(request, env)) {
       return json({ error: "lab_forbidden" }, 403);
     }
