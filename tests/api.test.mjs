@@ -2,11 +2,70 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createWorker } from "../src/index.js";
 import { authenticateRequest, createRateLimiter } from "../src/core/auth.js";
+import { hashApiKey } from "../src/core/tenant-auth.js";
 import { TaskContractError, validateTaskRequest } from "../src/core/task-contract.js";
 import { fetchPublicResource, FetchAdapterError } from "../src/core/http-fetch.js";
 import { startServer } from "../src/server.js";
 
-const TEST_TOKEN = "ef_test_token_synthetic_1234567890";
+const TEST_KEY_ID = "0123456789abcdef";
+const TEST_TOKEN = `ef_live_${TEST_KEY_ID}_${"A".repeat(43)}`;
+const TEST_KEY_HASH = await hashApiKey(TEST_TOKEN);
+
+function makeTestEnv({ requestLimit = 10_000, keyStatus = "active", tenantStatus = "active", planStatus = "active", scopes = ["tasks:fetch"], expiresAt = null } = {}) {
+  const usage = new Map();
+  const record = {
+    key_id: TEST_KEY_ID,
+    tenant_id: "tenant_test_001",
+    key_status: keyStatus,
+    expires_at: expiresAt,
+    scopes_json: JSON.stringify(scopes),
+    tenant_status: tenantStatus,
+    plan_code: "test",
+    plan_status: planStatus,
+    quota_period: "daily",
+    request_limit: requestLimit,
+    policy_version: "test-v1",
+  };
+  const db = {
+    prepare(sql) {
+      let params = [];
+      return {
+        bind(...values) { params = values; return this; },
+        async first() {
+          if (sql.includes("FROM api_keys")) {
+            const [keyId, keyHash] = params;
+            return keyId === TEST_KEY_ID && keyHash === TEST_KEY_HASH ? { ...record } : null;
+          }
+          if (sql.includes("tenant_request_usage LIMIT 0")) return null;
+          if (sql.includes("INSERT INTO tenant_request_usage")) {
+            const [tenantId, windowId, planCode, policyVersion, limit, updatedAt] = params;
+            const key = tenantId + ":" + windowId;
+            const current = usage.get(key) || {
+              tenant_id: tenantId,
+              window_id: windowId,
+              plan_code: planCode,
+              policy_version: policyVersion,
+              request_limit: limit,
+              requests_used: 0,
+            };
+            if (current.requests_used >= current.request_limit) return null;
+            current.requests_used += 1;
+            current.updated_at = updatedAt;
+            usage.set(key, current);
+            return { requests_used: current.requests_used, request_limit: current.request_limit };
+          }
+          if (sql.includes("SELECT request_limit, requests_used")) {
+            const [tenantId, windowId] = params;
+            const current = usage.get(tenantId + ":" + windowId);
+            return current ? { request_limit: current.request_limit, requests_used: current.requests_used } : null;
+          }
+          throw new Error("Unexpected SQL in synthetic D1 fixture.");
+        },
+      };
+    },
+  };
+  return { EXPORTFLOW_AUTH_DB: db };
+}
 
 function makeTaskRequest(body, {
   token = TEST_TOKEN,
@@ -40,7 +99,7 @@ test("auth fails closed with 503 when EXPORTFLOW_API_TOKEN is missing or whitesp
 
 test("auth rejects missing, empty, oversized, malformed, and invalid Bearer tokens with 401", async () => {
   const worker = createWorker();
-  const env = { EXPORTFLOW_API_TOKEN: TEST_TOKEN };
+  const env = makeTestEnv();
 
   const missing = await worker.fetch(makeTaskRequest({ goal: "Fetch", url: "https://example.com" }, { token: null }), env);
   assert.equal(missing.status, 401);
@@ -74,20 +133,20 @@ test("authenticateRequest uses fixed-length SHA-256 comparison safely", async ()
   const req = new Request("https://api.exportflow.local/api/v1/tasks", {
     headers: { authorization: `Bearer ${TEST_TOKEN}` },
   });
-  const ok = await authenticateRequest(req, { EXPORTFLOW_API_TOKEN: TEST_TOKEN });
+  const ok = await authenticateRequest(req, makeTestEnv());
   assert.equal(ok.ok, true);
 
   const sameLenBad = new Request("https://api.exportflow.local/api/v1/tasks", {
     headers: { authorization: `Bearer ${"x".repeat(TEST_TOKEN.length)}` },
   });
-  const bad = await authenticateRequest(sameLenBad, { EXPORTFLOW_API_TOKEN: TEST_TOKEN });
+  const bad = await authenticateRequest(sameLenBad, makeTestEnv());
   assert.equal(bad.ok, false);
   assert.equal(bad.code, "INVALID_TOKEN");
 });
 
 test("POST /api/v1/tasks enforces content-type, empty/invalid UTF-8/malformed JSON, oversized payloads, and unknown fields", async () => {
   const worker = createWorker();
-  const env = { EXPORTFLOW_API_TOKEN: TEST_TOKEN };
+  const env = makeTestEnv();
 
   const wrongType = await worker.fetch(makeTaskRequest("{}", { contentType: "text/plain" }), env);
   assert.equal(wrongType.status, 415);
@@ -180,7 +239,7 @@ test("POST /api/v1/tasks rejects private, loopback, metadata, and invalid URLs b
       return new Response("should not execute");
     },
   });
-  const env = { EXPORTFLOW_API_TOKEN: TEST_TOKEN };
+  const env = makeTestEnv();
 
   for (const url of [
     "http://127.0.0.1/admin",
@@ -198,7 +257,7 @@ test("POST /api/v1/tasks rejects private, loopback, metadata, and invalid URLs b
 });
 
 test("POST /api/v1/tasks enforces egress redirect validation, redirect limit, stream size cap, and timeout end-to-end", async () => {
-  const env = { EXPORTFLOW_API_TOKEN: TEST_TOKEN };
+  const env = makeTestEnv();
 
   const redirectToPrivate = createWorker({
     fetchImpl: async () => new Response(null, { status: 302, headers: { location: "http://127.0.0.1/secret" } }),
@@ -278,7 +337,7 @@ test("POST /api/v1/tasks executes end-to-end bounded HTTP fetch and returns stru
 
   const res = await worker.fetch(
     makeTaskRequest({ goal: "Retrieve synthetic public page", url: "https://example.com/start" }),
-    { EXPORTFLOW_API_TOKEN: TEST_TOKEN },
+    makeTestEnv(),
   );
   assert.equal(res.status, 200);
   const task = await res.json();
@@ -310,7 +369,7 @@ test("POST /api/v1/tasks executes end-to-end bounded HTTP fetch and returns stru
 });
 
 test("POST /api/v1/tasks handles upstream 404, 500, and network failures without leaking secrets", async () => {
-  const env = { EXPORTFLOW_API_TOKEN: TEST_TOKEN };
+  const env = makeTestEnv();
 
   const worker404 = createWorker({
     idFactory: () => "task-404-0001",
@@ -358,7 +417,7 @@ test("POST /api/v1/tasks returns 501 unsupported for browser JS or interaction t
       return new Response("unexpected");
     },
   });
-  const env = { EXPORTFLOW_API_TOKEN: TEST_TOKEN };
+  const env = makeTestEnv();
 
   const jsRes = await worker.fetch(
     makeTaskRequest({ goal: "Render SPA", url: "https://example.com/app", requiresJavascript: true }),
@@ -383,7 +442,7 @@ test("rate limiter enforces boundary, concurrent burst, window reset, auth isola
     rateLimiter: limiter,
     fetchImpl: async () => new Response("ok", { headers: { "content-type": "text/plain" } }),
   });
-  const env = { EXPORTFLOW_API_TOKEN: TEST_TOKEN };
+  const env = makeTestEnv();
 
   // Failed auth requests must NOT consume the legitimate client's quota
   const badAuth = await worker.fetch(makeTaskRequest({ goal: "Bad", url: "https://example.com/0" }, { token: "bad" }), env);
@@ -423,8 +482,10 @@ test("existing Worker routes remain backward compatible and reflect liveCapabili
   assert.deepEqual((await unconfiguredPlatform.json()).liveCapabilities, []);
 
   const configuredPlatform = await worker.fetch(
-    new Request("https://exportflow.local/api/v1/platform"),
-    { EXPORTFLOW_API_TOKEN: TEST_TOKEN },
+    new Request("https://exportflow.local/api/v1/platform", {
+      headers: { authorization: `Bearer ${TEST_TOKEN}` },
+    }),
+    makeTestEnv(),
   );
   const platformData = await configuredPlatform.json();
   assert.deepEqual(platformData.liveCapabilities, ["http.fetch.v1"]);
@@ -456,7 +517,7 @@ test("Node HTTP server bridges localhost requests safely, enforces body limits, 
   const server = await startServer({
     port: 0,
     workerInstance: spyWorker,
-    env: { EXPORTFLOW_API_TOKEN: TEST_TOKEN },
+    env: makeTestEnv(),
   });
 
   try {
