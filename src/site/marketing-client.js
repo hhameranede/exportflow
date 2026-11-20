@@ -994,7 +994,7 @@ export const MARKETING_JS = `(function () {
       if (error) error.textContent = message;
     }
     if (["signin", "signup", "forgot"].indexOf(mode) >= 0 &&
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        !(email.indexOf("@") > 0 && email.lastIndexOf(".") > email.indexOf("@") + 1 && email.lastIndexOf(".") < email.length - 1)) {
       fail("email", "Enter a valid email address.");
     }
     if (mode === "signin" || mode === "signup") {
