@@ -39,7 +39,7 @@ jobs:
 
  deploy-production:
   needs: test
-  if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message == 'chore: authorized Production auth deployment'
+  if: "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message == 'chore: authorized Production auth deployment' }}"
   runs-on: ubuntu-latest
   steps:
    - uses: actions/checkout@v4
