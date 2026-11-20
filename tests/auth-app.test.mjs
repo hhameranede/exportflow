@@ -3,9 +3,16 @@ import assert from "node:assert/strict";
 import { getAuthFeatureStatus, handleAuthRequest } from "../src/core/auth-app.js";
 import { createWorker } from "../src/index.js";
 
-function createD1BindingStub() {
+function createD1BindingStub(tableNames = []) {
   return {
-    prepare() {},
+    prepare() {
+      return {
+        bind() { return this; },
+        async all() {
+          return { results: tableNames.map((name) => ({ name })) };
+        },
+      };
+    },
     batch() {},
   };
 }
@@ -97,11 +104,44 @@ test("public auth config returns capability booleans only and never returns cred
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.equal(body.authConfigured, true);
-  assert.equal(body.googleEnabled, true);
+  assert.equal(body.authReady, false);
+  assert.equal(body.googleEnabled, false);
   assert.equal(body.emailPasswordEnabled, false);
   assert.equal("migrationEnabled" in body, false);
   assert.equal(JSON.stringify(body).includes("test-client-secret"), false);
   assert.equal(JSON.stringify(body).includes("test-migration-token"), false);
+});
+
+
+test("public auth capabilities stay disabled until all required Better Auth D1 tables exist", async () => {
+  const requiredTables = ["user", "session", "account", "verification"];
+  const response = await handleAuthRequest(
+    new Request("https://exportflow.me/api/auth/config"),
+    {
+      AUTH_DB: createD1BindingStub(requiredTables),
+      BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
+      GOOGLE_CLIENT_ID: "test-client-id",
+      GOOGLE_CLIENT_SECRET: "test-client-secret",
+    },
+  );
+  const body = await response.json();
+  assert.equal(body.authConfigured, true);
+  assert.equal(body.authReady, true);
+  assert.equal(body.googleEnabled, true);
+
+  const incomplete = await handleAuthRequest(
+    new Request("https://exportflow.me/api/auth/config"),
+    {
+      AUTH_DB: createD1BindingStub(["user", "session", "account"]),
+      BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
+      GOOGLE_CLIENT_ID: "test-client-id",
+      GOOGLE_CLIENT_SECRET: "test-client-secret",
+    },
+  );
+  const incompleteBody = await incomplete.json();
+  assert.equal(incompleteBody.authConfigured, true);
+  assert.equal(incompleteBody.authReady, false);
+  assert.equal(incompleteBody.googleEnabled, false);
 });
 
 test("auth configuration endpoint rejects non-GET methods", async () => {
