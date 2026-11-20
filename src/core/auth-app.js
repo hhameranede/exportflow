@@ -121,15 +121,9 @@ function createEmailSender(env) {
   };
 }
 
-export function getAuthInstance(env = {}) {
-  const status = getAuthFeatureStatus(env);
-  if (!status.authConfigured) return null;
-
+function buildAuthOptions(env, status) {
   const binding = env.AUTH_DB;
-  const cached = authInstances.get(binding);
-  if (cached) return cached;
-
-  const baseUrl = (env.BETTER_AUTH_URL || "https://exportflow.me").trim().replace(/\/+$/, "");
+  const baseUrl = (env.BETTER_AUTH_URL || "https://exportflow.me").trim().replace(/\\/+$/, "");
   const sendAccountEmail = createEmailSender(env);
   const socialProviders = {};
 
@@ -215,7 +209,24 @@ export function getAuthInstance(env = {}) {
     options.emailAndPassword = { enabled: false };
   }
 
-  const instance = betterAuth(options);
+  return options;
+}
+
+export function getAuthOptions(env = {}) {
+  const status = getAuthFeatureStatus(env);
+  if (!status.authConfigured) return null;
+  return buildAuthOptions(env, status);
+}
+
+export function getAuthInstance(env = {}) {
+  const status = getAuthFeatureStatus(env);
+  if (!status.authConfigured) return null;
+
+  const binding = env.AUTH_DB;
+  const cached = authInstances.get(binding);
+  if (cached) return cached;
+
+  const instance = betterAuth(buildAuthOptions(env, status));
   authInstances.set(binding, instance);
   return instance;
 }

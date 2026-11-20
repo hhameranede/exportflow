@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getAuthFeatureStatus, getAuthInstance, handleAuthRequest } from "../src/core/auth-app.js";
+import { getAuthFeatureStatus, getAuthOptions, handleAuthRequest } from "../src/core/auth-app.js";
 import { createWorker } from "../src/index.js";
 
 function createD1BindingStub(tableNames = []) {
@@ -57,7 +57,7 @@ test("Google OAuth is enabled only when D1, the Better Auth secret, and both Goo
 });
 
 test("Google OAuth requires a verified provider email and explicit account linking", () => {
-  const auth = getAuthInstance({
+  const options = getAuthOptions({
     AUTH_DB: createD1BindingStub(),
     BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
     BETTER_AUTH_URL: "https://exportflow.me",
@@ -65,10 +65,10 @@ test("Google OAuth requires a verified provider email and explicit account linki
     GOOGLE_CLIENT_SECRET: "test-client-secret",
   });
 
-  assert.equal(auth.options.socialProviders.google.requireEmailVerification, true);
-  assert.equal(auth.options.account.accountLinking.enabled, true);
-  assert.equal(auth.options.account.accountLinking.disableImplicitLinking, true);
-  assert.deepEqual(auth.options.account.accountLinking.trustedProviders, ["google"]);
+  assert.equal(options.socialProviders.google.requireEmailVerification, true);
+  assert.equal(options.account.accountLinking.enabled, true);
+  assert.equal(options.account.accountLinking.disableImplicitLinking, true);
+  assert.deepEqual(options.account.accountLinking.trustedProviders, ["google"]);
 });
 
 test("email/password remains disabled until a Cloudflare Email binding and sender address exist", () => {
