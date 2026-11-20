@@ -111,14 +111,19 @@ jobs:
       EMAIL="owner-session-lab-${GITHUB_RUN_ID}@example.com"
       PASSWORD="$(openssl rand -hex 24)"
       HEALTH_JSON="$RUNNER_TEMP/owner-session-lab-health.json"
-      HEALTH_STATUS="$(curl --silent --show-error --output "$HEALTH_JSON" --write-out "%{http_code}" \
-       "$BASE_URL/__session_lab/health")"
-      if [ "$HEALTH_STATUS" != "200" ]; then
-       echo "Session lab Worker health probe failed with HTTP $HEALTH_STATUS."
-       node -e 'try { const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(JSON.stringify({error:x.error||null,ok:x.ok||false})); } catch { console.log("Non-JSON liveness response."); }' "$HEALTH_JSON"
+      sleep 3
+      if ! HEALTH_STATUS="$(curl --silent --show-error --retry 8 --retry-all-errors --retry-delay 2 --connect-timeout 8 --max-time 30 --output "$HEALTH_JSON" --write-out "%{http_code}" \
+       "$BASE_URL/__session_lab/health")"; then
+       echo "Session lab Worker health request could not connect after retry."
+       node -e 'try { const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(JSON.stringify({error:x.error||null,ok:x.ok||false})); } catch { console.log("No JSON liveness response was received."); }' "$HEALTH_JSON"
        exit 1
       fi
-      node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(x.ok!==true || x.sessionLabTokenConfigured!==true || x.authDbBindingPresent!==true) process.exit(1)' "$HEALTH_JSON"
+      echo "Session lab Worker health HTTP status: $HEALTH_STATUS"
+      node -e 'try { const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(JSON.stringify({ok:x.ok===true,sessionLabTokenConfigured:x.sessionLabTokenConfigured===true,authDbBindingPresent:x.authDbBindingPresent===true})); if(x.ok!==true || x.sessionLabTokenConfigured!==true || x.authDbBindingPresent!==true) process.exit(1); } catch { process.exit(1); }' "$HEALTH_JSON"
+      if [ "$HEALTH_STATUS" != "200" ]; then
+       echo "Session lab Worker health probe failed."
+       exit 1
+      fi
 
       SIGNUP_STATUS="$(curl --silent --show-error --cookie-jar "$COOKIE_JAR" --output "$SIGNUP_JSON" --write-out "%{http_code}" \
        -H "x-session-lab-token: $SESSION_LAB_TOKEN" \
