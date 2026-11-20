@@ -27,6 +27,8 @@ jobs:
       find dist -maxdepth 4 -type f -printf '%p %s bytes\\n' 2>/dev/null || true
       echo "Lab config-relative output:"
       find cloudflare/auth-lab -maxdepth 5 -type f -printf '%p %s bytes\\n' 2>/dev/null || true
+      echo "Owner session lab config-relative output:"
+      find cloudflare/auth-session-lab -maxdepth 5 -type f -printf '%p %s bytes\\n' 2>/dev/null || true
       echo "Wrangler internal output:"
       find .wrangler -maxdepth 5 -type f -printf '%p %s bytes\\n' 2>/dev/null || true
    - name: Upload isolated Auth Lab bundle artifact
@@ -36,6 +38,7 @@ jobs:
       path: |
        dist/
        cloudflare/auth-lab/dist/
+       cloudflare/auth-session-lab/dist/
        .wrangler/
       if-no-files-found: error
       retention-days: 1
