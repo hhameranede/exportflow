@@ -174,7 +174,15 @@ export default {
     }
 
     if (!authorizedForLab(request, env)) {
-      return json({ error: "lab_forbidden" }, 403);
+      return json({
+        error: "lab_forbidden",
+        sessionLabTokenConfigured: typeof env.SESSION_LAB_TOKEN === "string" && env.SESSION_LAB_TOKEN.length >= 32,
+        tokenHeaderPresent: request.headers.has("x-session-lab-token"),
+      }, 403);
+    }
+
+    if (url.pathname === "/__session_lab/health-auth" && request.method === "GET") {
+      return json({ ok: true });
     }
 
     if (url.pathname === "/__session_lab/signup" && request.method === "POST") {
