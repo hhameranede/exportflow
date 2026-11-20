@@ -2,6 +2,7 @@ import { fetchPublicResource, HTTP_FETCH_LIMITS } from "./http-fetch.js";
 import { normalizeResult } from "./result.js";
 import { extractAdapter } from "./extract.js";
 import { mapWebsite, crawlWebsite, MAP_CRAWL_LIMITS } from "./map-crawl.js";
+import { throwIfAborted } from "./cancellation.js";
 
 const registry = new Map();
 
@@ -104,6 +105,14 @@ registerAdapter({
 });
 
 
+function createAdapterFetchResource(options = {}) {
+  return (url, fetchOptions = {}) => fetchPublicResource(url, {
+    ...fetchOptions,
+    ...(typeof options.fetchImpl === "function" ? { fetchImpl: options.fetchImpl } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
+  });
+}
+
 registerAdapter({
   id: "web.map.v1",
   family: "web",
@@ -121,8 +130,13 @@ registerAdapter({
     "bounded-link-discovery",
     "no-authenticated-pages",
   ],
-  async execute(input = {}) {
-    const mapped = await mapWebsite(input);
+  async execute(input = {}, options = {}) {
+    throwIfAborted(options.signal);
+    const mapped = await mapWebsite(input, {
+      signal: options.signal,
+      fetchResource: createAdapterFetchResource(options),
+    });
+    throwIfAborted(options.signal);
     return normalizeResult({
       status: mapped.homepage.status >= 200 && mapped.homepage.status < 300 ? "succeeded" : "failed",
       data: {
@@ -157,8 +171,13 @@ registerAdapter({
     "bounded-response-bytes",
     "no-authenticated-pages",
   ],
-  async execute(input = {}) {
-    const crawled = await crawlWebsite(input);
+  async execute(input = {}, options = {}) {
+    throwIfAborted(options.signal);
+    const crawled = await crawlWebsite(input, {
+      signal: options.signal,
+      fetchResource: createAdapterFetchResource(options),
+    });
+    throwIfAborted(options.signal);
     return normalizeResult({
       status: crawled.pages.length ? "succeeded" : "failed",
       data: {
