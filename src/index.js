@@ -1,6 +1,7 @@
 import { chooseExecutionPath } from "./core/router.js";
 import { getAdapterCatalog } from "./core/adapters.js";
 import { authenticateRequest, createRateLimiter } from "./core/auth.js";
+import { reservePlanRequest } from "./core/plan-quota.js";
 import { readBoundedJsonBody, TaskContractError, validateTaskRequest } from "./core/task-contract.js";
 import { executeWebTask } from "./core/tasks.js";
 import { handleWebsiteRequest } from "./site/router.js";
@@ -37,7 +38,40 @@ function json(data, status = 200, extraHeaders = {}) {
 }
 
 function isAuthConfigured(env) {
-  return typeof env?.EXPORTFLOW_API_TOKEN === "string" && env.EXPORTFLOW_API_TOKEN.trim().length > 0;
+  return typeof env?.EXPORTFLOW_AUTH_DB?.prepare === "function";
+}
+
+async function hasLiveFetchTenant(env) {
+  const db = env?.EXPORTFLOW_AUTH_DB;
+  if (typeof db?.prepare !== "function") return false;
+
+  try {
+    // Confirm the persistent quota table exists before advertising Fetch as live.
+    await db.prepare("SELECT 1 FROM tenant_request_usage LIMIT 0").first();
+    const row = await db.prepare(`
+      SELECT 1 AS tenant_auth_ready
+      FROM api_keys AS k
+      JOIN tenants AS t ON t.tenant_id = k.tenant_id
+      JOIN plan_policies AS p ON p.plan_code = t.plan_code
+      WHERE k.status = 'active'
+        AND t.status = 'active'
+        AND p.status = 'active'
+        AND (k.expires_at IS NULL OR k.expires_at > ?1)
+        AND EXISTS (
+          SELECT 1
+          FROM json_each(
+            CASE WHEN json_valid(k.scopes_json) THEN k.scopes_json ELSE '[]' END
+          ) AS scope
+          WHERE scope.value IN ('tasks:fetch', 'tasks:*', '*')
+        )
+      LIMIT 1
+    `).bind(new Date().toISOString()).first();
+
+    return Boolean(row);
+  } catch {
+    // A binding without the expected schema or a usable tenant must fail closed.
+    return false;
+  }
 }
 
 function taskHttpStatus(task) {
@@ -61,7 +95,7 @@ export function createWorker(options = {}) {
             return json({ error: "method_not_allowed" }, 405, { allow: "POST" });
           }
 
-          const auth = await authenticateRequest(request, env);
+          const auth = await authenticateRequest(request, env, { requiredScope: "tasks:fetch" });
           if (!auth.ok) {
             return json(
               { error: { code: auth.code, message: auth.message } },
@@ -70,7 +104,7 @@ export function createWorker(options = {}) {
             );
           }
 
-          const rate = rateLimiter.check(auth.clientId);
+          const rate = rateLimiter.check(auth.tenantId);
           if (!rate.allowed) {
             return json(
               { error: { code: "RATE_LIMITED", message: "Too many task requests; retry later." } },
@@ -96,13 +130,43 @@ export function createWorker(options = {}) {
             );
           }
 
+          let quota;
+          try {
+            quota = await reservePlanRequest({
+              db: env.EXPORTFLOW_AUTH_DB,
+              identity: auth,
+            });
+          } catch {
+            return json(
+              { error: { code: "QUOTA_BACKEND_UNAVAILABLE", message: "Plan quota storage is temporarily unavailable." } },
+              503,
+            );
+          }
+
+          if (!quota.allowed) {
+            return json(
+              { error: { code: "PLAN_QUOTA_EXCEEDED", message: "The plan request allowance for this window has been exhausted." } },
+              429,
+              {
+                "retry-after": String(quota.retryAfterSec),
+                "x-plan-limit": String(quota.limit),
+                "x-plan-remaining": "0",
+                "x-plan-reset": quota.resetAt,
+              },
+            );
+          }
+
           const task = await executeWebTask(contract, {
             fetchImpl: options.fetchImpl,
             now: options.now,
             idFactory: options.idFactory,
             signal: request.signal,
           });
-          return json(task, taskHttpStatus(task));
+          return json(task, taskHttpStatus(task), {
+            "x-plan-limit": String(quota.limit),
+            "x-plan-remaining": String(quota.remaining),
+            "x-plan-reset": quota.resetAt,
+          });
         }
 
         if (request.method !== "GET" && request.method !== "HEAD") {
@@ -120,7 +184,8 @@ export function createWorker(options = {}) {
         }
 
         if (url.pathname === "/api/v1/platform") {
-          const authReady = isAuthConfigured(env);
+          const authConfigured = isAuthConfigured(env);
+          const fetchReady = authConfigured && await hasLiveFetchTenant(env);
           return json({
             name: "ExportFlow",
             positioning: "Model-agnostic agentic web infrastructure",
@@ -129,8 +194,9 @@ export function createWorker(options = {}) {
             adapterCatalog: getAdapterCatalog(),
             status: "foundation",
             auth: {
-              mode: "bearer",
-              configured: authReady,
+              mode: "tenant-api-key",
+              configured: authConfigured,
+              ready: fetchReady,
             },
             endpoints: {
               health: "/api/v1/health",
@@ -138,7 +204,7 @@ export function createWorker(options = {}) {
               routerPreview: "/api/v1/router-preview",
               tasks: "/api/v1/tasks",
             },
-            liveCapabilities: authReady ? ["http.fetch.v1"] : [],
+            liveCapabilities: fetchReady ? ["http.fetch.v1"] : [],
           });
         }
 
