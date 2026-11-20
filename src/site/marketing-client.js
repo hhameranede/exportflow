@@ -822,432 +822,506 @@ export const MARKETING_JS = `(function () {
   }
 
   /* ========================================================================
-     15. Accounts & Google Linking UI Blueprint (Ready for Real Backend)
+     15. Server-backed Accounts & Google OAuth
      ======================================================================== */
-  var AUTH_STORAGE_KEY = "ef_auth_preview";
-  var DEFAULT_AUTH_STATE = {
-    signedIn: false,
-    name: "ExportFlow Developer",
-    email: "developer@exportflow.me",
-    org: "Local Execution Lab",
-    googleLinked: false,
-    googleEmail: "",
-    twoFactorEnabled: false
-  };
+  var sessionTokenByIndex = new Map();
+  var accountIdByKey = new Map();
+  var authConfig = null;
 
-  function readAuthState() {
-    try {
-      var raw = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (!raw) return Object.assign({}, DEFAULT_AUTH_STATE);
-      return Object.assign({}, DEFAULT_AUTH_STATE, JSON.parse(raw));
-    } catch (_e) {
-      return Object.assign({}, DEFAULT_AUTH_STATE);
+  function authMessage(element, message, state) {
+    if (!element) return;
+    element.textContent = message || "";
+    if (state) element.dataset.state = state;
+    else delete element.dataset.state;
+  }
+
+  function escapeAuthText(value) {
+    return String(value == null ? "" : value).replace(/[&<>"']/g, function (char) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[char];
+    });
+  }
+
+  async function authRequest(path, method, payload) {
+    var options = {
+      method: method || "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "accept": "application/json" }
+    };
+    if (payload !== undefined) {
+      options.headers["content-type"] = "application/json";
+      options.body = JSON.stringify(payload);
     }
-  }
-
-  function writeAuthState(patch) {
-    var next = Object.assign({}, readAuthState(), patch);
-    try {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(next));
-    } catch (_e) {}
-    syncAuthHeaderLink();
-    syncAccountWorkspace();
-    return next;
-  }
-
-  function computeInitials(name, email) {
-    var src = (name || email || "EF").trim();
-    var parts = src.split(/\\s+/);
-    if (parts.length >= 2) {
-      return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    var response = await fetch("/api/auth/" + path, options);
+    var data = null;
+    try { data = await response.json(); } catch (_e) {}
+    if (!response.ok) {
+      var message = data && (data.message || data.error && data.error.message || data.error);
+      throw new Error(typeof message === "string" ? message : "The account service could not complete this request.");
     }
-    return src.slice(0, 2).toUpperCase();
+    return data;
   }
 
-  function syncAuthHeaderLink() {
+  function authGoTo(url) {
+    if (typeof url === "string" && url.indexOf("/") === 0 && url.indexOf("//") !== 0) {
+      window.location.assign(url);
+      return;
+    }
+    if (typeof url === "string") {
+      try {
+        var parsed = new URL(url, window.location.origin);
+        if (parsed.origin === window.location.origin || parsed.protocol === "https:") {
+          window.location.assign(parsed.href);
+          return;
+        }
+      } catch (_e) {}
+    }
+    window.location.assign("/account");
+  }
+
+  function updateAuthHeader(user) {
     var link = document.querySelector("[data-auth-header-link]");
     if (!link) return;
-    var st = readAuthState();
-    if (st.signedIn) {
+    if (user) {
       link.setAttribute("href", link.getAttribute("data-account-href") || "/account");
-      link.textContent = st.name || "Account";
+      link.textContent = user.name || user.email || "Account";
     } else {
       link.setAttribute("href", link.getAttribute("data-signin-href") || "/signin");
       link.textContent = link.getAttribute("data-signin-label") || "Sign in";
     }
   }
 
-  function syncAccountWorkspace() {
+  async function refreshAuthHeader() {
+    try {
+      var response = await authRequest("get-session");
+      updateAuthHeader(response && response.user ? response.user : null);
+    } catch (_e) {
+      updateAuthHeader(null);
+    }
+  }
+
+  function setAccountConfig(config) {
+    document.querySelectorAll("[data-auth-google]").forEach(function (button) {
+      var mode = button.getAttribute("data-auth-google-mode");
+      var allowed = Boolean(config && config.googleEnabled);
+      button.disabled = !allowed;
+      button.hidden = !allowed;
+      if (mode === "link") button.hidden = !allowed;
+    });
+
+    document.querySelectorAll('[data-auth-form="signin"], [data-auth-form="signup"]').forEach(function (form) {
+      form.hidden = !Boolean(config && config.emailPasswordEnabled);
+    });
+
+    document.querySelectorAll('[data-auth-form="forgot"], [data-auth-form="reset"]').forEach(function (form) {
+      form.hidden = !Boolean(config && config.emailPasswordEnabled);
+    });
+
+    var disabledEmail = document.querySelector("[data-auth-email-disabled]");
+    if (disabledEmail) disabledEmail.hidden = Boolean(config && config.emailPasswordEnabled);
+    var disabledReset = document.querySelector("[data-auth-reset-disabled]");
+    if (disabledReset) disabledReset.hidden = Boolean(config && config.emailPasswordEnabled);
+
+    var status = document.querySelector("[data-auth-config-status]");
+    if (!config || !config.authConfigured) {
+      authMessage(status, "Account services are not connected yet. The sign-in page is ready, but no account can be created until the server database and secret are configured.", "warning");
+    } else if (!config.googleEnabled && !config.emailPasswordEnabled) {
+      authMessage(status, "Authentication is configured on the server, but no sign-in provider is enabled yet.", "warning");
+    } else if (!config.emailPasswordEnabled) {
+      authMessage(status, "Google sign-in is available. Email/password stays disabled until verified transactional email delivery is configured.", "success");
+    } else {
+      authMessage(status, "Secure account services are available.", "success");
+    }
+
+    var linkGoogle = document.querySelector("[data-auth-link-google]");
+    if (linkGoogle) {
+      linkGoogle.disabled = !Boolean(config && config.googleEnabled);
+      linkGoogle.hidden = !Boolean(config && config.googleEnabled);
+    }
+  }
+
+  async function beginGoogleAuth(mode) {
+    var data = await authRequest(mode === "link" ? "link-social" : "sign-in/social", "POST", {
+      provider: "google",
+      callbackURL: window.location.origin + "/account"
+    });
+    if (data && data.url) {
+      authGoTo(data.url);
+      return;
+    }
+    if (mode === "link") {
+      showToast("Google account linked.");
+      await loadAccountWorkspace();
+      return;
+    }
+    authGoTo("/account");
+  }
+
+  function clearFieldErrors(form) {
+    if (!form) return;
+    form.querySelectorAll("[data-auth-field-error]").forEach(function (node) {
+      node.textContent = "";
+    });
+  }
+
+  function showFormError(form, message) {
+    var banner = form ? form.querySelector("[data-auth-form-status]") : null;
+    authMessage(banner, message, "error");
+    if (form) {
+      form.querySelectorAll("input").forEach(function (input) {
+        input.setAttribute("aria-invalid", "false");
+      });
+    }
+  }
+
+  function validateAuthForm(form, mode) {
+    clearFieldErrors(form);
+    var email = form.elements.email ? String(form.elements.email.value || "").trim() : "";
+    var password = form.elements.password ? String(form.elements.password.value || "") : "";
+    var name = form.elements.name ? String(form.elements.name.value || "").trim() : "";
+    var firstInvalid = null;
+    function fail(field, message) {
+      var input = form.elements[field];
+      var error = form.querySelector('[data-auth-field-error="' + field + '"]');
+      if (input) {
+        input.setAttribute("aria-invalid", "true");
+        if (!firstInvalid) firstInvalid = input;
+      }
+      if (error) error.textContent = message;
+    }
+    if (["signin", "signup", "forgot"].indexOf(mode) >= 0 &&
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      fail("email", "Enter a valid email address.");
+    }
+    if (mode === "signin" || mode === "signup") {
+      if (password.length < 8) fail("password", "Use at least 8 characters.");
+    }
+    if (mode === "signup" && name.length < 2) {
+      fail("name", "Enter your full name.");
+    }
+    if (mode === "reset") {
+      var newPassword = form.elements.password ? String(form.elements.password.value || "") : "";
+      var confirmPassword = form.elements.confirmPassword ? String(form.elements.confirmPassword.value || "") : "";
+      if (newPassword.length < 8) fail("password", "Use at least 8 characters.");
+      if (confirmPassword !== newPassword) fail("confirmPassword", "Passwords do not match.");
+      if (!new URLSearchParams(window.location.search).get("token")) {
+        fail("password", "This reset link is incomplete or expired. Request a new one.");
+      }
+    }
+    if (firstInvalid) firstInvalid.focus();
+    return {
+      ok: !firstInvalid,
+      email: email,
+      password: password,
+      name: name
+    };
+  }
+
+  function bindAuthForms() {
+    document.querySelectorAll("[data-auth-form]").forEach(function (form) {
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        var mode = form.getAttribute("data-auth-form");
+        var values = validateAuthForm(form, mode);
+        if (!values.ok) return;
+        var banner = form.querySelector("[data-auth-form-status]");
+        var submit = form.querySelector('button[type="submit"]');
+        if (submit) submit.disabled = true;
+        authMessage(banner, "Processing securely…");
+        try {
+          var result;
+          if (mode === "signin") {
+            result = await authRequest("sign-in/email", "POST", {
+              email: values.email,
+              password: values.password,
+              callbackURL: window.location.origin + "/account"
+            });
+            if (result && result.url) {
+              authGoTo(result.url);
+              return;
+            }
+            authGoTo("/account");
+            return;
+          }
+          if (mode === "signup") {
+            await authRequest("sign-up/email", "POST", {
+              name: values.name,
+              email: values.email,
+              password: values.password,
+              callbackURL: window.location.origin + "/account"
+            });
+            authMessage(banner, "Account created. Check your email and verify the address before signing in.", "success");
+            showToast("Verification email requested.");
+            form.reset();
+            return;
+          }
+          if (mode === "forgot") {
+            await authRequest("request-password-reset", "POST", {
+              email: values.email,
+              redirectTo: window.location.origin + "/reset-password"
+            });
+            authMessage(banner, "If that address is registered, a secure password reset email will be sent.", "success");
+            form.reset();
+            return;
+          }
+          if (mode === "reset") {
+            var token = new URLSearchParams(window.location.search).get("token");
+            await authRequest("reset-password", "POST", {
+              newPassword: values.password,
+              token: token
+            });
+            authMessage(banner, "Password updated. You can now sign in.", "success");
+            form.reset();
+            setTimeout(function () { window.location.assign("/signin"); }, 900);
+          }
+        } catch (error) {
+          showFormError(form, error && error.message ? error.message : "The request failed. Try again.");
+        } finally {
+          if (submit) submit.disabled = false;
+        }
+      });
+    });
+  }
+
+  function makeSessionRow(session, index, currentSession) {
+    var item = document.createElement("li");
+    item.className = "ef-session-row";
+    var info = document.createElement("div");
+    var title = document.createElement("strong");
+    var detail = document.createElement("p");
+    var action = document.createElement("span");
+    title.textContent = currentSession ? "Current session" : (session.userAgent || "Signed-in session");
+    detail.textContent = session.expiresAt
+      ? "Expires " + new Date(session.expiresAt).toLocaleString()
+      : "Active session";
+    info.appendChild(title);
+    info.appendChild(detail);
+    if (currentSession) {
+      action.className = "ef-badge ef-badge-available";
+      action.textContent = "This device";
+    } else {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "ef-code-btn";
+      button.textContent = "Revoke";
+      button.addEventListener("click", async function () {
+        try {
+          if (!session.token) throw new Error("Session identifier is unavailable.");
+          await authRequest("revoke-session", "POST", { token: session.token });
+          showToast("Session revoked.");
+          await loadAccountWorkspace();
+        } catch (error) {
+          showToast(error.message || "Could not revoke session.");
+        }
+      });
+      action.appendChild(button);
+    }
+    item.appendChild(info);
+    item.appendChild(action);
+    return item;
+  }
+
+  function makeAccountRow(account) {
+    var item = document.createElement("li");
+    item.className = "ef-session-row";
+    var info = document.createElement("div");
+    var title = document.createElement("strong");
+    var detail = document.createElement("p");
+    var action = document.createElement("span");
+    title.textContent = account.providerId === "google" ? "Google" : (account.providerId || "Connected provider");
+    detail.textContent = account.accountId ? "Connected account" : "Connected identity";
+    info.appendChild(title);
+    info.appendChild(detail);
+    if (account.providerId === "google" && account.id) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "ef-code-btn";
+      button.textContent = "Disconnect";
+      button.addEventListener("click", async function () {
+        if (!window.confirm("Disconnect this Google account from ExportFlow? Make sure another sign-in method is available first.")) return;
+        try {
+          await authRequest("unlink-account", "POST", {
+            providerId: "google",
+            accountId: account.accountId
+          });
+          showToast("Google account disconnected.");
+          await loadAccountWorkspace();
+        } catch (error) {
+          showToast(error.message || "Could not disconnect the account.");
+        }
+      });
+      action.appendChild(button);
+    }
+    item.appendChild(info);
+    item.appendChild(action);
+    return item;
+  }
+
+  async function loadAccountWorkspace() {
     var workspace = document.querySelector("[data-account-workspace]");
     if (!workspace) return;
-    var st = readAuthState();
-    var avatarEl = workspace.querySelector("[data-acc-avatar]");
-    var nameEl = workspace.querySelector("[data-acc-display-name]");
-    var emailEl = workspace.querySelector("[data-acc-email]");
-    var nameInput = workspace.querySelector("#acc-name");
-    var orgInput = workspace.querySelector("#acc-org");
-
-    if (avatarEl) avatarEl.textContent = computeInitials(st.name, st.email);
-    if (nameEl) nameEl.textContent = st.name;
-    if (emailEl) emailEl.textContent = st.email;
-    if (nameInput && document.activeElement !== nameInput) nameInput.value = st.name;
-    if (orgInput && document.activeElement !== orgInput) orgInput.value = st.org;
-
-    var gCard = workspace.querySelector("[data-google-provider-card]");
-    var gBadge = workspace.querySelector("[data-google-status-badge]");
-    var gStatusText = workspace.querySelector("[data-google-status-text]");
-    var gDetail = workspace.querySelector("[data-google-sub-detail]");
-    var gScopes = workspace.querySelector("[data-google-scopes]");
-    var gConnectBtn = gCard ? gCard.querySelector("[data-google-oauth-btn]") : null;
-    var gUnlinkBtn = gCard ? gCard.querySelector("[data-google-unlink-btn]") : null;
-
-    if (gCard) {
-      gCard.setAttribute("data-linked", st.googleLinked ? "true" : "false");
-    }
-    if (gBadge) {
-      gBadge.className = "ef-badge " + (st.googleLinked ? "ef-badge-available" : "ef-badge-planned");
-    }
-    if (gStatusText) {
-      gStatusText.textContent = st.googleLinked ? "Linked" : "Not linked";
-    }
-    if (gDetail) {
-      gDetail.textContent = st.googleLinked
-        ? "Linked to " + (st.googleEmail || st.email) + " · OAuth 2.0 scopes granted."
-        : "No Google identity linked yet. Connect to enable one-click OAuth sign-in.";
-    }
-    if (gScopes) gScopes.hidden = !st.googleLinked;
-    if (gConnectBtn) gConnectBtn.hidden = Boolean(st.googleLinked);
-    if (gUnlinkBtn) gUnlinkBtn.hidden = !st.googleLinked;
-
-    var twoFaBadge = workspace.querySelector("[data-2fa-badge]");
-    var twoFaBtn = workspace.querySelector("[data-2fa-toggle]");
-    if (twoFaBadge) {
-      twoFaBadge.className = "ef-badge " + (st.twoFactorEnabled ? "ef-badge-available" : "ef-badge-planned");
-      var badgeSpan = twoFaBadge.querySelector("span");
-      if (badgeSpan) badgeSpan.textContent = st.twoFactorEnabled ? "Enabled (Preview)" : "Off (Preview)";
-    }
-    if (twoFaBtn) {
-      twoFaBtn.setAttribute("aria-pressed", String(Boolean(st.twoFactorEnabled)));
-      twoFaBtn.textContent = st.twoFactorEnabled ? "Disable 2FA Preview" : "Enable 2FA Preview";
-    }
-  }
-
-  /* Integration adapter hook for wiring a real backend later */
-  window.ExportFlowAuth = {
-    getState: readAuthState,
-    signInWithEmail: function (payload) {
-      return Promise.resolve(writeAuthState({
-        signedIn: true,
-        email: payload.email,
-        name: payload.email.split("@")[0]
-      }));
-    },
-    signUpWithEmail: function (payload) {
-      return Promise.resolve(writeAuthState({
-        signedIn: true,
-        name: payload.name,
-        email: payload.email,
-        org: payload.org || "Personal Workspace"
-      }));
-    },
-    requestPasswordReset: function (email) {
-      return Promise.resolve({ ok: true, email: email });
-    },
-    linkGoogleAccount: function (googleProfile) {
-      var current = readAuthState();
-      return Promise.resolve(writeAuthState({
-        signedIn: true,
-        name: current.signedIn && current.name !== DEFAULT_AUTH_STATE.name ? current.name : (googleProfile.name || current.name),
-        email: current.signedIn && current.email !== DEFAULT_AUTH_STATE.email ? current.email : googleProfile.email,
-        googleLinked: true,
-        googleEmail: googleProfile.email
-      }));
-    },
-    unlinkGoogleAccount: function () {
-      return Promise.resolve(writeAuthState({
-        googleLinked: false,
-        googleEmail: ""
-      }));
-    },
-    updateProfile: function (patch) {
-      return Promise.resolve(writeAuthState(patch));
-    },
-    toggle2fa: function (enabled) {
-      return Promise.resolve(writeAuthState({ twoFactorEnabled: Boolean(enabled) }));
-    },
-    signOut: function () {
-      return Promise.resolve(writeAuthState({ signedIn: false }));
-    }
-  };
-
-  syncAuthHeaderLink();
-  syncAccountWorkspace();
-
-  /* Password Show/Hide Toggle */
-  document.querySelectorAll("[data-toggle-password]").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      var targetId = btn.getAttribute("data-toggle-password");
-      var input = targetId ? document.getElementById(targetId) : null;
-      if (!input) return;
-      var show = input.type === "password";
-      input.type = show ? "text" : "password";
-      btn.setAttribute("aria-pressed", String(show));
-    });
-  });
-
-  /* Password Strength Meter */
-  var pwInput = document.querySelector("[data-password-input]");
-  var strengthMeter = document.querySelector("[data-strength-meter]");
-  var strengthLabel = document.querySelector("[data-strength-label]");
-  if (pwInput && strengthMeter) {
-    var labels = [
-      "Password strength: waiting for input",
-      "Password strength: weak (add length & variety)",
-      "Password strength: fair",
-      "Password strength: good",
-      "Password strength: strong"
-    ];
-    pwInput.addEventListener("input", function () {
-      var val = pwInput.value || "";
-      var score = 0;
-      if (val.length >= 8) score += 1;
-      if (/[A-Z]/.test(val) && /[a-z]/.test(val)) score += 1;
-      if (/[0-9]/.test(val)) score += 1;
-      if (/[^A-Za-z0-9]/.test(val) || val.length >= 12) score += 1;
-      if (!val.length) score = 0;
-      strengthMeter.setAttribute("data-score", String(score));
-      if (strengthLabel) strengthLabel.textContent = labels[score] || labels[0];
-    });
-  }
-
-  /* Copy Backend Contract Snippet */
-  document.querySelectorAll("[data-copy-contract]").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      var payload = btn.getAttribute("data-copy-contract") || "";
-      var done = function () { showToast("Backend auth contract copied"); };
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(payload).then(done).catch(done);
-      } else {
-        done();
+    var loading = document.querySelector("[data-account-loading]");
+    var status = document.querySelector("[data-auth-account-status]");
+    if (loading) loading.hidden = false;
+    workspace.hidden = true;
+    try {
+      var sessionResponse = await authRequest("get-session");
+      if (!sessionResponse || !sessionResponse.user || !sessionResponse.session) {
+        window.location.assign("/signin");
+        return;
       }
-    });
-  });
-
-  /* Auth Forms Validation & Preview Flows (signin, signup, forgot) */
-  document.querySelectorAll("[data-auth-form]").forEach(function (form) {
-    var mode = form.getAttribute("data-auth-form");
-    var banner = form.querySelector("[data-form-status]");
-    var redirectUrl = form.getAttribute("data-redirect-account");
-
-    function setErr(field, msg) {
-      var inp = form.querySelector('[name="' + field + '"]');
-      var err = form.querySelector('[data-error-for="' + field + '"]');
-      if (inp) inp.setAttribute("aria-invalid", msg ? "true" : "false");
-      if (err) err.textContent = msg || "";
-      return inp;
-    }
-
-    form.addEventListener("submit", function (e) {
-      e.preventDefault();
-      var firstInvalid = null;
-
-      var emailVal = form.elements.email ? (form.elements.email.value || "").trim() : "";
-      var emailOk = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(emailVal);
-      var eField = setErr("email", emailOk ? "" : "Please enter a valid email address.");
-      if (!emailOk && !firstInvalid) firstInvalid = eField;
-
-      if (mode === "signin" || mode === "signup") {
-        var pwVal = form.elements.password ? form.elements.password.value || "" : "";
-        var pwOk = pwVal.length >= 8;
-        var pField = setErr("password", pwOk ? "" : "Password must be at least 8 characters.");
-        if (!pwOk && !firstInvalid) firstInvalid = pField;
-      }
-
-      if (mode === "signup") {
-        var nameVal = form.elements.name ? (form.elements.name.value || "").trim() : "";
-        var nField = setErr("name", nameVal.length >= 2 ? "" : "Please enter your full name.");
-        if (nameVal.length < 2 && !firstInvalid) firstInvalid = nField;
-
-        var termsEl = form.querySelector('[name="terms"]');
-        if (termsEl && !termsEl.checked) {
-          setErr("terms", "Please accept the Terms and Privacy Policy.");
-          if (!firstInvalid) firstInvalid = termsEl;
+      var user = sessionResponse.user;
+      var currentSession = sessionResponse.session;
+      var nameInput = workspace.querySelector("#acc-name");
+      var emailInput = workspace.querySelector("#acc-email");
+      if (nameInput) nameInput.value = user.name || "";
+      if (emailInput) emailInput.value = user.email || "";
+      var accountResponse = await authRequest("list-accounts");
+      var accounts = Array.isArray(accountResponse) ? accountResponse : (accountResponse && accountResponse.accounts) || [];
+      var accountList = workspace.querySelector("[data-auth-account-list]");
+      if (accountList) {
+        accountList.textContent = "";
+        if (!accounts.length) {
+          var emptyAccount = document.createElement("li");
+          emptyAccount.className = "ef-session-row";
+          emptyAccount.textContent = "No linked social accounts.";
+          accountList.appendChild(emptyAccount);
         } else {
-          setErr("terms", "");
+          accounts.forEach(function (account) {
+            accountList.appendChild(makeAccountRow(account));
+          });
         }
       }
-
-      if (firstInvalid) {
-        if (banner) {
-          banner.dataset.state = "error";
-          banner.textContent = "Please fix the highlighted fields above.";
-        }
-        firstInvalid.focus();
-        return;
-      }
-
-      if (mode === "forgot") {
-        window.ExportFlowAuth.requestPasswordReset(emailVal).then(function () {
-          if (banner) {
-            banner.dataset.state = "success";
-            banner.textContent = "Preview reset flow prepared for " + emailVal + ". Wire POST /api/auth/forgot-password to send real email.";
-          }
-          showToast("Password reset payload prepared");
+      var linkButton = workspace.querySelector("[data-auth-link-google]");
+      var hasGoogle = accounts.some(function (account) { return account.providerId === "google"; });
+      if (linkButton) linkButton.hidden = !Boolean(authConfig && authConfig.googleEnabled && !hasGoogle);
+      var sessionsResponse = await authRequest("list-sessions");
+      var sessions = Array.isArray(sessionsResponse) ? sessionsResponse : (sessionsResponse && sessionsResponse.sessions) || [];
+      var sessionList = workspace.querySelector("[data-auth-session-list]");
+      if (sessionList) {
+        sessionList.textContent = "";
+        sessions.forEach(function (session, index) {
+          sessionList.appendChild(makeSessionRow(session, index, session.id === currentSession.id));
         });
-        return;
+        if (!sessions.length) {
+          var emptySession = document.createElement("li");
+          emptySession.className = "ef-session-row";
+          emptySession.textContent = "No active sessions found.";
+          sessionList.appendChild(emptySession);
+        }
       }
-
-      var actionPromise = mode === "signup"
-        ? window.ExportFlowAuth.signUpWithEmail({
-            name: (form.elements.name.value || "").trim(),
-            email: emailVal,
-            org: form.elements.org ? (form.elements.org.value || "").trim() : ""
-          })
-        : window.ExportFlowAuth.signInWithEmail({ email: emailVal });
-
-      actionPromise.then(function () {
-        if (banner) {
-          banner.dataset.state = "success";
-          banner.textContent = "Preview session active for " + emailVal + ". Opening account dashboard...";
-        }
-        showToast(mode === "signup" ? "Preview account created" : "Signed in (UI preview)");
-        if (redirectUrl) {
-          setTimeout(function () { window.location.assign(redirectUrl); }, 450);
-        }
-      });
-    });
-  });
-
-  /* Google OAuth Consent Preview Modal */
-  var modalBackdrop = document.querySelector("[data-google-modal-backdrop]");
-  var modalEl = document.querySelector("[data-google-modal]");
-  var googleEmailInput = document.querySelector("[data-google-email-input]");
-  var googleConfirmBtn = document.querySelector("[data-google-confirm]");
-  var activeGoogleTrigger = null;
-  var pendingGoogleRedirect = null;
-  var selectedGoogleName = "Samer Dev";
-
-  function closeGoogleModal() {
-    if (!modalBackdrop) return;
-    modalBackdrop.hidden = true;
-    if (activeGoogleTrigger) activeGoogleTrigger.focus();
+      if (loading) loading.hidden = true;
+      workspace.hidden = false;
+      authMessage(status, "");
+      updateAuthHeader(user);
+    } catch (error) {
+      if (loading) loading.hidden = true;
+      workspace.hidden = false;
+      authMessage(status, error && error.message ? error.message : "Could not load account details.", "error");
+    }
   }
 
-  if (modalBackdrop && modalEl) {
-    document.querySelectorAll("[data-google-oauth-btn]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        activeGoogleTrigger = btn;
-        pendingGoogleRedirect = btn.getAttribute("data-redirect-account");
-        modalBackdrop.hidden = false;
-        if (googleEmailInput) googleEmailInput.focus();
-      });
-    });
-
-    document.querySelectorAll("[data-google-preset]").forEach(function (row) {
-      row.addEventListener("click", function () {
-        document.querySelectorAll("[data-google-preset]").forEach(function (r) {
-          r.classList.remove("is-selected");
-          r.setAttribute("aria-checked", "false");
-        });
-        row.classList.add("is-selected");
-        row.setAttribute("aria-checked", "true");
-        var presetEmail = row.getAttribute("data-google-preset") || "";
-        selectedGoogleName = row.getAttribute("data-google-name") || "Google User";
-        if (googleEmailInput) googleEmailInput.value = presetEmail;
-      });
-    });
-
-    document.querySelectorAll("[data-google-modal-close]").forEach(function (btn) {
-      btn.addEventListener("click", closeGoogleModal);
-    });
-
-    modalBackdrop.addEventListener("click", function (e) {
-      if (e.target === modalBackdrop) closeGoogleModal();
-    });
-
-    modalEl.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        closeGoogleModal();
-      }
-    });
-
-    if (googleConfirmBtn) {
-      googleConfirmBtn.addEventListener("click", function () {
-        var gEmail = googleEmailInput ? (googleEmailInput.value || "").trim() : "samer.dev@gmail.com";
-        if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(gEmail)) {
-          if (googleEmailInput) googleEmailInput.focus();
-          showToast("Enter a valid Google email address");
+  function bindAccountControls() {
+    var profileForm = document.querySelector("[data-account-profile-form]");
+    if (profileForm) {
+      profileForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        var name = String(profileForm.elements.name.value || "").trim();
+        var status = profileForm.querySelector("[data-profile-status]");
+        if (name.length < 2) {
+          authMessage(status, "Enter a name with at least two characters.", "error");
           return;
         }
-        window.ExportFlowAuth.linkGoogleAccount({
-          email: gEmail,
-          name: selectedGoogleName
-        }).then(function () {
-          closeGoogleModal();
-          showToast("Google account linked: " + gEmail);
-          if (pendingGoogleRedirect) {
-            setTimeout(function () { window.location.assign(pendingGoogleRedirect); }, 350);
-          }
-        });
+        var button = profileForm.querySelector('button[type="submit"]');
+        if (button) button.disabled = true;
+        try {
+          await authRequest("update-user", "POST", { name: name });
+          authMessage(status, "Profile updated.", "success");
+          await refreshAuthHeader();
+        } catch (error) {
+          authMessage(status, error.message || "Could not update your profile.", "error");
+        } finally {
+          if (button) button.disabled = false;
+        }
+      });
+    }
+
+    var linkGoogle = document.querySelector("[data-auth-link-google]");
+    if (linkGoogle) {
+      linkGoogle.addEventListener("click", async function () {
+        try {
+          await beginGoogleAuth("link");
+        } catch (error) {
+          showToast(error.message || "Google linking failed.");
+        }
+      });
+    }
+
+    var signOut = document.querySelector("[data-auth-signout]");
+    if (signOut) {
+      signOut.addEventListener("click", async function () {
+        signOut.disabled = true;
+        try {
+          await authRequest("sign-out", "POST", {});
+          updateAuthHeader(null);
+          window.location.assign("/signin");
+        } catch (error) {
+          showToast(error.message || "Could not sign out.");
+          signOut.disabled = false;
+        }
+      });
+    }
+
+    var revokeAll = document.querySelector("[data-auth-revoke-all]");
+    if (revokeAll) {
+      revokeAll.addEventListener("click", async function () {
+        if (!window.confirm("Sign out all other active sessions?")) return;
+        revokeAll.disabled = true;
+        try {
+          await authRequest("revoke-sessions", "POST", {});
+          showToast("Other sessions have been revoked.");
+          await loadAccountWorkspace();
+        } catch (error) {
+          showToast(error.message || "Could not revoke other sessions.");
+        } finally {
+          revokeAll.disabled = false;
+        }
       });
     }
   }
 
-  /* Account Dashboard Controls */
-  var profileForm = document.querySelector("[data-account-profile-form]");
-  if (profileForm) {
-    profileForm.addEventListener("submit", function (e) {
-      e.preventDefault();
-      var nameVal = (profileForm.elements.name.value || "").trim();
-      var orgVal = (profileForm.elements.org.value || "").trim();
-      if (nameVal.length < 2) {
-        showToast("Display name must be at least 2 characters");
-        return;
-      }
-      window.ExportFlowAuth.updateProfile({ name: nameVal, org: orgVal }).then(function () {
-        var note = profileForm.querySelector("[data-profile-status]");
-        if (note) note.textContent = "Updated locally";
-        showToast("Profile updated in preview state");
+  function bindGoogleButtons() {
+    document.querySelectorAll("[data-auth-google]").forEach(function (button) {
+      button.addEventListener("click", async function () {
+        if (!authConfig || !authConfig.googleEnabled) return;
+        button.disabled = true;
+        try {
+          await beginGoogleAuth(button.getAttribute("data-auth-google-mode") || "signin");
+        } catch (error) {
+          showToast(error.message || "Google sign-in could not start.");
+          button.disabled = false;
+        }
       });
     });
   }
 
-  var unlinkBtn = document.querySelector("[data-google-unlink-btn]");
-  if (unlinkBtn) {
-    unlinkBtn.addEventListener("click", function () {
-      window.ExportFlowAuth.unlinkGoogleAccount().then(function () {
-        showToast("Google account disconnected");
-      });
-    });
+  async function initializeAccountSystem() {
+    bindAuthForms();
+    bindGoogleButtons();
+    bindAccountControls();
+    await refreshAuthHeader();
+    try {
+      authConfig = await authRequest("config");
+      setAccountConfig(authConfig);
+    } catch (_e) {
+      authConfig = null;
+      setAccountConfig(null);
+    }
+    if (document.querySelector("[data-account-workspace]")) {
+      await loadAccountWorkspace();
+    }
   }
 
-  document.querySelectorAll("[data-revoke-session]").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      var row = btn.closest("[data-session-row], .ef-session-row");
-      if (row) row.remove();
-      showToast("Session revoked in UI preview");
-    });
-  });
-
-  var twoFaToggle = document.querySelector("[data-2fa-toggle]");
-  if (twoFaToggle) {
-    twoFaToggle.addEventListener("click", function () {
-      var next = !readAuthState().twoFactorEnabled;
-      window.ExportFlowAuth.toggle2fa(next).then(function () {
-        showToast(next ? "2FA preview enabled" : "2FA preview disabled");
-      });
-    });
-  }
-
-  var signoutBtn = document.querySelector("[data-account-signout]");
-  if (signoutBtn) {
-    signoutBtn.addEventListener("click", function () {
-      var dest = signoutBtn.getAttribute("data-redirect-signin") || "/signin";
-      window.ExportFlowAuth.signOut().then(function () {
-        showToast("Signed out of preview session");
-        setTimeout(function () { window.location.assign(dest); }, 300);
-      });
-    });
-  }
-})();`;
+  initializeAccountSystem();
+})();
+`;
