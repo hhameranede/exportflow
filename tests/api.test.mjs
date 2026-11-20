@@ -194,6 +194,51 @@ test("POST /api/v1/tasks stops before body parsing when the caller has already a
   assert.equal(fetchCalls, 0);
 });
 
+test("POST /api/v1/tasks cancels a pending request-body reader when the caller disconnects", async () => {
+  const controller = new AbortController();
+  let notifyPull;
+  const pullStarted = new Promise((resolve) => {
+    notifyPull = resolve;
+  });
+  let bodyCancelled = false;
+  let fetchCalls = 0;
+  const body = new ReadableStream({
+    pull() {
+      notifyPull();
+    },
+    cancel() {
+      bodyCancelled = true;
+    },
+  }, { highWaterMark: 0 });
+
+  const request = new Request("https://api.exportflow.local/api/v1/tasks", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${TEST_TOKEN}`,
+    },
+    body,
+    duplex: "half",
+    signal: controller.signal,
+  });
+  const worker = createWorker({
+    fetchImpl: async () => {
+      fetchCalls++;
+      return new Response("unexpected");
+    },
+  });
+
+  const pendingResponse = worker.fetch(request, { EXPORTFLOW_API_TOKEN: TEST_TOKEN });
+  await pullStarted;
+  controller.abort();
+  const response = await pendingResponse;
+
+  assert.equal(response.status, 499);
+  assert.equal((await response.json()).error.code, "TASK_CANCELLED");
+  assert.equal(bodyCancelled, true);
+  assert.equal(fetchCalls, 0);
+});
+
 test("POST /api/v1/tasks rejects private, loopback, metadata, and invalid URLs before outbound fetch", async () => {
   let fetchCalls = 0;
   const worker = createWorker({
