@@ -126,7 +126,7 @@ test("auth rejects missing, empty, oversized, malformed, and invalid Bearer toke
   );
   assert.equal(malformed.status, 401);
 
-  const invalid = await worker.fetch(makeTaskRequest({ goal: "Fetch", url: "https://example.com" }, { token: "wrong-token" }), env);
+  const invalid = await worker.fetch(makeTaskRequest({ goal: "Fetch", url: "https://example.com" }, { token: `ef_live_${TEST_KEY_ID}_${"B".repeat(43)}` }), env);
   assert.equal(invalid.status, 401);
   assert.equal((await invalid.json()).error.code, "INVALID_TOKEN");
 });
