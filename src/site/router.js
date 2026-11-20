@@ -10,6 +10,9 @@ import {
   renderUseCasesPage,
 } from "./pages.js";
 import { SITE_CSS } from "./styles.js";
+import { MARKETING_PATHS, renderMarketingPage, resolveMarketingRoute } from "./marketing.js";
+import { MARKETING_CSS } from "./marketing-styles.js";
+import { MARKETING_JS } from "./marketing-client.js";
 
 const HTML_SECURITY_HEADERS = Object.freeze({
   "content-type": "text/html; charset=utf-8",
@@ -17,9 +20,10 @@ const HTML_SECURITY_HEADERS = Object.freeze({
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
   "referrer-policy": "strict-origin-when-cross-origin",
+  "strict-transport-security": "max-age=63072000",
   "permissions-policy": "camera=(), microphone=(), geolocation=()",
   "content-security-policy":
-    "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+    "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
 });
 
 function assetResponse(body, contentType, method, maxAge = 300) {
@@ -62,6 +66,12 @@ export function handleWebsiteRequest(request, url) {
   if (pathname === "/assets/site.js") {
     return assetResponse(SITE_JS, "application/javascript; charset=utf-8", request.method);
   }
+  if (pathname === "/assets/marketing.css") {
+    return assetResponse(MARKETING_CSS, "text/css; charset=utf-8", request.method);
+  }
+  if (pathname === "/assets/marketing.js") {
+    return assetResponse(MARKETING_JS, "application/javascript; charset=utf-8", request.method);
+  }
   if (pathname === "/assets/mark.svg") {
     return assetResponse(BRAND_MARK_SVG, "image/svg+xml; charset=utf-8", request.method, 3600);
   }
@@ -72,7 +82,12 @@ export function handleWebsiteRequest(request, url) {
     return assetResponse(renderRobotsTxt(request.url), "text/plain; charset=utf-8", request.method);
   }
   if (pathname === "/sitemap.xml") {
-    return assetResponse(renderSitemapXml(request.url), "application/xml; charset=utf-8", request.method);
+    return assetResponse(renderSitemapXml(request.url, MARKETING_PATHS), "application/xml; charset=utf-8", request.method);
+  }
+
+  const marketingRoute = resolveMarketingRoute(pathname);
+  if (marketingRoute) {
+    return htmlResponse(renderMarketingPage(request.url, marketingRoute.path, marketingRoute.locale), request.method);
   }
 
   const pageRenderer = PAGE_ROUTES[pathname];

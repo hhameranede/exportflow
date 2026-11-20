@@ -56,6 +56,26 @@ export function renderDocument({
   const jsonLdTag = jsonLd
     ? `<script type="application/ld+json">${safeJsonForScript(jsonLd)}</script>`
     : "";
+  const isMarketing = bodyHtml.includes("ef-header-new");
+  const marketingHeader = isMarketing ? bodyHtml.match(/<header\b[\s\S]*?<\/header>/)?.[0] ?? "" : "";
+  const marketingFooter = isMarketing ? bodyHtml.match(/<footer\b[\s\S]*?<\/footer>/)?.[0] ?? "" : "";
+  const marketingContent = isMarketing
+    ? bodyHtml.replace(marketingHeader, "").replace(marketingFooter, "").replace(/<script src="\/assets\/marketing\.js" defer><\/script>/, "")
+    : bodyHtml;
+  const headerHtml = isMarketing ? marketingHeader : `<header class="ef-header">
+    <div class="ef-container ef-header-inner">
+      <a class="ef-brand" href="/">${escapeHtml(SITE_META.brandName)}</a>
+      <nav class="ef-nav" aria-label="Primary navigation">${navLinksHtml}</nav>
+      <div class="ef-header-actions">
+        <a class="ef-btn ef-btn-primary ef-btn-sm" href="/demo"${path === "/demo" ? ' aria-current="page"' : ""}>Try Demo</a>
+        <button type="button" class="ef-menu-toggle" aria-expanded="false" aria-controls="mobile-nav-drawer" aria-label="Toggle navigation menu" data-menu-toggle>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 5.5H17M3 10H17M3 14.5H17" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="mobile-nav-drawer" class="ef-mobile-drawer" data-mobile-drawer><nav aria-label="Mobile navigation"><ul class="ef-mobile-nav-list">${mobileLinksHtml}</ul></nav></div>
+  </header>`;
+  const footerHtml = isMarketing ? marketingFooter : `<footer class="ef-footer"><div class="ef-container"><div class="ef-footer-grid"><div><a class="ef-brand" href="/">${escapeHtml(SITE_META.brandName)}</a><p class="ef-footer-desc">${escapeHtml(SITE_META.positioning)} ${escapeHtml(SITE_META.tagline)}</p></div><div><h2 class="ef-footer-heading">Infrastructure</h2><ul class="ef-footer-links"><li><a href="/">Overview</a></li><li><a href="/platform">The Platform</a></li><li><a href="/use-cases">Use Cases</a></li></ul></div><div><h2 class="ef-footer-heading">Developers</h2><ul class="ef-footer-links"><li><a href="/developers">Developer Documentation</a></li><li><a href="/demo">Interactive Demo</a></li><li><a href="/faq">FAQ</a></li></ul></div></div><div class="ef-footer-bottom"><span>© 2026 ExportFlow</span><span>Phase 1 execution foundation · Public API access not yet open</span></div></div></footer>`;
 
   return `<!doctype html>
 <html lang="en">
@@ -84,79 +104,13 @@ export function renderDocument({
 <body>
   <a class="ef-skip-link" href="#main-content">Skip to content</a>
 
-  <header class="ef-header">
-    <div class="ef-container ef-header-inner">
-      <a class="ef-brand" href="/">${escapeHtml(SITE_META.brandName)}</a>
-
-      <nav class="ef-nav" aria-label="Primary navigation">
-        ${navLinksHtml}
-      </nav>
-
-      <div class="ef-header-actions">
-        <a class="ef-btn ef-btn-primary ef-btn-sm" href="/demo"${path === "/demo" ? ' aria-current="page"' : ""}>Try Demo</a>
-        <button
-          type="button"
-          class="ef-menu-toggle"
-          aria-expanded="false"
-          aria-controls="mobile-nav-drawer"
-          aria-label="Toggle navigation menu"
-          data-menu-toggle
-        >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <path d="M3 5.5H17M3 10H17M3 14.5H17" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"/>
-          </svg>
-        </button>
-      </div>
-    </div>
-
-    <div id="mobile-nav-drawer" class="ef-mobile-drawer" data-mobile-drawer>
-      <nav aria-label="Mobile navigation">
-        <ul class="ef-mobile-nav-list">
-          ${mobileLinksHtml}
-        </ul>
-      </nav>
-    </div>
-  </header>
-
+  ${headerHtml}
   <main id="main-content" class="ef-main">
-    ${bodyHtml}
+    ${marketingContent}
   </main>
+  ${footerHtml}
 
-  <footer class="ef-footer">
-    <div class="ef-container">
-      <div class="ef-footer-grid">
-        <div>
-          <a class="ef-brand" href="/">${escapeHtml(SITE_META.brandName)}</a>
-          <p class="ef-footer-desc">${escapeHtml(SITE_META.positioning)} ${escapeHtml(SITE_META.tagline)}</p>
-        </div>
-
-        <div>
-          <h2 class="ef-footer-heading">Infrastructure</h2>
-          <ul class="ef-footer-links">
-            <li><a href="/">Overview</a></li>
-            <li><a href="/platform">The Platform</a></li>
-            <li><a href="/use-cases">Use Cases</a></li>
-          </ul>
-        </div>
-
-        <div>
-          <h2 class="ef-footer-heading">Developers</h2>
-          <ul class="ef-footer-links">
-            <li><a href="/developers">Developer Documentation</a></li>
-            <li><a href="/demo">Interactive Demo</a></li>
-            <li><a href="/faq">FAQ</a></li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="ef-footer-bottom">
-        <span>© 2026 ExportFlow</span>
-        <span>Phase 1 execution foundation · Public API access not yet open</span>
-      </div>
-    </div>
-  </footer>
-
-  <script src="/assets/site.js" defer></script>
+  ${isMarketing ? '<script src="/assets/marketing.js" defer></script>' : '<script src="/assets/site.js" defer></script>'}
 </body>
 </html>`;
 }
@@ -166,9 +120,8 @@ export function renderRobotsTxt(requestUrl) {
   return `User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: ${origin}/sitemap.xml\n`;
 }
 
-export function renderSitemapXml(requestUrl) {
+export function renderSitemapXml(requestUrl, paths = ["/", "/platform", "/use-cases", "/developers", "/demo", "/faq"]) {
   const origin = resolveCanonicalBase(requestUrl);
-  const paths = ["/", "/platform", "/use-cases", "/developers", "/demo", "/faq"];
   const urls = paths
     .map(
       (p) => `  <url>\n    <loc>${escapeHtml(origin + p)}</loc>\n  </url>`,
