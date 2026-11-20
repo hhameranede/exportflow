@@ -172,6 +172,10 @@ test("light-first design system and interactive UX components are served cleanly
   assert.ok(js.includes("sign-in/social"));
   assert.ok(js.includes("authReady"));
   assert.ok(js.includes("authentication tables are not initialized"));
+  assert.ok(js.includes('requestError.code = data &&'));
+  assert.ok(js.includes('sessionError.code === "SESSION_NOT_FRESH"'));
+  assert.ok(js.includes('data-auth-session-status'));
+  assert.ok(js.includes('Sign in again before managing active sessions.'));
   assert.doesNotMatch(js, /ef_auth_preview|window[.]ExportFlowAuth/);
 });
 
@@ -192,6 +196,10 @@ test("account routes render real-auth UI, stay noindex, and are excluded from th
     assert.equal(res.headers.get("cache-control"), "no-store");
     const html = await res.text();
     assert.match(html, expectedNeedle);
+    if (path === "/account" || path === "/ar/account") {
+      assert.match(html, /data-auth-session-status/);
+      assert.match(html, /data-session-reauth-href="\\/signin"/);
+    }
     assert.match(html, /<meta name="robots" content="noindex, nofollow">/);
     assert.doesNotMatch(html, /UI Blueprint|Google Consent Preview|samer\.dev@gmail\.com/);
   }
