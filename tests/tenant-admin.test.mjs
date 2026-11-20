@@ -229,3 +229,17 @@ test("administrative methods reject null or array inputs with a controlled error
   );
   assert.equal(db.calls.length, 0);
 });
+
+test("authorizer infrastructure failures fail closed without writing to D1", async () => {
+  const db = makeD1();
+  const service = createTenantAdminService({
+    db,
+    authorizeAdmin: async () => { throw new Error("synthetic identity provider failure"); },
+    now: () => "2026-11-20T12:00:00.000Z",
+  });
+  await assert.rejects(
+    () => service.revokeApiKey({ tenantId: "tenant_alpha", keyId: "0123456789abcdef" }),
+    { code: "ADMIN_FORBIDDEN", httpStatus: 403 },
+  );
+  assert.equal(db.calls.length, 0);
+});
