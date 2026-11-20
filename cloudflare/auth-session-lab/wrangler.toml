@@ -1,4 +1,4 @@
-name = "exportflow-owner-session-lab-20261121"
+name = "exportflow-owner-session-lab-build-template"
 main = "worker.js"
 compatibility_date = "2026-11-20"
 compatibility_flags = ["nodejs_compat"]
@@ -7,9 +7,9 @@ preview_urls = false
 observability = { enabled = false }
 
 [vars]
-BETTER_AUTH_URL = "https://exportflow-owner-session-lab-20261121.hhameranede.workers.dev"
+BETTER_AUTH_URL = "https://exportflow-owner-session-lab-build-template.hhameranede.workers.dev"
 
 [[d1_databases]]
 binding = "AUTH_DB"
-database_name = "exportflow-owner-auth-rt-20261121"
-database_id = "795e95ac-0df4-4ab0-bb47-c36127800222"
+database_name = "exportflow-owner-auth-build-template"
+database_id = "00000000-0000-4000-8000-000000000000"
