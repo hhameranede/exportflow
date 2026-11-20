@@ -927,6 +927,8 @@ export const MARKETING_JS = `(function () {
     var status = document.querySelector("[data-auth-config-status]");
     if (!config || !config.authConfigured) {
       authMessage(status, "Account services are not connected yet. The sign-in page is ready, but no account can be created until the server database and secret are configured.", "warning");
+    } else if (!config.authReady) {
+      authMessage(status, "The account database is connected, but its authentication tables are not initialized yet. Sign-in stays disabled until setup is complete.", "warning");
     } else if (!config.googleEnabled && !config.emailPasswordEnabled) {
       authMessage(status, "Authentication is configured on the server, but no sign-in provider is enabled yet.", "warning");
     } else if (!config.emailPasswordEnabled) {
