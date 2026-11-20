@@ -42,7 +42,7 @@ function validatePayload(payload, allowed, required = []) {
 
 function routeFor(pathname) {
   if (pathname === ADMIN_PREFIX + "/plan-policies") {
-    return { method: "createPlanPolicy", allowed: ["planCode", "quotaPeriod", "requestLimit", "policyVersion", "status"], required: ["planCode", "quotaPeriod", "requestLimit", "policyVersion"], status: 201 };
+    return { method: "createPlanPolicy", allowed: ["planCode", "quotaPeriod", "requestLimit", "policyVersion", "status"], required: ["planCode", "quotaPeriod", "requestLimit", "policyVersion"], status: 200 };
   }
   if (pathname === ADMIN_PREFIX + "/tenants") {
     return { method: "provisionTenant", allowed: ["tenantId", "planCode"], required: ["planCode"], status: 201 };
