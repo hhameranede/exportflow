@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createWorker } from "../../src/index.js";
+import { executeWebTask } from "../../src/core/tasks.js";
+import { createSearchAdapter } from "../../src/core/search.js";
+import { createResearchPipeline } from "../../src/core/research.js";
+import { createBrowserAdapter } from "../../src/core/browser-render.js";
+import { createTaskCancelledError } from "../../src/core/cancellation.js";
 
 const TEST_TOKEN = "ef_workerd_test_token_synthetic_1234567890";
 const env = { EXPORTFLOW_API_TOKEN: TEST_TOKEN };
@@ -200,5 +205,214 @@ describe("public Fetch Task cancellation in Cloudflare Workerd", () => {
     expect(responseBody.error.code).toBe("TASK_CANCELLED");
     expect(bodyCancelled).toBe(true);
     expect(fetchCalls).toBe(0);
+  });
+});
+
+
+const INTERNAL_SCHEMA = {
+  type: "object",
+  properties: { title: { type: "string" } },
+  required: ["title"],
+};
+
+function expectCancelledTask(task) {
+  expect(task.state).toBe("cancelled");
+  expect(task.errors[0].code).toBe("TASK_CANCELLED");
+  expect(task.events.at(-1).type).toBe("task.cancelled");
+}
+
+describe("internal adapter cancellation in Cloudflare Workerd", () => {
+  it.each(["map", "crawl"])("%s stops when cancellation interrupts a sitemap request", async (operation) => {
+    const controller = new AbortController();
+    let notifySitemapStarted;
+    const sitemapStarted = new Promise((resolve) => {
+      notifySitemapStarted = resolve;
+    });
+    const requested = [];
+
+    const pendingTask = executeWebTask(
+      { goal: `Cancel internal ${operation}`, operation, url: "https://example.com/" },
+      {
+        signal: controller.signal,
+        fetchImpl: async (url, init) => {
+          requested.push(String(url));
+          if (String(url).endsWith("/robots.txt")) {
+            return new Response("User-agent: *\nAllow: /\n", {
+              headers: { "content-type": "text/plain" },
+            });
+          }
+          if (String(url).endsWith("/sitemap.xml")) {
+            notifySitemapStarted();
+            return new Promise((_resolve, reject) => {
+              init.signal.addEventListener("abort", () => {
+                reject(new DOMException("Aborted", "AbortError"));
+              }, { once: true });
+            });
+          }
+          throw new Error("Unexpected request after cancelled sitemap");
+        },
+      },
+    );
+
+    await sitemapStarted;
+    controller.abort();
+    const task = await pendingTask;
+
+    expectCancelledTask(task);
+    expect(requested).toHaveLength(2);
+  });
+
+  it("stops structured extraction when the source Fetch is cancelled", async () => {
+    const controller = new AbortController();
+    let notifyFetchStarted;
+    const fetchStarted = new Promise((resolve) => {
+      notifyFetchStarted = resolve;
+    });
+    const pendingTask = executeWebTask(
+      {
+        goal: "Cancel structured extraction",
+        operation: "extract",
+        url: "https://example.com/item",
+        schema: INTERNAL_SCHEMA,
+      },
+      {
+        signal: controller.signal,
+        fetchImpl: (_url, init) => new Promise((_resolve, reject) => {
+          notifyFetchStarted();
+          init.signal.addEventListener("abort", () => {
+            reject(new DOMException("Aborted", "AbortError"));
+          }, { once: true });
+        }),
+      },
+    );
+
+    await fetchStarted;
+    controller.abort();
+    const task = await pendingTask;
+    expectCancelledTask(task);
+  });
+
+  it("stops waiting for Cloudflare Web Search when its caller cancels", async () => {
+    const controller = new AbortController();
+    let notifySearchStarted;
+    const searchStarted = new Promise((resolve) => {
+      notifySearchStarted = resolve;
+    });
+    let searchCalls = 0;
+    const searchAdapter = createSearchAdapter({
+      webSearch: () => {
+        searchCalls++;
+        notifySearchStarted();
+        return new Promise(() => {});
+      },
+    });
+
+    const pendingTask = executeWebTask(
+      { goal: "Cancel web search", operation: "search", query: "synthetic query" },
+      { signal: controller.signal, searchAdapter },
+    );
+    await searchStarted;
+    controller.abort();
+    const task = await pendingTask;
+
+    expectCancelledTask(task);
+    expect(searchCalls).toBe(1);
+  });
+
+  it("propagates cancellation through Research into its candidate Fetch stage", async () => {
+    const controller = new AbortController();
+    let notifyFetchStarted;
+    const fetchStarted = new Promise((resolve) => {
+      notifyFetchStarted = resolve;
+    });
+    const researchAdapter = createResearchPipeline({
+      searchAdapter: {
+        execute: async () => ({
+          status: "succeeded",
+          data: {
+            results: [{ url: "https://example.com/product", title: "Synthetic product" }],
+          },
+          sources: [],
+          warnings: [],
+        }),
+      },
+      runAdapter: async (_adapterId, _input, options) => new Promise((_resolve, reject) => {
+        expect(options.signal).toBe(controller.signal);
+        notifyFetchStarted();
+        options.signal.addEventListener("abort", () => {
+          reject(createTaskCancelledError());
+        }, { once: true });
+      }),
+    });
+
+    const pendingTask = executeWebTask(
+      {
+        goal: "Cancel Research fetch stage",
+        operation: "research",
+        query: "synthetic product",
+        schema: INTERNAL_SCHEMA,
+      },
+      { signal: controller.signal, researchAdapter },
+    );
+    await fetchStarted;
+    controller.abort();
+    const task = await pendingTask;
+
+    expectCancelledTask(task);
+  });
+
+  it("closes the Browser session when caller cancellation interrupts navigation", async () => {
+    const controller = new AbortController();
+    let notifyNavigationStarted;
+    const navigationStarted = new Promise((resolve) => {
+      notifyNavigationStarted = resolve;
+    });
+    let rejectNavigation;
+    let browserClosed = false;
+    const browser = {
+      newPage: async () => ({
+        setUserAgent: async () => {},
+        setRequestInterception: async () => {},
+        on: () => {},
+        goto: () => new Promise((_resolve, reject) => {
+          rejectNavigation = reject;
+          notifyNavigationStarted();
+        }),
+        content: async () => "<html></html>",
+        title: async () => "Synthetic",
+        url: () => "https://example.com/",
+      }),
+      close: async () => {
+        browserClosed = true;
+        rejectNavigation?.(new Error("Browser session closed"));
+      },
+    };
+    const browserAdapter = createBrowserAdapter({
+      browserBinding: {},
+      puppeteer: { launch: async () => browser },
+      fetchResource: async (url) => ({
+        status: 200,
+        finalUrl: url,
+        contentType: "text/plain",
+        body: "User-agent: *\nAllow: /\n",
+        bytes: 22,
+        retrievedAt: "2026-11-20T00:00:00.000Z",
+      }),
+    });
+
+    const pendingTask = executeWebTask(
+      {
+        goal: "Cancel Browser navigation",
+        url: "https://example.com/",
+        requiresJavascript: true,
+      },
+      { signal: controller.signal, browserAdapter },
+    );
+    await navigationStarted;
+    controller.abort();
+    const task = await pendingTask;
+
+    expectCancelledTask(task);
+    expect(browserClosed).toBe(true);
   });
 });
