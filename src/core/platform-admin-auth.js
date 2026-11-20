@@ -26,9 +26,10 @@ export function parsePlatformOwnerIds(raw) {
 function parseExpectedOrigin(value) {
   try {
     const parsed = new URL(value);
-    if (parsed.protocol !== "https:" && parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
-      return null;
-    }
+    const secureHttps = parsed.protocol === "https:";
+    const localHttp = parsed.protocol === "http:" &&
+      ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+    if (!secureHttps && !localHttp) return null;
     if (parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
       return null;
     }
