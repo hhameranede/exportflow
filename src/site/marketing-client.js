@@ -870,7 +870,7 @@ export const MARKETING_JS = `(function () {
     if (typeof url === "string") {
       try {
         var parsed = new URL(url, window.location.origin);
-        if (parsed.origin === window.location.origin || parsed.protocol === "https:") {
+        if (parsed.origin === window.location.origin || (parsed.protocol === "https:" && parsed.hostname === "accounts.google.com")) {
           window.location.assign(parsed.href);
           return;
         }
@@ -1121,7 +1121,7 @@ export const MARKETING_JS = `(function () {
     return item;
   }
 
-  function makeAccountRow(account) {
+  function makeAccountRow(account, canUnlink) {
     var item = document.createElement("li");
     item.className = "ef-session-row";
     var info = document.createElement("div");
@@ -1132,7 +1132,7 @@ export const MARKETING_JS = `(function () {
     detail.textContent = account.accountId ? "Connected account" : "Connected identity";
     info.appendChild(title);
     info.appendChild(detail);
-    if (account.providerId === "google" && account.id) {
+    if (account.providerId === "google" && account.accountId && canUnlink) {
       var button = document.createElement("button");
       button.type = "button";
       button.className = "ef-code-btn";
@@ -1188,7 +1188,7 @@ export const MARKETING_JS = `(function () {
           accountList.appendChild(emptyAccount);
         } else {
           accounts.forEach(function (account) {
-            accountList.appendChild(makeAccountRow(account));
+            accountList.appendChild(makeAccountRow(account, accounts.length > 1));
           });
         }
       }
@@ -1216,8 +1216,8 @@ export const MARKETING_JS = `(function () {
       updateAuthHeader(user);
     } catch (error) {
       if (loading) loading.hidden = true;
-      workspace.hidden = false;
-      authMessage(status, error && error.message ? error.message : "Could not load account details.", "error");
+      workspace.hidden = true;
+      authMessage(status, error && error.message ? error.message : "Could not verify your account. Sign in again.", "error");
     }
   }
 
@@ -1278,7 +1278,7 @@ export const MARKETING_JS = `(function () {
         if (!window.confirm("Sign out all other active sessions?")) return;
         revokeAll.disabled = true;
         try {
-          await authRequest("revoke-sessions", "POST", {});
+          await authRequest("revoke-other-sessions", "POST", {});
           showToast("Other sessions have been revoked.");
           await loadAccountWorkspace();
         } catch (error) {
