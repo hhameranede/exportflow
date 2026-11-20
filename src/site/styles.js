@@ -1,34 +1,34 @@
 export const SITE_CSS = `:root {
-  color-scheme: dark;
-  --bg-canvas: #0b0f17;
-  --bg-surface: #111824;
-  --bg-surface-raised: #162030;
-  --bg-code: #090d14;
-  --border-hairline: rgba(148, 173, 204, 0.16);
-  --border-strong: rgba(148, 173, 204, 0.3);
-  --text-primary: #f4f7fb;
-  --text-secondary: #c5d1e2;
-  --text-muted: #8e9fb8;
-  --accent: #22d3a6;
-  --accent-hover: #3be0b7;
-  --accent-ink: #061411;
-  --accent-tint: rgba(34, 211, 166, 0.1);
-  --accent-border: rgba(34, 211, 166, 0.36);
-  --warn-text: #f5c469;
-  --warn-bg: rgba(245, 196, 105, 0.08);
-  --warn-border: rgba(245, 196, 105, 0.28);
-  --danger-text: #f38b8b;
-  --danger-bg: rgba(243, 139, 139, 0.08);
-  --danger-border: rgba(243, 139, 139, 0.3);
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  color-scheme: light;
+  --bg-canvas: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-raised: #f1f5f9;
+  --bg-code: #f6f8fc;
+  --border-hairline: rgba(15, 23, 42, 0.09);
+  --border-strong: rgba(15, 23, 42, 0.16);
+  --text-primary: #0b1220;
+  --text-secondary: #334155;
+  --text-muted: #475569;
+  --accent: #1d4ed8;
+  --accent-hover: #1e40af;
+  --accent-ink: #ffffff;
+  --accent-tint: rgba(29, 78, 216, 0.08);
+  --accent-border: rgba(29, 78, 216, 0.28);
+  --warn-text: #b45309;
+  --warn-bg: rgba(217, 119, 6, 0.08);
+  --warn-border: rgba(217, 119, 6, 0.28);
+  --danger-text: #dc2626;
+  --danger-bg: rgba(220, 38, 38, 0.08);
+  --danger-border: rgba(220, 38, 38, 0.28);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
   --max-width: 1180px;
-  --header-height: 64px;
+  --header-height: 68px;
   --space-section: clamp(48px, 6vw, 84px);
-  --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.32);
-  --font-sans: ui-sans-serif, "Plus Jakarta Sans", "Manrope", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --shadow-subtle: 0 1px 3px rgba(15, 23, 42, 0.06), 0 10px 24px -10px rgba(15, 23, 42, 0.08);
+  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 *,
@@ -113,8 +113,8 @@ textarea {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(11, 15, 23, 0.94);
-  backdrop-filter: blur(8px);
+  background: rgba(248, 250, 252, 0.88);
+  backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border-hairline);
 }
 
@@ -928,7 +928,7 @@ textarea {
   gap: 12px;
   padding: 8px 14px;
   border-bottom: 1px solid var(--border-hairline);
-  background: rgba(17, 24, 36, 0.7);
+  background: var(--bg-surface);
   font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--text-muted);
@@ -958,8 +958,8 @@ textarea {
   overflow-x: auto;
   font-family: var(--font-mono);
   font-size: 0.8125rem;
-  line-height: 1.55;
-  color: #dce7f5;
+  line-height: 1.65;
+  color: var(--text-primary);
   tab-size: 2;
   max-width: 100%;
 }
@@ -1369,8 +1369,8 @@ textarea {
 code {
   font-family: var(--font-mono);
   font-size: 0.88em;
-  background: rgba(148, 173, 204, 0.1);
-  padding: 1px 5px;
+  background: rgba(15, 23, 42, 0.06);
+  padding: 2px 6px;
   border-radius: 3px;
 }
 

@@ -1,6 +1,7 @@
-import { BRAND_MARK_SVG, OG_CARD_SVG } from "./diagrams.js";
+import { BRAND_MARK_SVG } from "./diagrams.js";
 import { SITE_JS } from "./client.js";
 import { renderRobotsTxt, renderSitemapXml } from "./layout.js";
+import { SEOManager } from "./seo-manager.js";
 import {
   renderDemoPage,
   renderDevelopersPage,
@@ -76,7 +77,7 @@ export function handleWebsiteRequest(request, url) {
     return assetResponse(BRAND_MARK_SVG, "image/svg+xml; charset=utf-8", request.method, 3600);
   }
   if (pathname === "/assets/og-card.svg") {
-    return assetResponse(OG_CARD_SVG, "image/svg+xml; charset=utf-8", request.method, 3600);
+    return assetResponse(SEOManager.renderOgImageSvg(url.searchParams), "image/svg+xml; charset=utf-8", request.method, 3600);
   }
   if (pathname === "/robots.txt") {
     return assetResponse(renderRobotsTxt(request.url), "text/plain; charset=utf-8", request.method);

@@ -149,15 +149,8 @@ export function renderHomePage(requestUrl) {
     description:
       "Agent execution infrastructure for AI. One execution layer coordinating multiple engines to deliver bounded, evidence-backed results.",
     bodyHtml,
-    jsonLd: {
-      "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      name: "ExportFlow",
-      applicationCategory: "DeveloperApplication",
-      operatingSystem: "Cloudflare Workers, Node.js",
-      description:
-        "Agent execution infrastructure coordinating bounded web retrieval, structured outputs, and source evidence.",
-    },
+    ogEyebrow: "AGENT EXECUTION INFRASTRUCTURE",
+    includeAlternates: false,
   });
 }
 
@@ -271,6 +264,8 @@ export function renderPlatformPage(requestUrl) {
     description:
       "Explore ExportFlow's seven infrastructure layers: Agent Interface, Task Contract, Auth and Policy, Router, Engine Adapters, Result Normalization, and Evidence.",
     bodyHtml,
+    ogEyebrow: "EXPORTFLOW / PLATFORM",
+    includeAlternates: false,
   });
 }
 
@@ -345,6 +340,8 @@ export function renderUseCasesPage(requestUrl) {
     description:
       "Explore AI agent execution workflows for multi-source research, website intelligence, structured data collection, browser execution, and long-running tasks.",
     bodyHtml,
+    ogEyebrow: "EXPORTFLOW / USE CASES",
+    includeAlternates: false,
   });
 }
 
@@ -664,6 +661,8 @@ curl -sS -X POST http://127.0.0.1:3000/api/v1/tasks \\
     description:
       "Technical documentation for ExportFlow's task contract, execution flow, adapters, authentication, evidence envelopes, error codes, and local runtime setup.",
     bodyHtml,
+    ogEyebrow: "EXPORTFLOW / DEVELOPERS",
+    includeAlternates: false,
   });
 }
 
@@ -844,6 +843,8 @@ export function renderDemoPage(requestUrl) {
     description:
       "Explore ExportFlow's bounded execution stages, policy validation, routing, and normalized evidence JSON in an illustrative browser preview.",
     bodyHtml,
+    ogEyebrow: "EXPORTFLOW / INTERACTIVE PREVIEW",
+    includeAlternates: false,
   });
 }
 
@@ -905,6 +906,8 @@ export function renderFaqPage(requestUrl) {
     description:
       "Answers about ExportFlow's agent execution infrastructure, adapters, source evidence, AI provider neutrality, MCP plans, and current availability.",
     bodyHtml,
+    ogEyebrow: "EXPORTFLOW / FAQ",
+    includeAlternates: false,
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "FAQPage",

@@ -4,6 +4,7 @@ import { authenticateRequest, createRateLimiter } from "./core/auth.js";
 import { readBoundedJsonBody, TaskContractError, validateTaskRequest } from "./core/task-contract.js";
 import { executeWebTask } from "./core/tasks.js";
 import { handleWebsiteRequest } from "./site/router.js";
+import { renderMarketingNotFoundPage } from "./site/marketing.js";
 
 const ERROR_CODE_TO_HTTP_STATUS = Object.freeze({
   INVALID_TASK: 400,
@@ -158,6 +159,16 @@ export function createWorker(options = {}) {
 
         if (url.pathname === "/favicon.ico") {
           return new Response(null, { status: 204 });
+        }
+
+        const acceptsHtml = request.headers.get("accept")?.includes("text/html") && !url.pathname.startsWith("/api/");
+        if (acceptsHtml) {
+          const localeMatch = /^\/(en|ar|fr|es|de|pt|zh|ja)(\/|$)/.exec(url.pathname);
+          const notFoundHtml = renderMarketingNotFoundPage(request.url, localeMatch?.[1] || "en");
+          return new Response(request.method === "HEAD" ? null : notFoundHtml, {
+            status: 404,
+            headers: { "content-type": "text/html; charset=utf-8", "x-content-type-options": "nosniff" },
+          });
         }
 
         return json({ error: "not_found" }, 404);
