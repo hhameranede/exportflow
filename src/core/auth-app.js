@@ -269,8 +269,7 @@ export async function handleAuthRequest(request, env = {}) {
     }
   }
 
-  const auth = getAuthInstance(env);
-  if (!auth) {
+  if (!status.authConfigured) {
     return textResponse({
       error: "AUTH_NOT_CONFIGURED",
       message: "Account services are not configured yet.",
@@ -281,6 +280,14 @@ export async function handleAuthRequest(request, env = {}) {
     return textResponse({
       error: "AUTH_SCHEMA_NOT_READY",
       message: "Account storage has not been initialized yet.",
+    }, 503);
+  }
+
+  const auth = getAuthInstance(env);
+  if (!auth) {
+    return textResponse({
+      error: "AUTH_NOT_CONFIGURED",
+      message: "Account services are not configured yet.",
     }, 503);
   }
 
