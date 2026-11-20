@@ -189,6 +189,21 @@ test("Worker routes /api/auth before its generic GET-only fallback", async () =>
   assert.equal(sessionBody.error, "AUTH_NOT_CONFIGURED");
 });
 
+test("account API requests return 503 until the Better Auth schema is migrated", async () => {
+  const response = await handleAuthRequest(
+    new Request("https://exportflow.me/api/auth/get-session"),
+    {
+      AUTH_DB: createD1BindingStub(["user", "session", "account"]),
+      BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
+      GOOGLE_CLIENT_ID: "test-client-id",
+      GOOGLE_CLIENT_SECRET: "test-client-secret",
+    },
+  );
+  assert.equal(response.status, 503);
+  const body = await response.json();
+  assert.equal(body.error, "AUTH_SCHEMA_NOT_READY");
+});
+
 test("weak migration secrets do not expose the schema migration route", async () => {
   const response = await handleAuthRequest(
     new Request("https://exportflow.me/api/auth/_ops/migrate", { method: "POST" }),
