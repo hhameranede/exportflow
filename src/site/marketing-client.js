@@ -863,14 +863,16 @@ export const MARKETING_JS = `(function () {
   }
 
   function authGoTo(url) {
-    if (typeof url === "string" && url.indexOf("/") === 0 && url.indexOf("//") !== 0) {
-      window.location.assign(url);
-      return;
-    }
     if (typeof url === "string") {
       try {
         var parsed = new URL(url, window.location.origin);
-        if (parsed.origin === window.location.origin || (parsed.protocol === "https:" && parsed.hostname === "accounts.google.com")) {
+        var sameOrigin = parsed.origin === window.location.origin;
+        var googleOrigin = parsed.protocol === "https:" &&
+          parsed.hostname === "accounts.google.com" &&
+          !parsed.port &&
+          !parsed.username &&
+          !parsed.password;
+        if (sameOrigin || googleOrigin) {
           window.location.assign(parsed.href);
           return;
         }
