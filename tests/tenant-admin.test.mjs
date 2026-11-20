@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createTenantAdminService } from "../src/core/tenant-admin.js";
 
-function makeD1({ changes = [1, 1, 1, 1], fail = false } = {}) {
+function makeD1({ changes = [1, 1, 1, 1], changesByBatch = null, fail = false } = {}) {
   const calls = [];
+  let batchIndex = 0;
   return {
     calls,
     prepare(sql) {
@@ -20,7 +21,8 @@ function makeD1({ changes = [1, 1, 1, 1], fail = false } = {}) {
     async batch(statements) {
       calls.push(statements.map((statement) => ({ sql: statement.sql, params: statement.params })));
       if (fail) throw new Error("synthetic storage failure");
-      return statements.map((_statement, index) => ({ meta: { changes: changes[index] ?? 1 } }));
+      const selectedChanges = changesByBatch?.[batchIndex++] || changes;
+      return statements.map((_statement, index) => ({ meta: { changes: selectedChanges[index] ?? 1 } }));
     },
   };
 }
@@ -204,17 +206,20 @@ test("D1 batch failure returns a sanitized service error", async () => {
 });
 
 test("tenant status updates are repeatable but a closed tenant remains terminal", async () => {
-  const { service, db } = makeService();
+  const db = makeD1({ changesByBatch: [[1, 1], [1, 1], [1, 1], [0, 0]] });
+  const { service } = makeService({ db });
   const first = await service.setTenantStatus({ tenantId: "tenant_alpha", status: "suspended" });
   const repeated = await service.setTenantStatus({ tenantId: "tenant_alpha", status: "suspended" });
+  const closed = await service.setTenantStatus({ tenantId: "tenant_alpha", status: "closed" });
   assert.equal(first.status, "suspended");
   assert.equal(repeated.status, "suspended");
-  assert.equal(db.calls.length, 2);
-  assert.match(db.calls[0][0].sql, /status <> 'closed' OR \?1 = 'closed'/);
+  assert.equal(closed.status, "closed");
+  assert.match(db.calls[0][0].sql, /status <> 'closed' OR \\?1 = 'closed'/);
   await assert.rejects(
     () => service.setTenantStatus({ tenantId: "tenant_alpha", status: "active" }),
     { code: "TENANT_NOT_UPDATABLE" },
   );
+  assert.equal(db.calls.length, 4);
 });
 
 test("administrative methods reject null or array inputs with a controlled error", async () => {
