@@ -3,6 +3,13 @@ import assert from "node:assert/strict";
 import { getAuthFeatureStatus, handleAuthRequest } from "../src/core/auth-app.js";
 import { createWorker } from "../src/index.js";
 
+function createD1BindingStub() {
+  return {
+    prepare() {},
+    batch() {},
+  };
+}
+
 test("authentication remains disabled without a dedicated D1 binding and server secret", () => {
   const status = getAuthFeatureStatus({});
   assert.deepEqual(status, {
@@ -12,8 +19,16 @@ test("authentication remains disabled without a dedicated D1 binding and server 
   });
 });
 
+
+test("authentication fails closed when AUTH_DB is not a D1 binding", () => {
+  const secret = "a-long-test-secret-that-is-not-a-real-credential";
+  assert.equal(getAuthFeatureStatus({ AUTH_DB: {}, BETTER_AUTH_SECRET: secret }).authConfigured, false);
+  assert.equal(getAuthFeatureStatus({ AUTH_DB: { prepare() {} }, BETTER_AUTH_SECRET: secret }).authConfigured, false);
+  assert.equal(getAuthFeatureStatus({ AUTH_DB: { batch() {} }, BETTER_AUTH_SECRET: secret }).authConfigured, false);
+});
+
 test("Google OAuth is enabled only when D1, the Better Auth secret, and both Google credentials exist", () => {
-  const binding = {};
+  const binding = createD1BindingStub();
   const partial = getAuthFeatureStatus({
     AUTH_DB: binding,
     BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
@@ -36,7 +51,7 @@ test("Google OAuth is enabled only when D1, the Better Auth secret, and both Goo
 
 test("email/password remains disabled until a Cloudflare Email binding and sender address exist", () => {
   const base = {
-    AUTH_DB: {},
+    AUTH_DB: createD1BindingStub(),
     BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
   };
   assert.equal(getAuthFeatureStatus(base).emailPasswordEnabled, false);
@@ -69,7 +84,7 @@ test("email/password remains disabled until a Cloudflare Email binding and sende
 
 test("public auth config returns capability booleans only and never returns credentials", async () => {
   const env = {
-    AUTH_DB: {},
+    AUTH_DB: createD1BindingStub(),
     BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
     GOOGLE_CLIENT_ID: "test-client-id",
     GOOGLE_CLIENT_SECRET: "test-client-secret",
@@ -114,7 +129,7 @@ test("weak migration secrets do not expose the schema migration route", async ()
   const response = await handleAuthRequest(
     new Request("https://exportflow.me/api/auth/_ops/migrate", { method: "POST" }),
     {
-      AUTH_DB: {},
+      AUTH_DB: createD1BindingStub(),
       BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
       AUTH_MIGRATION_TOKEN: "short",
     },
