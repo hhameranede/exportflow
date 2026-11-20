@@ -76,12 +76,27 @@ jobs:
       DECISION_JSON="$RUNNER_TEMP/owner-session-lab-decision.json"
       EMAIL="owner-session-lab-${GITHUB_RUN_ID}@example.com"
       PASSWORD="$(openssl rand -hex 24)"
-      curl --fail --silent --show-error --cookie-jar "$COOKIE_JAR" \
+      HEALTH_JSON="$RUNNER_TEMP/owner-session-lab-health.json"
+      HEALTH_STATUS="$(curl --silent --show-error --output "$HEALTH_JSON" --write-out "%{http_code}" \
+       "$BASE_URL/__session_lab/health")"
+      if [ "$HEALTH_STATUS" != "200" ]; then
+       echo "Session lab Worker health probe failed with HTTP $HEALTH_STATUS."
+       node -e 'try { const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(JSON.stringify({error:x.error||null,ok:x.ok||false})); } catch { console.log("Non-JSON liveness response."); }' "$HEALTH_JSON"
+       exit 1
+      fi
+      node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(x.ok!==true || x.sessionLabTokenConfigured!==true || x.authDbBindingPresent!==true) process.exit(1)' "$HEALTH_JSON"
+
+      SIGNUP_STATUS="$(curl --silent --show-error --cookie-jar "$COOKIE_JAR" --output "$SIGNUP_JSON" --write-out "%{http_code}" \
        -H "x-session-lab-token: $SESSION_LAB_TOKEN" \
        -H "content-type: application/json" \
        -H "origin: $BASE_URL" \
        --data "$(node -e 'process.stdout.write(JSON.stringify({name:"Synthetic Owner Session Lab",email:process.argv[1],password:process.argv[2]}))' "$EMAIL" "$PASSWORD")" \
-       "$BASE_URL/__session_lab/signup" > "$SIGNUP_JSON"
+       "$BASE_URL/__session_lab/signup")"
+      if [ "$SIGNUP_STATUS" != "200" ]; then
+       echo "Synthetic Better Auth signup failed with HTTP $SIGNUP_STATUS."
+       node -e 'try { const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(JSON.stringify({error:x.error||null,code:x.code||null,message:x.message||null,status:x.status||null,upstreamStatus:x.upstreamStatus||null})); } catch { console.log("Non-JSON signup response."); }' "$SIGNUP_JSON"
+       exit 1
+      fi
       OWNER_ID="$(node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(!x.user?.id) process.exit(1); process.stdout.write(x.user.id)' "$SIGNUP_JSON")"
       test -s "$COOKIE_JAR"
       SESSION_JSON="$RUNNER_TEMP/owner-session-lab-session.json"
