@@ -26,6 +26,13 @@ function requireText(value, field, maxLength = 128) {
   return value.trim();
 }
 
+function requireInputObject(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new TenantAdminError("INVALID_ADMIN_INPUT", "The administrative request must be an object.");
+  }
+  return value;
+}
+
 function requirePlanCode(value) {
   const planCode = requireText(value, "planCode", 32);
   if (!PLAN_CODE_PATTERN.test(planCode)) {
@@ -159,6 +166,7 @@ export function createTenantAdminService({
 
   return Object.freeze({
     async createPlanPolicy(input = {}) {
+      input = requireInputObject(input);
       const planCode = requirePlanCode(input.planCode);
       const actorId = await requireAdmin("plans:write", "plan", planCode);
       const quotaPeriod = input.quotaPeriod;
@@ -194,6 +202,7 @@ export function createTenantAdminService({
     },
 
     async provisionTenant(input = {}) {
+      input = requireInputObject(input);
       const tenantId = input.tenantId === undefined
         ? "tenant_" + cryptoImpl.randomUUID().replaceAll("-", "")
         : requireText(input.tenantId, "tenantId", 64);
@@ -218,6 +227,7 @@ export function createTenantAdminService({
     },
 
     async issueApiKey(input = {}) {
+      input = requireInputObject(input);
       const tenantId = requireText(input.tenantId, "tenantId", 64);
       if (!TENANT_ID_PATTERN.test(tenantId)) {
         throw new TenantAdminError("INVALID_TENANT_ID", "tenantId has an invalid format.");
@@ -243,6 +253,7 @@ export function createTenantAdminService({
     },
 
     async rotateApiKey(input = {}) {
+      input = requireInputObject(input);
       const tenantId = requireText(input.tenantId, "tenantId", 64);
       const oldKeyId = requireText(input.keyId, "keyId", 16);
       if (!TENANT_ID_PATTERN.test(tenantId) || !KEY_ID_PATTERN.test(oldKeyId)) {
@@ -275,6 +286,7 @@ export function createTenantAdminService({
     },
 
     async revokeApiKey(input = {}) {
+      input = requireInputObject(input);
       const tenantId = requireText(input.tenantId, "tenantId", 64);
       const keyId = requireText(input.keyId, "keyId", 16);
       if (!TENANT_ID_PATTERN.test(tenantId) || !KEY_ID_PATTERN.test(keyId)) {
@@ -297,6 +309,7 @@ export function createTenantAdminService({
     },
 
     async setTenantStatus(input = {}) {
+      input = requireInputObject(input);
       const tenantId = requireText(input.tenantId, "tenantId", 64);
       const status = input.status;
       if (!TENANT_ID_PATTERN.test(tenantId) || !TENANT_STATES.has(status)) {
@@ -306,7 +319,7 @@ export function createTenantAdminService({
       const updatedAt = timestampFrom(now);
       const results = await commit([
         db.prepare(
-          "UPDATE tenants SET status = ?1, updated_at = ?2 WHERE tenant_id = ?3 AND status <> 'closed' AND status <> ?1"
+          "UPDATE tenants SET status = ?1, updated_at = ?2 WHERE tenant_id = ?3 AND (status <> 'closed' OR ?1 = 'closed')"
         ).bind(status, updatedAt, tenantId),
         db.prepare(
           "INSERT INTO tenant_admin_audit_log (event_id, actor_id, action, resource_type, resource_id, details_json, created_at) SELECT ?1, ?2, 'tenants:status', 'tenant', ?3, ?4, ?5 WHERE changes() = 1"
@@ -319,6 +332,7 @@ export function createTenantAdminService({
     },
 
     async assignTenantPlan(input = {}) {
+      input = requireInputObject(input);
       const tenantId = requireText(input.tenantId, "tenantId", 64);
       const planCode = requirePlanCode(input.planCode);
       if (!TENANT_ID_PATTERN.test(tenantId)) {
