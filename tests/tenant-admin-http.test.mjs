@@ -143,7 +143,7 @@ test("API key issue, rotate and revoke routes bind tenant and key identifiers sa
   const issue = await handler(jsonRequest("/api/v1/admin/tenants/tenant_alpha/api-keys", { scopes: ["tasks:fetch"] }), env);
   assert.equal(issue.status, 201);
   assert.equal((await issue.json()).data.revealOnce, true);
-  assert.deepEqual(calls.actions[0][1], { tenantId: "tenant_alpha", scopes: ["tasks:fetch"] });
+  assert.deepEqual(calls.actions[0][1], { tenantId: "tenant_alpha", scopes: ["tasks:fetch"], expiresAt: undefined });
 
   const rotate = await handler(jsonRequest("/api/v1/admin/tenants/tenant_alpha/api-keys/0123456789abcdef/rotate", { scopes: ["tasks:map"] }), env);
   assert.equal(rotate.status, 200);
