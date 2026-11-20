@@ -277,6 +277,13 @@ export async function handleAuthRequest(request, env = {}) {
     }, 503);
   }
 
+  if (!(await isAuthSchemaReady(env.AUTH_DB))) {
+    return textResponse({
+      error: "AUTH_SCHEMA_NOT_READY",
+      message: "Account storage has not been initialized yet.",
+    }, 503);
+  }
+
   try {
     return await auth.handler(request);
   } catch {
