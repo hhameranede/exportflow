@@ -17,6 +17,8 @@ jobs:
    - run: npm run check
    - name: Build isolated Auth Lab bundle (dry-run only)
      run: npx --yes wrangler@4 deploy --dry-run --outdir dist/auth-lab --config cloudflare/auth-lab/wrangler.toml
+   - name: Build MCP Worker bundle (dry-run only)
+     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/mcp-preview --config cloudflare/mcp/wrangler.toml
    - name: Locate Wrangler build output
      run: |
       echo "Root dist output:"
