@@ -170,6 +170,8 @@ test("light-first design system and interactive UX components are served cleanly
   assert.match(js, /function getActiveTheme\(\)[\s\S]*return "light";/);
   assert.ok(js.includes("get-session"));
   assert.ok(js.includes("sign-in/social"));
+  assert.ok(js.includes("authReady"));
+  assert.ok(js.includes("authentication tables are not initialized"));
   assert.doesNotMatch(js, /ef_auth_preview|window[.]ExportFlowAuth/);
 });
 
