@@ -137,7 +137,7 @@ test("authenticateRequest uses fixed-length SHA-256 comparison safely", async ()
   assert.equal(ok.ok, true);
 
   const sameLenBad = new Request("https://api.exportflow.local/api/v1/tasks", {
-    headers: { authorization: `Bearer ${"x".repeat(TEST_TOKEN.length)}` },
+    headers: { authorization: `Bearer ef_live_${TEST_KEY_ID}_${"B".repeat(43)}` },
   });
   const bad = await authenticateRequest(sameLenBad, makeTestEnv());
   assert.equal(bad.ok, false);
