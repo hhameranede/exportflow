@@ -59,7 +59,7 @@ export function renderMarketingPage(requestUrl, routePath, locale = "en") {
   const route = ROUTES.find(([path]) => path === routePath) || ROUTES[1];
   const title = route[1];
   const description = route[2];
-  const body = `${header(routePath, selectedLocale, t)}${routePath === "/" ? homeBody(t, selectedLocale) : genericBody(route, routePath, t)}${footer(selectedLocale,t)}<script src="/assets/marketing.js?v=2" defer></script>`;
+  const body = `${header(routePath, selectedLocale, t)}${routePath === "/" ? homeBody(t, selectedLocale) : genericBody(route, routePath, t)}${footer(selectedLocale,t)}`;
   const html = renderDocument({ path: hrefFor(routePath, selectedLocale), requestUrl, title: `${title} — ExportFlow`, description, bodyHtml: body });
   const fontFamilies = { ar: "Noto+Sans+Arabic", zh: "Noto+Sans+SC", ja: "Noto+Sans+JP" };
   const fontFamily = fontFamilies[selectedLocale];
