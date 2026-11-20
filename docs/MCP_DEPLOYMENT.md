@@ -2,46 +2,42 @@
 
 ## Source of truth
 
-The MCP Streamable HTTP Worker now lives in this repository:
+- Entry point: `cloudflare/mcp/index.js`
+- Protocol implementation: `src/mcp/preview-worker.js`
+- Shared execution and security: `src/core/tasks.js`, `src/core/adapters.js`, `src/core/http-fetch.js`, `src/core/egress-guard.js`
+- Shared tenant authentication and quotas: `src/core/tenant-task-gateway.js`, `src/core/tenant-auth.js`, `src/core/plan-quota.js`
+- Cloudflare configuration: `cloudflare/mcp/wrangler.toml`
 
-- Entry point: cloudflare/mcp/index.js
-- Protocol and tool implementation: src/mcp/preview-worker.js
-- Shared execution logic: src/core/tasks.js, src/core/adapters.js, and other src/core modules
-- Cloudflare configuration: cloudflare/mcp/wrangler.toml
+MCP and REST import the same Core modules. Do not maintain separate copies of Fetch, egress, task, auth or quota behavior.
 
-The MCP worker imports the same Core modules as the REST Worker. It must not vendor a second copy of Fetch, task lifecycle, Map/Crawl, extraction, or egress code.
+## Tool contract in this PR
 
-## Current public contract
+- Endpoint: `/mcp` on `mcp.exportflow.me`
+- Read-only metadata: `exportflow_capabilities`
+- Execution tools: `web_fetch`, `web_map`, `web_crawl`, `web_extract`
+- Search, Research and Browser remain unavailable.
+- Execution tools require `Authorization: Bearer <ExportFlow API key>`.
+- Scopes: `tasks:fetch`, `tasks:map`, `tasks:crawl`, `tasks:extract` respectively. `tasks:*` and `*` are supported wildcards.
+- Each admitted execution tool reserves one persistent tenant request from `EXPORTFLOW_AUTH_DB` before invoking shared Task execution.
+- The MCP Cloudflare weighted Rate Limit binding remains an IP-level abuse guard, separate from per-tenant request quotas.
+- Map is bounded to 15 URLs; Crawl to 3 same-origin pages / depth 1.
+- URL egress checks and extraction schema validation happen before quota reservation.
+- Page contents are untrusted data and must not be treated as instructions.
 
-This source deliberately describes the currently deployed preview contract:
+## Current deployed state versus proposed code
 
-- MCP Streamable HTTP endpoint: /mcp
-- Host guard: mcp.exportflow.me
-- Tools: exportflow_capabilities, web_fetch, web_map, web_crawl, and web_extract
-- Search, Research, and Browser tools are not exposed.
-- Authentication is currently anonymous read-only; Cloudflare's weighted Rate Limit binding is an abuse-control layer, not a durable tenant quota or billing system.
-- Map is bounded to 15 URLs; Crawl is bounded to 3 same-origin pages at depth 1.
-- Fetch is bounded by the shared Core's response, timeout, redirect and content-type rules.
-- Page content is untrusted data and must never be treated as executable instructions.
+The live Cloudflare MCP Worker is still the previously deployed `0.4.1-preview` anonymous-read-only version until a separately approved deployment. This PR proposes `0.5.0-preview` behavior. The proposed MCP and REST Workers fail closed for execution if `EXPORTFLOW_AUTH_DB` is not bound and provisioned.
 
-The MCP service remains Preview-grade. Keeping its source in GitHub does not by itself make it customer-ready or enable tenant API keys.
+The existing human account `AUTH_DB` (Better Auth) is not the tenant auth database. Do not point `EXPORTFLOW_AUTH_DB` at it by default. No D1 binding is added to the Wrangler config in this PR because the dedicated target database and release action still require explicit approval.
 
-## Configuration
+## Configuration and validation
 
-The Wrangler configuration models the existing Worker name, mcp.exportflow.me custom domain, and existing rate-limit binding namespace. It does not create a new database, secret, binding namespace, DNS record, or Worker.
-
-## Validation
-
-The GitHub Actions PR job performs:
-
-1. Node unit tests, including MCP protocol, host/origin guards, input bounds, weighted rate limiting and fail-closed behavior.
-2. Syntax checks for the new MCP entrypoint and protocol implementation.
-3. A Wrangler dry-run build of the MCP Worker bundle.
-
-The dry-run build is not a deployment and does not change Cloudflare resources or traffic.
+- The existing `MCP_RATE_LIMITER` namespace is recorded in the Wrangler config.
+- `EXPORTFLOW_AUTH_DB` is intentionally not configured here; without it, execution tools fail closed.
+- GitHub Actions runs Node tests, syntax checks and Wrangler `--dry-run` builds. These do not upload a Worker, change domains or validate a real D1 binding.
 
 ## Release gate
 
-Do not run wrangler deploy --config cloudflare/mcp/wrangler.toml until the owner explicitly approves updating the live exportflow-mcp-preview Worker. That deployment would update the code behind the already attached mcp.exportflow.me custom domain.
+Do not run `wrangler deploy --config cloudflare/mcp/wrangler.toml` or modify Production `wrangler.toml` until the owner explicitly approves the exact D1 binding and deployment action. That update changes the code behind the existing `mcp.exportflow.me` custom domain.
 
-Before enabling tenant authentication, quotas, billing or additional tools, integrate the reviewed tenant API-key implementation and verify it against a real D1 Binding in the approved target Worker runtime. Do not reuse the human-account AUTH_DB contract as a substitute for the separate EXPORTFLOW_AUTH_DB schema without a reviewed migration and data-isolation decision.
+Before customer enablement, run authenticated target-runtime D1 Binding acceptance for both REST and MCP, then review the diff and owner-approve the release.
