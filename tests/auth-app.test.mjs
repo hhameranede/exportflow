@@ -69,6 +69,7 @@ test("Google OAuth requires a verified provider email and explicit account linki
   assert.equal(options.account.accountLinking.enabled, true);
   assert.equal(options.account.accountLinking.disableImplicitLinking, true);
   assert.deepEqual(options.account.accountLinking.trustedProviders, ["google"]);
+  assert.deepEqual(options.advanced.ipAddress.ipAddressHeaders, ["cf-connecting-ip"]);
 });
 
 test("email/password remains disabled until a Cloudflare Email binding and sender address exist", () => {
