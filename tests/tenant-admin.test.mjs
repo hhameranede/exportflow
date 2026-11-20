@@ -202,3 +202,30 @@ test("D1 batch failure returns a sanitized service error", async () => {
     { code: "TENANT_ADMIN_STORAGE_UNAVAILABLE", httpStatus: 503 },
   );
 });
+
+test("tenant status updates are repeatable but a closed tenant remains terminal", async () => {
+  const { service, db } = makeService();
+  const first = await service.setTenantStatus({ tenantId: "tenant_alpha", status: "suspended" });
+  const repeated = await service.setTenantStatus({ tenantId: "tenant_alpha", status: "suspended" });
+  assert.equal(first.status, "suspended");
+  assert.equal(repeated.status, "suspended");
+  assert.equal(db.calls.length, 2);
+  assert.match(db.calls[0][0].sql, /status <> 'closed' OR \?1 = 'closed'/);
+  await assert.rejects(
+    () => service.setTenantStatus({ tenantId: "tenant_alpha", status: "active" }),
+    { code: "TENANT_NOT_UPDATABLE" },
+  );
+});
+
+test("administrative methods reject null or array inputs with a controlled error", async () => {
+  const { service, db } = makeService();
+  await assert.rejects(
+    () => service.provisionTenant(null),
+    { code: "INVALID_ADMIN_INPUT" },
+  );
+  await assert.rejects(
+    () => service.createPlanPolicy([]),
+    { code: "INVALID_ADMIN_INPUT" },
+  );
+  assert.equal(db.calls.length, 0);
+});
