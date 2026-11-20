@@ -43,6 +43,90 @@ jobs:
       if-no-files-found: error
       retention-days: 1
       include-hidden-files: true
+   - name: Generate ephemeral Better Auth lab secrets
+     run: |
+      set -euo pipefail
+      AUTH_LAB_SECRET="$(openssl rand -hex 32)"
+      SESSION_LAB_TOKEN="$(openssl rand -hex 32)"
+      echo "::add-mask::$AUTH_LAB_SECRET"
+      echo "::add-mask::$SESSION_LAB_TOKEN"
+      printf 'AUTH_LAB_SECRET=%s\\n' "$AUTH_LAB_SECRET" >> "$GITHUB_ENV"
+      printf 'SESSION_LAB_TOKEN=%s\\n' "$SESSION_LAB_TOKEN" >> "$GITHUB_ENV"
+
+   - name: Deploy temporary Better Auth session lab Worker
+     env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+     run: |
+      set -euo pipefail
+      if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+       echo "::error::Cloudflare test deployment token is unavailable."
+       exit 1
+      fi
+      npx --yes wrangler@4 deploy --config cloudflare/auth-session-lab/wrangler.toml
+      printf '%s' "$AUTH_LAB_SECRET" | npx --yes wrangler@4 secret put BETTER_AUTH_SECRET --config cloudflare/auth-session-lab/wrangler.toml
+      printf '%s' "$SESSION_LAB_TOKEN" | npx --yes wrangler@4 secret put SESSION_LAB_TOKEN --config cloudflare/auth-session-lab/wrangler.toml
+
+   - name: Verify real Better Auth owner session cookies against isolated Worker and D1
+     run: |
+      set -euo pipefail
+      BASE_URL="https://exportflow-owner-session-lab-20261121.hhameranede.workers.dev"
+      COOKIE_JAR="$RUNNER_TEMP/owner-session-lab-cookies.txt"
+      SIGNUP_JSON="$RUNNER_TEMP/owner-session-lab-signup.json"
+      DECISION_JSON="$RUNNER_TEMP/owner-session-lab-decision.json"
+      EMAIL="owner-session-lab-${GITHUB_RUN_ID}@example.com"
+      PASSWORD="$(openssl rand -hex 24)"
+      curl --fail --silent --show-error --cookie-jar "$COOKIE_JAR" \\
+       -H "x-session-lab-token: $SESSION_LAB_TOKEN" \\
+       -H "content-type: application/json" \\
+       -H "origin: $BASE_URL" \\
+       --data "$(node -e 'process.stdout.write(JSON.stringify({name:"Synthetic Owner Session Lab",email:process.argv[1],password:process.argv[2]}))' "$EMAIL" "$PASSWORD")" \\
+       "$BASE_URL/__session_lab/signup" > "$SIGNUP_JSON"
+      OWNER_ID="$(node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(!x.user?.id) process.exit(1); process.stdout.write(x.user.id)' "$SIGNUP_JSON")"
+      test -s "$COOKIE_JAR"
+      SESSION_JSON="$RUNNER_TEMP/owner-session-lab-session.json"
+      curl --fail --silent --show-error --cookie "$COOKIE_JAR" -H "origin: $BASE_URL" \\
+       "$BASE_URL/api/auth/get-session" > "$SESSION_JSON"
+      node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(x.user?.id!==process.argv[2] || x.user?.emailVerified!==true) process.exit(1)' "$SESSION_JSON" "$OWNER_ID"
+
+      lab_control() {
+       curl --fail --silent --show-error -H "x-session-lab-token: $SESSION_LAB_TOKEN" \\
+        -H "content-type: application/json" --data "$1" "$BASE_URL/__session_lab/control" >/dev/null
+      }
+      assert_access() {
+       local label="$1" expected="$2" cookie="$3" owner="$4" origin="$5" fetch_site="$6"
+       local args=(--silent --show-error --output "$DECISION_JSON" --write-out "%{http_code}" -X POST \\
+        -H "x-session-lab-token: $SESSION_LAB_TOKEN" -H "x-session-lab-owner-id: $owner" \\
+        -H "origin: $origin" -H "sec-fetch-site: $fetch_site")
+       if [ "$cookie" = "yes" ]; then args+=(--cookie "$COOKIE_JAR"); fi
+       local status
+       status="$(curl "${args[@]}" "$BASE_URL/__session_lab/authorize")"
+       test "$status" = "200"
+       node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); const expected=process.argv[2]==="true"; if(x.allowed!==expected || (expected && x.actorMatches!==true)) process.exit(1)' "$DECISION_JSON" "$expected"
+       echo "PASS: $label"
+      }
+
+      assert_access "fresh verified owner cookie accepted by production authorizePlatformOwner()" true yes "$OWNER_ID" "$BASE_URL" same-origin
+      assert_access "request without session cookie denied" false no "$OWNER_ID" "$BASE_URL" same-origin
+      assert_access "non-allowlisted user ID denied" false yes "${OWNER_ID}_other" "$BASE_URL" same-origin
+      assert_access "mismatched Origin denied" false yes "$OWNER_ID" "https://attacker.example" cross-site
+      lab_control "$(node -e 'process.stdout.write(JSON.stringify({action:"unverify",userId:process.argv[1]}))' "$OWNER_ID")"
+      assert_access "unverified account denied despite valid session cookie" false yes "$OWNER_ID" "$BASE_URL" same-origin
+      lab_control "$(node -e 'process.stdout.write(JSON.stringify({action:"verify",userId:process.argv[1]}))' "$OWNER_ID")"
+      lab_control "$(node -e 'process.stdout.write(JSON.stringify({action:"stale",userId:process.argv[1]}))' "$OWNER_ID")"
+      assert_access "session older than ten minutes denied" false yes "$OWNER_ID" "$BASE_URL" same-origin
+      lab_control "$(node -e 'process.stdout.write(JSON.stringify({action:"fresh",userId:process.argv[1]}))' "$OWNER_ID")"
+      lab_control "$(node -e 'process.stdout.write(JSON.stringify({action:"expired",userId:process.argv[1]}))' "$OWNER_ID")"
+      assert_access "expired session denied" false yes "$OWNER_ID" "$BASE_URL" same-origin
+      echo "PASS: Better Auth real D1 session-cookie runtime acceptance completed."
+
+   - name: Delete temporary Better Auth session lab Worker
+     if: always()
+     continue-on-error: true
+     env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+     run: npx --yes wrangler@4 delete --config cloudflare/auth-session-lab/wrangler.toml --force
 
  deploy-production:
   needs: test
