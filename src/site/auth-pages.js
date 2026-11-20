@@ -35,6 +35,8 @@ const COPY = {
     connected: "Connected accounts",
     sessions: "Active sessions",
     revokeAll: "Sign out other sessions",
+    sessionReauth: "Your session needs a fresh sign-in before you can view or manage other sessions.",
+    sessionUnavailable: "Sessions could not be loaded right now. Your profile and connected accounts are still available.",
     loading: "Loading your account…",
     profileUpdated: "Profile updated.",
     verifyEmail: "Check your inbox for a verification link to finish creating your account.",
@@ -79,6 +81,8 @@ const COPY = {
     connected: "الحسابات المرتبطة",
     sessions: "الجلسات النشطة",
     revokeAll: "إنهاء الجلسات الأخرى",
+    sessionReauth: "يلزم تسجيل الدخول مجدداً للتحقق من الجلسات الأخرى وإدارتها.",
+    sessionUnavailable: "تعذر تحميل الجلسات حالياً، لكن يبقى ملفك الشخصي وحساباتك المرتبطة متاحة.",
     loading: "جارٍ تحميل حسابك…",
     profileUpdated: "تم تحديث الملف الشخصي.",
     verifyEmail: "تحقق من بريدك الإلكتروني وافتح رابط التفعيل لإكمال إنشاء الحساب.",
@@ -205,6 +209,7 @@ export function renderAuthPage(type, t, locale, hrefFor, escapeHtml, arrowRightI
         '</article>' +
         '<article class="ef-account-card"><div class="ef-account-card-head"><div><h2>' + escapeHtml(c.sessions) + '</h2><p class="ef-acc-card-desc">Review and revoke sessions connected to your account.</p></div></div>' +
           '<ul class="ef-session-list" data-auth-session-list aria-live="polite"></ul>' +
+          '<p class="ef-form-banner" data-auth-session-status data-session-stale-message="' + escapeHtml(c.sessionReauth) + '" data-session-error-message="' + escapeHtml(c.sessionUnavailable) + '" data-session-reauth-href="' + hrefFor("/signin", locale) + '" data-session-reauth-label="' + escapeHtml(c.signIn) + '" role="status" aria-live="polite" hidden></p>' +
           '<button type="button" class="ef-btn ef-btn-secondary ef-btn-sm" data-auth-revoke-all>' + escapeHtml(c.revokeAll) + '</button>' +
         '</article>' +
       '</div>' +
