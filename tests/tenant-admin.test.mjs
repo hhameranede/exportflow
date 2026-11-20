@@ -214,7 +214,7 @@ test("tenant status updates are repeatable but a closed tenant remains terminal"
   assert.equal(first.status, "suspended");
   assert.equal(repeated.status, "suspended");
   assert.equal(closed.status, "closed");
-  assert.match(db.calls[0][0].sql, /status <> 'closed' OR \\?1 = 'closed'/);
+  assert.ok(db.calls[0][0].sql.includes("status <> 'closed' OR ?1 = 'closed'"));
   await assert.rejects(
     () => service.setTenantStatus({ tenantId: "tenant_alpha", status: "active" }),
     { code: "TENANT_NOT_UPDATABLE" },
