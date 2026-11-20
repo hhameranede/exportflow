@@ -168,30 +168,44 @@ test("light-first design system and interactive UX components are served cleanly
   const jsRes = getWebsiteResponse("/assets/marketing.js");
   const js = await jsRes.text();
   assert.match(js, /function getActiveTheme\(\)[\s\S]*return "light";/);
-  assert.match(js, /window\.ExportFlowAuth\s*=/);
+    assert.match(js, /get-session/);
+  assert.match(js, /sign-in\\/social/);
+  assert.doesNotMatch(js, /ef_auth_preview|window\\.ExportFlowAuth/);
 });
 
-test("accounts and Google linking UI blueprint pages render across English and Arabic RTL", async () => {
+test("account routes render real-auth UI, stay noindex, and are excluded from the sitemap", async () => {
   for (const [path, expectedNeedle] of [
-    ["/signin", /data-auth-form="signin"/],
+    ["/signin", /data-auth-google/],
     ["/signup", /data-auth-form="signup"/],
     ["/forgot-password", /data-auth-form="forgot"/],
-    ["/account", /data-google-provider-card/],
+    ["/reset-password", /data-auth-form="reset"/],
+    ["/account", /data-account-workspace/],
     ["/ar/signin", /dir="rtl"/],
-    ["/ar/account", /data-google-unlink-btn/],
+    ["/ar/account", /data-auth-session-list/],
+    ["/ar/reset-password", /dir="rtl"/],
   ]) {
     const res = getWebsiteResponse(path);
-    assert.ok(res, `${path} should resolve`);
+    assert.ok(res, path + " should resolve");
     assert.equal(res.status, 200);
+    assert.equal(res.headers.get("cache-control"), "no-store");
     const html = await res.text();
     assert.match(html, expectedNeedle);
+    assert.match(html, /<meta name="robots" content="noindex, nofollow">/);
+    assert.doesNotMatch(html, /UI Blueprint|Google Consent Preview|samer\.dev@gmail\.com/);
   }
 
-  const signinHtml = await getWebsiteResponse("/signin").text();
-  assert.match(signinHtml, /data-google-oauth-btn/);
-  assert.match(signinHtml, /data-google-modal/);
-  assert.match(signinHtml, /POST \/api\/auth\/login/);
-  assert.match(signinHtml, /GET \/api\/auth\/google\/start/);
+  const signinHtml = await getWebsiteResponse("/signin").then((response) => response.text());
+  assert.match(signinHtml, /data-auth-page/);
+  assert.match(signinHtml, /data-auth-config-status/);
+  assert.match(signinHtml, /data-auth-google/);
+  assert.doesNotMatch(signinHtml, /data-google-modal|data-google-preset/);
+
+  for (const path of ["/signin", "/signup", "/forgot-password", "/reset-password", "/account"]) {
+    assert.equal(MARKETING_PATHS.includes(path), false, path + " must not appear in sitemap paths");
+  }
+
+  const sitemap = await getWebsiteResponse("/sitemap.xml").then((response) => response.text());
+  assert.doesNotMatch(sitemap, /<loc>https:\/\/exportflow\.test\/(?:ar\/)?(?:signin|signup|forgot-password|reset-password|account)<\/loc>/);
 });
 
 
