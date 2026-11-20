@@ -166,6 +166,10 @@ function buildAuthOptions(env, status) {
     },
     advanced: {
       cookiePrefix: "exportflow",
+      ipAddress: {
+        // Workers expose the visitor IP in CF-Connecting-IP, not X-Forwarded-For.
+        ipAddressHeaders: ["cf-connecting-ip"],
+      },
       useSecureCookies: baseUrl.startsWith("https://"),
       defaultCookieAttributes: {
         httpOnly: true,
