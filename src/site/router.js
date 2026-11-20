@@ -12,6 +12,7 @@ import {
 } from "./pages.js";
 import { SITE_CSS } from "./styles.js";
 import { MARKETING_PATHS, renderMarketingPage, resolveMarketingRoute } from "./marketing.js";
+import { AUTH_ROUTES } from "./auth-pages.js";
 import { MARKETING_CSS } from "./marketing-styles.js";
 import { MARKETING_JS } from "./marketing-client.js";
 
@@ -38,10 +39,10 @@ function assetResponse(body, contentType, method, maxAge = 300) {
   });
 }
 
-function htmlResponse(html, method) {
+function htmlResponse(html, method, noStore = false) {
   return new Response(method === "HEAD" ? null : html, {
     status: 200,
-    headers: HTML_SECURITY_HEADERS,
+    headers: noStore ? { ...HTML_SECURITY_HEADERS, "cache-control": "no-store" } : HTML_SECURITY_HEADERS,
   });
 }
 
@@ -88,7 +89,12 @@ export function handleWebsiteRequest(request, url) {
 
   const marketingRoute = resolveMarketingRoute(pathname);
   if (marketingRoute) {
-    return htmlResponse(renderMarketingPage(request.url, marketingRoute.path, marketingRoute.locale), request.method);
+    const privateAccountRoute = AUTH_ROUTES.some(([authPath]) => authPath === marketingRoute.path);
+    return htmlResponse(
+      renderMarketingPage(request.url, marketingRoute.path, marketingRoute.locale),
+      request.method,
+      privateAccountRoute,
+    );
   }
 
   const pageRenderer = PAGE_ROUTES[pathname];
