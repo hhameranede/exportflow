@@ -48,6 +48,7 @@ When enabled, Better Auth requires email verification and sends verification/res
 - Sessions last seven days; recent-session checks use a ten-minute fresh-session window.
 - Cookie session caching is disabled so server-side session revocation is not masked by a cached session.
 - The account UI loads the actual session, profile, linked providers and active sessions from the server. Session tokens are never written to localStorage.
+- The public `/api/auth/config` endpoint checks that the four base D1 tables (`user`, `session`, `account`, `verification`) exist before advertising Google or email/password sign-in. Missing tables or schema-query failures keep provider buttons disabled until the protected migration has completed.
 - Account pages are noindex, nofollow, excluded from sitemap.xml, and served with Cache-Control: no-store.
 
 ## Required acceptance before release
