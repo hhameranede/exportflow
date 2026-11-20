@@ -88,7 +88,7 @@ No Better Auth Admin plugin was added. That plugin brings broad user-management 
 
 ## Privileged Tenant Lifecycle Service — isolated implementation
 
-The Draft implementation adds `src/core/tenant-admin.js` as an internal D1-backed service. It does not add an HTTP route, public provisioning endpoint, dashboard or production binding.
+The Draft implementation adds `src/core/tenant-admin.js` as a D1-backed service and `src/core/tenant-admin-http.js` as a narrowly scoped owner-only HTTP adapter. It does not add a general public admin interface, role-promotion endpoint, dashboard or production binding.
 
 Supported operations:
 - Create/update owner-managed plan policies with validated periods, positive integer request limits and explicit policy versions.
@@ -98,7 +98,7 @@ Supported operations:
 - Rotate an active key in one D1 batch: revoke the old key, insert the replacement, and append both audit events atomically.
 - Suspend/close tenants and reassign active plans. A closed tenant cannot be reactivated through this service.
 
-Every mutating operation requires an injected `authorizeAdmin` function. The caller must derive the operator identity from a verified server-side session and an explicit owner/admin role; request-body fields, query parameters and caller-supplied headers must never establish authority. Construction fails without this function, and every operation fails closed when it denies access. No Better Auth role mapping or public route is wired in this PR.
+Every mutating service operation requires an injected `authorizeAdmin` function. The HTTP adapter constructs the service separately for each request and binds the already-verified allowlisted owner identity only for that request. Request-body fields, query parameters and caller-supplied headers never establish authority. No Better Auth role mapping, user-role promotion endpoint or impersonation route is wired in this PR.
 
 Migration `0003_tenant_admin_audit_log.sql` adds an append-only audit table with update/delete guards. Each D1 mutation and its audit event are submitted in the same `D1Database.batch()`; if the batch fails, the operation returns a sanitized 503. The migration has not been applied to any database. The service remains draft-only until the verified owner-role integration and real D1 Binding acceptance are separately reviewed.
 
