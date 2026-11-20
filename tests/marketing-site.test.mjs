@@ -194,7 +194,8 @@ test("account routes render real-auth UI, stay noindex, and are excluded from th
     assert.doesNotMatch(html, /UI Blueprint|Google Consent Preview|samer\.dev@gmail\.com/);
   }
 
-  const signinHtml = await getWebsiteResponse("/signin").then((response) => response.text());
+  const signinResponse = getWebsiteResponse("/signin");
+  const signinHtml = await signinResponse.text();
   assert.match(signinHtml, /data-auth-page/);
   assert.match(signinHtml, /data-auth-config-status/);
   assert.match(signinHtml, /data-auth-google/);
@@ -204,7 +205,8 @@ test("account routes render real-auth UI, stay noindex, and are excluded from th
     assert.equal(MARKETING_PATHS.includes(path), false, path + " must not appear in sitemap paths");
   }
 
-  const sitemap = await getWebsiteResponse("/sitemap.xml").then((response) => response.text());
+  const sitemapResponse = getWebsiteResponse("/sitemap.xml");
+  const sitemap = await sitemapResponse.text();
   assert.doesNotMatch(sitemap, /<loc>https:\/\/exportflow\.test\/(?:ar\/)?(?:signin|signup|forgot-password|reset-password|account)<\/loc>/);
 });
 
