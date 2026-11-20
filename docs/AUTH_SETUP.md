@@ -1,6 +1,6 @@
 # ExportFlow account authentication setup
 
-This branch introduces a server-side Better Auth integration using `better-auth@1.7.27`. It does not enable account creation in Production by itself. The active `exportflow-platform` Worker has no AUTH_DB binding or developer-account Google OAuth credentials. The isolated D1 test database is bound only to `exportflow-auth-lab`; however, the currently uploaded Lab script is still a diagnostic harness, not this PR's Better Auth application bundle. No Better Auth schema migration has been applied.
+This branch introduces a server-side Better Auth integration using `better-auth@1.7.27`. It does not enable account creation in Production by itself. The active `exportflow-platform` Worker has no `AUTH_DB` binding or developer-account Google OAuth credentials. The isolated D1 test database is bound as `AUTH_DB` only to `exportflow-auth-lab`. On the 20 November 2026 read-only check, its active Worker Version #5 was annotated as a scheduled-runtime probe and declared `fetch` and `scheduled` handlers; the Cron schedules list was empty. A read-only `sqlite_master` query returned only Cloudflare's internal `_cf_KV` table. No Better Auth tables or migrations exist in that database. The current active Lab version has not been verified as this PR's Better Auth application bundle, so no Auth runtime acceptance is claimed.
 
 ## Google OAuth client
 
@@ -18,7 +18,7 @@ Set the following as Worker secrets; never commit them or add them to frontend c
 - BETTER_AUTH_URL=https://exportflow.me
 - AUTH_MIGRATION_TOKEN (a separate long random token for the one-time schema migration route)
 
-Better Auth uses the standard Google authorization-code flow and server-side callback. Google sign-in requires a provider-verified email before issuing a session. Same-email existing accounts are not linked automatically: users must sign in with their current method, then explicitly connect Google from the authenticated Account page. The callback URI in Google Cloud must match exactly.
+Better Auth uses the standard Google authorization-code flow and server-side callback. Google sign-in requires a provider-verified email before issuing a session. Same-email existing accounts are not linked automatically: users must sign in with their current method, then explicitly connect Google from the authenticated Account page. A Google identity that reports an unverified email must not receive a session; Better Auth may still create a local user/account record before rejecting the session. Test this edge case deliberately and define a reviewed cleanup/support path before customer launch.
 
 ## Cloudflare D1
 
@@ -26,11 +26,12 @@ A dedicated isolated test database already exists:
 
 - Name: `exportflow-auth-test-20261120`
 - Database ID: `4dbed731-1191-4ce6-8aec-4955e5082c77`
-- Current state: empty of application tables; not bound to any Worker; no migration has been applied.
+- Current state (20 November 2026): bound as `AUTH_DB` to `exportflow-auth-lab`; no application tables or Better Auth migration exist. The only table returned by the read-only `sqlite_master` check was Cloudflare's internal `_cf_KV` table.
 
-Do not reuse the Cost Router integration-test database or an unrelated application database. The current `AUTH_DB` binding is isolated to `exportflow-auth-lab`; do not add it to the official `exportflow-platform` Worker. Production requires a separate reviewed database and explicit authorization before any Worker binding, migration, secret change or deployment.
+Do not reuse the Cost Router integration-test database or an unrelated application database. Keep this binding isolated to `exportflow-auth-lab`; do not add it to the official `exportflow-platform` Worker. Production requires a separate reviewed database and explicit authorization before any Worker binding, migration, secret change or deployment.
 
-After the actual PR application bundle has been uploaded to the isolated Lab Worker and its runtime can be safely invoked, run the schema setup once using POST `/api/auth/_ops/migrate` with Authorization: Bearer `AUTH_MIGRATION_TOKEN`. The endpoint is hidden unless the migration token is configured and the token is checked server-side. Run it only on the isolated test Worker and test database; never call it against Production without a separate reviewed migration and explicit approval. The current diagnostic Lab script does not include Better Auth or this migration handler.
+After the actual PR application bundle has been uploaded to the isolated Lab Worker and its runtime can be safely invoked, run the schema setup once using POST `/api/auth/_ops/migrate` with Authorization: Bearer `AUTH_MIGRATION_TOKEN`. The endpoint is hidden unless the migration token is configured and the token is checked server-side. Run it only on the isolated test Worker and test database; never call it against Production without a separate reviewed migration and explicit approval. The active Lab version has not been established as this PR's Better Auth bundle and the D1 schema remains empty; do not call the migration until the correct bundle is verified and the Lab upload/migration actions are explicitly authorized. 
+es not include Better Auth or this migration handler.
 
 ## Email and password
 
