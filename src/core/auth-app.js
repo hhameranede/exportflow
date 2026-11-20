@@ -138,6 +138,7 @@ export function getAuthInstance(env = {}) {
       clientId: env.GOOGLE_CLIENT_ID.trim(),
       clientSecret: env.GOOGLE_CLIENT_SECRET.trim(),
       prompt: "select_account",
+      requireEmailVerification: true,
     };
   }
 
@@ -152,6 +153,8 @@ export function getAuthInstance(env = {}) {
     account: {
       accountLinking: {
         enabled: true,
+        // Existing accounts must authenticate first and link Google explicitly from account settings.
+        disableImplicitLinking: true,
         trustedProviders: ["google"],
       },
     },

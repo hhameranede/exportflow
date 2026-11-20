@@ -18,7 +18,7 @@ Set the following as Worker secrets; never commit them or add them to frontend c
 - BETTER_AUTH_URL=https://exportflow.me
 - AUTH_MIGRATION_TOKEN (a separate long random token for the one-time schema migration route)
 
-Better Auth uses the standard Google authorization-code flow and server-side callback. The callback URI in Google Cloud must match exactly.
+Better Auth uses the standard Google authorization-code flow and server-side callback. Google sign-in requires a provider-verified email before issuing a session. Same-email existing accounts are not linked automatically: users must sign in with their current method, then explicitly connect Google from the authenticated Account page. The callback URI in Google Cloud must match exactly.
 
 ## Cloudflare D1
 
@@ -43,7 +43,7 @@ When enabled, Better Auth requires email verification and sends verification/res
 
 ## Account management
 
-- Google sign-in and Google account linking/unlinking use Better Auth server endpoints.
+- Google sign-in requires Google's verified-email signal. Same-email accounts are never implicitly linked; an existing user must authenticate first and deliberately connect Google from Account settings. Linking/unlinking uses Better Auth server endpoints.
 - Session cookies are HttpOnly, Secure on HTTPS, SameSite=Lax, and scoped to the ExportFlow origin.
 - Sessions last seven days; recent-session checks use a ten-minute fresh-session window.
 - Cookie session caching is disabled so server-side session revocation is not masked by a cached session.
@@ -56,7 +56,7 @@ When enabled, Better Auth requires email verification and sends verification/res
 1. Obtain a dedicated Google OAuth Web client (or verify owner access to the historical Merchant client and add the developer callback).
 2. Build and upload the exact PR bundle to the isolated Lab Worker with the `AUTH_DB` binding and test-only secrets.
 3. Apply the Better Auth schema on the test D1 using the protected migration route.
-4. Verify Google sign-up, callback state handling, sign-in, sign-out, linking and unlinking with a controlled test Google account.
+4. Verify Google sign-up, callback state handling, sign-in, sign-out, verified-email enforcement, rejection of implicit same-email linking, and explicit link/unlink from an authenticated account with a controlled test Google account.
 5. Verify session persistence, single-session revoke, revoke-all, profile update, CSRF/origin rejection, expired/invalid sessions, and user isolation.
 6. If Email Service is configured, verify email verification, password reset, token expiry and non-enumerating responses.
 7. Run real Worker-runtime and browser tests before enabling the Production binding or credentials.
