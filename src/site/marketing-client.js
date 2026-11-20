@@ -943,7 +943,8 @@ export const MARKETING_JS = `(function () {
   async function beginGoogleAuth(mode) {
     var data = await authRequest(mode === "link" ? "link-social" : "sign-in/social", "POST", {
       provider: "google",
-      callbackURL: window.location.origin + "/account"
+      callbackURL: window.location.origin + "/account",
+      disableRedirect: true
     });
     if (data && data.url) {
       authGoTo(data.url);
