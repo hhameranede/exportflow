@@ -44,7 +44,7 @@ export function getAuthFeatureStatus(env = {}) {
   const authConfigured = Boolean(
     env.AUTH_DB &&
     typeof env.AUTH_DB === "object" &&
-    isNonEmptyString(env.BETTER_AUTH_SECRET) &&
+    isNonEmptyString(env.BETTER_AUTH_SECRET) && env.BETTER_AUTH_SECRET.trim().length >= 32 &&
     validOrigin(baseUrl)
   );
   const googleCredentialsPresent =
@@ -214,7 +214,7 @@ export async function handleAuthRequest(request, env = {}) {
     if (request.method !== "POST") {
       return textResponse({ error: "method_not_allowed" }, 405);
     }
-    if (!status.authConfigured || !isNonEmptyString(env.AUTH_MIGRATION_TOKEN)) {
+    if (!status.authConfigured || !isNonEmptyString(env.AUTH_MIGRATION_TOKEN) || env.AUTH_MIGRATION_TOKEN.trim().length < 32) {
       return textResponse({ error: "not_found" }, 404);
     }
     const authorization = request.headers.get("authorization") || "";
