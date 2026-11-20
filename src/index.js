@@ -5,6 +5,7 @@ import { readBoundedJsonBody, TaskContractError, validateTaskRequest } from "./c
 import { executeWebTask } from "./core/tasks.js";
 import { handleWebsiteRequest } from "./site/router.js";
 import { renderMarketingNotFoundPage } from "./site/marketing.js";
+import { handleAuthRequest } from "./core/auth-app.js";
 
 const ERROR_CODE_TO_HTTP_STATUS = Object.freeze({
   INVALID_TASK: 400,
@@ -55,6 +56,9 @@ export function createWorker(options = {}) {
     async fetch(request, env = {}) {
       try {
         const url = new URL(request.url);
+
+        const authResponse = await handleAuthRequest(request, env);
+        if (authResponse) return authResponse;
 
         if (url.pathname === "/api/v1/tasks") {
           if (request.method !== "POST") {
