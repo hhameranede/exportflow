@@ -2,6 +2,7 @@ import { normalizeResult } from "./result.js";
 import { executeAdapter } from "./adapters.js";
 import { validatePublicHttpUrl } from "./http-fetch.js";
 import { extractFromStructuredSources, validateExtractionSchema } from "./extract.js";
+import { throwIfAborted, createTaskCancelledError } from "./cancellation.js";
 
 export const RESEARCH_PIPELINE_LIMITS = Object.freeze({
   maxCandidates: 3,
@@ -172,7 +173,9 @@ export function createResearchPipeline({
       "no-LLM-inference",
       "browser-escalation-requires-injected-adapter",
     ],
-    async execute(input = {}) {
+    async execute(input = {}, options = {}) {
+      const signal = options.signal;
+      throwIfAborted(signal);
       const validated = validateInput(input);
       if (!searchAdapter || typeof searchAdapter.execute !== "function") {
         throw new ResearchPipelineError("SEARCH_UNAVAILABLE", "Search adapter is not configured.", 503);
@@ -181,7 +184,8 @@ export function createResearchPipeline({
       const searchResult = await searchAdapter.execute({
         query: validated.query,
         limit: Math.min(validated.limit ?? 5, 10),
-      });
+      }, { signal });
+      throwIfAborted(signal);
       const candidates = Array.isArray(searchResult.data?.results)
         ? searchResult.data.results.slice(0, validated.candidateLimit)
         : [];
@@ -207,6 +211,7 @@ export function createResearchPipeline({
       let best = null;
 
       for (const candidate of candidates) {
+        throwIfAborted(signal);
         let target;
         try {
           target = validatePublicHttpUrl(candidate.url);
@@ -217,8 +222,13 @@ export function createResearchPipeline({
 
         let fetched;
         try {
-          fetched = await runAdapter("http.fetch.v1", { url: target.href });
-        } catch {
+          fetched = await runAdapter("http.fetch.v1", { url: target.href }, {
+            ...(typeof options.fetchImpl === "function" ? { fetchImpl: options.fetchImpl } : {}),
+            ...(signal ? { signal } : {}),
+          });
+          throwIfAborted(signal);
+        } catch (error) {
+          if (error?.code === "TASK_CANCELLED" || signal?.aborted) throw createTaskCancelledError();
           attempts.push({ url: target.href, stage: "fetch", status: "failed", reason: "UPSTREAM_FETCH_FAILED" });
           continue;
         }
@@ -269,7 +279,11 @@ export function createResearchPipeline({
             url: best.finalUrl,
             goal: "Render this page to complete the requested structured extraction.",
             requiresInteraction: false,
+          }, {
+            ...(signal ? { signal } : {}),
+            ...(typeof options.fetchImpl === "function" ? { fetchImpl: options.fetchImpl } : {}),
           });
+          throwIfAborted(signal);
           best.browserResult = browserResult;
           const html = browserResult.data?.html;
           if (browserResult.status === "succeeded" && typeof html === "string") {
@@ -292,7 +306,8 @@ export function createResearchPipeline({
           } else {
             warnings.push("Browser escalation did not return a renderable HTML page.");
           }
-        } catch {
+        } catch (error) {
+          if (error?.code === "TASK_CANCELLED" || signal?.aborted) throw createTaskCancelledError();
           warnings.push("Browser escalation was attempted but did not complete.");
         }
         best.attempt.stage = "browser-extract";
@@ -319,6 +334,7 @@ export function createResearchPipeline({
         });
       }
 
+      throwIfAborted(signal);
       const searchSource = (searchResult.sources || []).find((source) => source.url === best.candidate.url);
       const evidence = [
         ...(searchSource?.evidence || []),
