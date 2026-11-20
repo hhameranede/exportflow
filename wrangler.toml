@@ -3,3 +3,16 @@ main = "src/index.js"
 compatibility_date = "2026-11-17"
 workers_dev = true
 preview_urls = false
+keep_vars = true
+
+[[routes]]
+pattern = "exportflow.me"
+custom_domain = true
+
+[[d1_databases]]
+binding = "AUTH_DB"
+database_name = "exportflow-auth-production"
+database_id = "0bd9f873-a1d5-4d90-b3fc-1c4b47e1aa67"
+
+[secrets]
+required = ["BETTER_AUTH_SECRET", "AUTH_MIGRATION_TOKEN"]
