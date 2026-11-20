@@ -1,6 +1,6 @@
 # ExportFlow account authentication setup
 
-This branch introduces a server-side Better Auth integration. It does not enable account creation in Production by itself. The active `exportflow-platform` Worker has no AUTH_DB binding or developer-account Google OAuth credentials. An isolated D1 test database has been created, but it is not yet bound to a Worker and has no Better Auth schema.
+This branch introduces a server-side Better Auth integration using `better-auth@1.7.27`. It does not enable account creation in Production by itself. The active `exportflow-platform` Worker has no AUTH_DB binding or developer-account Google OAuth credentials. The isolated D1 test database is bound only to `exportflow-auth-lab`; however, the currently uploaded Lab script is still a diagnostic harness, not this PR's Better Auth application bundle. No Better Auth schema migration has been applied.
 
 ## Google OAuth client
 
@@ -28,9 +28,9 @@ A dedicated isolated test database already exists:
 - Database ID: `4dbed731-1191-4ce6-8aec-4955e5082c77`
 - Current state: empty of application tables; not bound to any Worker; no migration has been applied.
 
-Do not reuse the Cost Router integration-test database or an unrelated application database. Bind this test database only to a separate non-production test Worker named, for example, `exportflow-auth-lab`; do not bind it to the official `exportflow-platform` Worker. Production requires a separate approved database and explicit authorization before any Worker binding or deployment.
+Do not reuse the Cost Router integration-test database or an unrelated application database. The current `AUTH_DB` binding is isolated to `exportflow-auth-lab`; do not add it to the official `exportflow-platform` Worker. Production requires a separate reviewed database and explicit authorization before any Worker binding, migration, secret change or deployment.
 
-After the test Worker binding and test-only `BETTER_AUTH_SECRET` are configured, run the schema setup once using POST `/api/auth/_ops/migrate` with Authorization: Bearer `AUTH_MIGRATION_TOKEN`. The endpoint is hidden unless the migration token is configured and the token is checked server-side. Run it only on the isolated test Worker and test database; never call it against Production without a separate reviewed migration and explicit approval.
+After the actual PR application bundle has been uploaded to the isolated Lab Worker and its runtime can be safely invoked, run the schema setup once using POST `/api/auth/_ops/migrate` with Authorization: Bearer `AUTH_MIGRATION_TOKEN`. The endpoint is hidden unless the migration token is configured and the token is checked server-side. Run it only on the isolated test Worker and test database; never call it against Production without a separate reviewed migration and explicit approval. The current diagnostic Lab script does not include Better Auth or this migration handler.
 
 ## Email and password
 
@@ -52,21 +52,21 @@ When enabled, Better Auth requires email verification and sends verification/res
 
 ## Required acceptance before release
 
-1. Obtain an isolated Google OAuth Web client (or verify owner access to the historical Merchant client and add the developer callback).
-2. Deploy the separate non-production test Worker with the test D1 binding and test-only server secrets, after explicit approval.
-3. Apply the Better Auth schema on the test database using the protected migration route.
-3. Verify Google sign-up, callback state handling, sign-in, sign-out, linking and unlinking with a controlled test Google account.
-4. Verify session persistence, single-session revoke, revoke-all, profile update, CSRF/origin rejection, expired/invalid sessions, and tenant/user separation.
-5. If Email Service is configured, verify email verification, password reset, token expiry and non-enumerating responses.
-6. Run real Worker-runtime and browser tests before enabling the Production binding or credentials.
+1. Obtain a dedicated Google OAuth Web client (or verify owner access to the historical Merchant client and add the developer callback).
+2. Build and upload the exact PR bundle to the isolated Lab Worker with the `AUTH_DB` binding and test-only secrets.
+3. Apply the Better Auth schema on the test D1 using the protected migration route.
+4. Verify Google sign-up, callback state handling, sign-in, sign-out, linking and unlinking with a controlled test Google account.
+5. Verify session persistence, single-session revoke, revoke-all, profile update, CSRF/origin rejection, expired/invalid sessions, and user isolation.
+6. If Email Service is configured, verify email verification, password reset, token expiry and non-enumerating responses.
+7. Run real Worker-runtime and browser tests before enabling the Production binding or credentials.
 
 ## Current limitations
 
 - The current `exportflow-platform` Worker has no Google OAuth secret binding configured. Earlier project history records a Google OAuth client used by the separate Merchant Preview flow (Google Cloud project `478533247081`), whose callback was `/api/merchant/auth/google/callback`. That historical client has not been verified as reusable for developer accounts, and access to its Google Cloud project was previously unavailable. Do not assume it is the same credential set or silently reuse it. The owner of that Google Cloud project must confirm access and either add `https://exportflow.me/api/auth/callback/google` as an authorized redirect URI to the intended Web OAuth client, or create a dedicated Web OAuth client.
-- An isolated D1 test database now exists but is unbound and has no application schema. No Production Auth D1 database or AUTH_DB binding exists.
+- The isolated D1 test database is bound to the diagnostic `exportflow-auth-lab` Worker. It still has no Better Auth application schema. No Production Auth D1 database or AUTH_DB binding exists.
 - Email/password is intentionally disabled until a verified transactional sender exists.
 - Two-factor authentication, organization/team roles, account deletion workflow, billing entitlements, and admin provisioning are not included in this first implementation.
-- The test D1 resource was created separately and is not bound. This branch does not change Worker secrets, bindings, DNS, permissions, Production traffic, or deployments.
+- The Lab has three test-only secret bindings and the isolated `AUTH_DB`; the current uploaded script remains a diagnostic harness. No Production secret, binding, schema, DNS, permission, traffic or deployment was changed.
 
 ## Cloudflare Auth Lab deployment configuration
 
@@ -74,9 +74,9 @@ The isolated Lab uses a separate Wrangler file at `cloudflare/auth-lab/wrangler.
 
 - Cloudflare Workers Builds root directory: `/cloudflare/auth-lab`
 - Build command: `cd ../.. && npm install --no-audit --no-fund && npm test && npm run check`
-- Deploy command: `cd ../.. && npx wrangler deploy --config cloudflare/auth-lab/wrangler.toml`
+- Upload command (creates a new Worker Version without promoting it): `cd ../.. && npx wrangler versions upload --config cloudflare/auth-lab/wrangler.toml`
 - Previews: disabled
 - The Lab Wrangler config binds only `AUTH_DB` to the isolated D1 database `exportflow-auth-test-20261120`.
 - The config sets `workers_dev = false` and `preview_urls = false`; no public Workers subdomain or Preview URL is enabled.
 
-A build must be connected only to the `exportflow-auth-lab` Worker tag and the account branch `feat/real-google-auth-account-system-20261120`. Never point this build command at the root config or `exportflow-platform`. Keep the Cloudflare Build configuration uncreated until its dedicated Build Token is available and the script tag has been checked.
+Connect the build only to the `exportflow-auth-lab` immutable Worker tag `044d4d82df164d248b523723a1c15652` and branch `feat/real-google-auth-account-system-20261120`. Never point this build command at the root config or `exportflow-platform`. Previews must remain disabled. A Workers Build configuration is not active yet: the account currently has no Build Token. The browser-based token creation step is blocked until a usable Cloudflare Dashboard session path is available; do not invent a token or expose a credential in chat. The upload command creates a new Lab Worker Version but does not by itself prove the version is active or that Better Auth works.
