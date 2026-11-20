@@ -55,7 +55,28 @@ async function cancelBody(response) {
   }
 }
 
-async function readTextBody(response, maxBytes, signal) {
+function normalizeReceiptContentType(contentType) {
+  const mime = String(contentType || "").split(";")[0].trim().toLowerCase();
+  return /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(mime) ? mime : null;
+}
+
+function getDeclaredResponseBytes(response) {
+  const value = response?.headers?.get("content-length") || "";
+  if (!/^\d+$/.test(value)) return null;
+  const bytes = Number(value);
+  return Number.isSafeInteger(bytes) ? bytes : null;
+}
+
+function reportUsageReceipt(callback, receipt) {
+  if (typeof callback !== "function") return;
+  try {
+    callback(Object.freeze(receipt));
+  } catch {
+    // Usage observation must never change Fetch success or failure behavior.
+  }
+}
+
+async function readTextBody(response, maxBytes, signal, onBytesRead) {
   const declaredLength = response.headers.get("content-length");
   if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxBytes) {
     await cancelBody(response);
@@ -75,6 +96,13 @@ async function readTextBody(response, maxBytes, signal) {
       const { done, value } = await reader.read();
       if (done) break;
       totalBytes += value.byteLength;
+      if (typeof onBytesRead === "function") {
+        try {
+          onBytesRead(totalBytes);
+        } catch {
+          // Measurement callbacks are observational only.
+        }
+      }
       if (totalBytes > maxBytes) {
         await reader.cancel();
         throw new FetchAdapterError("RESPONSE_TOO_LARGE", "Upstream response exceeds the configured size limit.", 413);
@@ -114,6 +142,8 @@ export async function fetchPublicResource(input, options = {}) {
   const timeoutMs = options.timeoutMs ?? HTTP_FETCH_LIMITS.timeoutMs;
   const maxRedirects = options.maxRedirects ?? HTTP_FETCH_LIMITS.maxRedirects;
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  const onUsageReceipt = options.onUsageReceipt;
+  let attemptsStarted = 0;
   let allowedOrigin = null;
   if (options.allowedOrigin !== undefined) {
     try {
@@ -175,7 +205,29 @@ export async function fetchPublicResource(input, options = {}) {
       }
       visited.add(current);
 
+      const attempt = ++attemptsStarted;
+      const attemptStartedMs = Date.now();
       let response;
+      let responseBodyBytesRead = 0;
+      let receiptEmitted = false;
+      const emitReceipt = (outcome, errorCode = null) => {
+        if (receiptEmitted) return;
+        receiptEmitted = true;
+        reportUsageReceipt(onUsageReceipt, {
+          schemaVersion: 1,
+          attempt,
+          outcome,
+          httpStatus: response && Number.isInteger(response.status) ? response.status : null,
+          contentType: normalizeReceiptContentType(response?.headers?.get("content-type")),
+          declaredResponseBytes: response ? getDeclaredResponseBytes(response) : null,
+          responseBodyBytesRead,
+          bytesSource: "stream_reader_observed",
+          elapsedMs: Math.max(0, Date.now() - attemptStartedMs),
+          elapsedBasis: "io_inclusive_wall_elapsed_not_cpu",
+          errorCode: typeof errorCode === "string" ? errorCode : null,
+        });
+      };
+
       try {
         response = await fetchImpl(current, {
           method: "GET",
@@ -191,66 +243,99 @@ export async function fetchPublicResource(input, options = {}) {
         });
       } catch {
         if (timedOut) {
+          emitReceipt("timeout", "UPSTREAM_TIMEOUT");
           throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
         }
+        emitReceipt("network_error", "UPSTREAM_FETCH_FAILED");
         throw new FetchAdapterError("UPSTREAM_FETCH_FAILED", "Could not retrieve the upstream resource.", 502);
       }
 
-      if (REDIRECT_STATUSES.has(response.status)) {
-        const location = response.headers.get("location");
-        await cancelBody(response);
-        if (!location) {
-          throw new FetchAdapterError("INVALID_REDIRECT", "Upstream redirect did not include a Location header.", 502);
-        }
-        if (redirectChain.length >= maxRedirects) {
-          throw new FetchAdapterError("TOO_MANY_REDIRECTS", "Upstream exceeded the redirect limit.", 502);
-        }
-
-        let nextUrl;
-        try {
-          nextUrl = validatePublicHttpUrl(new URL(location, currentUrl).href);
-        } catch (error) {
-          if (error instanceof FetchAdapterError) {
-            throw new FetchAdapterError("REDIRECT_NOT_ALLOWED", "Upstream redirected to a disallowed destination.", 502);
+      try {
+        if (REDIRECT_STATUSES.has(response.status)) {
+          const location = response.headers.get("location");
+          await cancelBody(response);
+          if (!location) {
+            const error = new FetchAdapterError("INVALID_REDIRECT", "Upstream redirect did not include a Location header.", 502);
+            emitReceipt("redirect_rejected", error.code);
+            throw error;
           }
-          throw new FetchAdapterError("INVALID_REDIRECT", "Upstream returned an invalid redirect URL.", 502);
-        }
-        if (allowedOrigin && nextUrl.origin !== allowedOrigin) {
-          throw new FetchAdapterError("REDIRECT_NOT_ALLOWED", "Redirect left the allowed origin.", 502);
-        }
-        if (currentUrl.protocol === "https:" && nextUrl.protocol !== "https:") {
-          throw new FetchAdapterError("REDIRECT_DOWNGRADE", "HTTPS redirects cannot downgrade to HTTP.", 502);
+          if (redirectChain.length >= maxRedirects) {
+            const error = new FetchAdapterError("TOO_MANY_REDIRECTS", "Upstream exceeded the redirect limit.", 502);
+            emitReceipt("redirect_rejected", error.code);
+            throw error;
+          }
+
+          let nextUrl;
+          try {
+            nextUrl = validatePublicHttpUrl(new URL(location, currentUrl).href);
+          } catch (error) {
+            const redirectError = error instanceof FetchAdapterError
+              ? new FetchAdapterError("REDIRECT_NOT_ALLOWED", "Upstream redirected to a disallowed destination.", 502)
+              : new FetchAdapterError("INVALID_REDIRECT", "Upstream returned an invalid redirect URL.", 502);
+            emitReceipt("redirect_rejected", redirectError.code);
+            throw redirectError;
+          }
+          if (allowedOrigin && nextUrl.origin !== allowedOrigin) {
+            const error = new FetchAdapterError("REDIRECT_NOT_ALLOWED", "Redirect left the allowed origin.", 502);
+            emitReceipt("redirect_rejected", error.code);
+            throw error;
+          }
+          if (currentUrl.protocol === "https:" && nextUrl.protocol !== "https:") {
+            const error = new FetchAdapterError("REDIRECT_DOWNGRADE", "HTTPS redirects cannot downgrade to HTTP.", 502);
+            emitReceipt("redirect_rejected", error.code);
+            throw error;
+          }
+
+          redirectChain.push({
+            status: response.status,
+            from: currentUrl.href,
+            to: nextUrl.href,
+          });
+          emitReceipt("redirect");
+          currentUrl = nextUrl;
+          continue;
         }
 
-        redirectChain.push({
+        const contentType = response.headers.get("content-type") || "";
+        if (response.body && !isTextContentType(contentType)) {
+          await cancelBody(response);
+          const error = new FetchAdapterError("UNSUPPORTED_CONTENT_TYPE", "Only text, HTML, JSON, and XML responses are supported.", 415);
+          emitReceipt("response_rejected", error.code);
+          throw error;
+        }
+
+        let body;
+        try {
+          body = await readTextBody(response, maxBytes, controller.signal, (bytes) => {
+            responseBodyBytesRead = bytes;
+          });
+        } catch (error) {
+          emitReceipt(error?.code === "UPSTREAM_TIMEOUT" ? "timeout" : "read_failed", error?.code || null);
+          throw error;
+        }
+        emitReceipt("response");
+        const retrievedAt = new Date().toISOString();
+
+        return {
+          ok: response.ok,
           status: response.status,
-          from: currentUrl.href,
-          to: nextUrl.href,
-        });
-        currentUrl = nextUrl;
-        continue;
+          contentType,
+          body: body.text,
+          bytes: body.bytes,
+          originalUrl: initialUrl.href,
+          finalUrl: currentUrl.href,
+          redirects: redirectChain,
+          retrievedAt,
+        };
+      } catch (error) {
+        if (!receiptEmitted) {
+          emitReceipt(
+            error?.code === "UPSTREAM_TIMEOUT" ? "timeout" : "failed",
+            typeof error?.code === "string" ? error.code : null,
+          );
+        }
+        throw error;
       }
-
-      const contentType = response.headers.get("content-type") || "";
-      if (response.body && !isTextContentType(contentType)) {
-        await cancelBody(response);
-        throw new FetchAdapterError("UNSUPPORTED_CONTENT_TYPE", "Only text, HTML, JSON, and XML responses are supported.", 415);
-      }
-
-      const { text, bytes } = await readTextBody(response, maxBytes, controller.signal);
-      const retrievedAt = new Date().toISOString();
-
-      return {
-        ok: response.ok,
-        status: response.status,
-        contentType,
-        body: text,
-        bytes,
-        originalUrl: initialUrl.href,
-        finalUrl: currentUrl.href,
-        redirects: redirectChain,
-        retrievedAt,
-      };
     }
   } finally {
     clearTimeout(timeoutId);
