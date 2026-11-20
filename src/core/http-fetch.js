@@ -55,7 +55,13 @@ async function cancelBody(response) {
   }
 }
 
-async function readTextBody(response, maxBytes, signal) {
+async function readTextBody(response, maxBytes, getAbortError) {
+  const initialAbortError = getAbortError?.();
+  if (initialAbortError) {
+    await cancelBody(response);
+    throw initialAbortError;
+  }
+
   const declaredLength = response.headers.get("content-length");
   if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxBytes) {
     await cancelBody(response);
@@ -73,6 +79,11 @@ async function readTextBody(response, maxBytes, signal) {
   try {
     while (true) {
       const { done, value } = await reader.read();
+      const abortError = getAbortError?.();
+      if (abortError) {
+        await reader.cancel().catch(() => {});
+        throw abortError;
+      }
       if (done) break;
       totalBytes += value.byteLength;
       if (totalBytes > maxBytes) {
@@ -84,9 +95,8 @@ async function readTextBody(response, maxBytes, signal) {
   } catch (error) {
     await reader.cancel().catch(() => {});
     if (error instanceof FetchAdapterError) throw error;
-    if (signal?.aborted) {
-      throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
-    }
+    const abortError = getAbortError?.();
+    if (abortError) throw abortError;
     throw new FetchAdapterError("UPSTREAM_FETCH_FAILED", "Could not read the upstream response stream.", 502);
   } finally {
     reader.releaseLock();
@@ -150,25 +160,39 @@ export async function fetchPublicResource(input, options = {}) {
   }
   const visited = new Set();
   const redirectChain = [];
-  const controller = new AbortController();
-  let timedOut = false;
-  const timeoutId = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-
   const externalSignal = options.signal;
-  const onExternalAbort = () => controller.abort();
-  if (externalSignal) {
-    if (externalSignal.aborted) {
-      clearTimeout(timeoutId);
-      throw new FetchAdapterError("UPSTREAM_FETCH_FAILED", "Request was aborted.", 499);
-    }
-    externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+  if (externalSignal?.aborted) {
+    throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled by the caller.", 499);
   }
+
+  const controller = new AbortController();
+  let abortReason = null;
+  const abortForReason = (reason) => {
+    if (abortReason !== null) return;
+    abortReason = reason;
+    controller.abort();
+  };
+  const getAbortError = () => {
+    if (abortReason === "caller") {
+      return new FetchAdapterError("TASK_CANCELLED", "Task was cancelled by the caller.", 499);
+    }
+    if (abortReason === "timeout") {
+      return new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
+    }
+    return null;
+  };
+  const onExternalAbort = () => abortForReason("caller");
+  if (externalSignal) {
+    externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+    if (externalSignal.aborted) onExternalAbort();
+  }
+  const timeoutId = setTimeout(() => abortForReason("timeout"), timeoutMs);
 
   try {
     while (true) {
+      const pendingAbort = getAbortError();
+      if (pendingAbort) throw pendingAbort;
+
       const current = currentUrl.href;
       if (visited.has(current)) {
         throw new FetchAdapterError("REDIRECT_LOOP", "Upstream redirect loop detected.", 502);
@@ -190,15 +214,22 @@ export async function fetchPublicResource(input, options = {}) {
           },
         });
       } catch {
-        if (timedOut) {
-          throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
-        }
+        const abortError = getAbortError();
+        if (abortError) throw abortError;
         throw new FetchAdapterError("UPSTREAM_FETCH_FAILED", "Could not retrieve the upstream resource.", 502);
+      }
+
+      const abortAfterFetch = getAbortError();
+      if (abortAfterFetch) {
+        await cancelBody(response);
+        throw abortAfterFetch;
       }
 
       if (REDIRECT_STATUSES.has(response.status)) {
         const location = response.headers.get("location");
         await cancelBody(response);
+        const abortAfterRedirectBody = getAbortError();
+        if (abortAfterRedirectBody) throw abortAfterRedirectBody;
         if (!location) {
           throw new FetchAdapterError("INVALID_REDIRECT", "Upstream redirect did not include a Location header.", 502);
         }
@@ -222,6 +253,9 @@ export async function fetchPublicResource(input, options = {}) {
           throw new FetchAdapterError("REDIRECT_DOWNGRADE", "HTTPS redirects cannot downgrade to HTTP.", 502);
         }
 
+        const abortBeforeRedirect = getAbortError();
+        if (abortBeforeRedirect) throw abortBeforeRedirect;
+
         redirectChain.push({
           status: response.status,
           from: currentUrl.href,
@@ -237,7 +271,9 @@ export async function fetchPublicResource(input, options = {}) {
         throw new FetchAdapterError("UNSUPPORTED_CONTENT_TYPE", "Only text, HTML, JSON, and XML responses are supported.", 415);
       }
 
-      const { text, bytes } = await readTextBody(response, maxBytes, controller.signal);
+      const { text, bytes } = await readTextBody(response, maxBytes, getAbortError);
+      const abortAfterRead = getAbortError();
+      if (abortAfterRead) throw abortAfterRead;
       const retrievedAt = new Date().toISOString();
 
       return {
