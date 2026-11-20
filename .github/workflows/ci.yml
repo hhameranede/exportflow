@@ -105,8 +105,27 @@ jobs:
       node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(x.user?.id!==process.argv[2] || x.user?.emailVerified!==true) process.exit(1)' "$SESSION_JSON" "$OWNER_ID"
 
       lab_control() {
-       curl --fail --silent --show-error -H "x-session-lab-token: $SESSION_LAB_TOKEN" \
-        -H "content-type: application/json" --data "$1" "$BASE_URL/__session_lab/control" >/dev/null
+       local label="$2"
+       local CONTROL_JSON="$RUNNER_TEMP/owner-session-lab-control.json"
+       echo "CONTROL_START: $label"
+       local gate_status
+       gate_status="$(curl --silent --show-error --output /dev/null --write-out "%{http_code}" \
+        -H "x-session-lab-token: $SESSION_LAB_TOKEN" "$BASE_URL/__session_lab/health-auth")"
+       if [ "$gate_status" != "200" ]; then
+        echo "Session lab token gate failed before control action '$label' (HTTP $gate_status)."
+        exit 1
+       fi
+       local status
+       status="$(curl --silent --show-error --output "$CONTROL_JSON" --write-out "%{http_code}" \
+        -H "x-session-lab-token: $SESSION_LAB_TOKEN" \
+        -H "origin: $BASE_URL" -H "sec-fetch-site: same-origin" \
+        -H "content-type: application/json" --data "$1" "$BASE_URL/__session_lab/control")"
+       if [ "$status" != "200" ]; then
+        echo "Session lab control action '$label' failed (HTTP $status)."
+        node -e 'try { const x=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(JSON.stringify({error:x.error||null,sessionLabTokenConfigured:x.sessionLabTokenConfigured||false,tokenHeaderPresent:x.tokenHeaderPresent||false})); } catch { console.log("Non-JSON control response."); }' "$CONTROL_JSON"
+        exit 1
+       fi
+       echo "CONTROL_PASS: $label"
       }
       assert_access() {
        local label="$1" expected="$2" cookie="$3" owner="$4" origin="$5" fetch_site="$6"
@@ -125,13 +144,13 @@ jobs:
       assert_access "request without session cookie denied" false no "$OWNER_ID" "$BASE_URL" same-origin
       assert_access "non-allowlisted user ID denied" false yes "${OWNER_ID}_other" "$BASE_URL" same-origin
       assert_access "mismatched Origin denied" false yes "$OWNER_ID" "https://attacker.example" cross-site
-      lab_control "$(node -e 'process.stdout.write(JSON.stringify({action:"unverify",userId:process.argv[1]}))' "$OWNER_ID")"
+      lab_control "$(node -e 'process.stdout.write(JSON.stringify({action:"unverify",userId:process.argv[1]}))' "$OWNER_ID")" "unverify"
       assert_access "unverified account denied despite valid session cookie" false yes "$OWNER_ID" "$BASE_URL" same-origin
-      lab_control "$(node -e 'process.stdout.write(JSON.stringify({action:"verify",userId:process.argv[1]}))' "$OWNER_ID")"
-      lab_control "$(node -e 'process.stdout.write(JSON.stringify({action:"stale",userId:process.argv[1]}))' "$OWNER_ID")"
+      lab_control "$(node -e 'process.stdout.write(JSON.stringify({action:"verify",userId:process.argv[1]}))' "$OWNER_ID")" "verify"
+      lab_control "$(node -e 'process.stdout.write(JSON.stringify({action:"stale",userId:process.argv[1]}))' "$OWNER_ID")" "stale"
       assert_access "session older than ten minutes denied" false yes "$OWNER_ID" "$BASE_URL" same-origin
-      lab_control "$(node -e 'process.stdout.write(JSON.stringify({action:"fresh",userId:process.argv[1]}))' "$OWNER_ID")"
-      lab_control "$(node -e 'process.stdout.write(JSON.stringify({action:"expired",userId:process.argv[1]}))' "$OWNER_ID")"
+      lab_control "$(node -e 'process.stdout.write(JSON.stringify({action:"fresh",userId:process.argv[1]}))' "$OWNER_ID")" "fresh"
+      lab_control "$(node -e 'process.stdout.write(JSON.stringify({action:"expired",userId:process.argv[1]}))' "$OWNER_ID")" "expired"
       assert_access "expired session denied" false yes "$OWNER_ID" "$BASE_URL" same-origin
       echo "PASS: Better Auth real D1 session-cookie runtime acceptance completed."
 
