@@ -112,7 +112,7 @@ test("MCP initialize negotiates a supported protocol version", async () => {
   assert.equal(response.status, 200);
   assert.equal(body.result.protocolVersion, "2025-11-25");
   assert.equal(body.result.serverInfo.name, "ExportFlow");
-  assert.equal(body.result.serverInfo.version, "0.4.1-preview");
+  assert.equal(body.result.serverInfo.version, "0.5.0-preview");
   assert.equal(response.headers.get("access-control-allow-origin"), "https://chatgpt.com");
 });
 
