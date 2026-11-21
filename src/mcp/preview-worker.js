@@ -70,15 +70,26 @@ const TOOL_DEFINITIONS = Object.freeze([
   },
 ]);
 
+const MAX_MCP_BODY_CHUNKS = 8_192;
+
 async function readBoundedRequestText(request, maxBytes) {
   if (!request.body) return "";
   const reader = request.body.getReader();
   const chunks = [];
   let totalBytes = 0;
+  let chunksRead = 0;
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      chunksRead += 1;
+      if (chunksRead > MAX_MCP_BODY_CHUNKS) {
+        const error = new Error("Request body exceeds the maximum allowed size.");
+        error.code = "REQUEST_TOO_LARGE";
+        void reader.cancel().catch(() => {});
+        throw error;
+      }
+      if (!value || value.byteLength === 0) continue;
       totalBytes += value.byteLength;
       if (totalBytes > maxBytes) {
         const error = new Error("Request body exceeds the maximum allowed size.");
