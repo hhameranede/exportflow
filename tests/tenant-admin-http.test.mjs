@@ -9,12 +9,16 @@ const TABLES = [
   "tenant_request_usage",
   "tenant_admin_audit_log",
 ];
-const AUDIT_TRIGGERS = [
+const REQUIRED_TRIGGERS = [
+  "guard_tenant_request_usage_limit_insert",
+  "guard_tenant_request_usage_limit_update",
+  "prevent_mid_month_plan_quota_period_change",
+  "prevent_mid_month_tenant_plan_period_change",
   "prevent_tenant_admin_audit_update",
   "prevent_tenant_admin_audit_delete",
 ];
 
-function makeD1(tables = TABLES, triggers = AUDIT_TRIGGERS) {
+function makeD1(tables = TABLES, triggers = REQUIRED_TRIGGERS) {
   return {
     prepare(sql) {
       return {
@@ -49,7 +53,7 @@ function jsonRequest(path, body = {}, method = "POST") {
   });
 }
 
-function setup({ owner = { allowed: true, actorId: "owner_123" }, tables = TABLES, triggers = AUDIT_TRIGGERS } = {}) {
+function setup({ owner = { allowed: true, actorId: "owner_123" }, tables = TABLES, triggers = REQUIRED_TRIGGERS } = {}) {
   const calls = { authorization: [], service: [], actions: [] };
   const handler = createTenantAdminHttpHandler({
     authorizeOwner: async (request, env) => {
@@ -116,17 +120,31 @@ test("admin storage binding and migration readiness fail closed", async () => {
 
   const missingDeleteGuard = await handler(
     jsonRequest("/api/v1/admin/tenants", { planCode: "free" }),
-    { EXPORTFLOW_AUTH_DB: makeD1(TABLES, AUDIT_TRIGGERS.filter((name) => name !== "prevent_tenant_admin_audit_delete")) },
+    { EXPORTFLOW_AUTH_DB: makeD1(TABLES, REQUIRED_TRIGGERS.filter((name) => name !== "prevent_tenant_admin_audit_delete")) },
   );
   assert.equal(missingDeleteGuard.status, 503);
   assert.equal((await missingDeleteGuard.json()).error.code, "ADMIN_SCHEMA_NOT_READY");
 
   const missingUpdateGuard = await handler(
     jsonRequest("/api/v1/admin/tenants", { planCode: "free" }),
-    { EXPORTFLOW_AUTH_DB: makeD1(TABLES, AUDIT_TRIGGERS.filter((name) => name !== "prevent_tenant_admin_audit_update")) },
+    { EXPORTFLOW_AUTH_DB: makeD1(TABLES, REQUIRED_TRIGGERS.filter((name) => name !== "prevent_tenant_admin_audit_update")) },
   );
   assert.equal(missingUpdateGuard.status, 503);
   assert.equal((await missingUpdateGuard.json()).error.code, "ADMIN_SCHEMA_NOT_READY");
+
+  for (const missingTrigger of [
+    "guard_tenant_request_usage_limit_insert",
+    "guard_tenant_request_usage_limit_update",
+    "prevent_mid_month_plan_quota_period_change",
+    "prevent_mid_month_tenant_plan_period_change",
+  ]) {
+    const missingProtection = await handler(
+      jsonRequest("/api/v1/admin/tenants", { planCode: "free" }),
+      { EXPORTFLOW_AUTH_DB: makeD1(TABLES, REQUIRED_TRIGGERS.filter((name) => name !== missingTrigger)) },
+    );
+    assert.equal(missingProtection.status, 503, missingTrigger);
+    assert.equal((await missingProtection.json()).error.code, "ADMIN_SCHEMA_NOT_READY", missingTrigger);
+  }
 });
 
 test("plan policy and tenant provisioning routes pass strict validated bodies", async () => {
