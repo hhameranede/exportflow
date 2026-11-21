@@ -63,7 +63,20 @@ async function getPublicAuthFeatureStatus(env, configuredStatus) {
 }
 
 export function withAuthSecurityHeaders(response) {
-  const headers = new Headers(response.headers);
+  const headers = new Headers();
+  for (const [name, value] of response.headers) {
+    if (name.toLowerCase() !== "set-cookie") headers.append(name, value);
+  }
+
+  // Workers exposes getAll("Set-Cookie"); standard runtimes expose getSetCookie().
+  // Never copy Set-Cookie through iteration, which can fold distinct cookies.
+  const cookies = typeof response.headers.getAll === "function"
+    ? response.headers.getAll("Set-Cookie")
+    : typeof response.headers.getSetCookie === "function"
+      ? response.headers.getSetCookie()
+      : [];
+  for (const cookie of cookies) headers.append("Set-Cookie", cookie);
+
   headers.set("cache-control", "no-store");
   headers.set("strict-transport-security", "max-age=63072000");
   headers.set("x-content-type-options", "nosniff");
