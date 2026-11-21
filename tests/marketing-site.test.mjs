@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { handleWebsiteRequest } from "../src/site/router.js";
 import { MARKETING_PATHS, renderMarketingNotFoundPage } from "../src/site/marketing.js";
 import { SEOManager } from "../src/site/seo-manager.js";
+import { MARKETING_JS } from "../src/site/marketing-client.js";
 
 const ORIGIN = "https://exportflow.test";
 const LOCALIZED_PATH = /^\/(en|ar|fr|es|de|pt|zh|ja)\//;
@@ -177,6 +178,20 @@ test("light-first design system and interactive UX components are served cleanly
   assert.ok(js.includes('data-auth-session-status'));
   assert.ok(js.includes('Sign in again before managing active sessions.'));
   assert.doesNotMatch(js, /ef_auth_preview|window[.]ExportFlowAuth/);
+});
+
+test("contact form opens an email draft instead of claiming a message was submitted", async () => {
+  const response = getWebsiteResponse("/contact");
+  assert.ok(response, "contact route should resolve");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /href="mailto:hhameranede@gmail\\.com"/);
+  assert.match(html, /hhameranede@gmail\\.com/);
+  assert.match(html, /email app will open with a draft/i);
+  assert.match(MARKETING_JS, /mailto:hhameranede@gmail\\.com/);
+  assert.match(MARKETING_JS, /encodeURIComponent\\("\\[ExportFlow\\] "/);
+  assert.match(MARKETING_JS, /window\\.location\\.href = mailtoUrl/);
+  assert.doesNotMatch(MARKETING_JS, /No external submission endpoint is connected yet/);
 });
 
 test("account routes render real-auth UI, stay noindex, and are excluded from the sitemap", async () => {
