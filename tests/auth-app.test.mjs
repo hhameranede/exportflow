@@ -65,6 +65,7 @@ test("Google OAuth requires a verified provider email and explicit account linki
     GOOGLE_CLIENT_SECRET: "test-client-secret",
   });
 
+  assert.deepEqual(options.disabledPaths, ["/token"]);
   assert.equal(options.socialProviders.google.requireEmailVerification, true);
   assert.equal(options.account.accountLinking.enabled, true);
   assert.equal(options.account.accountLinking.disableImplicitLinking, true);
