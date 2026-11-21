@@ -1,6 +1,6 @@
 const LIST_ACTIVE_MEMBERSHIPS_SQL = `
 SELECT
-  m.membership_id, m.user_id, m.tenant_id, m.role,
+  m.membership_id, m.user_id, m.tenant_id, m.role, m.membership_version,
   t.plan_code, p.quota_period, p.request_limit, p.policy_version
 FROM tenant_memberships AS m
 JOIN tenants AS t ON t.tenant_id = m.tenant_id
@@ -39,11 +39,13 @@ function mapMembership(row) {
       !["daily", "monthly"].includes(row.quota_period) ||
       typeof row.user_id !== "string" || typeof row.tenant_id !== "string" ||
       typeof row.membership_id !== "string" || typeof row.role !== "string" ||
+      !Number.isSafeInteger(Number(row.membership_version)) || Number(row.membership_version) < 1 ||
       typeof row.plan_code !== "string" || typeof row.policy_version !== "string") {
     throw new Error("Tenant membership storage returned an invalid record.");
   }
   return Object.freeze({
     membershipId: row.membership_id,
+    membershipVersion: Number(row.membership_version),
     userId: row.user_id,
     tenantId: row.tenant_id,
     role: row.role,
@@ -143,8 +145,63 @@ export async function createTenantOAuthAccessTokenClaims(db, { user, referenceId
   const membership = await getActiveTenantMembership(db, userId, tenantId);
   if (!membership) throw new Error("An active tenant membership and plan are required.");
   return Object.freeze({
-    tenant_id: membership.tenantId,
-    tenant_role: membership.role,
-    tenant_membership_id: membership.membershipId,
+    "https://exportflow.me/claims/tenant": Object.freeze({
+      id: membership.tenantId,
+      role: membership.role,
+      membership_id: membership.membershipId,
+      membership_version: membership.membershipVersion,
+    }),
+  });
+}
+
+export class TenantOAuthIdentityError extends Error {
+  constructor(code, message, httpStatus = 403) {
+    super(message);
+    this.name = "TenantOAuthIdentityError";
+    this.code = code;
+    this.httpStatus = httpStatus;
+  }
+}
+
+export async function resolveOAuthTenantPrincipal(db, claims) {
+  const userId = claims?.sub;
+  if (typeof userId !== "string" || userId.length < 1 || userId.length > 128) {
+    throw new TenantOAuthIdentityError("INVALID_OAUTH_SUBJECT", "The OAuth subject is invalid.", 401);
+  }
+  const tenantClaim = claims?.["https://exportflow.me/claims/tenant"];
+  if (!tenantClaim || typeof tenantClaim !== "object" || Array.isArray(tenantClaim) ||
+      typeof tenantClaim.id !== "string" || typeof tenantClaim.membership_id !== "string" ||
+      !Number.isSafeInteger(tenantClaim.membership_version) || tenantClaim.membership_version < 1) {
+    throw new TenantOAuthIdentityError("INVALID_TENANT_CLAIM", "The access token has no valid ExportFlow tenant claim.", 403);
+  }
+
+  let membership;
+  try {
+    membership = await getActiveTenantMembership(db, userId, tenantClaim.id);
+  } catch {
+    throw new TenantOAuthIdentityError("TENANT_STORAGE_UNAVAILABLE", "Tenant membership storage is temporarily unavailable.", 503);
+  }
+  if (!membership) {
+    throw new TenantOAuthIdentityError("TENANT_MEMBERSHIP_INACTIVE", "This account no longer has an active membership in the selected tenant.", 403);
+  }
+  if (membership.membershipId !== tenantClaim.membership_id ||
+      membership.membershipVersion !== tenantClaim.membership_version) {
+    throw new TenantOAuthIdentityError("TENANT_MEMBERSHIP_CHANGED", "Tenant membership changed after this token was issued. Reconnect the account.", 403);
+  }
+
+  const scopes = typeof claims.scope === "string"
+    ? claims.scope.split(/\\s+/).filter(Boolean)
+    : [];
+  return Object.freeze({
+    tenantId: membership.tenantId,
+    planCode: membership.planCode,
+    policyVersion: membership.policyVersion,
+    quotaPeriod: membership.quotaPeriod,
+    requestLimit: membership.requestLimit,
+    scopes: Object.freeze([...new Set(scopes)]),
+    userId,
+    authMethod: "oauth2",
+    membershipId: membership.membershipId,
+    membershipVersion: membership.membershipVersion,
   });
 }
