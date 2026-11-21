@@ -129,6 +129,13 @@ async function checkHomeInteractions(browser) {
   const page = await context.newPage();
   await page.goto(baseUrl + "/", { waitUntil: "networkidle" });
 
+  const languageButton = page.locator("header [data-lang-trigger]");
+  assert.equal(await languageButton.count(), 1, "mobile language switcher missing");
+  assert.match(await languageButton.getAttribute("aria-label"), /Language: English/,
+    "compact mobile language control lost its accessible language name");
+  assert.equal(await languageButton.locator(":scope > span").isVisible(), false,
+    "mobile language name should be visually compact at 360px");
+
   const menuButton = page.locator("[data-menu-toggle]");
   assert.equal(await menuButton.count(), 1, "mobile navigation toggle missing");
   const drawer = page.locator("[data-mobile-drawer]");
