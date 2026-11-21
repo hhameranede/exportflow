@@ -883,6 +883,15 @@ textarea {
   margin-bottom: 14px;
 }
 
+/* Keep readiness labels from overflowing narrow use-case cards. */
+.ef-usecase-head .ef-maturity-tag {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+
 .ef-usecase-grid {
   display: grid;
   grid-template-columns: 1fr;
