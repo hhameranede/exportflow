@@ -70,7 +70,16 @@ async function openPage(browser, width, route) {
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text());
   });
-  page.on("pageerror", (error) => pageErrors.push(error.stack || error.message));
+  page.on("pageerror", (error) => {
+    pageErrors.push(error && typeof error === "object"
+      ? {
+          name: error.name || null,
+          message: error.message || String(error),
+          stack: typeof error.stack === "string" ? error.stack : null,
+          properties: Object.getOwnPropertyNames(error),
+        }
+      : { thrownValue: String(error) });
+  });
   page.on("request", (request) => {
     try {
       if (new URL(request.url()).origin !== baseUrl && !isExpectedFontAsset(request.url())) externalRequests.push(request.url());
