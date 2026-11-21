@@ -459,6 +459,7 @@ export async function extractStructuredData(input, options = {}) {
     maxBytes: options.maxBytes ?? 1_048_576,
     timeoutMs: options.timeoutMs ?? 8_000,
     maxRedirects: options.maxRedirects ?? 3,
+    ...(options.signal ? { signal: options.signal } : {}),
   });
   if (response.status < 200 || response.status >= 300) {
     return normalizeResult({
@@ -565,7 +566,7 @@ export const extractAdapter = Object.freeze({
     "field-level-evidence",
     "bounded-input-schema",
   ],
-  async execute(input = {}) {
-    return extractStructuredData(input);
+  async execute(input = {}, options = {}) {
+    return extractStructuredData(input, options);
   },
 });
