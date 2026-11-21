@@ -54,13 +54,20 @@ function createTaskExecutionControls(externalSignal, timeoutMs) {
   let timeoutHandle = null;
   let externalAbortHandler = null;
   let rejectTimeout;
+  let rejectAbort;
+  let timeoutStarted = false;
 
   const timeoutPromise = new Promise((_, reject) => {
     rejectTimeout = reject;
   });
+  const abortPromise = new Promise((_, reject) => {
+    rejectAbort = reject;
+  });
 
   const abortFromCaller = () => {
-    controller.abort(externalSignal?.reason);
+    const error = Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });
+    controller.abort(externalSignal?.reason || error);
+    rejectAbort(error);
   };
 
   if (externalSignal?.aborted) {
@@ -70,26 +77,30 @@ function createTaskExecutionControls(externalSignal, timeoutMs) {
     externalSignal.addEventListener("abort", externalAbortHandler, { once: true });
   }
 
-  timeoutHandle = setTimeout(() => {
-    const error = Object.assign(new Error("Task execution timed out."), { code: "TASK_TIMEOUT" });
-    controller.abort(error);
-    rejectTimeout(error);
-  }, timeoutMs);
-
   return {
     signal: controller.signal,
     timeoutPromise,
+    abortPromise,
+    startTimeout() {
+      if (timeoutStarted) return;
+      timeoutStarted = true;
+      timeoutHandle = setTimeout(() => {
+        const error = Object.assign(new Error("Task execution timed out."), { code: "TASK_TIMEOUT" });
+        controller.abort(error);
+        rejectTimeout(error);
+      }, timeoutMs);
+    },
     cleanup() {
-      clearTimeout(timeoutHandle);
+      if (timeoutHandle !== null) clearTimeout(timeoutHandle);
       if (externalAbortHandler) externalSignal.removeEventListener("abort", externalAbortHandler);
     },
   };
 }
-
 async function runWithTaskControls(run, controls) {
+  controls.startTimeout();
   const work = Promise.resolve().then(() => run(controls.signal));
   try {
-    return await Promise.race([work, controls.timeoutPromise]);
+    return await Promise.race([work, controls.timeoutPromise, controls.abortPromise]);
   } finally {
     controls.cleanup();
   }
