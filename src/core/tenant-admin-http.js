@@ -1,9 +1,13 @@
 import { authorizePlatformOwner } from "./auth-app.js";
 import { readBoundedJsonBody, TaskContractError } from "./task-contract.js";
 import { createTenantAdminService, TenantAdminError } from "./tenant-admin.js";
+import { createRateLimiter } from "./auth.js";
+import { getClientRateLimitKey } from "./client-rate-limit.js";
 
 const ADMIN_PREFIX = "/api/v1/admin";
 const MAX_ADMIN_BODY_BYTES = 16_384;
+const ADMIN_RATE_LIMIT_WINDOW_MS = 60_000;
+const ADMIN_RATE_LIMIT_MAX_REQUESTS = 10;
 const REQUIRED_ADMIN_TABLES = Object.freeze([
   "plan_policies",
   "tenants",
@@ -24,7 +28,7 @@ const REQUIRED_ADMIN_SCHEMA_OBJECTS = Object.freeze([
   ...REQUIRED_ADMIN_TRIGGERS.map((name) => Object.freeze({ type: "trigger", name })),
 ]);
 
-function jsonResponse(body, status = 200) {
+function jsonResponse(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -34,6 +38,7 @@ function jsonResponse(body, status = 200) {
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
       "strict-transport-security": "max-age=63072000",
+      ...extraHeaders,
     },
   });
 }
@@ -112,9 +117,14 @@ export async function isTenantAdminSchemaReady(db) {
 export function createTenantAdminHttpHandler({
   authorizeOwner = authorizePlatformOwner,
   serviceFactory = createTenantAdminService,
+  adminRateLimiter = createRateLimiter({
+    windowMs: ADMIN_RATE_LIMIT_WINDOW_MS,
+    maxRequests: ADMIN_RATE_LIMIT_MAX_REQUESTS,
+  }),
 } = {}) {
-  if (typeof authorizeOwner !== "function" || typeof serviceFactory !== "function") {
-    throw new TypeError("authorizeOwner and serviceFactory must be functions.");
+  if (typeof authorizeOwner !== "function" || typeof serviceFactory !== "function" ||
+      !adminRateLimiter || typeof adminRateLimiter.check !== "function") {
+    throw new TypeError("authorizeOwner, serviceFactory and adminRateLimiter must be valid.");
   }
 
   return async function handleTenantAdminRequest(request, env = {}) {
@@ -125,6 +135,20 @@ export function createTenantAdminHttpHandler({
     if (!route) return jsonResponse({ error: { code: "NOT_FOUND", message: "Not found." } }, 404);
     if (request.method !== "POST") {
       return jsonResponse({ error: { code: "METHOD_NOT_ALLOWED", message: "POST is required." } }, 405);
+    }
+
+    let rate;
+    try {
+      rate = adminRateLimiter.check(getClientRateLimitKey(request));
+    } catch {
+      return jsonResponse({ error: { code: "ADMIN_RATE_LIMIT_UNAVAILABLE", message: "Administrative request protection is temporarily unavailable." } }, 503);
+    }
+    if (!rate?.allowed) {
+      return jsonResponse(
+        { error: { code: "ADMIN_RATE_LIMITED", message: "Too many administrative requests; retry later." } },
+        429,
+        { "retry-after": String(Number.isInteger(rate?.retryAfterSec) && rate.retryAfterSec > 0 ? rate.retryAfterSec : 60) },
+      );
     }
 
     let owner;
