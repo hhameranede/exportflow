@@ -148,6 +148,85 @@ test("fetch returns bounded text and source metadata", async () => {
   assert.equal(result.finalUrl, "https://example.com/page");
 });
 
+test("fetch rejects an already-cancelled caller signal before starting outbound work", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let calls = 0;
+  await assert.rejects(
+    fetchPublicResource("https://example.com/page", {
+      signal: controller.signal,
+      fetchImpl: async () => { calls++; return response("unexpected"); },
+    }),
+    (error) => error instanceof FetchAdapterError && error.code === "TASK_CANCELLED",
+  );
+  assert.equal(calls, 0);
+});
+
+test("fetch distinguishes caller cancellation from its own request timeout", async () => {
+  const controller = new AbortController();
+  let requestSignal;
+  const pending = fetchPublicResource("https://example.com/page", {
+    signal: controller.signal,
+    timeoutMs: 1_000,
+    fetchImpl: async (_url, init) => {
+      requestSignal = init.signal;
+      return new Promise((_resolve, reject) => {
+        init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+      });
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  controller.abort();
+  await assert.rejects(pending, (error) => error instanceof FetchAdapterError && error.code === "TASK_CANCELLED");
+  assert.equal(requestSignal.aborted, true);
+
+  await assert.rejects(
+    fetchPublicResource("https://example.com/slow", {
+      timeoutMs: 10,
+      fetchImpl: async (_url, init) => new Promise((_resolve, reject) => {
+        init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+      }),
+    }),
+    (error) => error instanceof FetchAdapterError && error.code === "UPSTREAM_TIMEOUT",
+  );
+});
+
+test("fetch stops before following a redirect when the caller cancels", async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  await assert.rejects(
+    fetchPublicResource("https://example.com/start", {
+      signal: controller.signal,
+      fetchImpl: async () => {
+        calls++;
+        controller.abort();
+        return response(null, { status: 302, headers: { location: "/next" } });
+      },
+    }),
+    (error) => error instanceof FetchAdapterError && error.code === "TASK_CANCELLED",
+  );
+  assert.equal(calls, 1);
+});
+
+test("fetch preserves caller cancellation while reading a streamed response body", async () => {
+  const controller = new AbortController();
+  let streamController;
+  const pending = fetchPublicResource("https://example.com/stream", {
+    signal: controller.signal,
+    timeoutMs: 1_000,
+    fetchImpl: async (_url, init) => {
+      const body = new ReadableStream({ start(stream) { streamController = stream; } });
+      init.signal.addEventListener("abort", () => {
+        streamController.error(new DOMException("Aborted", "AbortError"));
+      }, { once: true });
+      return new Response(body, { headers: { "content-type": "text/plain" } });
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  controller.abort();
+  await assert.rejects(pending, (error) => error instanceof FetchAdapterError && error.code === "TASK_CANCELLED");
+});
+
 test("fetch manually follows redirects and revalidates every destination", async () => {
   const seen = [];
   const result = await fetchPublicResource("https://example.com/start", {
@@ -621,7 +700,8 @@ test("task executor forwards AbortSignal to the selected adapter", async () => {
     },
   );
   assert.equal(task.state, "succeeded");
-  assert.equal(receivedSignal, controller.signal);
+  assert.ok(receivedSignal instanceof AbortSignal);
+  assert.notEqual(receivedSignal, controller.signal);
 });
 
 test("task executor enforces an overall timeout and aborts the adapter signal", async () => {
@@ -660,7 +740,8 @@ test("task executor immediately settles when caller cancels an active adapter", 
   await new Promise((resolve) => setTimeout(resolve, 5));
   controller.abort();
   const task = await pending;
-  assert.equal(task.state, "failed");
+  assert.equal(task.state, "cancelled");
+  assert.equal(task.events.at(-1).type, "task.cancelled");
   assert.equal(task.errors[0].code, "TASK_CANCELLED");
   assert.equal(receivedSignal.aborted, true);
 });
@@ -678,7 +759,8 @@ test("task executor stops pre-cancelled work before invoking an adapter", async 
     },
   );
   assert.equal(calls, 0);
-  assert.equal(task.state, "failed");
+  assert.equal(task.state, "cancelled");
+  assert.equal(task.events.at(-1).type, "task.cancelled");
   assert.equal(task.errors[0].code, "TASK_CANCELLED");
 });
 
@@ -712,9 +794,12 @@ test("task executor forwards AbortSignal to search, research and browser adapter
   assert.equal(searchTask.state, "succeeded");
   assert.equal(researchTask.state, "succeeded");
   assert.equal(browserTask.state, "succeeded");
-  assert.equal(received.search, controller.signal);
-  assert.equal(received.research, controller.signal);
-  assert.equal(received.browser, controller.signal);
+  assert.ok(received.search instanceof AbortSignal);
+  assert.ok(received.research instanceof AbortSignal);
+  assert.ok(received.browser instanceof AbortSignal);
+  assert.notEqual(received.search, controller.signal);
+  assert.notEqual(received.research, controller.signal);
+  assert.notEqual(received.browser, controller.signal);
 });
 
 test("task executor dispatches map and crawl to internal adapters", async () => {
