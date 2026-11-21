@@ -422,6 +422,36 @@ test("mapWebsite discovers sitemap URLs and allowed same-origin links", async ()
   assert.equal(calls.length, 3);
 });
 
+test("mapWebsite propagates cancellation to every fetch and does not continue to the homepage", async () => {
+  const controller = new AbortController();
+  const calls = [];
+  await assert.rejects(
+    mapWebsite({ url: "https://example.com/" }, {
+      signal: controller.signal,
+      fetchResource: async (url, options = {}) => {
+        calls.push(url);
+        assert.equal(options.signal, controller.signal);
+        if (url.endsWith("/robots.txt")) {
+          return {
+            status: 200,
+            body: "User-agent: *\\nSitemap: https://example.com/sitemap.xml",
+            bytes: 60,
+            contentType: "text/plain",
+            finalUrl: url,
+          };
+        }
+        controller.abort();
+        throw new Error("simulated abort");
+      },
+    }),
+    (error) => error.code === "TASK_CANCELLED",
+  );
+  assert.deepEqual(calls, [
+    "https://example.com/robots.txt",
+    "https://example.com/sitemap.xml",
+  ]);
+});
+
 test("mapWebsite fails closed when robots.txt is unreachable", async () => {
   let pageFetched = false;
   await assert.rejects(
