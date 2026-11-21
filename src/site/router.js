@@ -28,13 +28,19 @@ export const HTML_SECURITY_HEADERS = Object.freeze({
     "default-src 'self'; object-src 'none'; frame-src 'none'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
 });
 
+const ASSET_SECURITY_HEADERS = Object.freeze({
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "strict-transport-security": "max-age=63072000",
+});
+
 function assetResponse(body, contentType, method, maxAge = 300) {
   return new Response(method === "HEAD" ? null : body, {
     status: 200,
     headers: {
+      ...ASSET_SECURITY_HEADERS,
       "content-type": contentType,
       "cache-control": `public, max-age=${maxAge}`,
-      "x-content-type-options": "nosniff",
     },
   });
 }
