@@ -93,7 +93,7 @@ test("website assets, robots, and sitemap are available with expected content ty
     ["/assets/mark.svg", /image\/svg\+xml/, "<svg"],
     ["/assets/og-card.svg", /image\/svg\+xml/, "<svg"],
     ["/robots.txt", /text\/plain/, "Sitemap: https://exportflow.test/sitemap.xml"],
-    ["/sitemap.xml", /application\/xml/, "https://exportflow.test/demo"],
+    ["/sitemap.xml", /application\/xml/, "https://exportflow.test/product"],
   ];
   for (const [path, typePattern, marker] of assets) {
     const response = await worker.fetch(new Request(ORIGIN + path), {});
