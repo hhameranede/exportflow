@@ -384,17 +384,16 @@ async function checkDeveloperCopy(browser) {
     permissions: ["clipboard-read", "clipboard-write"],
   });
   const page = await context.newPage();
-  await page.goto(baseUrl + "/developers", { waitUntil: "networkidle" });
-  const copyButton = page.locator("[data-copy-target]").first();
-  assert.equal(await copyButton.count(), 1, "developer documentation copy button missing");
-  await copyButton.focus();
-  await page.keyboard.press("Enter");
+  await page.goto(baseUrl + "/", { waitUntil: "networkidle" });
+  const copyButton = page.locator("[data-copy-code]");
+  assert.equal(await copyButton.count(), 1, "homepage illustrative JSON copy button missing");
+  await copyButton.click();
   await page.waitForFunction(() => {
-    const button = document.querySelector("[data-copy-target]");
-    return button && button.textContent.trim() === "Copied";
+    const label = document.querySelector("[data-copy-code] [data-copy-label]");
+    return label && label.textContent.trim() === "Copied";
   }, null, { timeout: 3000 });
   const copiedText = await page.evaluate(() => navigator.clipboard.readText());
-  assert.ok(copiedText.length > 0, "copy button did not write text to the clipboard");
+  assert.ok(copiedText.length > 0, "copy button did not write the illustrative payload to the clipboard");
   await context.close();
 }
 
