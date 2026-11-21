@@ -556,6 +556,46 @@ test("crawlWebsite respects robots, seeds sitemap pages, and bounds traversal", 
   assert.equal(result.pages.some((page) => page.url.includes("outside.example")), false);
 });
 
+test("crawlWebsite does not swallow cancellation while fetching discovered pages", async () => {
+  const controller = new AbortController();
+  const calls = [];
+  await assert.rejects(
+    crawlWebsite({ url: "https://example.com/" }, {
+      signal: controller.signal,
+      maxPages: 3,
+      maxDepth: 1,
+      fetchResource: async (url, options = {}) => {
+        calls.push(url);
+        assert.equal(options.signal, controller.signal);
+        if (url.endsWith("/robots.txt")) {
+          return { status: 200, body: "", bytes: 0, contentType: "text/plain", finalUrl: url };
+        }
+        if (url.endsWith("/sitemap.xml")) {
+          return { status: 404, body: "", bytes: 0, contentType: "text/plain", finalUrl: url };
+        }
+        if (url === "https://example.com/") {
+          return {
+            status: 200,
+            body: '<a href="/child">Child</a>',
+            bytes: 30,
+            contentType: "text/html",
+            finalUrl: url,
+          };
+        }
+        controller.abort();
+        throw new Error("simulated abort");
+      },
+    }),
+    (error) => error.code === "TASK_CANCELLED",
+  );
+  assert.deepEqual(calls, [
+    "https://example.com/robots.txt",
+    "https://example.com/sitemap.xml",
+    "https://example.com/",
+    "https://example.com/child",
+  ]);
+});
+
 test("map and crawl adapters publish bounded limits", () => {
   const catalog = getAdapterCatalog();
   const mapAdapter = catalog.find((item) => item.id === "web.map.v1");
