@@ -19,7 +19,7 @@ export class BrowserAdapterError extends Error {
   }
 }
 
-async function loadRobotsPolicy(url, fetchResource) {
+async function loadRobotsPolicy(url, fetchResource, signal) {
   const robotsUrl = new URL("/robots.txt", url.origin).href;
   let response;
   try {
@@ -29,8 +29,12 @@ async function loadRobotsPolicy(url, fetchResource) {
       maxRedirects: 2,
       allowedOrigin: url.origin,
       userAgent: EXPORTFLOW_CRAWLER_USER_AGENT,
+      ...(signal ? { signal } : {}),
     });
-  } catch {
+  } catch (error) {
+    if (signal?.aborted || error?.code === "TASK_CANCELLED") {
+      throw Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });
+    }
     throw new BrowserAdapterError("ROBOTS_UNREACHABLE", "robots.txt could not be retrieved; browser navigation was stopped.", 503);
   }
 
@@ -141,16 +145,25 @@ export function createBrowserAdapter({
         throw new BrowserAdapterError("BROWSER_UNAVAILABLE", "Browser Run binding is not configured for this Worker.", 503);
       }
 
-      const robots = await loadRobotsPolicy(target, fetchResource);
+      if (input.signal?.aborted) throw Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });
+      const robots = await loadRobotsPolicy(target, fetchResource, input.signal);
+      if (input.signal?.aborted) throw Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });
       if (!isAllowedByRobots(target.href, robots.policy)) {
         throw new BrowserAdapterError("ROBOTS_DISALLOWED_TARGET", "The requested page is disallowed by robots.txt.", 403);
       }
 
       let browser;
+      let abortHandler;
       try {
         browser = await puppeteer.launch(browserBinding, {
           guardrails: { allowedDomains: [target.hostname] },
         });
+        if (input.signal) {
+          abortHandler = () => { void browser?.close(); };
+          if (input.signal.aborted) abortHandler();
+          else input.signal.addEventListener("abort", abortHandler, { once: true });
+        }
+        if (input.signal?.aborted) throw Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });
         const page = await browser.newPage();
         await page.setUserAgent(EXPORTFLOW_CRAWLER_USER_AGENT);
         await page.setRequestInterception(true);
@@ -213,12 +226,16 @@ export function createBrowserAdapter({
           warnings,
         });
       } catch (error) {
+        if (input.signal?.aborted || error?.code === "TASK_CANCELLED") {
+          throw Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });
+        }
         if (error instanceof BrowserAdapterError) throw error;
         if (error instanceof FetchAdapterError) {
           throw new BrowserAdapterError(error.code, "Browser navigation failed its URL policy.", error.httpStatus);
         }
         throw new BrowserAdapterError("BROWSER_RENDER_FAILED", "Browser rendering failed or exceeded its execution budget.", 502);
       } finally {
+        if (abortHandler && input.signal) input.signal.removeEventListener("abort", abortHandler);
         try {
           await browser?.close();
         } catch {
