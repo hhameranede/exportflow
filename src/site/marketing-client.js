@@ -827,8 +827,7 @@ export const MARKETING_JS = `(function () {
         "&body=" + encodeURIComponent(mailtoBody);
 
       statusBanner.dataset.state = "info";
-      statusBanner.textContent = "Your email app should open with a draft. Review the details and send it there; this website does not submit messages directly.";
-      showToast("Opening your email app");
+      statusBanner.textContent = contactForm.getAttribute("data-draft-status") || "Review and send the email draft in your email app.";
       window.location.href = mailtoUrl;
     });
   }
