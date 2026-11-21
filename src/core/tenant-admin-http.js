@@ -33,6 +33,7 @@ function jsonResponse(body, status = 200) {
       pragma: "no-cache",
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
+      "strict-transport-security": "max-age=63072000",
     },
   });
 }
