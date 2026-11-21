@@ -46,7 +46,7 @@ function isExpectedFontAsset(urlValue) {
     const url = new URL(urlValue);
     return (
       (url.origin === "https://fonts.googleapis.com" && url.pathname === "/css2") ||
-      (url.origin === "https://fonts.gstatic.com" && url.pathname.startsWith("/s/"))
+      (url.origin === "https://fonts.gstatic.com" && (url.pathname.startsWith("/s/") || url.pathname.startsWith("/l/")))
     );
   } catch {
     return false;
