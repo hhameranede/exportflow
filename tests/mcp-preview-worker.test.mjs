@@ -247,6 +247,23 @@ test("oversized-body rejection does not wait for a stalled stream cancellation",
   assert.equal(calls.tasks.length, 0);
 });
 
+test("malformed Content-Length is rejected before JSON-RPC dispatch", async () => {
+  const { worker, env, calls } = makeWorker();
+  const malformedLengths = ["1.5", "1e3", "-1", "+1", "NaN"];
+
+  for (const contentLength of malformedLengths) {
+    const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
+      name: "web_fetch", arguments: { url: "https://example.com/" },
+    }), { headers: { "content-length": contentLength } }), env);
+
+    assert.equal(response.status, 400, `Content-Length ${contentLength} must be rejected.`);
+    assert.deepEqual(await response.json(), { error: "invalid_content_length" });
+  }
+
+  assert.equal(calls.limits.length, 0);
+  assert.equal(calls.tasks.length, 0);
+});
+
 test("MCP endpoint enforces JSON content type and required response media types", async () => {
   const { worker, env } = makeWorker();
   const wrongContentType = await worker.fetch(new Request(URL, {
