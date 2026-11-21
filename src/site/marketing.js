@@ -636,7 +636,7 @@ function genericBody(route, path, t, locale) {
           </div>
           <p class="ef-section-lead ef-mt-20 ef-text-sm">The form below opens a draft in your email app. You review and send it from your own account.</p>
         </div>
-        <form class="ef-contact-form" data-contact-form novalidate>
+        <form class="ef-contact-form" data-contact-form data-draft-status="${escapeHtml(t.contactIntro)}" novalidate>
           <div class="ef-field">
             <label for="cf-name">${escapeHtml(t.formName)}</label>
             <input id="cf-name" name="name" autocomplete="name" required maxlength="120" aria-describedby="err-name">
@@ -674,7 +674,7 @@ function genericBody(route, path, t, locale) {
             <span>${escapeHtml(t.send)}</span>
             ${arrowRightIcon()}
           </button>
-          <p class="ef-form-banner" role="status" data-form-status>Frontend only — no message is sent.</p>
+          <p class="ef-form-banner" role="status" data-form-status>${escapeHtml(t.contactIntro)}</p>
         </form>
       </div>
     </section>`;
