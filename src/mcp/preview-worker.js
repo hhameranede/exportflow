@@ -182,7 +182,7 @@ function toolContent(value, isError = false, meta = undefined) {
 }
 
 function isDirectApiKeyAuthorization(value) {
-  return typeof value === "string" && /^Bearer\\s+ef_live_[A-Za-z0-9_-]{16}_[A-Za-z0-9_-]{43}$/i.test(value.trim());
+  return typeof value === "string" && /^Bearer\s+ef_live_[A-Za-z0-9_-]{16}_[A-Za-z0-9_-]{43}$/i.test(value.trim());
 }
 
 function oauthToolChallenge(scope, status) {
