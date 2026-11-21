@@ -172,6 +172,31 @@ test("chunked request bodies are bounded while streaming even without Content-Le
   assert.equal(calls.tasks.length, 0);
 });
 
+test("MCP request bodies also bound empty stream chunks", async () => {
+  const { worker, env, calls } = makeWorker();
+  const stream = new ReadableStream({
+    start(controller) {
+      for (let index = 0; index < 8_193; index += 1) {
+        controller.enqueue(new Uint8Array(0));
+      }
+      controller.close();
+    },
+  });
+  const request = new Request(URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: stream,
+    duplex: "half",
+  });
+  const response = await worker.fetch(request, env);
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), { error: "request_too_large" });
+  assert.equal(calls.tasks.length, 0);
+});
+
 test("stream cancellation errors do not mask the oversized-body response", async () => {
   const { worker, env, calls } = makeWorker();
   const stream = new ReadableStream({
