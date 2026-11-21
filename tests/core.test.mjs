@@ -434,7 +434,7 @@ test("mapWebsite propagates cancellation to every fetch and does not continue to
         if (url.endsWith("/robots.txt")) {
           return {
             status: 200,
-            body: "User-agent: *\\nSitemap: https://example.com/sitemap.xml",
+            body: "User-agent: *\nSitemap: https://example.com/sitemap.xml",
             bytes: 60,
             contentType: "text/plain",
             finalUrl: url,
