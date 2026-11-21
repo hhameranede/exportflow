@@ -372,7 +372,7 @@ export function createTenantAdminService({
           "SELECT ?1, ?2, ?3, ?4, 'active', ?5, ?6, ?6, NULL FROM tenants AS t " +
           "JOIN plan_policies AS p ON p.plan_code = t.plan_code " +
           "WHERE t.tenant_id = ?3 AND t.status = 'active' AND p.status = 'active' " +
-          "ON CONFLICT(user_id, tenant_id) DO UPDATE SET role = excluded.role, status = 'active', updated_at = excluded.updated_at, revoked_at = NULL"
+          "ON CONFLICT(user_id, tenant_id) DO UPDATE SET role = excluded.role, status = 'active', membership_version = tenant_memberships.membership_version + 1, updated_at = excluded.updated_at, revoked_at = NULL"
         ).bind(membershipId, userId, tenantId, role, actorId, updatedAt),
         db.prepare(
           "INSERT INTO tenant_admin_audit_log (event_id, actor_id, action, resource_type, resource_id, details_json, created_at) " +
