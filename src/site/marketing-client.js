@@ -890,6 +890,27 @@ export const MARKETING_JS = `(function () {
     return data;
   }
 
+  function matchesSignedOAuthCallback(destination) {
+    var signedQuery = signedOAuthQueryFromLocation();
+    if (!signedQuery) return false;
+    var requestedRedirect = new URLSearchParams(signedQuery).get("redirect_uri");
+    if (!requestedRedirect) return false;
+
+    try {
+      var callback = new URL(requestedRedirect);
+      if (destination.protocol !== callback.protocol ||
+          destination.host !== callback.host ||
+          destination.pathname !== callback.pathname ||
+          destination.hash !== callback.hash) return false;
+      for (var pair of callback.searchParams.entries()) {
+        if (!destination.searchParams.getAll(pair[0]).includes(pair[1])) return false;
+      }
+      return true;
+    } catch (_e) {
+      return false;
+    }
+  }
+
   function authGoTo(url) {
     if (typeof url === "string") {
       try {
@@ -900,7 +921,7 @@ export const MARKETING_JS = `(function () {
           !parsed.port &&
           !parsed.username &&
           !parsed.password;
-        if (sameOrigin || googleOrigin) {
+        if (sameOrigin || googleOrigin || matchesSignedOAuthCallback(parsed)) {
           window.location.assign(parsed.href);
           return;
         }
@@ -920,28 +941,9 @@ export const MARKETING_JS = `(function () {
       return;
     }
 
-    var signedQuery = signedOAuthQueryFromLocation();
-    if (!signedQuery) throw new Error("The signed OAuth request is missing.");
-    var requestedRedirect = new URLSearchParams(signedQuery).get("redirect_uri");
-    if (!requestedRedirect) throw new Error("The signed OAuth request has no callback URL.");
-
-    var callback;
-    try { callback = new URL(requestedRedirect); }
-    catch (_e) { throw new Error("The registered OAuth callback URL is invalid."); }
-
-    if (destination.protocol !== callback.protocol ||
-        destination.host !== callback.host ||
-        destination.pathname !== callback.pathname ||
-        destination.hash !== callback.hash) {
+    if (!matchesSignedOAuthCallback(destination)) {
       throw new Error("The authorization server returned a redirect that does not match the registered callback.");
     }
-
-    for (var pair of callback.searchParams.entries()) {
-      if (!destination.searchParams.getAll(pair[0]).includes(pair[1])) {
-        throw new Error("The OAuth callback URL did not preserve its registered query parameters.");
-      }
-    }
-
     window.location.assign(destination.href);
   }
 
