@@ -606,6 +606,24 @@ test("map and crawl adapters publish bounded limits", () => {
   assert.ok(crawlAdapter.restrictions.includes("same-origin-only"));
 });
 
+test("task executor forwards AbortSignal to the selected adapter", async () => {
+  const controller = new AbortController();
+  let receivedSignal = null;
+  const task = await executeWebTask(
+    { goal: "Map the website", url: "https://example.com/", operation: "map" },
+    {
+      idFactory: () => "task-cancel-0001",
+      signal: controller.signal,
+      executeAdapter: async (_id, _input, options = {}) => {
+        receivedSignal = options.signal;
+        return { status: "succeeded", data: {}, sources: [], warnings: [] };
+      },
+    },
+  );
+  assert.equal(task.state, "succeeded");
+  assert.equal(receivedSignal, controller.signal);
+});
+
 test("task executor dispatches map and crawl to internal adapters", async () => {
   const seen = [];
   const runAdapter = async (id, input) => {
