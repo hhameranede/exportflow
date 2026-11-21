@@ -2,6 +2,7 @@ import { HTTP_FETCH_LIMITS, validatePublicHttpUrl } from "./http-fetch.js";
 
 export const TASK_REQUEST_LIMITS = Object.freeze({
   maxBodyBytes: 32_768,
+  maxBodyChunks: 8_192,
   maxGoalLength: 2_000,
 });
 
@@ -42,6 +43,19 @@ function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+// Cancellation is best-effort: a stream source's cancel() callback must never
+// hold the HTTP request open after a resource limit or read error.
+function cancelReaderBestEffort(reader) {
+  try {
+    const cancellation = reader.cancel();
+    if (cancellation && typeof cancellation.catch === "function") {
+      void cancellation.catch(() => {});
+    }
+  } catch {
+    // The stream may already be closed, errored, or locked by the runtime.
+  }
+}
+
 export async function readBoundedJsonBody(request, maxBytes = TASK_REQUEST_LIMITS.maxBodyBytes) {
   const contentType = String(request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
   if (contentType !== "application/json") {
@@ -52,13 +66,27 @@ export async function readBoundedJsonBody(request, maxBytes = TASK_REQUEST_LIMIT
     );
   }
 
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
+    throw new TypeError("maxBytes must be a positive safe integer.");
+  }
+
   const declaredLength = request.headers.get("content-length");
-  if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxBytes) {
-    throw new TaskContractError(
-      "PAYLOAD_TOO_LARGE",
-      "Request body exceeds the maximum allowed size.",
-      413,
-    );
+  if (declaredLength !== null) {
+    if (!/^\d+$/.test(declaredLength)) {
+      throw new TaskContractError(
+        "INVALID_CONTENT_LENGTH",
+        "Content-Length must contain decimal digits only.",
+        400,
+      );
+    }
+    const parsedLength = Number(declaredLength);
+    if (!Number.isSafeInteger(parsedLength) || parsedLength > maxBytes) {
+      throw new TaskContractError(
+        "PAYLOAD_TOO_LARGE",
+        "Request body exceeds the maximum allowed size.",
+        413,
+      );
+    }
   }
 
   if (!request.body) {
@@ -68,24 +96,37 @@ export async function readBoundedJsonBody(request, maxBytes = TASK_REQUEST_LIMIT
   const reader = request.body.getReader();
   const chunks = [];
   let totalBytes = 0;
+  let chunksRead = 0;
 
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      totalBytes += value.byteLength;
-      if (totalBytes > maxBytes) {
-        await reader.cancel();
+
+      chunksRead += 1;
+      if (chunksRead > TASK_REQUEST_LIMITS.maxBodyChunks) {
+        throw new TaskContractError(
+          "PAYLOAD_TOO_LARGE",
+          "Request body contains too many chunks.",
+          413,
+        );
+      }
+
+      const chunkBytes = value?.byteLength ?? 0;
+      if (chunkBytes > maxBytes - totalBytes) {
         throw new TaskContractError(
           "PAYLOAD_TOO_LARGE",
           "Request body exceeds the maximum allowed size.",
           413,
         );
       }
+      if (chunkBytes === 0) continue;
+
+      totalBytes += chunkBytes;
       chunks.push(value);
     }
   } catch (error) {
-    await reader.cancel().catch(() => {});
+    cancelReaderBestEffort(reader);
     if (error instanceof TaskContractError) throw error;
     throw new TaskContractError("INVALID_BODY", "Could not read request body.", 400);
   } finally {
