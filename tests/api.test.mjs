@@ -508,3 +508,53 @@ test("Node HTTP server bridges localhost requests safely, enforces body limits, 
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }
 });
+
+
+test("POST /api/v1/tasks maps the Task-wide execution deadline to HTTP 504", async () => {
+  const worker = createWorker({
+    taskTimeoutMs: 15,
+    fetchImpl: async () => new Promise(() => {}),
+  });
+  const response = await worker.fetch(
+    makeTaskRequest({ goal: "Wait for bounded deadline", url: "https://example.com/slow" }),
+    { EXPORTFLOW_API_TOKEN: TEST_TOKEN },
+  );
+
+  assert.equal(response.status, 504);
+  const task = await response.json();
+  assert.equal(task.state, "failed");
+  assert.equal(task.result.data.errorCode, "TASK_TIMEOUT");
+  assert.equal(task.errors[0].code, "TASK_TIMEOUT");
+});
+
+test("POST /api/v1/tasks maps caller cancellation to HTTP 499 and cancelled lifecycle", async () => {
+  const controller = new AbortController();
+  const worker = createWorker({
+    fetchImpl: async (_url, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => {
+        reject(new DOMException("Aborted", "AbortError"));
+      }, { once: true });
+    }),
+  });
+  const pending = worker.fetch(
+    makeTaskRequest({ goal: "Cancel active fetch", url: "https://example.com/slow" }, { headers: {} , method: "POST" }),
+    { EXPORTFLOW_API_TOKEN: TEST_TOKEN },
+  );
+  // Exercise the Worker request's own signal without relying on a real network client.
+  const request = new Request("https://api.exportflow.local/api/v1/tasks", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${TEST_TOKEN}` },
+    body: JSON.stringify({ goal: "Cancel active fetch", url: "https://example.com/slow" }),
+    signal: controller.signal,
+  });
+  const cancelledPending = worker.fetch(request, { EXPORTFLOW_API_TOKEN: TEST_TOKEN });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  controller.abort();
+
+  const response = await cancelledPending;
+  assert.equal(response.status, 499);
+  const task = await response.json();
+  assert.equal(task.state, "cancelled");
+  assert.equal(task.errors[0].code, "TASK_CANCELLED");
+  await pending.then((unused) => unused.body?.cancel()).catch(() => {});
+});
