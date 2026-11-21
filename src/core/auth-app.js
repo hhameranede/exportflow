@@ -202,6 +202,9 @@ function buildAuthOptions(env, status) {
     appName: "ExportFlow",
     baseURL: baseUrl,
     basePath: "/api/auth",
+    // The OAuth Provider owns the MCP authorization server. Disable the JWT
+    // plugin's parallel session-token endpoint to prevent token-type confusion.
+    disabledPaths: ["/token"],
     secret: env.BETTER_AUTH_SECRET,
     trustedOrigins: [baseUrl],
     database: binding,
@@ -243,7 +246,7 @@ function buildAuthOptions(env, status) {
 
   if (status.tenantOAuthConfigured) {
     options.plugins = [
-      jwt({ jwt: { issuer: AUTH_ISSUER } }),
+      jwt({ jwt: { issuer: AUTH_ISSUER }, disableSettingJwtHeader: true }),
       mcp({
         resource: MCP_RESOURCE,
         scopes: [...MCP_SCOPES],
