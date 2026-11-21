@@ -185,12 +185,12 @@ test("contact form opens an email draft instead of claiming a message was submit
   assert.ok(response, "contact route should resolve");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /href="mailto:hhameranede@gmail\\.com"/);
-  assert.match(html, /hhameranede@gmail\\.com/);
-  assert.match(html, /email app will open with a draft/i);
-  assert.match(MARKETING_JS, /mailto:hhameranede@gmail\\.com/);
-  assert.match(MARKETING_JS, /encodeURIComponent\\("\\[ExportFlow\\] "/);
-  assert.match(MARKETING_JS, /window\\.location\\.href = mailtoUrl/);
+  assert.ok(html.includes('href="mailto:hhameranede@gmail.com"'));
+  assert.ok(html.includes("hhameranede@gmail.com"));
+  assert.ok(html.includes("email app will open with a draft"));
+  assert.ok(MARKETING_JS.includes("mailto:hhameranede@gmail.com"));
+  assert.ok(MARKETING_JS.includes('encodeURIComponent("[ExportFlow] " + subjectVal)'));
+  assert.ok(MARKETING_JS.includes("window.location.href = mailtoUrl"));
   assert.doesNotMatch(MARKETING_JS, /No external submission endpoint is connected yet/);
 });
 
