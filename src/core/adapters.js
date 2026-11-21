@@ -121,8 +121,8 @@ registerAdapter({
     "bounded-link-discovery",
     "no-authenticated-pages",
   ],
-  async execute(input = {}) {
-    const mapped = await mapWebsite(input);
+  async execute(input = {}, options = {}) {
+    const mapped = await mapWebsite(input, { signal: options.signal });
     return normalizeResult({
       status: mapped.homepage.status >= 200 && mapped.homepage.status < 300 ? "succeeded" : "failed",
       data: {
@@ -157,8 +157,8 @@ registerAdapter({
     "bounded-response-bytes",
     "no-authenticated-pages",
   ],
-  async execute(input = {}) {
-    const crawled = await crawlWebsite(input);
+  async execute(input = {}, options = {}) {
+    const crawled = await crawlWebsite(input, { signal: options.signal });
     return normalizeResult({
       status: crawled.pages.length ? "succeeded" : "failed",
       data: {

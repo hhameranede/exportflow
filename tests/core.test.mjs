@@ -148,6 +148,98 @@ test("fetch returns bounded text and source metadata", async () => {
   assert.equal(result.finalUrl, "https://example.com/page");
 });
 
+test("fetch rejects an already-cancelled caller signal before starting outbound work", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let calls = 0;
+  await assert.rejects(
+    fetchPublicResource("https://example.com/page", {
+      signal: controller.signal,
+      fetchImpl: async () => { calls++; return response("unexpected"); },
+    }),
+    (error) => error instanceof FetchAdapterError && error.code === "TASK_CANCELLED",
+  );
+  assert.equal(calls, 0);
+});
+
+test("fetch distinguishes caller cancellation from its own request timeout", async () => {
+  const controller = new AbortController();
+  let requestSignal;
+  const pending = fetchPublicResource("https://example.com/page", {
+    signal: controller.signal,
+    timeoutMs: 1_000,
+    fetchImpl: async (_url, init) => {
+      requestSignal = init.signal;
+      return new Promise((_resolve, reject) => {
+        init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+      });
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  controller.abort();
+  await assert.rejects(pending, (error) => error instanceof FetchAdapterError && error.code === "TASK_CANCELLED");
+  assert.equal(requestSignal.aborted, true);
+
+  await assert.rejects(
+    fetchPublicResource("https://example.com/slow", {
+      timeoutMs: 10,
+      fetchImpl: async (_url, init) => new Promise((_resolve, reject) => {
+        init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+      }),
+    }),
+    (error) => error instanceof FetchAdapterError && error.code === "UPSTREAM_TIMEOUT",
+  );
+});
+
+test("fetch rejects a late response after its own timeout has fired", async () => {
+  await assert.rejects(
+    fetchPublicResource("https://example.com/late", {
+      timeoutMs: 1,
+      fetchImpl: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return response(null);
+      },
+    }),
+    (error) => error instanceof FetchAdapterError && error.code === "UPSTREAM_TIMEOUT",
+  );
+});
+
+test("fetch stops before following a redirect when the caller cancels", async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  await assert.rejects(
+    fetchPublicResource("https://example.com/start", {
+      signal: controller.signal,
+      fetchImpl: async () => {
+        calls++;
+        controller.abort();
+        return response(null, { status: 302, headers: { location: "/next" } });
+      },
+    }),
+    (error) => error instanceof FetchAdapterError && error.code === "TASK_CANCELLED",
+  );
+  assert.equal(calls, 1);
+});
+
+test("fetch preserves caller cancellation while reading a streamed response body", async () => {
+  const controller = new AbortController();
+  let streamController;
+  const pending = fetchPublicResource("https://example.com/stream", {
+    signal: controller.signal,
+    timeoutMs: 1_000,
+    fetchImpl: async (_url, init) => {
+      const body = new ReadableStream({ start(stream) { streamController = stream; } });
+      init.signal.addEventListener("abort", () => {
+        streamController.error(new DOMException("Aborted", "AbortError"));
+      }, { once: true });
+      return new Response(body, { headers: { "content-type": "text/plain" } });
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  controller.abort();
+  await assert.rejects(pending, (error) => error instanceof FetchAdapterError && error.code === "TASK_CANCELLED");
+});
+
 test("fetch manually follows redirects and revalidates every destination", async () => {
   const seen = [];
   const result = await fetchPublicResource("https://example.com/start", {
@@ -422,6 +514,36 @@ test("mapWebsite discovers sitemap URLs and allowed same-origin links", async ()
   assert.equal(calls.length, 3);
 });
 
+test("mapWebsite propagates cancellation to every fetch and does not continue to the homepage", async () => {
+  const controller = new AbortController();
+  const calls = [];
+  await assert.rejects(
+    mapWebsite({ url: "https://example.com/" }, {
+      signal: controller.signal,
+      fetchResource: async (url, options = {}) => {
+        calls.push(url);
+        assert.equal(options.signal, controller.signal);
+        if (url.endsWith("/robots.txt")) {
+          return {
+            status: 200,
+            body: "User-agent: *\nSitemap: https://example.com/sitemap.xml",
+            bytes: 60,
+            contentType: "text/plain",
+            finalUrl: url,
+          };
+        }
+        controller.abort();
+        throw new Error("simulated abort");
+      },
+    }),
+    (error) => error.code === "TASK_CANCELLED",
+  );
+  assert.deepEqual(calls, [
+    "https://example.com/robots.txt",
+    "https://example.com/sitemap.xml",
+  ]);
+});
+
 test("mapWebsite fails closed when robots.txt is unreachable", async () => {
   let pageFetched = false;
   await assert.rejects(
@@ -526,6 +648,46 @@ test("crawlWebsite respects robots, seeds sitemap pages, and bounds traversal", 
   assert.equal(result.pages.some((page) => page.url.includes("outside.example")), false);
 });
 
+test("crawlWebsite does not swallow cancellation while fetching discovered pages", async () => {
+  const controller = new AbortController();
+  const calls = [];
+  await assert.rejects(
+    crawlWebsite({ url: "https://example.com/" }, {
+      signal: controller.signal,
+      maxPages: 3,
+      maxDepth: 1,
+      fetchResource: async (url, options = {}) => {
+        calls.push(url);
+        assert.equal(options.signal, controller.signal);
+        if (url.endsWith("/robots.txt")) {
+          return { status: 200, body: "", bytes: 0, contentType: "text/plain", finalUrl: url };
+        }
+        if (url.endsWith("/sitemap.xml")) {
+          return { status: 404, body: "", bytes: 0, contentType: "text/plain", finalUrl: url };
+        }
+        if (url === "https://example.com/") {
+          return {
+            status: 200,
+            body: '<a href="/child">Child</a>',
+            bytes: 30,
+            contentType: "text/html",
+            finalUrl: url,
+          };
+        }
+        controller.abort();
+        throw new Error("simulated abort");
+      },
+    }),
+    (error) => error.code === "TASK_CANCELLED",
+  );
+  assert.deepEqual(calls, [
+    "https://example.com/robots.txt",
+    "https://example.com/sitemap.xml",
+    "https://example.com/",
+    "https://example.com/child",
+  ]);
+});
+
 test("map and crawl adapters publish bounded limits", () => {
   const catalog = getAdapterCatalog();
   const mapAdapter = catalog.find((item) => item.id === "web.map.v1");
@@ -534,6 +696,123 @@ test("map and crawl adapters publish bounded limits", () => {
   assert.equal(crawlAdapter.limits.maxPages, 5);
   assert.ok(mapAdapter.restrictions.includes("robots.txt-respected"));
   assert.ok(crawlAdapter.restrictions.includes("same-origin-only"));
+});
+
+test("task executor forwards AbortSignal to the selected adapter", async () => {
+  const controller = new AbortController();
+  let receivedSignal = null;
+  const task = await executeWebTask(
+    { goal: "Map the website", url: "https://example.com/", operation: "map" },
+    {
+      idFactory: () => "task-cancel-0001",
+      signal: controller.signal,
+      executeAdapter: async (_id, _input, options = {}) => {
+        receivedSignal = options.signal;
+        return { status: "succeeded", data: {}, sources: [], warnings: [] };
+      },
+    },
+  );
+  assert.equal(task.state, "succeeded");
+  assert.ok(receivedSignal instanceof AbortSignal);
+  assert.notEqual(receivedSignal, controller.signal);
+});
+
+test("task executor enforces an overall timeout and aborts the adapter signal", async () => {
+  let receivedSignal;
+  const task = await executeWebTask(
+    { goal: "Wait for a slow adapter", url: "https://example.com/" },
+    {
+      idFactory: () => "task-timeout-0001",
+      taskTimeoutMs: 10,
+      executeAdapter: async (_id, _input, options = {}) => {
+        receivedSignal = options.signal;
+        return new Promise(() => {});
+      },
+    },
+  );
+  assert.equal(task.state, "failed");
+  assert.equal(task.errors[0].code, "TASK_TIMEOUT");
+  assert.equal(receivedSignal.aborted, true);
+});
+
+test("task executor immediately settles when caller cancels an active adapter", async () => {
+  const controller = new AbortController();
+  let receivedSignal;
+  const pending = executeWebTask(
+    { goal: "Wait for a cancellable adapter", url: "https://example.com/" },
+    {
+      idFactory: () => "task-abort-0001",
+      signal: controller.signal,
+      taskTimeoutMs: 5_000,
+      executeAdapter: async (_id, _input, options = {}) => {
+        receivedSignal = options.signal;
+        return new Promise(() => {});
+      },
+    },
+  );
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  controller.abort();
+  const task = await pending;
+  assert.equal(task.state, "cancelled");
+  assert.equal(task.events.at(-1).type, "task.cancelled");
+  assert.equal(task.errors[0].code, "TASK_CANCELLED");
+  assert.equal(receivedSignal.aborted, true);
+});
+
+test("task executor stops pre-cancelled work before invoking an adapter", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let calls = 0;
+  const task = await executeWebTask(
+    { goal: "Fetch the page", url: "https://example.com/" },
+    {
+      idFactory: () => "task-cancel-early",
+      signal: controller.signal,
+      executeAdapter: async () => { calls++; return { status: "succeeded", data: {}, sources: [], warnings: [] }; },
+    },
+  );
+  assert.equal(calls, 0);
+  assert.equal(task.state, "cancelled");
+  assert.equal(task.events.at(-1).type, "task.cancelled");
+  assert.equal(task.errors[0].code, "TASK_CANCELLED");
+});
+
+test("task executor forwards AbortSignal to search, research and browser adapters", async () => {
+  const controller = new AbortController();
+  const received = {};
+  const searchTask = await executeWebTask(
+    { goal: "Search the web", operation: "search", query: "sample query" },
+    {
+      idFactory: () => "task-search-cancel",
+      signal: controller.signal,
+      searchAdapter: { execute: async (input) => { received.search = input.signal; return { status: "succeeded" }; } },
+    },
+  );
+  const researchTask = await executeWebTask(
+    { goal: "Research the topic", operation: "research", query: "sample query" },
+    {
+      idFactory: () => "task-research-cancel",
+      signal: controller.signal,
+      researchAdapter: { execute: async (input) => { received.research = input.signal; return { status: "succeeded" }; } },
+    },
+  );
+  const browserTask = await executeWebTask(
+    { goal: "Render the page", url: "https://example.com/", requiresJavascript: true },
+    {
+      idFactory: () => "task-browser-cancel",
+      signal: controller.signal,
+      browserAdapter: { id: "test.browser", execute: async (input) => { received.browser = input.signal; return { status: "succeeded" }; } },
+    },
+  );
+  assert.equal(searchTask.state, "succeeded");
+  assert.equal(researchTask.state, "succeeded");
+  assert.equal(browserTask.state, "succeeded");
+  assert.ok(received.search instanceof AbortSignal);
+  assert.ok(received.research instanceof AbortSignal);
+  assert.ok(received.browser instanceof AbortSignal);
+  assert.notEqual(received.search, controller.signal);
+  assert.notEqual(received.research, controller.signal);
+  assert.notEqual(received.browser, controller.signal);
 });
 
 test("task executor dispatches map and crawl to internal adapters", async () => {
@@ -725,6 +1004,39 @@ test("schema extraction returns normalized result and field-level source evidenc
   assert.equal(result.sources[0].url, "https://example.com/item");
   assert.equal(result.sources[0].evidence[1].type, "extracted_field");
   assert.equal(result.sources[0].evidence[1].field, "name");
+});
+
+test("Extract adapter propagates Task cancellation through the source fetch", async () => {
+  const controller = new AbortController();
+  let markStarted;
+  const started = new Promise((resolve) => { markStarted = resolve; });
+  const pending = executeAdapter("web.extract.v1", {
+    url: "https://example.com/item",
+    schema: {
+      type: "object",
+      properties: { name: { type: "string", "x-source": "jsonld:name" } },
+      required: ["name"],
+    },
+  }, {
+    signal: controller.signal,
+    fetchResource: async (_url, options = {}) => {
+      assert.equal(options.signal, controller.signal);
+      markStarted();
+      return new Promise((_resolve, reject) => {
+        if (options.signal.aborted) {
+          reject(Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" }));
+          return;
+        }
+        options.signal.addEventListener("abort", () => {
+          reject(Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" }));
+        }, { once: true });
+      });
+    },
+  });
+
+  await started;
+  controller.abort();
+  await assert.rejects(pending, (error) => error?.code === "TASK_CANCELLED");
 });
 
 test("schema extraction handles JSON endpoints without HTML parsing", async () => {
@@ -963,6 +1275,39 @@ test("browser adapter closes the browser session after navigation failure", asyn
   assert.equal(closeCalls, 1);
 });
 
+test("browser cancellation handles a rejected close promise without losing cancellation", async () => {
+  const controller = new AbortController();
+  let closeCalls = 0;
+  const adapter = createBrowserAdapter({
+    browserBinding: {},
+    puppeteer: {
+      launch: async () => ({
+        newPage: async () => ({
+          setUserAgent: async () => {},
+          setRequestInterception: async () => {},
+          on: () => {},
+          goto: async () => {
+            controller.abort();
+            throw new Error("navigation interrupted by cancellation");
+          },
+        }),
+        close: async () => {
+          closeCalls++;
+          if (closeCalls === 1) throw new Error("synthetic browser close failure");
+        },
+      }),
+    },
+    fetchResource: async (url) => ({
+      status: 200, finalUrl: url, body: "", contentType: "text/plain", bytes: 0,
+    }),
+  });
+  await assert.rejects(
+    adapter.execute({ url: "https://example.com/", signal: controller.signal }),
+    (error) => error.code === "TASK_CANCELLED",
+  );
+  assert.equal(closeCalls, 2);
+});
+
 test("task executor routes JavaScript rendering to an injected Browser adapter", async () => {
   let received;
   const task = await executeWebTask(
@@ -1039,6 +1384,54 @@ test("search adapter calls Cloudflare Web Search with a fixed provider and bound
   assert.equal(result.data.results[0].rank, 1);
   assert.equal(result.sources[0].evidence[0].query, "cloudflare workers");
   assert.equal(result.sources[0].url, "https://example.com/one");
+});
+
+test("search adapter does not start a Web Search call for an already-cancelled Task", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let calls = 0;
+  const adapter = createSearchAdapter({
+    webSearch: async () => {
+      calls += 1;
+      return { items: [] };
+    },
+  });
+
+  await assert.rejects(
+    adapter.execute({ query: "cloudflare workers", signal: controller.signal }),
+    (error) => error instanceof SearchAdapterError && error.code === "TASK_CANCELLED",
+  );
+  assert.equal(calls, 0);
+});
+
+test("search adapter stops waiting for Web Search when its Task is cancelled", async () => {
+  const controller = new AbortController();
+  let finishProvider;
+  let calls = 0;
+  const providerPromise = new Promise((resolve) => { finishProvider = resolve; });
+  const adapter = createSearchAdapter({
+    webSearch: () => {
+      calls += 1;
+      return providerPromise;
+    },
+  });
+
+  const pending = adapter.execute({
+    query: "cloudflare workers",
+    signal: controller.signal,
+  });
+  assert.equal(calls, 1);
+
+  controller.abort();
+  await assert.rejects(
+    pending,
+    (error) => error instanceof SearchAdapterError && error.code === "TASK_CANCELLED",
+  );
+
+  // The Workers AI websearch() binding has no AbortSignal parameter; its
+  // underlying operation may finish later, but the cancelled Task stops waiting.
+  finishProvider({ items: [] });
+  await Promise.resolve();
 });
 
 test("search adapter drops unsafe and duplicate result URLs", async () => {
@@ -1119,7 +1512,9 @@ test("task executor dispatches query-only search operations to an injected Searc
   );
   assert.equal(task.state, "succeeded");
   assert.equal(task.execution.adapterId, "web.search.v1");
-  assert.deepEqual(received, { query: "Cloudflare Workers docs", limit: 4 });
+  assert.equal(received.query, "Cloudflare Workers docs");
+  assert.equal(received.limit, 4);
+  assert.ok(received.signal instanceof AbortSignal);
 });
 
 test("task executor keeps search unsupported when its AI binding is not configured", async () => {
@@ -1319,7 +1714,11 @@ test("task executor dispatches query-only research tasks to an injected Research
   );
   assert.equal(task.state, "partial");
   assert.equal(task.execution.adapterId, "web.research.v1");
-  assert.deepEqual(received, { query: "sample product", schema, limit: undefined, candidateLimit: 2 });
+  assert.equal(received.query, "sample product");
+  assert.equal(received.schema, schema);
+  assert.equal(received.limit, undefined);
+  assert.equal(received.candidateLimit, 2);
+  assert.ok(received.signal instanceof AbortSignal);
 });
 
 test("task executor keeps research unsupported when no pipeline is configured", async () => {

@@ -174,6 +174,11 @@ export function createResearchPipeline({
     ],
     async execute(input = {}) {
       const validated = validateInput(input);
+      const signal = input.signal;
+      const throwIfCancelled = () => {
+        if (signal?.aborted) throw Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });
+      };
+      throwIfCancelled();
       if (!searchAdapter || typeof searchAdapter.execute !== "function") {
         throw new ResearchPipelineError("SEARCH_UNAVAILABLE", "Search adapter is not configured.", 503);
       }
@@ -181,7 +186,9 @@ export function createResearchPipeline({
       const searchResult = await searchAdapter.execute({
         query: validated.query,
         limit: Math.min(validated.limit ?? 5, 10),
+        ...(signal ? { signal } : {}),
       });
+      throwIfCancelled();
       const candidates = Array.isArray(searchResult.data?.results)
         ? searchResult.data.results.slice(0, validated.candidateLimit)
         : [];
@@ -207,6 +214,7 @@ export function createResearchPipeline({
       let best = null;
 
       for (const candidate of candidates) {
+        throwIfCancelled();
         let target;
         try {
           target = validatePublicHttpUrl(candidate.url);
@@ -217,8 +225,10 @@ export function createResearchPipeline({
 
         let fetched;
         try {
-          fetched = await runAdapter("http.fetch.v1", { url: target.href });
-        } catch {
+          fetched = await runAdapter("http.fetch.v1", { url: target.href }, signal ? { signal } : {});
+          throwIfCancelled();
+        } catch (error) {
+          if (error?.code === "TASK_CANCELLED" || signal?.aborted) throw Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });
           attempts.push({ url: target.href, stage: "fetch", status: "failed", reason: "UPSTREAM_FETCH_FAILED" });
           continue;
         }
@@ -269,7 +279,9 @@ export function createResearchPipeline({
             url: best.finalUrl,
             goal: "Render this page to complete the requested structured extraction.",
             requiresInteraction: false,
+            ...(signal ? { signal } : {}),
           });
+          throwIfCancelled();
           best.browserResult = browserResult;
           const html = browserResult.data?.html;
           if (browserResult.status === "succeeded" && typeof html === "string") {
@@ -292,7 +304,8 @@ export function createResearchPipeline({
           } else {
             warnings.push("Browser escalation did not return a renderable HTML page.");
           }
-        } catch {
+        } catch (error) {
+          if (error?.code === "TASK_CANCELLED" || signal?.aborted) throw Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });
           warnings.push("Browser escalation was attempted but did not complete.");
         }
         best.attempt.stage = "browser-extract";

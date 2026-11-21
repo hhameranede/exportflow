@@ -286,7 +286,8 @@ async function fetchSitemaps(policy, origin, fetchResource, warnings, maxUrls) {
       for (const url of extractSitemapLocations(response.body, sitemapUrl, maxUrls - urls.length)) {
         if (isAllowedByRobots(url, policy) && !urls.includes(url)) urls.push(url);
       }
-    } catch {
+    } catch (error) {
+      if (error?.code === "TASK_CANCELLED") throw error;
       warnings.push("A sitemap could not be retrieved.");
     }
   }
@@ -319,6 +320,12 @@ async function pageLinks(html, baseUrl, origin, policy, parser) {
   return urls;
 }
 
+function throwIfTaskCancelled(signal) {
+  if (signal?.aborted) {
+    throw new MapCrawlError("TASK_CANCELLED", "Task was cancelled.", 499);
+  }
+}
+
 function validateOptions(input, maximum, fallback, name) {
   const value = input === undefined ? fallback : input;
   if (!Number.isInteger(value) || value < 1 || value > maximum) {
@@ -330,7 +337,24 @@ function validateOptions(input, maximum, fallback, name) {
 async function createSiteContext(input, options) {
   const requestedUrl = validatePublicHttpUrl(input.url);
   const origin = requestedUrl.origin;
-  const fetchResource = options.fetchResource || fetchPublicResource;
+  const baseFetchResource = options.fetchResource || fetchPublicResource;
+  const signal = options.signal;
+  const fetchResource = async (url, fetchOptions = {}) => {
+    if (signal?.aborted) {
+      throw new MapCrawlError("TASK_CANCELLED", "Task was cancelled.", 499);
+    }
+    try {
+      return await baseFetchResource(url, {
+        ...fetchOptions,
+        ...(signal ? { signal } : {}),
+      });
+    } catch (error) {
+      if (signal?.aborted) {
+        throw new MapCrawlError("TASK_CANCELLED", "Task was cancelled.", 499);
+      }
+      throw error;
+    }
+  };
   const parser = options.parseHtmlLinks || defaultParseHtmlLinks;
   const robots = await getRobotsPolicy(origin, fetchResource);
 
@@ -383,6 +407,7 @@ async function createSiteContext(input, options) {
 export async function mapWebsite(input, options = {}) {
   const maxUrls = validateOptions(options.maxUrls, MAP_CRAWL_LIMITS.maxUrls, 20, "maxUrls");
   const context = await createSiteContext(input, { ...options, maxUrls });
+  throwIfTaskCancelled(options.signal);
   const seen = new Set([context.homepage.finalUrl || context.requestedUrl]);
   const urls = [];
 
@@ -436,6 +461,7 @@ export async function crawlWebsite(input, options = {}) {
     ...options,
     maxUrls: Math.max(maxPages * 5, 10),
   });
+  throwIfTaskCancelled(options.signal);
   const pages = [];
   const sources = [];
   const warnings = [...context.warnings];
@@ -449,6 +475,7 @@ export async function crawlWebsite(input, options = {}) {
   let totalBytes = 0;
 
   while (queue.length && pages.length < maxPages) {
+    throwIfTaskCancelled(options.signal);
     const item = queue.shift();
     if (item.depth > maxDepth) continue;
     if (visited.has(item.url)) continue;
@@ -472,7 +499,8 @@ export async function crawlWebsite(input, options = {}) {
           userAgent: EXPORTFLOW_CRAWLER_USER_AGENT,
           allowedOrigin: context.origin,
         });
-      } catch {
+      } catch (error) {
+        if (error?.code === "TASK_CANCELLED") throw error;
         warnings.push("A discovered page could not be retrieved.");
         continue;
       }

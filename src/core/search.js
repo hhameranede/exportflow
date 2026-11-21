@@ -35,6 +35,46 @@ function validateSearchInput(input) {
   return { query: input.query.trim(), limit };
 }
 
+function taskCancelledError() {
+  return new SearchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
+}
+
+// Workers AI's websearch() binding does not accept an AbortSignal. Match
+// Cloudflare's WebSearchSource behavior: do not start pre-aborted work and
+// stop waiting when cancellation arrives. The underlying binding call may
+// continue in the background because its API has no cancellation parameter.
+function awaitSearchOrAbort(promise, signal) {
+  if (!signal) return promise;
+  if (signal.aborted) {
+    Promise.resolve(promise).catch(() => {});
+    return Promise.reject(taskCancelledError());
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => signal.removeEventListener("abort", onAbort);
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      callback(value);
+    };
+    const onAbort = () => finish(reject, taskCancelledError());
+
+    signal.addEventListener("abort", onAbort, { once: true });
+    Promise.resolve(promise).then(
+      (value) => {
+        if (signal.aborted) finish(reject, taskCancelledError());
+        else finish(resolve, value);
+      },
+      (error) => {
+        if (signal.aborted) finish(reject, taskCancelledError());
+        else finish(reject, error);
+      },
+    );
+  });
+}
+
 function clip(value, maxLength) {
   return typeof value === "string" ? value.slice(0, maxLength) : "";
 }
@@ -137,12 +177,20 @@ export function createSearchAdapter({
         throw new SearchAdapterError("SEARCH_UNAVAILABLE", "Cloudflare Web Search API binding is not configured.", 503);
       }
 
+      const signal = input.signal;
+      if (signal?.aborted) throw taskCancelledError();
+
       let response;
       try {
-        response = await webSearch({ gatewayId, query, provider, limit });
-      } catch {
+        response = await awaitSearchOrAbort(
+          webSearch({ gatewayId, query, provider, limit }),
+          signal,
+        );
+      } catch (error) {
+        if (signal?.aborted || error?.code === "TASK_CANCELLED") throw taskCancelledError();
         throw new SearchAdapterError("SEARCH_PROVIDER_FAILED", "Cloudflare Web Search request failed.", 502);
       }
+      if (signal?.aborted) throw taskCancelledError();
       if (response && typeof response.json === "function" && response.ok === false) {
         throw new SearchAdapterError("SEARCH_PROVIDER_HTTP_ERROR", "Cloudflare Web Search returned an error.", 502);
       }

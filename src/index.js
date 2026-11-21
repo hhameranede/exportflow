@@ -16,6 +16,8 @@ const ERROR_CODE_TO_HTTP_STATUS = Object.freeze({
   RESPONSE_TOO_LARGE: 413,
   UNSUPPORTED_CONTENT_TYPE: 415,
   UPSTREAM_TIMEOUT: 504,
+  TASK_TIMEOUT: 504,
+  TASK_CANCELLED: 499,
   TOO_MANY_REDIRECTS: 502,
   REDIRECT_LOOP: 502,
   REDIRECT_NOT_ALLOWED: 502,
@@ -43,7 +45,7 @@ function isAuthConfigured(env) {
 
 function taskHttpStatus(task) {
   if (task.state === "unsupported") return 501;
-  if (task.state === "failed" && task.result?.data?.errorCode) {
+  if ((task.state === "failed" || task.state === "cancelled") && task.result?.data?.errorCode) {
     return ERROR_CODE_TO_HTTP_STATUS[task.result.data.errorCode] || 502;
   }
   return 200;
@@ -104,6 +106,7 @@ export function createWorker(options = {}) {
             fetchImpl: options.fetchImpl,
             now: options.now,
             idFactory: options.idFactory,
+            taskTimeoutMs: options.taskTimeoutMs,
             signal: request.signal,
           });
           return json(task, taskHttpStatus(task));

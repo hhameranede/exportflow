@@ -55,7 +55,7 @@ async function cancelBody(response) {
   }
 }
 
-async function readTextBody(response, maxBytes, signal) {
+async function readTextBody(response, maxBytes, signal, getAbortCode) {
   const declaredLength = response.headers.get("content-length");
   if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxBytes) {
     await cancelBody(response);
@@ -85,6 +85,10 @@ async function readTextBody(response, maxBytes, signal) {
     await reader.cancel().catch(() => {});
     if (error instanceof FetchAdapterError) throw error;
     if (signal?.aborted) {
+      const abortCode = getAbortCode?.();
+      if (abortCode === "TASK_CANCELLED") {
+        throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
+      }
       throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
     }
     throw new FetchAdapterError("UPSTREAM_FETCH_FAILED", "Could not read the upstream response stream.", 502);
@@ -152,23 +156,33 @@ export async function fetchPublicResource(input, options = {}) {
   const redirectChain = [];
   const controller = new AbortController();
   let timedOut = false;
+  let callerCancelled = false;
   const timeoutId = setTimeout(() => {
     timedOut = true;
     controller.abort();
   }, timeoutMs);
 
   const externalSignal = options.signal;
-  const onExternalAbort = () => controller.abort();
+  const onExternalAbort = () => {
+    callerCancelled = true;
+    controller.abort();
+  };
   if (externalSignal) {
     if (externalSignal.aborted) {
       clearTimeout(timeoutId);
-      throw new FetchAdapterError("UPSTREAM_FETCH_FAILED", "Request was aborted.", 499);
+      throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
     }
     externalSignal.addEventListener("abort", onExternalAbort, { once: true });
   }
 
   try {
     while (true) {
+      if (callerCancelled) {
+        throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
+      }
+      if (timedOut) {
+        throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
+      }
       const current = currentUrl.href;
       if (visited.has(current)) {
         throw new FetchAdapterError("REDIRECT_LOOP", "Upstream redirect loop detected.", 502);
@@ -190,10 +204,22 @@ export async function fetchPublicResource(input, options = {}) {
           },
         });
       } catch {
+        if (callerCancelled) {
+          throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
+        }
         if (timedOut) {
           throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
         }
         throw new FetchAdapterError("UPSTREAM_FETCH_FAILED", "Could not retrieve the upstream resource.", 502);
+      }
+
+      if (callerCancelled) {
+        await cancelBody(response);
+        throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
+      }
+      if (timedOut) {
+        await cancelBody(response);
+        throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
       }
 
       if (REDIRECT_STATUSES.has(response.status)) {
@@ -237,7 +263,18 @@ export async function fetchPublicResource(input, options = {}) {
         throw new FetchAdapterError("UNSUPPORTED_CONTENT_TYPE", "Only text, HTML, JSON, and XML responses are supported.", 415);
       }
 
-      const { text, bytes } = await readTextBody(response, maxBytes, controller.signal);
+      const { text, bytes } = await readTextBody(
+        response,
+        maxBytes,
+        controller.signal,
+        () => callerCancelled ? "TASK_CANCELLED" : timedOut ? "UPSTREAM_TIMEOUT" : null,
+      );
+      if (callerCancelled) {
+        throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
+      }
+      if (timedOut) {
+        throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
+      }
       const retrievedAt = new Date().toISOString();
 
       return {

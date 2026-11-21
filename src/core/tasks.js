@@ -33,6 +33,8 @@ const SAFE_ERROR_MESSAGES = Object.freeze({
   REDIRECT_DOWNGRADE: "HTTPS redirects cannot downgrade to HTTP.",
   INVALID_REDIRECT: "Upstream returned an invalid redirect response.",
   UPSTREAM_HTTP_ERROR: "Upstream returned a non-2xx HTTP status.",
+  TASK_CANCELLED: "Task was cancelled before completion.",
+  TASK_TIMEOUT: "Task exceeded its maximum execution time.",
   BROWSER_INTERACTION_UNAVAILABLE: "User-directed browser interactions are not connected.",
   BROWSER_UNAVAILABLE: "Browser Run binding is not configured.",
   SEARCH_UNAVAILABLE: "Cloudflare Web Search binding is not configured.",
@@ -42,6 +44,68 @@ const SAFE_ERROR_MESSAGES = Object.freeze({
 
 function safeErrorMessage(code) {
   return SAFE_ERROR_MESSAGES[code] || SAFE_ERROR_MESSAGES.TASK_EXECUTION_FAILED;
+}
+
+const DEFAULT_TASK_TIMEOUT_MS = 30_000;
+const MAX_TASK_TIMEOUT_MS = 120_000;
+
+function createTaskExecutionControls(externalSignal, timeoutMs) {
+  const controller = new AbortController();
+  let timeoutHandle = null;
+  let externalAbortHandler = null;
+  let rejectTimeout;
+  let rejectAbort;
+  let timeoutStarted = false;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    rejectTimeout = reject;
+  });
+  const abortPromise = new Promise((_, reject) => {
+    rejectAbort = reject;
+  });
+
+  const abortFromCaller = () => {
+    const error = Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });
+    controller.abort(externalSignal?.reason || error);
+    rejectAbort(error);
+  };
+
+  // Mark the rejection handled even when validation exits before adapter execution.
+  abortPromise.catch(() => {});
+
+  return {
+    signal: controller.signal,
+    timeoutPromise,
+    abortPromise,
+    startTimeout() {
+      if (timeoutStarted) return;
+      timeoutStarted = true;
+      if (externalSignal?.aborted) {
+        abortFromCaller();
+      } else if (externalSignal) {
+        externalAbortHandler = abortFromCaller;
+        externalSignal.addEventListener("abort", externalAbortHandler, { once: true });
+      }
+      timeoutHandle = setTimeout(() => {
+        const error = Object.assign(new Error("Task execution timed out."), { code: "TASK_TIMEOUT" });
+        controller.abort(error);
+        rejectTimeout(error);
+      }, timeoutMs);
+    },
+    cleanup() {
+      if (timeoutHandle !== null) clearTimeout(timeoutHandle);
+      if (externalAbortHandler) externalSignal.removeEventListener("abort", externalAbortHandler);
+    },
+  };
+}
+async function runWithTaskControls(run, controls) {
+  controls.startTimeout();
+  const work = Promise.resolve().then(() => run(controls.signal));
+  try {
+    return await Promise.race([work, controls.timeoutPromise, controls.abortPromise]);
+  } finally {
+    controls.cleanup();
+  }
 }
 
 function computeDurationMs(startedAt, completedAt, fallbackMs) {
@@ -104,6 +168,9 @@ export async function executeWebTask(input, options = {}) {
   const idFactory = options.idFactory || createId;
   const runAdapter = options.executeAdapter || executeAdapter;
   const startMs = Date.now();
+  const requestedTimeout = Number.isInteger(options.taskTimeoutMs) ? options.taskTimeoutMs : DEFAULT_TASK_TIMEOUT_MS;
+  const taskTimeoutMs = Math.min(MAX_TASK_TIMEOUT_MS, Math.max(1, requestedTimeout));
+  const controls = createTaskExecutionControls(options.signal, taskTimeoutMs);
   const id = idFactory();
   const createdAt = now();
   const events = [event("task.accepted", createdAt)];
@@ -128,6 +195,8 @@ export async function executeWebTask(input, options = {}) {
     if (input.requiresInteraction !== undefined && typeof input.requiresInteraction !== "boolean") {
       throw Object.assign(new TypeError("requiresInteraction must be a boolean."), { code: "INVALID_TASK" });
     }
+
+    if (options.signal?.aborted) throw Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });
 
     const operation = input.operation === undefined ? "fetch" : input.operation;
     if (!["fetch", "map", "crawl", "extract", "search", "research"].includes(operation)) {
@@ -183,12 +252,16 @@ export async function executeWebTask(input, options = {}) {
         });
       }
       execution.adapterId = researchAdapter.id || "web.research.v1";
-      const result = await researchAdapter.execute({
-        query: input.query,
-        schema: input.schema,
-        limit: input.limit,
-        candidateLimit: input.candidateLimit,
-      });
+      const result = await runWithTaskControls(
+        (signal) => researchAdapter.execute({
+          query: input.query,
+          schema: input.schema,
+          limit: input.limit,
+          candidateLimit: input.candidateLimit,
+          signal,
+        }),
+        controls,
+      );
       const completedAt = now();
       const state = result.status === "succeeded"
         ? "succeeded"
@@ -219,7 +292,7 @@ export async function executeWebTask(input, options = {}) {
         });
       }
       execution.adapterId = searchAdapter.id || "web.search.v1";
-      const result = await searchAdapter.execute({ query: input.query, limit: input.limit });
+      const result = await runWithTaskControls((signal) => searchAdapter.execute({ query: input.query, limit: input.limit, signal }), controls);
       const completedAt = now();
       const state = result.status === "succeeded"
         ? "succeeded"
@@ -273,7 +346,7 @@ export async function executeWebTask(input, options = {}) {
       execution.adapterId = browserAdapter.id || "web.browser.v1";
       let browserResult;
       try {
-        browserResult = await browserAdapter.execute({ url: url.href, goal, requiresInteraction: false });
+        browserResult = await runWithTaskControls((signal) => browserAdapter.execute({ url: url.href, goal, requiresInteraction: false, signal }), controls);
       } catch (error) {
         if (error?.code === "BROWSER_UNAVAILABLE") {
           const completedAt = now();
@@ -326,10 +399,10 @@ export async function executeWebTask(input, options = {}) {
     if (operation === "extract") adapterInput.schema = input.schema;
     const adapterOptions = {};
     if (typeof options.fetchImpl === "function") adapterOptions.fetchImpl = options.fetchImpl;
-    if (options.signal) adapterOptions.signal = options.signal;
+    adapterOptions.signal = controls.signal;
     const result = Object.keys(adapterOptions).length
-      ? await runAdapter(adapterId, adapterInput, adapterOptions)
-      : await runAdapter(adapterId, adapterInput);
+      ? await runWithTaskControls((signal) => runAdapter(adapterId, adapterInput, { ...adapterOptions, signal }), controls)
+      : await runWithTaskControls((signal) => runAdapter(adapterId, adapterInput, { signal }), controls);
     const completedAt = now();
     const state = result.status === "succeeded"
       ? "succeeded"
@@ -378,12 +451,13 @@ export async function executeWebTask(input, options = {}) {
     const code = typeof error?.code === "string" && /^[A-Z0-9_]{2,64}$/.test(error.code)
       ? error.code
       : "TASK_EXECUTION_FAILED";
-    events.push(event("task.failed", completedAt, { reason: code }));
+    const cancelled = code === "TASK_CANCELLED";
+    events.push(event(cancelled ? "task.cancelled" : "task.failed", completedAt, { reason: code }));
     return buildTask({
       id,
       goal,
       requestedUrl,
-      state: "failed",
+      state: cancelled ? "cancelled" : "failed",
       execution,
       createdAt,
       startedAt,
