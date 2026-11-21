@@ -163,7 +163,15 @@ export function createWorker(options = {}) {
         }
 
         if (url.pathname === "/favicon.ico") {
-          return new Response(null, { status: 204 });
+          return new Response(null, {
+            status: 204,
+            headers: {
+              "cache-control": "public, max-age=300",
+              "x-content-type-options": "nosniff",
+              "referrer-policy": "strict-origin-when-cross-origin",
+              "strict-transport-security": "max-age=63072000",
+            },
+          });
         }
 
         const acceptsHtml = request.headers.get("accept")?.includes("text/html") && !url.pathname.startsWith("/api/");
