@@ -84,7 +84,7 @@ Admin request bodies are bounded to 16 KiB, JSON-only, and reject unknown fields
 
 No Better Auth Admin plugin was added. That plugin brings broad user-management endpoints (including role changes and impersonation) and additional schema fields; this project uses a narrow owner allowlist instead. This avoids introducing a client-accessible self-promotion path and avoids expanding the Better Auth schema at this stage. There is no endpoint to modify the owner allowlist.
 
-**Release/configuration state:** `EXPORTFLOW_OWNER_USER_IDS` is not set in Production; `EXPORTFLOW_AUTH_DB` is not bound to the Production Worker; and migration 0003 is not applied to the dedicated test D1 database. Therefore the admin API is source-only and cannot perform tenant mutations in the current deployed environment. Do not set the owner allowlist, apply migrations, bind the database or deploy this code without separate owner approval.
+**Release/configuration state:** `EXPORTFLOW_OWNER_USER_IDS` is not set in Production and `EXPORTFLOW_AUTH_DB` is not bound to the Production Worker. Migration 0003 was applied only to temporary isolated D1 databases for the runtime acceptance described below; those databases were deleted and verified absent. Therefore the admin API remains fail-closed/source-only in the current deployed environment. Do not set the owner allowlist, apply migrations, bind the database or deploy this code without separate owner approval.
 
 ## Privileged Tenant Lifecycle Service — isolated implementation
 
@@ -100,7 +100,7 @@ Supported operations:
 
 Every mutating service operation requires an injected `authorizeAdmin` function. The HTTP adapter constructs the service separately for each request and binds the already-verified allowlisted owner identity only for that request. Request-body fields, query parameters and caller-supplied headers never establish authority. No Better Auth role mapping, user-role promotion endpoint or impersonation route is wired in this PR.
 
-Migration `0003_tenant_admin_audit_log.sql` adds an append-only audit table with update/delete guards. Each D1 mutation and its audit event are submitted in the same `D1Database.batch()`; if the batch fails, the operation returns a sanitized 503. The migration has not been applied to any database. The service remains draft-only until the verified owner-role integration and real D1 Binding acceptance are separately reviewed.
+Migration `0003_tenant_admin_audit_log.sql` adds an append-only audit table with update/delete guards. Each D1 mutation and its audit event are submitted in the same `D1Database.batch()`; if the batch fails, the operation returns a sanitized 503. Migration 0003 was applied to a temporary isolated D1 database for the combined tenant-admin HTTP + D1 Binding acceptance (19/19 checks), then that test database and Worker were deleted and independently verified absent. That test used an injected synthetic owner at the HTTP boundary; it did not prove Better Auth browser-cookie authorization. The service remains Draft-only pending the remaining authentication, step-up/MFA, rate-limit, recovery/lockout and owner-identity reviews, plus separate release approvals.
 
 ## Quota semantics
 
@@ -141,3 +141,13 @@ This implementation does not include:
 7. Obtain separate owner approval before changing bindings, deploying or enabling live customer keys.
 
 Node fixtures and Wrangler dry-run builds are supporting checks only; neither proves Cloudflare D1 Binding runtime acceptance.
+
+
+## Owner session authorization runtime evidence and remaining gates
+
+- The combined tenant-admin HTTP handler + service + Cloudflare D1 Binding acceptance passed **19/19 checks** on an isolated Worker and temporary D1 database. It covered the owner-gate denial path with an injected synthetic owner, plan and tenant provisioning, API-key issue/rotation/revocation, tenant isolation, append-only audit enforcement and batch rollback. The temporary Worker and D1 database were deleted and independently verified absent.
+- A separate real Better Auth email/password cookie-session runtime test passed five cases: fresh verified allowlisted session accepted; no-cookie denied; non-allowlisted user denied; mismatched Origin denied; unverified account denied.
+- A later isolated Worker + D1 test of the `platform-admin-auth.js` freshness helper passed all three cases: fresh accepted, stale denied and expired denied. It used only synthetic D1 session fixtures and did **not** issue or validate a Better Auth cookie.
+- Therefore real Better Auth stale/expired cookie denials remain unverified. The five-case Better Auth result and the three-case helper result are distinct evidence and must not be merged into one claim.
+- A 10-minute session-age check is a freshness gate, not proof of step-up MFA. Better Auth's 2FA plugin does not apply its credential sign-in challenge to OAuth/social sign-in by default; an explicit server-side policy/hook is required if Google OAuth owners must complete a second factor before admin mutations. See [Better Auth 2FA documentation](https://better-auth.com/docs/plugins/2fa).
+- Admin-specific rate limiting, exact owner user-ID verification, account recovery/lockout handling and final operation-level security review remain outstanding. No owner allowlist or tenant D1 binding is configured in Production.
