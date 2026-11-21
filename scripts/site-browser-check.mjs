@@ -41,6 +41,18 @@ async function waitForServer() {
   throw new Error("Timed out waiting for local ExportFlow server.\n" + serverOutput);
 }
 
+function isExpectedFontAsset(urlValue) {
+  try {
+    const url = new URL(urlValue);
+    return (
+      (url.origin === "https://fonts.googleapis.com" && url.pathname === "/css2") ||
+      (url.origin === "https://fonts.gstatic.com" && url.pathname.startsWith("/s/"))
+    );
+  } catch {
+    return false;
+  }
+}
+
 function routeSlug(route) {
   return route === "/" ? "home" : route.slice(1).replaceAll("/", "-");
 }
@@ -61,7 +73,7 @@ async function openPage(browser, width, route) {
   page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("request", (request) => {
     try {
-      if (new URL(request.url()).origin !== baseUrl) externalRequests.push(request.url());
+      if (new URL(request.url()).origin !== baseUrl && !isExpectedFontAsset(request.url())) externalRequests.push(request.url());
     } catch {
       externalRequests.push(request.url());
     }
@@ -259,7 +271,7 @@ async function checkDemoInteractions(browser) {
   const consoleErrors = [];
   page.on("request", (request) => {
     try {
-      if (new URL(request.url()).origin !== baseUrl) externalRequests.push(request.url());
+      if (new URL(request.url()).origin !== baseUrl && !isExpectedFontAsset(request.url())) externalRequests.push(request.url());
     } catch {
       externalRequests.push(request.url());
     }
