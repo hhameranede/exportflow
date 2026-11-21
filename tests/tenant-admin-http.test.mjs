@@ -9,8 +9,12 @@ const TABLES = [
   "tenant_request_usage",
   "tenant_admin_audit_log",
 ];
+const AUDIT_TRIGGERS = [
+  "prevent_tenant_admin_audit_update",
+  "prevent_tenant_admin_audit_delete",
+];
 
-function makeD1(tables = TABLES) {
+function makeD1(tables = TABLES, triggers = AUDIT_TRIGGERS) {
   return {
     prepare(sql) {
       return {
@@ -18,7 +22,14 @@ function makeD1(tables = TABLES) {
           return {
             sql,
             params,
-            async all() { return { results: tables.map((name) => ({ name })) }; },
+            async all() {
+              return {
+                results: [
+                  ...tables.map((name) => ({ type: "table", name })),
+                  ...triggers.map((name) => ({ type: "trigger", name })),
+                ],
+              };
+            },
           };
         },
       };
@@ -38,7 +49,7 @@ function jsonRequest(path, body = {}, method = "POST") {
   });
 }
 
-function setup({ owner = { allowed: true, actorId: "owner_123" }, tables = TABLES } = {}) {
+function setup({ owner = { allowed: true, actorId: "owner_123" }, tables = TABLES, triggers = AUDIT_TRIGGERS } = {}) {
   const calls = { authorization: [], service: [], actions: [] };
   const handler = createTenantAdminHttpHandler({
     authorizeOwner: async (request, env) => {
@@ -58,7 +69,7 @@ function setup({ owner = { allowed: true, actorId: "owner_123" }, tables = TABLE
       ]);
     },
   });
-  return { handler, calls, env: { EXPORTFLOW_AUTH_DB: makeD1(tables) } };
+  return { handler, calls, env: { EXPORTFLOW_AUTH_DB: makeD1(tables, triggers) } };
 }
 
 test("tenant admin handler ignores paths outside its namespace", async () => {
@@ -102,6 +113,20 @@ test("admin storage binding and migration readiness fail closed", async () => {
   );
   assert.equal(missingAuditTable.status, 503);
   assert.equal((await missingAuditTable.json()).error.code, "ADMIN_SCHEMA_NOT_READY");
+
+  const missingDeleteGuard = await handler(
+    jsonRequest("/api/v1/admin/tenants", { planCode: "free" }),
+    { EXPORTFLOW_AUTH_DB: makeD1(TABLES, AUDIT_TRIGGERS.filter((name) => name !== "prevent_tenant_admin_audit_delete")) },
+  );
+  assert.equal(missingDeleteGuard.status, 503);
+  assert.equal((await missingDeleteGuard.json()).error.code, "ADMIN_SCHEMA_NOT_READY");
+
+  const missingUpdateGuard = await handler(
+    jsonRequest("/api/v1/admin/tenants", { planCode: "free" }),
+    { EXPORTFLOW_AUTH_DB: makeD1(TABLES, AUDIT_TRIGGERS.filter((name) => name !== "prevent_tenant_admin_audit_update")) },
+  );
+  assert.equal(missingUpdateGuard.status, 503);
+  assert.equal((await missingUpdateGuard.json()).error.code, "ADMIN_SCHEMA_NOT_READY");
 });
 
 test("plan policy and tenant provisioning routes pass strict validated bodies", async () => {
