@@ -584,7 +584,7 @@ test("POST /api/v1/tasks maps the Task-wide execution deadline to HTTP 504", asy
   });
   const response = await worker.fetch(
     makeTaskRequest({ goal: "Wait for bounded deadline", url: "https://example.com/slow" }),
-    { EXPORTFLOW_API_TOKEN: TEST_TOKEN },
+    makeTestEnv(),
   );
 
   assert.equal(response.status, 504);
@@ -609,7 +609,7 @@ test("POST /api/v1/tasks maps caller cancellation to HTTP 499 and cancelled life
     body: JSON.stringify({ goal: "Cancel active fetch", url: "https://example.com/slow" }),
     signal: controller.signal,
   });
-  const pending = worker.fetch(request, { EXPORTFLOW_API_TOKEN: TEST_TOKEN });
+  const pending = worker.fetch(request, makeTestEnv());
   await new Promise((resolve) => setTimeout(resolve, 10));
   controller.abort();
 
