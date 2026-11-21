@@ -336,6 +336,13 @@ export function createExportFlowPreviewWorker({
 
       const name = params.name;
       const args = params.arguments ?? {};
+      const validationError = validateToolArguments(name, args);
+      if (validationError) {
+        return jsonResponse(rpcResult(message.id, toolContent({
+          error: "invalid_arguments",
+          message: validationError,
+        }, true)));
+      }
       const rate = await applyRateLimit(request, env, name);
       if (!rate.ok) {
         const limited = toolContent({
