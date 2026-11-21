@@ -17,7 +17,7 @@ jobs:
    - run: npm run check
    - name: Install pinned Playwright and Chromium outside project dependencies
      run: |
-      npm install --prefix "$RUNNER_TEMP/ef-browser" --no-save --package-lock=false playwright@1.57.0
+      npm install --prefix "$RUNNER_TEMP/ef-browser" --no-save --package-lock=false playwright@1.65.1
       "$RUNNER_TEMP/ef-browser/node_modules/.bin/playwright" install --only-shell chromium
    - name: Run real Chromium website checks
      env:
