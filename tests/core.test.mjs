@@ -1006,6 +1006,39 @@ test("schema extraction returns normalized result and field-level source evidenc
   assert.equal(result.sources[0].evidence[1].field, "name");
 });
 
+test("Extract adapter propagates Task cancellation through the source fetch", async () => {
+  const controller = new AbortController();
+  let markStarted;
+  const started = new Promise((resolve) => { markStarted = resolve; });
+  const pending = executeAdapter("web.extract.v1", {
+    url: "https://example.com/item",
+    schema: {
+      type: "object",
+      properties: { name: { type: "string", "x-source": "jsonld:name" } },
+      required: ["name"],
+    },
+  }, {
+    signal: controller.signal,
+    fetchResource: async (_url, options = {}) => {
+      assert.equal(options.signal, controller.signal);
+      markStarted();
+      return new Promise((_resolve, reject) => {
+        if (options.signal.aborted) {
+          reject(Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" }));
+          return;
+        }
+        options.signal.addEventListener("abort", () => {
+          reject(Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" }));
+        }, { once: true });
+      });
+    },
+  });
+
+  await started;
+  controller.abort();
+  await assert.rejects(pending, (error) => error?.code === "TASK_CANCELLED");
+});
+
 test("schema extraction handles JSON endpoints without HTML parsing", async () => {
   const result = await extractStructuredData(
     {
