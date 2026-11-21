@@ -536,25 +536,19 @@ test("POST /api/v1/tasks maps caller cancellation to HTTP 499 and cancelled life
       }, { once: true });
     }),
   });
-  const pending = worker.fetch(
-    makeTaskRequest({ goal: "Cancel active fetch", url: "https://example.com/slow" }, { headers: {} , method: "POST" }),
-    { EXPORTFLOW_API_TOKEN: TEST_TOKEN },
-  );
-  // Exercise the Worker request's own signal without relying on a real network client.
   const request = new Request("https://api.exportflow.local/api/v1/tasks", {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${TEST_TOKEN}` },
     body: JSON.stringify({ goal: "Cancel active fetch", url: "https://example.com/slow" }),
     signal: controller.signal,
   });
-  const cancelledPending = worker.fetch(request, { EXPORTFLOW_API_TOKEN: TEST_TOKEN });
+  const pending = worker.fetch(request, { EXPORTFLOW_API_TOKEN: TEST_TOKEN });
   await new Promise((resolve) => setTimeout(resolve, 10));
   controller.abort();
 
-  const response = await cancelledPending;
+  const response = await pending;
   assert.equal(response.status, 499);
   const task = await response.json();
   assert.equal(task.state, "cancelled");
   assert.equal(task.errors[0].code, "TASK_CANCELLED");
-  await pending.then((unused) => unused.body?.cancel()).catch(() => {});
 });
