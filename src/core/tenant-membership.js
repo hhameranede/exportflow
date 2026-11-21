@@ -190,7 +190,7 @@ export async function resolveOAuthTenantPrincipal(db, claims) {
   }
 
   const scopes = typeof claims.scope === "string"
-    ? claims.scope.split(/\\s+/).filter(Boolean)
+    ? claims.scope.split(/\s+/).filter(Boolean)
     : [];
   return Object.freeze({
     tenantId: membership.tenantId,
