@@ -909,6 +909,42 @@ export const MARKETING_JS = `(function () {
     window.location.assign("/account");
   }
 
+  function authGoToOAuth(url) {
+    if (typeof url !== "string") throw new Error("The authorization server returned an invalid redirect.");
+    var destination;
+    try { destination = new URL(url, window.location.origin); }
+    catch (_e) { throw new Error("The authorization server returned an invalid redirect."); }
+
+    if (destination.origin === window.location.origin) {
+      window.location.assign(destination.href);
+      return;
+    }
+
+    var signedQuery = signedOAuthQueryFromLocation();
+    if (!signedQuery) throw new Error("The signed OAuth request is missing.");
+    var requestedRedirect = new URLSearchParams(signedQuery).get("redirect_uri");
+    if (!requestedRedirect) throw new Error("The signed OAuth request has no callback URL.");
+
+    var callback;
+    try { callback = new URL(requestedRedirect); }
+    catch (_e) { throw new Error("The registered OAuth callback URL is invalid."); }
+
+    if (destination.protocol !== callback.protocol ||
+        destination.host !== callback.host ||
+        destination.pathname !== callback.pathname ||
+        destination.hash !== callback.hash) {
+      throw new Error("The authorization server returned a redirect that does not match the registered callback.");
+    }
+
+    for (var pair of callback.searchParams.entries()) {
+      if (!destination.searchParams.getAll(pair[0]).includes(pair[1])) {
+        throw new Error("The OAuth callback URL did not preserve its registered query parameters.");
+      }
+    }
+
+    window.location.assign(destination.href);
+  }
+
   function updateAuthHeader(user) {
     var link = document.querySelector("[data-auth-header-link]");
     if (!link) return;
@@ -1412,7 +1448,7 @@ export const MARKETING_JS = `(function () {
         if (!result || result.redirect !== true || typeof result.url !== "string") {
           throw new Error("The authorization server returned an invalid continuation.");
         }
-        authGoTo(result.url);
+        authGoToOAuth(result.url);
       } catch (error) {
         authMessage(status, error && error.message ? error.message : "Could not complete authorization.", "error");
         if (button) button.disabled = false;
@@ -1468,7 +1504,7 @@ export const MARKETING_JS = `(function () {
         if (!continued || continued.redirect !== true || typeof continued.url !== "string") {
           throw new Error("The authorization server returned an invalid continuation.");
         }
-        authGoTo(continued.url);
+        authGoToOAuth(continued.url);
       } catch (error) {
         authMessage(status, error && error.message ? error.message : "Could not continue authorization.", "error");
         if (submit) submit.disabled = false;
