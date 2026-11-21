@@ -841,7 +841,31 @@ export const MARKETING_JS = `(function () {
     });
   }
 
+  function signedOAuthQueryFromLocation() {
+    try {
+      var params = new URLSearchParams(window.location.search || "");
+      var names = params.getAll("ba_param");
+      if (!params.has("sig") || !names.length) return null;
+      var signed = new Set(["sig", "ba_param"].concat(names));
+      var result = new URLSearchParams();
+      params.forEach(function (value, key) {
+        if (signed.has(key)) result.append(key, value);
+      });
+      return result.toString();
+    } catch (_e) {
+      return null;
+    }
+  }
+
   async function authRequest(path, method, payload) {
+    var requestMethod = String(method || "GET").toUpperCase();
+    if (payload && typeof payload === "object" && !Array.isArray(payload) &&
+        requestMethod !== "GET" && requestMethod !== "DELETE") {
+      var oauthQuery = signedOAuthQueryFromLocation();
+      if (oauthQuery && !payload.oauth_query) {
+        payload = Object.assign({}, payload, { oauth_query: oauthQuery });
+      }
+    }
     var options = {
       method: method || "GET",
       credentials: "same-origin",
@@ -1375,8 +1399,86 @@ export const MARKETING_JS = `(function () {
     });
   }
 
+  function bindOAuthConsentPage() {
+    var accept = document.querySelector("[data-oauth-consent-accept]");
+    var deny = document.querySelector("[data-oauth-consent-deny]");
+    var status = document.querySelector("[data-oauth-flow-status]");
+    async function respond(accepted, button) {
+      if (button) button.disabled = true;
+      authMessage(status, accepted ? "Saving your authorization…" : "Cancelling the connection…");
+      try {
+        var result = await authRequest("oauth2/consent", "POST", { accept: accepted });
+        if (!result || result.redirect !== true || typeof result.url !== "string") {
+          throw new Error("The authorization server returned an invalid continuation.");
+        }
+        authGoTo(result.url);
+      } catch (error) {
+        authMessage(status, error && error.message ? error.message : "Could not complete authorization.", "error");
+        if (button) button.disabled = false;
+      }
+    }
+    if (accept) accept.addEventListener("click", function () { respond(true, accept); });
+    if (deny) deny.addEventListener("click", function () { respond(false, deny); });
+  }
+
+  async function bindOAuthTenantSelectionPage() {
+    var form = document.querySelector("[data-oauth-tenant-form]");
+    if (!form) return;
+    var select = form.querySelector("#oauth-tenant-choice");
+    var submit = form.querySelector("[data-oauth-tenant-submit]");
+    var status = form.querySelector("[data-oauth-flow-status]");
+    try {
+      var data = await authRequest("tenant/list");
+      var tenants = data && Array.isArray(data.tenants) ? data.tenants : [];
+      select.textContent = "";
+      if (!tenants.length) {
+        var empty = document.createElement("option");
+        empty.value = "";
+        empty.textContent = "No active workspace membership was found.";
+        select.appendChild(empty);
+        authMessage(status, "Ask a workspace owner to add your account before connecting.", "error");
+        return;
+      }
+      tenants.forEach(function (tenant) {
+        if (!tenant || typeof tenant.tenantId !== "string") return;
+        var option = document.createElement("option");
+        option.value = tenant.tenantId;
+        option.textContent = tenant.tenantId + " · " + (tenant.role || "member") + " · " + (tenant.planCode || "plan");
+        select.appendChild(option);
+      });
+      submit.disabled = select.options.length === 0;
+    } catch (error) {
+      authMessage(status, error && error.message ? error.message : "Could not load your workspaces.", "error");
+      return;
+    }
+
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      var tenantId = String(select.value || "");
+      if (!tenantId) {
+        authMessage(status, "Choose a workspace to continue.", "error");
+        return;
+      }
+      if (submit) submit.disabled = true;
+      authMessage(status, "Saving your workspace selection…");
+      try {
+        await authRequest("tenant/select", "POST", { tenantId: tenantId });
+        var continued = await authRequest("oauth2/continue", "POST", { postLogin: true });
+        if (!continued || continued.redirect !== true || typeof continued.url !== "string") {
+          throw new Error("The authorization server returned an invalid continuation.");
+        }
+        authGoTo(continued.url);
+      } catch (error) {
+        authMessage(status, error && error.message ? error.message : "Could not continue authorization.", "error");
+        if (submit) submit.disabled = false;
+      }
+    });
+  }
+
   async function initializeAccountSystem() {
     bindAuthForms();
+    bindOAuthConsentPage();
+    await bindOAuthTenantSelectionPage();
     bindGoogleButtons();
     bindAccountControls();
     await refreshAuthHeader();
