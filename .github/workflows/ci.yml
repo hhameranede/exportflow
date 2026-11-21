@@ -41,7 +41,7 @@ jobs:
 
  deploy-production:
   needs: test
-  if: "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message == 'chore: authorized Production auth deployment' }}"
+  if: "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message == 'chore: authorized ExportFlow release' }}"
   runs-on: ubuntu-latest
   steps:
    - uses: actions/checkout@v4
@@ -49,13 +49,80 @@ jobs:
      with:
       node-version: 24
    - run: npm install --no-audit --no-fund
-   - name: Deploy official Cloudflare Worker
+   - name: Verify Cloudflare deployment credentials
      env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
      run: |
       if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
        echo "::error::Missing CLOUDFLARE_API_TOKEN (or CF_API_TOKEN) GitHub Actions secret."
        exit 1
       fi
-      npx --yes wrangler@4 deploy --config wrangler.toml
+   - name: Deploy official ExportFlow Platform Worker
+     env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+     run: npx --yes wrangler@4 deploy --config wrangler.toml
+   - name: Deploy official ExportFlow MCP Worker
+     env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+     run: npx --yes wrangler@4 deploy --config cloudflare/mcp/wrangler.toml
+   - name: Read-only production smoke checks
+     run: |
+      node --input-type=module <<'NODE'
+      const checks = [
+        ["platform-health", "https://exportflow.me/api/v1/health"],
+        ["mcp-health", "https://mcp.exportflow.me/health"],
+      ];
+      for (const [name, url] of checks) {
+        const response = await fetch(url, { headers: { accept: "application/json" } });
+        const text = await response.text();
+        if (!response.ok) throw new Error(name + " returned HTTP " + response.status + ": " + text.slice(0, 300));
+        let body;
+        try { body = JSON.parse(text); } catch { throw new Error(name + " did not return JSON"); }
+        if (body.status !== "ok") throw new Error(name + " returned an unexpected health payload");
+        console.log(name + ": HTTP " + response.status + " OK");
+      }
+
+      const initResponse = await fetch("https://mcp.exportflow.me/mcp", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          "mcp-protocol-version": "2025-11-25",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-11-25",
+            capabilities: {},
+            clientInfo: { name: "exportflow-release-smoke", version: "1.0.0" },
+          },
+        }),
+      });
+      if (!initResponse.ok) throw new Error("MCP initialize returned HTTP " + initResponse.status + ": " + (await initResponse.text()).slice(0, 300));
+      const init = await initResponse.json();
+      if (init.result?.serverInfo?.name !== "ExportFlow" || init.result?.protocolVersion !== "2025-11-25") {
+        throw new Error("MCP initialize returned an unexpected response");
+      }
+      console.log("mcp-initialize: HTTP " + initResponse.status + " OK");
+
+      const listResponse = await fetch("https://mcp.exportflow.me/mcp", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          "mcp-protocol-version": "2025-11-25",
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
+      });
+      if (!listResponse.ok) throw new Error("MCP tools/list returned HTTP " + listResponse.status + ": " + (await listResponse.text()).slice(0, 300));
+      const listed = await listResponse.json();
+      const names = listed.result?.tools?.map((tool) => tool.name) || [];
+      for (const expected of ["exportflow_capabilities", "web_fetch", "web_map", "web_crawl", "web_extract"]) {
+        if (!names.includes(expected)) throw new Error("MCP tools/list is missing " + expected);
+      }
+      console.log("mcp-tools-list: HTTP " + listResponse.status + " OK (" + names.length + " tools)");
+      NODE
