@@ -81,9 +81,9 @@ async function readBoundedRequestText(request, maxBytes) {
       if (done) break;
       totalBytes += value.byteLength;
       if (totalBytes > maxBytes) {
-        await reader.cancel();
         const error = new Error("Request body exceeds the maximum allowed size.");
         error.code = "REQUEST_TOO_LARGE";
+        await reader.cancel().catch(() => {});
         throw error;
       }
       chunks.push(value);
