@@ -522,7 +522,7 @@ export function createExportFlowPreviewWorker({
       if (!accept.includes("application/json") || !accept.includes("text/event-stream")) return withCors(jsonResponse({ error: "not_acceptable" }, 406), request);
       const declaredLength = request.headers.get("content-length");
       if (declaredLength !== null) {
-        if (!/^\\d+$/.test(declaredLength)) return withCors(jsonResponse({ error: "invalid_content_length" }, 400), request);
+        if (!/^\d+$/.test(declaredLength)) return withCors(jsonResponse({ error: "invalid_content_length" }, 400), request);
         if (Number(declaredLength) > MAX_BODY_BYTES) return withCors(jsonResponse({ error: "request_too_large" }, 413), request);
       }
       const authRequest = request.clone();
