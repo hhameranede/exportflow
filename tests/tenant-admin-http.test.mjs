@@ -235,6 +235,7 @@ test("responses are private and never cache one-time API keys", async () => {
   const { handler, env } = setup();
   const response = await handler(jsonRequest("/api/v1/admin/tenants/tenant_alpha/api-keys", { scopes: ["tasks:fetch"] }), env);
   assert.match(response.headers.get("cache-control"), /no-store/);
+  assert.equal(response.headers.get("strict-transport-security"), "max-age=63072000");
   assert.equal(response.headers.get("access-control-allow-origin"), null);
 });
 
