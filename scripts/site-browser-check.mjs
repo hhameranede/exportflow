@@ -177,6 +177,10 @@ async function checkHomeInteractions(browser) {
   assert.ok(await drawer.isVisible(), "mobile drawer is not visible after opening");
   await page.keyboard.press("Escape");
   assert.equal(await menuButton.getAttribute("aria-expanded"), "false", "Escape did not close mobile navigation");
+  await page.waitForFunction(() => {
+    const activeDrawer = document.querySelector("[data-mobile-drawer]");
+    return activeDrawer && activeDrawer.hidden;
+  }, null, { timeout: 1500 });
   assert.equal(await drawer.isVisible(), false, "mobile drawer remained visible after Escape");
 
   await menuButton.click();
