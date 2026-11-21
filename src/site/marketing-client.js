@@ -1379,7 +1379,7 @@ export const MARKETING_JS = `(function () {
     bindAuthForms();
     bindGoogleButtons();
     bindAccountControls();
-    await refreshAuthHeader();
+
     try {
       authConfig = await authRequest("config");
       setAccountConfig(authConfig);
@@ -1387,6 +1387,27 @@ export const MARKETING_JS = `(function () {
       authConfig = null;
       setAccountConfig(null);
     }
+
+    var authReady = Boolean(authConfig && authConfig.authConfigured && authConfig.authReady);
+    if (!authReady) {
+      // Do not request a session from a deployment whose account service is
+      // not configured. This keeps public pages quiet and the account UI
+      // explicitly unavailable instead of producing an avoidable 503.
+      updateAuthHeader(null);
+      var workspace = document.querySelector("[data-account-workspace]");
+      var loading = document.querySelector("[data-account-loading]");
+      var accountStatus = document.querySelector("[data-auth-account-status]");
+      if (workspace) workspace.hidden = true;
+      if (loading) loading.hidden = true;
+      authMessage(
+        accountStatus,
+        "Account services are not connected yet. The account workspace will be available after server authentication is configured.",
+        "warning",
+      );
+      return;
+    }
+
+    await refreshAuthHeader();
     if (document.querySelector("[data-account-workspace]")) {
       await loadAccountWorkspace();
     }
