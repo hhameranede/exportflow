@@ -12,6 +12,10 @@ const REQUIRED_ADMIN_TABLES = Object.freeze([
   "tenant_admin_audit_log",
 ]);
 const REQUIRED_ADMIN_TRIGGERS = Object.freeze([
+  "guard_tenant_request_usage_limit_insert",
+  "guard_tenant_request_usage_limit_update",
+  "prevent_mid_month_plan_quota_period_change",
+  "prevent_mid_month_tenant_plan_period_change",
   "prevent_tenant_admin_audit_update",
   "prevent_tenant_admin_audit_delete",
 ]);
