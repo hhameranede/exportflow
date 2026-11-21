@@ -180,6 +180,9 @@ export async function fetchPublicResource(input, options = {}) {
       if (callerCancelled) {
         throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
       }
+      if (timedOut) {
+        throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
+      }
       const current = currentUrl.href;
       if (visited.has(current)) {
         throw new FetchAdapterError("REDIRECT_LOOP", "Upstream redirect loop detected.", 502);
@@ -213,6 +216,10 @@ export async function fetchPublicResource(input, options = {}) {
       if (callerCancelled) {
         await cancelBody(response);
         throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
+      }
+      if (timedOut) {
+        await cancelBody(response);
+        throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
       }
 
       if (REDIRECT_STATUSES.has(response.status)) {
@@ -264,6 +271,9 @@ export async function fetchPublicResource(input, options = {}) {
       );
       if (callerCancelled) {
         throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
+      }
+      if (timedOut) {
+        throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
       }
       const retrievedAt = new Date().toISOString();
 
