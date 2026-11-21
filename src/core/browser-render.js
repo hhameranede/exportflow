@@ -159,7 +159,13 @@ export function createBrowserAdapter({
           guardrails: { allowedDomains: [target.hostname] },
         });
         if (input.signal) {
-          abortHandler = () => { void browser?.close(); };
+          abortHandler = () => {
+            try {
+              void browser?.close()?.catch(() => {});
+            } catch {
+              // Abort cleanup is best-effort; preserve the task cancellation result.
+            }
+          };
           if (input.signal.aborted) abortHandler();
           else input.signal.addEventListener("abort", abortHandler, { once: true });
         }
