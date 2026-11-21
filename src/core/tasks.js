@@ -70,12 +70,8 @@ function createTaskExecutionControls(externalSignal, timeoutMs) {
     rejectAbort(error);
   };
 
-  if (externalSignal?.aborted) {
-    abortFromCaller();
-  } else if (externalSignal) {
-    externalAbortHandler = abortFromCaller;
-    externalSignal.addEventListener("abort", externalAbortHandler, { once: true });
-  }
+  // Mark the rejection handled even when validation exits before adapter execution.
+  abortPromise.catch(() => {});
 
   return {
     signal: controller.signal,
@@ -84,6 +80,12 @@ function createTaskExecutionControls(externalSignal, timeoutMs) {
     startTimeout() {
       if (timeoutStarted) return;
       timeoutStarted = true;
+      if (externalSignal?.aborted) {
+        abortFromCaller();
+      } else if (externalSignal) {
+        externalAbortHandler = abortFromCaller;
+        externalSignal.addEventListener("abort", externalAbortHandler, { once: true });
+      }
       timeoutHandle = setTimeout(() => {
         const error = Object.assign(new Error("Task execution timed out."), { code: "TASK_TIMEOUT" });
         controller.abort(error);
@@ -194,7 +196,7 @@ export async function executeWebTask(input, options = {}) {
       throw Object.assign(new TypeError("requiresInteraction must be a boolean."), { code: "INVALID_TASK" });
     }
 
-    if (controls.signal.aborted) throw Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });
+    if (options.signal?.aborted) throw Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });
 
     const operation = input.operation === undefined ? "fetch" : input.operation;
     if (!["fetch", "map", "crawl", "extract", "search", "research"].includes(operation)) {
