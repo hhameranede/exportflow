@@ -111,6 +111,8 @@ export async function executeWebTask(input, options = {}) {
   let goal = "";
   let requestedUrl = null;
   let execution = null;
+  let operation = null;
+  const usageReceipts = [];
 
   try {
     if (!input || typeof input !== "object" || Array.isArray(input)) {
@@ -129,7 +131,7 @@ export async function executeWebTask(input, options = {}) {
       throw Object.assign(new TypeError("requiresInteraction must be a boolean."), { code: "INVALID_TASK" });
     }
 
-    const operation = input.operation === undefined ? "fetch" : input.operation;
+    operation = input.operation === undefined ? "fetch" : input.operation;
     if (!["fetch", "map", "crawl", "extract", "search", "research"].includes(operation)) {
       throw Object.assign(new TypeError("Unsupported task operation."), { code: "UNSUPPORTED_OPERATION" });
     }
@@ -327,6 +329,24 @@ export async function executeWebTask(input, options = {}) {
     const adapterOptions = {};
     if (typeof options.fetchImpl === "function") adapterOptions.fetchImpl = options.fetchImpl;
     if (options.signal) adapterOptions.signal = options.signal;
+    if (operation === "fetch") {
+      adapterOptions.onUsageReceipt = (receipt) => {
+        const enrichedReceipt = {
+          ...receipt,
+          taskId: id,
+          operation,
+          adapterId,
+        };
+        usageReceipts.push(enrichedReceipt);
+        if (typeof options.onUsageReceipt === "function") {
+          try {
+            options.onUsageReceipt(Object.freeze(enrichedReceipt));
+          } catch {
+            // External usage observers must not affect task execution.
+          }
+        }
+      };
+    }
     const result = Object.keys(adapterOptions).length
       ? await runAdapter(adapterId, adapterInput, adapterOptions)
       : await runAdapter(adapterId, adapterInput);
@@ -350,10 +370,10 @@ export async function executeWebTask(input, options = {}) {
         });
       }
     }
-    const redirectsCount = Array.isArray(result.data?.redirects) ? result.data.redirects.length : null;
-    const requestsAttempted = operation === "fetch" && redirectsCount !== null
-      ? 1 + redirectsCount
-      : null;
+    const requestsAttempted = operation === "fetch" ? usageReceipts.length : null;
+    const responseBytes = operation === "fetch"
+      ? usageReceipts.reduce((total, receipt) => total + receipt.responseBodyBytesRead, 0)
+      : (Number.isInteger(result.data?.bytes) ? result.data.bytes : null);
     return buildTask({
       id,
       goal,
@@ -368,7 +388,11 @@ export async function executeWebTask(input, options = {}) {
       usage: {
         durationMs: computeDurationMs(startedAt, completedAt, Date.now() - startMs),
         requestsAttempted,
-        responseBytes: Number.isInteger(result.data?.bytes) ? result.data.bytes : null,
+        responseBytes,
+        ...(operation === "fetch" ? {
+          responseBytesBasis: "stream_reader_observed",
+          receipts: usageReceipts,
+        } : {}),
         cost: null,
       },
       result,
@@ -392,8 +416,14 @@ export async function executeWebTask(input, options = {}) {
       errors: [{ code, message: safeErrorMessage(code) }],
       usage: {
         durationMs: computeDurationMs(startedAt, completedAt, Date.now() - startMs),
-        requestsAttempted: startedAt ? null : 0,
-        responseBytes: 0,
+        requestsAttempted: operation === "fetch" ? usageReceipts.length : (startedAt ? null : 0),
+        responseBytes: operation === "fetch"
+          ? usageReceipts.reduce((total, receipt) => total + receipt.responseBodyBytesRead, 0)
+          : 0,
+        ...(operation === "fetch" ? {
+          responseBytesBasis: "stream_reader_observed",
+          receipts: usageReceipts,
+        } : {}),
         cost: null,
       },
       result: failureResult(code, requestedUrl),

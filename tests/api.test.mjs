@@ -208,7 +208,11 @@ test("POST /api/v1/tasks enforces egress redirect validation, redirect limit, st
     env,
   );
   assert.equal(rPrivate.status, 502);
-  assert.equal((await rPrivate.json()).result.data.errorCode, "REDIRECT_NOT_ALLOWED");
+  const privateRedirectTask = await rPrivate.json();
+  assert.equal(privateRedirectTask.result.data.errorCode, "REDIRECT_NOT_ALLOWED");
+  assert.equal(privateRedirectTask.usage.requestsAttempted, 1);
+  assert.equal(privateRedirectTask.usage.receipts[0].outcome, "redirect_rejected");
+  assert.equal(privateRedirectTask.usage.receipts[0].errorCode, "REDIRECT_NOT_ALLOWED");
 
   const tooManyRedirects = createWorker({
     fetchImpl: async () => new Response(null, { status: 302, headers: { location: `https://example.com/hop-${Math.random()}` } }),
@@ -231,7 +235,13 @@ test("POST /api/v1/tasks enforces egress redirect validation, redirect limit, st
     env,
   );
   assert.equal(rLarge.status, 413);
-  assert.equal((await rLarge.json()).result.data.errorCode, "RESPONSE_TOO_LARGE");
+  const largeTask = await rLarge.json();
+  assert.equal(largeTask.result.data.errorCode, "RESPONSE_TOO_LARGE");
+  assert.equal(largeTask.usage.requestsAttempted, 1);
+  assert.equal(largeTask.usage.responseBytes, 10);
+  assert.equal(largeTask.usage.receipts[0].outcome, "read_failed");
+  assert.equal(largeTask.usage.receipts[0].responseBodyBytesRead, 10);
+  assert.equal(largeTask.usage.receipts[0].errorCode, "RESPONSE_TOO_LARGE");
 
   const slowWorker = createWorker({
     fetchImpl: (_url, init) => new Promise((_resolve, reject) => {
@@ -251,6 +261,9 @@ test("POST /api/v1/tasks enforces egress redirect validation, redirect limit, st
   assert.equal(timeoutBody.state, "failed");
   assert.equal(timeoutBody.result.data.errorCode, "UPSTREAM_TIMEOUT");
   assert.equal(timeoutBody.errors[0].code, "UPSTREAM_TIMEOUT");
+  assert.equal(timeoutBody.usage.requestsAttempted, 1);
+  assert.equal(timeoutBody.usage.receipts[0].outcome, "timeout");
+  assert.equal(timeoutBody.usage.receipts[0].errorCode, "UPSTREAM_TIMEOUT");
 });
 
 test("POST /api/v1/tasks executes end-to-end bounded HTTP fetch and returns structured evidence & usage", async () => {
@@ -295,8 +308,19 @@ test("POST /api/v1/tasks executes end-to-end bounded HTTP fetch and returns stru
   assert.equal(task.usage.durationMs, 75);
   assert.equal(task.usage.requestsAttempted, 2);
   assert.equal(task.usage.responseBytes, 66);
-  assert.equal(task.usage.cost, null);
+  assert.equal(task.usage.responseBytesBasis, "stream_reader_observed");
+  assert.equal(task.usage.receipts.length, 2);
+  assert.deepEqual(task.usage.receipts.map((receipt) => receipt.outcome), ["redirect", "response"]);
+  assert.equal(task.usage.receipts[0].httpStatus, 302);
+  assert.equal(task.usage.receipts[0].responseBodyBytesRead, 0);
+  assert.equal(task.usage.receipts[1].httpStatus, 200);
+  assert.equal(task.usage.receipts[1].contentType, "text/html");
+  assert.equal(task.usage.receipts[1].responseBodyBytesRead, 66);
+  assert.equal(task.usage.receipts.every((receipt) => receipt.elapsedMs >= 0), true);
+  assert.equal(task.usage.receipts.every((receipt) => receipt.elapsedBasis === "io_inclusive_wall_elapsed_not_cpu"), true);
+  assert.equal(JSON.stringify(task.usage.receipts).includes("https://"), false);
   assert.equal(JSON.stringify(task).includes("session=secret"), false);
+  assert.equal(task.usage.cost, null);
 
   assert.equal(task.result.status, "succeeded");
   assert.equal(task.result.data.httpStatus, 200);
@@ -346,7 +370,10 @@ test("POST /api/v1/tasks handles upstream 404, 500, and network failures without
   assert.equal(errTask.state, "failed");
   assert.equal(errTask.errors[0].code, "UPSTREAM_FETCH_FAILED");
   assert.equal(JSON.stringify(errTask).includes("secret-123"), false);
-  assert.equal(errTask.usage.requestsAttempted, null);
+  assert.equal(errTask.usage.requestsAttempted, 1);
+  assert.equal(errTask.usage.responseBytes, 0);
+  assert.equal(errTask.usage.receipts[0].outcome, "network_error");
+  assert.equal(errTask.usage.receipts[0].errorCode, "UPSTREAM_FETCH_FAILED");
 });
 
 test("POST /api/v1/tasks returns 501 unsupported for browser JS or interaction tasks without outbound calls", async () => {
