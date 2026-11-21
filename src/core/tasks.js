@@ -33,6 +33,7 @@ const SAFE_ERROR_MESSAGES = Object.freeze({
   REDIRECT_DOWNGRADE: "HTTPS redirects cannot downgrade to HTTP.",
   INVALID_REDIRECT: "Upstream returned an invalid redirect response.",
   UPSTREAM_HTTP_ERROR: "Upstream returned a non-2xx HTTP status.",
+  TASK_CANCELLED: "Task was cancelled before completion.",
   BROWSER_INTERACTION_UNAVAILABLE: "User-directed browser interactions are not connected.",
   BROWSER_UNAVAILABLE: "Browser Run binding is not configured.",
   SEARCH_UNAVAILABLE: "Cloudflare Web Search binding is not configured.",
