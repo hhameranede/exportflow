@@ -59,8 +59,10 @@ const REQUIRED_TENANT_OAUTH_TRIGGERS = Object.freeze([
   "guard_tenant_membership_last_owner",
   "prevent_tenant_membership_identity_update",
   "prevent_tenant_membership_delete",
+  "bump_tenant_membership_version_on_tenant_state_change",
 ]);
-const MCP_RESOURCE = "https://mcp.exportflow.me";
+const AUTH_ISSUER = "https://exportflow.me/api/auth";
+const MCP_RESOURCE = "https://mcp.exportflow.me/mcp";
 const MCP_SCOPES = Object.freeze([
   "openid", "profile", "email", "offline_access",
   "tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract",
@@ -239,7 +241,7 @@ function buildAuthOptions(env, status) {
 
   if (status.tenantOAuthConfigured) {
     options.plugins = [
-      jwt(),
+      jwt({ jwt: { issuer: AUTH_ISSUER } }),
       mcp({
         resource: MCP_RESOURCE,
         scopes: [...MCP_SCOPES],
@@ -249,8 +251,18 @@ function buildAuthOptions(env, status) {
         accessTokenExpiresIn: 10 * 60,
         refreshTokenExpiresIn: 30 * 24 * 60 * 60,
         refreshTokenReuseInterval: 30,
-        allowDynamicClientRegistration: false,
-        allowUnauthenticatedClientRegistration: false,
+        subjectType: "public",
+        // ChatGPT supports OAuth DCR. Public registration is rate-limited by Better Auth,
+        // clients are restricted to authorization-code + PKCE and the single MCP resource.
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedClientRegistration: true,
+        clientRegistrationRequirePKCE: true,
+        clientRegistrationDefaultApplicationType: "web",
+        clientRegistrationDefaultScopes: [...MCP_SCOPES],
+        clientRegistrationAllowedScopes: [...MCP_SCOPES],
+        clientRegistrationDefaultResources: [MCP_RESOURCE],
+        clientRegistrationAllowedResources: [MCP_RESOURCE],
+        grantTypes: ["authorization_code", "refresh_token"],
         postLogin: {
           page: "/oauth/select-tenant",
           consentReferenceId: async ({ user, session }) => {
