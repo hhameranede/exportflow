@@ -68,7 +68,7 @@ async function openPage(browser, width, route) {
   const externalRequests = [];
 
   page.on("console", (message) => {
-    if (message.type() === "error") consoleErrors.push(message.text());
+    if (message.type() === "error") consoleErrors.push({ text: message.text(), location: message.location() });
   });
   page.on("pageerror", (error) => {
     pageErrors.push(error && typeof error === "object"
@@ -77,6 +77,7 @@ async function openPage(browser, width, route) {
           message: error.message || String(error),
           stack: typeof error.stack === "string" ? error.stack : null,
           properties: Object.getOwnPropertyNames(error),
+          log: error.log === undefined ? null : String(error.log).slice(0, 2_000),
         }
       : { thrownValue: String(error) });
   });
