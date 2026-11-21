@@ -11,6 +11,14 @@ const REQUIRED_ADMIN_TABLES = Object.freeze([
   "tenant_request_usage",
   "tenant_admin_audit_log",
 ]);
+const REQUIRED_ADMIN_TRIGGERS = Object.freeze([
+  "prevent_tenant_admin_audit_update",
+  "prevent_tenant_admin_audit_delete",
+]);
+const REQUIRED_ADMIN_SCHEMA_OBJECTS = Object.freeze([
+  ...REQUIRED_ADMIN_TABLES.map((name) => Object.freeze({ type: "table", name })),
+  ...REQUIRED_ADMIN_TRIGGERS.map((name) => Object.freeze({ type: "trigger", name })),
+]);
 
 function jsonResponse(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -84,12 +92,13 @@ function routeFor(pathname) {
 export async function isTenantAdminSchemaReady(db) {
   if (!db || typeof db.prepare !== "function") return false;
   try {
-    const placeholders = REQUIRED_ADMIN_TABLES.map(() => "?").join(", ");
+    const clauses = REQUIRED_ADMIN_SCHEMA_OBJECTS.map(() => "(type = ? AND name = ?)").join(" OR ");
+    const params = REQUIRED_ADMIN_SCHEMA_OBJECTS.flatMap(({ type, name }) => [type, name]);
     const result = await db.prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (" + placeholders + ")",
-    ).bind(...REQUIRED_ADMIN_TABLES).all();
-    const found = new Set((result?.results || []).map((row) => row.name));
-    return REQUIRED_ADMIN_TABLES.every((name) => found.has(name));
+      "SELECT type, name FROM sqlite_master WHERE " + clauses,
+    ).bind(...params).all();
+    const found = new Set((result?.results || []).map((row) => row.type + ":" + row.name));
+    return REQUIRED_ADMIN_SCHEMA_OBJECTS.every(({ type, name }) => found.has(type + ":" + name));
   } catch {
     return false;
   }
