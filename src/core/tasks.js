@@ -191,7 +191,7 @@ export async function executeWebTask(input, options = {}) {
         schema: input.schema,
         limit: input.limit,
         candidateLimit: input.candidateLimit,
-        signal: options.signal,
+        ...(options.signal ? { signal: options.signal } : {}),
       });
       const completedAt = now();
       const state = result.status === "succeeded"
@@ -223,7 +223,7 @@ export async function executeWebTask(input, options = {}) {
         });
       }
       execution.adapterId = searchAdapter.id || "web.search.v1";
-      const result = await searchAdapter.execute({ query: input.query, limit: input.limit, signal: options.signal });
+      const result = await searchAdapter.execute({ query: input.query, limit: input.limit, ...(options.signal ? { signal: options.signal } : {}) });
       const completedAt = now();
       const state = result.status === "succeeded"
         ? "succeeded"
@@ -277,7 +277,7 @@ export async function executeWebTask(input, options = {}) {
       execution.adapterId = browserAdapter.id || "web.browser.v1";
       let browserResult;
       try {
-        browserResult = await browserAdapter.execute({ url: url.href, goal, requiresInteraction: false, signal: options.signal });
+        browserResult = await browserAdapter.execute({ url: url.href, goal, requiresInteraction: false, ...(options.signal ? { signal: options.signal } : {}) });
       } catch (error) {
         if (error?.code === "BROWSER_UNAVAILABLE") {
           const completedAt = now();
