@@ -149,6 +149,29 @@ test("oversized MCP request bodies are rejected", async () => {
   assert.equal(response.status, 413);
 });
 
+test("chunked request bodies are bounded while streaming even without Content-Length", async () => {
+  const { worker, env, calls } = makeWorker();
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("x".repeat(65_537)));
+      controller.close();
+    },
+  });
+  const request = new Request(URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: stream,
+    duplex: "half",
+  });
+  const response = await worker.fetch(request, env);
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), { error: "request_too_large" });
+  assert.equal(calls.tasks.length, 0);
+});
+
 test("MCP endpoint enforces JSON content type and required response media types", async () => {
   const { worker, env } = makeWorker();
   const wrongContentType = await worker.fetch(new Request(URL, {
