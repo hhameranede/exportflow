@@ -70,6 +70,51 @@ const TOOL_DEFINITIONS = Object.freeze([
   },
 ]);
 
+const MAX_MCP_BODY_CHUNKS = 8_192;
+
+async function readBoundedRequestText(request, maxBytes) {
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  let chunksRead = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunksRead += 1;
+      if (chunksRead > MAX_MCP_BODY_CHUNKS) {
+        const error = new Error("Request body exceeds the maximum allowed size.");
+        error.code = "REQUEST_TOO_LARGE";
+        void reader.cancel().catch(() => {});
+        throw error;
+      }
+      if (!value || value.byteLength === 0) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        const error = new Error("Request body exceeds the maximum allowed size.");
+        error.code = "REQUEST_TOO_LARGE";
+        void reader.cancel().catch(() => {});
+        throw error;
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error?.code !== "REQUEST_TOO_LARGE") void reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+}
+
 function jsonResponse(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
@@ -285,12 +330,19 @@ export function createExportFlowPreviewWorker({ executeWebTask, getAdapterCatalo
       if (!contentType.toLowerCase().startsWith("application/json")) return withCors(jsonResponse({ error: "unsupported_media_type" }, 415), request);
       const accept = request.headers.get("accept") || "";
       if (!accept.includes("application/json") || !accept.includes("text/event-stream")) return withCors(jsonResponse({ error: "not_acceptable" }, 406), request);
-      const declaredLength = Number(request.headers.get("content-length") || 0);
-      if (declaredLength > MAX_BODY_BYTES) return withCors(jsonResponse({ error: "request_too_large" }, 413), request);
+      const declaredLength = request.headers.get("content-length");
+      if (declaredLength !== null) {
+        if (!/^\d+$/.test(declaredLength)) return withCors(jsonResponse({ error: "invalid_content_length" }, 400), request);
+        if (Number(declaredLength) > MAX_BODY_BYTES) return withCors(jsonResponse({ error: "request_too_large" }, 413), request);
+      }
 
       let raw;
-      try { raw = await request.text(); } catch { return withCors(jsonResponse({ error: "invalid_body" }, 400), request); }
-      if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES) return withCors(jsonResponse({ error: "request_too_large" }, 413), request);
+      try {
+        raw = await readBoundedRequestText(request, MAX_BODY_BYTES);
+      } catch (error) {
+        if (error?.code === "REQUEST_TOO_LARGE") return withCors(jsonResponse({ error: "request_too_large" }, 413), request);
+        return withCors(jsonResponse({ error: "invalid_body" }, 400), request);
+      }
       let message;
       try { message = JSON.parse(raw); } catch { return withCors(jsonResponse(rpcError(null, -32700, "Parse error."), 400), request); }
       if (Array.isArray(message)) return withCors(jsonResponse(rpcError(null, -32600, "JSON-RPC batches are not supported."), 400), request);

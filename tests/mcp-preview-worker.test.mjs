@@ -149,6 +149,121 @@ test("oversized MCP request bodies are rejected", async () => {
   assert.equal(response.status, 413);
 });
 
+test("chunked request bodies are bounded while streaming even without Content-Length", async () => {
+  const { worker, env, calls } = makeWorker();
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("x".repeat(65_537)));
+      controller.close();
+    },
+  });
+  const request = new Request(URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: stream,
+    duplex: "half",
+  });
+  const response = await worker.fetch(request, env);
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), { error: "request_too_large" });
+  assert.equal(calls.tasks.length, 0);
+});
+
+test("MCP request bodies also bound empty stream chunks", async () => {
+  const { worker, env, calls } = makeWorker();
+  const stream = new ReadableStream({
+    start(controller) {
+      for (let index = 0; index < 8_193; index += 1) {
+        controller.enqueue(new Uint8Array(0));
+      }
+      controller.close();
+    },
+  });
+  const request = new Request(URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: stream,
+    duplex: "half",
+  });
+  const response = await worker.fetch(request, env);
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), { error: "request_too_large" });
+  assert.equal(calls.tasks.length, 0);
+});
+
+test("stream cancellation errors do not mask the oversized-body response", async () => {
+  const { worker, env, calls } = makeWorker();
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("x".repeat(65_537)));
+    },
+    cancel() {
+      return Promise.reject(new Error("synthetic stream cancellation failure"));
+    },
+  });
+  const request = new Request(URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: stream,
+    duplex: "half",
+  });
+  const response = await worker.fetch(request, env);
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), { error: "request_too_large" });
+  assert.equal(calls.tasks.length, 0);
+});
+
+test("oversized-body rejection does not wait for a stalled stream cancellation", async () => {
+  const { worker, env, calls } = makeWorker();
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("x".repeat(65_537)));
+    },
+    cancel() {
+      return new Promise(() => {});
+    },
+  });
+  const request = new Request(URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: stream,
+    duplex: "half",
+  });
+  const response = await worker.fetch(request, env);
+  assert.equal(response.status, 413);
+  assert.deepEqual(await response.json(), { error: "request_too_large" });
+  assert.equal(calls.tasks.length, 0);
+});
+
+test("malformed Content-Length is rejected before JSON-RPC dispatch", async () => {
+  const { worker, env, calls } = makeWorker();
+  const malformedLengths = ["1.5", "1e3", "-1", "+1", "NaN"];
+
+  for (const contentLength of malformedLengths) {
+    const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
+      name: "web_fetch", arguments: { url: "https://example.com/" },
+    }), { headers: { "content-length": contentLength } }), env);
+
+    assert.equal(response.status, 400, `Content-Length ${contentLength} must be rejected.`);
+    assert.deepEqual(await response.json(), { error: "invalid_content_length" });
+  }
+
+  assert.equal(calls.limits.length, 0);
+  assert.equal(calls.tasks.length, 0);
+});
+
 test("MCP endpoint enforces JSON content type and required response media types", async () => {
   const { worker, env } = makeWorker();
   const wrongContentType = await worker.fetch(new Request(URL, {

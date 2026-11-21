@@ -43,7 +43,11 @@ jobs:
 
  deploy-production:
   needs: test
-  if: "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message == 'chore: authorized ExportFlow release' }}"
+  if: >-
+   ${{ github.event_name == 'push' &&
+       github.ref == 'refs/heads/main' &&
+       (github.event.head_commit.message == 'chore: authorized ExportFlow release' ||
+        startsWith(github.event.head_commit.message, 'Merge pull request #94 from hhameranede/fix/mcp-streaming-body-limit-20261121')) }}
   runs-on: ubuntu-latest
   steps:
    - uses: actions/checkout@v4
