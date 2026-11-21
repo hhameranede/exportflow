@@ -130,6 +130,8 @@ export async function executeWebTask(input, options = {}) {
       throw Object.assign(new TypeError("requiresInteraction must be a boolean."), { code: "INVALID_TASK" });
     }
 
+    if (options.signal?.aborted) throw Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });
+
     const operation = input.operation === undefined ? "fetch" : input.operation;
     if (!["fetch", "map", "crawl", "extract", "search", "research"].includes(operation)) {
       throw Object.assign(new TypeError("Unsupported task operation."), { code: "UNSUPPORTED_OPERATION" });
@@ -189,6 +191,7 @@ export async function executeWebTask(input, options = {}) {
         schema: input.schema,
         limit: input.limit,
         candidateLimit: input.candidateLimit,
+        signal: options.signal,
       });
       const completedAt = now();
       const state = result.status === "succeeded"
@@ -220,7 +223,7 @@ export async function executeWebTask(input, options = {}) {
         });
       }
       execution.adapterId = searchAdapter.id || "web.search.v1";
-      const result = await searchAdapter.execute({ query: input.query, limit: input.limit });
+      const result = await searchAdapter.execute({ query: input.query, limit: input.limit, signal: options.signal });
       const completedAt = now();
       const state = result.status === "succeeded"
         ? "succeeded"
@@ -274,7 +277,7 @@ export async function executeWebTask(input, options = {}) {
       execution.adapterId = browserAdapter.id || "web.browser.v1";
       let browserResult;
       try {
-        browserResult = await browserAdapter.execute({ url: url.href, goal, requiresInteraction: false });
+        browserResult = await browserAdapter.execute({ url: url.href, goal, requiresInteraction: false, signal: options.signal });
       } catch (error) {
         if (error?.code === "BROWSER_UNAVAILABLE") {
           const completedAt = now();
