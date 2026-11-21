@@ -513,7 +513,11 @@ test("Node HTTP server bridges localhost requests safely, enforces body limits, 
 test("POST /api/v1/tasks maps the Task-wide execution deadline to HTTP 504", async () => {
   const worker = createWorker({
     taskTimeoutMs: 15,
-    fetchImpl: async () => new Promise(() => {}),
+    fetchImpl: async (_url, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => {
+        reject(new DOMException("Aborted", "AbortError"));
+      }, { once: true });
+    }),
   });
   const response = await worker.fetch(
     makeTaskRequest({ goal: "Wait for bounded deadline", url: "https://example.com/slow" }),
