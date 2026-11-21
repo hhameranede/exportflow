@@ -225,6 +225,9 @@ export const MARKETING_JS = `(function () {
         drawer.hidden = false;
         if (backdrop) backdrop.classList.add("is-open");
         requestAnimationFrame(function () {
+          // The user may close the drawer before this opening frame runs.
+          // Ignore stale animation frames so they cannot reopen a closed drawer.
+          if (menuBtn.getAttribute("aria-expanded") !== "true") return;
           drawer.classList.add("is-open");
           var items = getFocusable();
           if (items.length) items[0].focus();
