@@ -815,9 +815,21 @@ export const MARKETING_JS = `(function () {
         return;
       }
 
-      statusBanner.dataset.state = "success";
-      statusBanner.textContent = "Message validated and prepared locally for " + subjectVal + ". No external submission endpoint is connected yet.";
-      showToast("Inquiry prepared locally");
+      var mailtoBody = [
+        "Name: " + nameVal,
+        "Reply-to: " + emailVal,
+        "Inquiry type: " + subjectVal,
+        "",
+        messageVal
+      ].join("\\n");
+      var mailtoUrl = "mailto:hhameranede@gmail.com?subject=" +
+        encodeURIComponent("[ExportFlow] " + subjectVal) +
+        "&body=" + encodeURIComponent(mailtoBody);
+
+      statusBanner.dataset.state = "info";
+      statusBanner.textContent = "Your email app should open with a draft. Review the details and send it there; this website does not submit messages directly.";
+      showToast("Opening your email app");
+      window.location.href = mailtoUrl;
     });
   }
 
