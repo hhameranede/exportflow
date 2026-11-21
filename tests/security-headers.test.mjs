@@ -22,6 +22,9 @@ test("HTML 404 responses use the same security policy as rendered site pages", a
   assert.equal(missing.status, 404);
   assert.equal(missing.headers.get("cache-control"), "no-store");
 
+  assert.ok(home.headers.get("content-security-policy").includes("object-src 'none'"));
+  assert.ok(home.headers.get("content-security-policy").includes("frame-src 'none'"));
+
   for (const header of REQUIRED_HTML_HEADERS) {
     assert.equal(typeof home.headers.get(header), "string", `home missing ${header}`);
     assert.equal(missing.headers.get(header), home.headers.get(header), `404 mismatch for ${header}`);
