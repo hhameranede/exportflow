@@ -260,3 +260,54 @@ test("admin body size and content type are enforced before service execution", a
   assert.equal((await wrongType.json()).error.code, "UNSUPPORTED_MEDIA_TYPE");
   assert.equal(calls.service.length, 0);
 });
+
+
+test("admin pre-auth rate limit rejects excess requests before loading the owner session", async () => {
+  let authorizationCalls = 0;
+  const handler = createTenantAdminHttpHandler({
+    authorizeOwner: async () => {
+      authorizationCalls += 1;
+      return { allowed: false };
+    },
+    adminRateLimiter: {
+      check: () => ({ allowed: false, retryAfterSec: 17 }),
+    },
+  });
+  const response = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), {});
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get("retry-after"), "17");
+  assert.equal((await response.json()).error.code, "ADMIN_RATE_LIMITED");
+  assert.equal(authorizationCalls, 0);
+});
+
+test("default admin burst limiter is keyed by Cloudflare client IP", async () => {
+  let authorizationCalls = 0;
+  const handler = createTenantAdminHttpHandler({
+    authorizeOwner: async () => {
+      authorizationCalls += 1;
+      return { allowed: false };
+    },
+  });
+  const makeRequest = (ip) => new Request("https://exportflow.me/api/v1/admin/tenants", {
+    method: "POST",
+    headers: {
+      origin: "https://exportflow.me",
+      "content-type": "application/json",
+      "cf-connecting-ip": ip,
+    },
+    body: JSON.stringify({ planCode: "free" }),
+  });
+
+  for (let index = 0; index < 10; index += 1) {
+    const response = await handler(makeRequest("203.0.113.10"), {});
+    assert.equal(response.status, 403);
+  }
+  const limited = await handler(makeRequest("203.0.113.10"), {});
+  assert.equal(limited.status, 429);
+  assert.equal(limited.headers.get("retry-after") !== null, true);
+  assert.equal(authorizationCalls, 10);
+
+  const otherIp = await handler(makeRequest("203.0.113.11"), {});
+  assert.equal(otherIp.status, 403);
+  assert.equal(authorizationCalls, 11);
+});
