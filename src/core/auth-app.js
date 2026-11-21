@@ -3,6 +3,8 @@ import { getMigrations } from "better-auth/db/migration";
 import { authorizePlatformOwnerRequest, parsePlatformOwnerIds } from "./platform-admin-auth.js";
 import { jwt } from "better-auth/plugins";
 import { mcp } from "@better-auth/mcp";
+import { verifyOAuthQueryParams } from "@better-auth/oauth-provider";
+import { renderMarketingPage } from "../site/marketing.js";
 import { readBoundedJsonBody, TaskContractError } from "./task-contract.js";
 import {
   createTenantOAuthAccessTokenClaims,
@@ -356,11 +358,17 @@ export function getAuthInstance(env = {}) {
   if (!status.authConfigured) return null;
 
   const binding = env.AUTH_DB;
-  const cached = authInstances.get(binding);
+  let instancesByTenantDb = authInstances.get(binding);
+  if (!instancesByTenantDb) {
+    instancesByTenantDb = new Map();
+    authInstances.set(binding, instancesByTenantDb);
+  }
+  const tenantBinding = isD1Binding(env.EXPORTFLOW_AUTH_DB) ? env.EXPORTFLOW_AUTH_DB : null;
+  const cached = instancesByTenantDb.get(tenantBinding);
   if (cached) return cached;
 
   const instance = betterAuth(buildAuthOptions(env, status));
-  authInstances.set(binding, instance);
+  instancesByTenantDb.set(tenantBinding, instance);
   return instance;
 }
 
@@ -532,6 +540,118 @@ export async function handleAuthRequest(request, env = {}) {
   }
 }
 
+
+const OAUTH_BROWSER_PATHS = new Set(["/oauth/consent", "/oauth/select-tenant"]);
+const OAUTH_BROWSER_HEADERS = Object.freeze({
+  "content-type": "text/html; charset=utf-8",
+  "cache-control": "no-store",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+  "referrer-policy": "no-referrer",
+  "strict-transport-security": "max-age=63072000",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+  "content-security-policy": "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+});
+
+function getSignedOAuthQuery(searchParams) {
+  const signedNames = searchParams.getAll("ba_param");
+  if (!searchParams.has("sig") || !signedNames.length) return null;
+  const allowed = new Set(["sig", "ba_param", ...signedNames]);
+  const signed = new URLSearchParams();
+  for (const [key, value] of searchParams.entries()) {
+    if (allowed.has(key)) signed.append(key, value);
+  }
+  return signed.toString();
+}
+
+function oauthBrowserError(status, title, message) {
+  const html = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>" +
+    htmlEscape(title) + " — ExportFlow</title></head><body><main style=\"font-family:system-ui;max-width:640px;margin:10vh auto;padding:24px\"><h1>" +
+    htmlEscape(title) + "</h1><p>" + htmlEscape(message) + "</p><a href=\"/signin\">Return to sign in</a></main></body></html>";
+  return new Response(html, { status, headers: OAUTH_BROWSER_HEADERS });
+}
+
+export async function handleOAuthBrowserPage(request, env = {}) {
+  const url = new URL(request.url);
+  if (!OAUTH_BROWSER_PATHS.has(url.pathname)) return null;
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new Response(null, { status: 405, headers: { ...OAUTH_BROWSER_HEADERS, allow: "GET, HEAD" } });
+  }
+
+  const status = getAuthFeatureStatus(env);
+  if (!status.authConfigured || !status.tenantOAuthConfigured ||
+      !(await isAuthSchemaReady(env.AUTH_DB)) ||
+      !(await isOAuthAuthSchemaReady(env.AUTH_DB)) ||
+      !(await isTenantOAuthSchemaReady(env.EXPORTFLOW_AUTH_DB))) {
+    return oauthBrowserError(503, "Authorization unavailable", "ExportFlow account authorization is not initialized yet.");
+  }
+
+  const auth = getAuthInstance(env);
+  if (!auth) return oauthBrowserError(503, "Authorization unavailable", "ExportFlow account authorization is not configured.");
+
+  const oauthQuery = getSignedOAuthQuery(url.searchParams);
+  if (!oauthQuery) return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request is missing.");
+  let context;
+  try {
+    context = await auth.$context;
+    if (!(await verifyOAuthQueryParams(oauthQuery, context.secret))) {
+      return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request is invalid or has expired.");
+    }
+  } catch {
+    return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request could not be verified.");
+  }
+
+  const signedParams = new URLSearchParams(oauthQuery);
+  if (signedParams.getAll("sig").length !== 1 ||
+      signedParams.get("response_type") !== "code" ||
+      signedParams.get("code_challenge_method") !== "S256" ||
+      signedParams.getAll("resource").length !== 1 ||
+      signedParams.get("resource") !== MCP_RESOURCE) {
+    return oauthBrowserError(400, "Unsupported authorization request", "This request does not match the ExportFlow OAuth authorization profile.");
+  }
+
+  let session;
+  try {
+    session = await auth.api.getSession({ headers: request.headers, query: { disableCookieCache: true } });
+  } catch {
+    return oauthBrowserError(503, "Session unavailable", "Your ExportFlow session could not be checked. Try again.");
+  }
+  if (!session?.user?.id || !session?.session?.id) {
+    const next = new URL("/signin", url.origin);
+    next.search = oauthQuery;
+    return Response.redirect(next.toString(), 302);
+  }
+  if (session.user.emailVerified !== true) {
+    return oauthBrowserError(403, "Verify your email first", "A verified ExportFlow email address is required before authorizing an application.");
+  }
+
+  let details = {};
+  if (url.pathname === "/oauth/consent") {
+    const clientId = signedParams.get("client_id");
+    const scopes = (signedParams.get("scope") || "").split(/\s+/).filter(Boolean);
+    const allowedScopes = new Set(MCP_SCOPES);
+    if (!clientId || !scopes.length || scopes.some((scope) => !allowedScopes.has(scope)) ||
+        scopes.every((scope) => !["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract"].includes(scope))) {
+      return oauthBrowserError(400, "Invalid permission request", "The requested application permissions are invalid.");
+    }
+    details = { clientId, scopes };
+  } else {
+    try {
+      const memberships = await listActiveTenantMemberships(env.EXPORTFLOW_AUTH_DB, session.user.id);
+      if (memberships.length === 0) {
+        return oauthBrowserError(403, "No workspace access", "Your account is not a member of an active ExportFlow workspace.");
+      }
+    } catch {
+      return oauthBrowserError(503, "Workspace lookup unavailable", "Your workspace membership could not be checked.");
+    }
+  }
+
+  const html = renderMarketingPage(request.url, url.pathname, "en", details);
+  return new Response(request.method === "HEAD" ? null : html, {
+    status: 200,
+    headers: OAUTH_BROWSER_HEADERS,
+  });
+}
 
 /**
  * Resolves the current request to a deployment-allowlisted platform owner.
