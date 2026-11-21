@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { handleWebsiteRequest } from "../src/site/router.js";
 import { MARKETING_PATHS, renderMarketingNotFoundPage } from "../src/site/marketing.js";
+import { MARKETING_JS } from "../src/site/marketing-client.js";
 import { SEOManager } from "../src/site/seo-manager.js";
 
 const ORIGIN = "https://exportflow.test";
@@ -11,6 +12,10 @@ function getWebsiteResponse(path) {
   const request = new Request(new URL(path, ORIGIN));
   return handleWebsiteRequest(request, new URL(request.url));
 }
+
+test("marketing client bundle parses as executable JavaScript", () => {
+  assert.doesNotThrow(() => new Function(MARKETING_JS));
+});
 
 test("every marketing sitemap route renders one marketing client script and stylesheet", async () => {
   const paths = [...new Set(MARKETING_PATHS)];
