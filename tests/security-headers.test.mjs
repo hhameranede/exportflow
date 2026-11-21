@@ -40,3 +40,26 @@ test("JSON API responses include HSTS and nosniff headers", async () => {
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.equal(response.headers.get("cache-control"), "no-store");
 });
+
+test("static assets and favicon include baseline transport and content-sniffing headers", async () => {
+  const worker = createWorker();
+  const paths = [
+    "/assets/site.css",
+    "/assets/site.js",
+    "/assets/marketing.css",
+    "/assets/marketing.js",
+    "/assets/mark.svg",
+    "/assets/og-card.svg",
+    "/robots.txt",
+    "/sitemap.xml",
+    "/favicon.ico",
+  ];
+
+  for (const path of paths) {
+    const response = await worker.fetch(new Request("https://exportflow.local" + path), {});
+    assert.ok(response.status === 200 || response.status === 204, path + " status");
+    assert.equal(response.headers.get("strict-transport-security"), "max-age=63072000", path + " HSTS");
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff", path + " nosniff");
+    assert.equal(response.headers.get("referrer-policy"), "strict-origin-when-cross-origin", path + " referrer policy");
+  }
+});
