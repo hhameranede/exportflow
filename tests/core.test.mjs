@@ -624,6 +624,58 @@ test("task executor forwards AbortSignal to the selected adapter", async () => {
   assert.equal(receivedSignal, controller.signal);
 });
 
+test("task executor stops pre-cancelled work before invoking an adapter", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let calls = 0;
+  const task = await executeWebTask(
+    { goal: "Fetch the page", url: "https://example.com/" },
+    {
+      idFactory: () => "task-cancel-early",
+      signal: controller.signal,
+      executeAdapter: async () => { calls++; return { status: "succeeded", data: {}, sources: [], warnings: [] }; },
+    },
+  );
+  assert.equal(calls, 0);
+  assert.equal(task.state, "failed");
+  assert.equal(task.errors[0].code, "TASK_CANCELLED");
+});
+
+test("task executor forwards AbortSignal to search, research and browser adapters", async () => {
+  const controller = new AbortController();
+  const received = {};
+  const searchTask = await executeWebTask(
+    { goal: "Search the web", operation: "search", query: "sample query" },
+    {
+      idFactory: () => "task-search-cancel",
+      signal: controller.signal,
+      searchAdapter: { execute: async (input) => { received.search = input.signal; return { status: "succeeded" }; } },
+    },
+  );
+  const researchTask = await executeWebTask(
+    { goal: "Research the topic", operation: "research", query: "sample query" },
+    {
+      idFactory: () => "task-research-cancel",
+      signal: controller.signal,
+      researchAdapter: { execute: async (input) => { received.research = input.signal; return { status: "succeeded" }; } },
+    },
+  );
+  const browserTask = await executeWebTask(
+    { goal: "Render the page", url: "https://example.com/", requiresJavascript: true },
+    {
+      idFactory: () => "task-browser-cancel",
+      signal: controller.signal,
+      browserAdapter: { id: "test.browser", execute: async (input) => { received.browser = input.signal; return { status: "succeeded" }; } },
+    },
+  );
+  assert.equal(searchTask.state, "succeeded");
+  assert.equal(researchTask.state, "succeeded");
+  assert.equal(browserTask.state, "succeeded");
+  assert.equal(received.search, controller.signal);
+  assert.equal(received.research, controller.signal);
+  assert.equal(received.browser, controller.signal);
+});
+
 test("task executor dispatches map and crawl to internal adapters", async () => {
   const seen = [];
   const runAdapter = async (id, input) => {
