@@ -69,7 +69,7 @@ Each mutating request must:
 - Use the configured `BETTER_AUTH_URL` origin and matching request URL origin; a missing or mismatched `Origin` is denied.
 - Use a Better Auth session loaded server-side from `AUTH_DB` with cookie-cache bypass (`disableCookieCache: true`).
 - Belong to an allowlisted user with a verified email and a session created within the previous 10 minutes, not expired and not impersonated.
-- Use the dedicated `EXPORTFLOW_AUTH_DB` binding and have migrations 0001–0003 present. Better Auth `AUTH_DB` is never reused as tenant/admin storage.
+- Use the dedicated `EXPORTFLOW_AUTH_DB` binding and have migrations 0001–0003 plus both append-only audit triggers from migration 0003 present. The Worker fails closed if either trigger is missing. Better Auth `AUTH_DB` is never reused as tenant/admin storage.
 
 The API supports:
 - `POST /api/v1/admin/plan-policies`
