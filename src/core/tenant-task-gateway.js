@@ -32,6 +32,40 @@ export function createTenantTaskGateway({
     maxRequests: TENANT_MAX_REQUESTS,
   });
 
+  async function authorizeIdentity(request, identity, {
+    requiredScope = "tasks:fetch",
+    preAuthChecked = false,
+  } = {}) {
+    if (!preAuthChecked) {
+      const ipRate = preAuth.check(getClientRateLimitKey(request));
+      if (!ipRate.allowed) {
+        return failure(429, "RATE_LIMITED", "Too many requests; retry later.", {
+          retryAfterSec: ipRate.retryAfterSec,
+        });
+      }
+    }
+
+    if (!identity || typeof identity.tenantId !== "string" ||
+        typeof identity.planCode !== "string" || typeof identity.policyVersion !== "string" ||
+        !Number.isSafeInteger(identity.requestLimit) || identity.requestLimit < 1 ||
+        !["daily", "monthly"].includes(identity.quotaPeriod) ||
+        !Array.isArray(identity.scopes) || identity.scopes.some((scope) => typeof scope !== "string")) {
+      return failure(503, "AUTH_BACKEND_INVALID_RECORD", "Authenticated tenant identity is invalid.");
+    }
+    if (!identity.scopes.includes(requiredScope) &&
+        !identity.scopes.includes("tasks:*") && !identity.scopes.includes("*")) {
+      return failure(403, "INSUFFICIENT_SCOPE", "The credential does not have permission for this operation.");
+    }
+
+    const tenantRate = perTenant.check(identity.tenantId);
+    if (!tenantRate.allowed) {
+      return failure(429, "RATE_LIMITED", "Tenant burst limit reached; retry later.", {
+        retryAfterSec: tenantRate.retryAfterSec,
+      });
+    }
+    return { ok: true, identity };
+  }
+
   async function authenticate(request, env = {}, { requiredScope = "tasks:fetch" } = {}) {
     const ipRate = preAuth.check(getClientRateLimitKey(request));
     if (!ipRate.allowed) {
@@ -48,14 +82,7 @@ export function createTenantTaskGateway({
     }
     if (!identity?.ok) return identity || failure(503, "AUTH_BACKEND_UNAVAILABLE", "Tenant authentication failed.");
 
-    const tenantRate = perTenant.check(identity.tenantId);
-    if (!tenantRate.allowed) {
-      return failure(429, "RATE_LIMITED", "Tenant burst limit reached; retry later.", {
-        retryAfterSec: tenantRate.retryAfterSec,
-      });
-    }
-
-    return { ok: true, identity };
+    return authorizeIdentity(request, identity, { requiredScope, preAuthChecked: true });
   }
 
   async function reserve(env = {}, identity) {
@@ -85,5 +112,5 @@ export function createTenantTaskGateway({
     return { ok: true, quota };
   }
 
-  return Object.freeze({ authenticate, reserve });
+  return Object.freeze({ authenticate, authorizeIdentity, reserve });
 }
