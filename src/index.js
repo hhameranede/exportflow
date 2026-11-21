@@ -1,6 +1,6 @@
 import { chooseExecutionPath } from "./core/router.js";
 import { getAdapterCatalog } from "./core/adapters.js";
-import { authenticateRequest, createRateLimiter } from "./core/auth.js";
+import { createTenantTaskGateway } from "./core/tenant-task-gateway.js";
 import { readBoundedJsonBody, TaskContractError, validateTaskRequest } from "./core/task-contract.js";
 import { executeWebTask } from "./core/tasks.js";
 import { handleWebsiteRequest } from "./site/router.js";
@@ -40,7 +40,20 @@ function json(data, status = 200, extraHeaders = {}) {
 }
 
 function isAuthConfigured(env) {
-  return typeof env?.EXPORTFLOW_API_TOKEN === "string" && env.EXPORTFLOW_API_TOKEN.trim().length > 0;
+  return typeof env?.EXPORTFLOW_AUTH_DB?.prepare === "function";
+}
+
+async function hasQuotaSchema(env) {
+  const db = env?.EXPORTFLOW_AUTH_DB;
+  if (typeof db?.prepare !== "function") return false;
+  try {
+    await db.prepare(
+      "SELECT tenant_id, window_id, plan_code, policy_version, request_limit, requests_used, updated_at FROM tenant_request_usage LIMIT 0",
+    ).first();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function taskHttpStatus(task) {
@@ -52,7 +65,10 @@ function taskHttpStatus(task) {
 }
 
 export function createWorker(options = {}) {
-  const rateLimiter = options.rateLimiter || createRateLimiter();
+  const tenantTaskGateway = options.tenantTaskGateway || createTenantTaskGateway({
+    preAuthRateLimiter: options.preAuthRateLimiter,
+    tenantRateLimiter: options.rateLimiter,
+  });
 
   return {
     async fetch(request, env = {}) {
@@ -67,21 +83,17 @@ export function createWorker(options = {}) {
             return json({ error: "method_not_allowed" }, 405, { allow: "POST" });
           }
 
-          const auth = await authenticateRequest(request, env);
+          const auth = await tenantTaskGateway.authenticate(request, env, {
+            requiredScope: "tasks:fetch",
+          });
           if (!auth.ok) {
             return json(
               { error: { code: auth.code, message: auth.message } },
               auth.httpStatus,
-              auth.headers,
-            );
-          }
-
-          const rate = rateLimiter.check(auth.clientId);
-          if (!rate.allowed) {
-            return json(
-              { error: { code: "RATE_LIMITED", message: "Too many task requests; retry later." } },
-              429,
-              { "retry-after": String(rate.retryAfterSec) },
+              {
+                ...(auth.headers || {}),
+                ...(auth.retryAfterSec ? { "retry-after": String(auth.retryAfterSec) } : {}),
+              },
             );
           }
 
@@ -102,6 +114,17 @@ export function createWorker(options = {}) {
             );
           }
 
+          const reservation = await tenantTaskGateway.reserve(env, auth.identity);
+          if (!reservation.ok) {
+            return json(
+              { error: { code: reservation.code, message: reservation.message } },
+              reservation.httpStatus,
+              reservation.retryAfterSec
+                ? { "retry-after": String(reservation.retryAfterSec), "x-plan-limit": String(reservation.quota?.limit ?? auth.identity.requestLimit), "x-plan-remaining": "0", ...(reservation.quota?.resetAt ? { "x-plan-reset": reservation.quota.resetAt } : {}) }
+                : {},
+            );
+          }
+
           const task = await executeWebTask(contract, {
             fetchImpl: options.fetchImpl,
             now: options.now,
@@ -109,7 +132,11 @@ export function createWorker(options = {}) {
             taskTimeoutMs: options.taskTimeoutMs,
             signal: request.signal,
           });
-          return json(task, taskHttpStatus(task));
+          return json(task, taskHttpStatus(task), {
+            "x-plan-limit": String(reservation.quota.limit),
+            "x-plan-remaining": String(reservation.quota.remaining),
+            "x-plan-reset": reservation.quota.resetAt,
+          });
         }
 
         if (request.method !== "GET" && request.method !== "HEAD") {
@@ -127,7 +154,24 @@ export function createWorker(options = {}) {
         }
 
         if (url.pathname === "/api/v1/platform") {
-          const authReady = isAuthConfigured(env);
+          const authConfigured = isAuthConfigured(env);
+          let authReady = false;
+          if (request.headers.has("authorization")) {
+            const auth = await tenantTaskGateway.authenticate(request, env, {
+              requiredScope: "tasks:fetch",
+            });
+            if (!auth.ok) {
+              return json(
+                { error: { code: auth.code, message: auth.message } },
+                auth.httpStatus,
+                {
+                  ...(auth.headers || {}),
+                  ...(auth.retryAfterSec ? { "retry-after": String(auth.retryAfterSec) } : {}),
+                },
+              );
+            }
+            authReady = await hasQuotaSchema(env);
+          }
           return json({
             name: "ExportFlow",
             positioning: "Model-agnostic agentic web infrastructure",
@@ -137,7 +181,8 @@ export function createWorker(options = {}) {
             status: "foundation",
             auth: {
               mode: "bearer",
-              configured: authReady,
+              configured: authConfigured,
+              ready: authReady,
             },
             endpoints: {
               health: "/api/v1/health",
