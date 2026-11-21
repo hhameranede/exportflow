@@ -13,6 +13,10 @@ function getWebsiteResponse(path) {
   return handleWebsiteRequest(request, new URL(request.url));
 }
 
+test("marketing client bundle parses as executable JavaScript", () => {
+  assert.doesNotThrow(() => new Function(MARKETING_JS));
+});
+
 test("every marketing sitemap route renders one marketing client script and stylesheet", async () => {
   const paths = [...new Set(MARKETING_PATHS)];
   assert.ok(paths.length > 0, "marketing sitemap should expose routes");
