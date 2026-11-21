@@ -320,6 +320,12 @@ async function pageLinks(html, baseUrl, origin, policy, parser) {
   return urls;
 }
 
+function throwIfTaskCancelled(signal) {
+  if (signal?.aborted) {
+    throw new MapCrawlError("TASK_CANCELLED", "Task was cancelled.", 499);
+  }
+}
+
 function validateOptions(input, maximum, fallback, name) {
   const value = input === undefined ? fallback : input;
   if (!Number.isInteger(value) || value < 1 || value > maximum) {
@@ -401,6 +407,7 @@ async function createSiteContext(input, options) {
 export async function mapWebsite(input, options = {}) {
   const maxUrls = validateOptions(options.maxUrls, MAP_CRAWL_LIMITS.maxUrls, 20, "maxUrls");
   const context = await createSiteContext(input, { ...options, maxUrls });
+  throwIfTaskCancelled(options.signal);
   const seen = new Set([context.homepage.finalUrl || context.requestedUrl]);
   const urls = [];
 
@@ -454,6 +461,7 @@ export async function crawlWebsite(input, options = {}) {
     ...options,
     maxUrls: Math.max(maxPages * 5, 10),
   });
+  throwIfTaskCancelled(options.signal);
   const pages = [];
   const sources = [];
   const warnings = [...context.warnings];
@@ -467,6 +475,7 @@ export async function crawlWebsite(input, options = {}) {
   let totalBytes = 0;
 
   while (queue.length && pages.length < maxPages) {
+    throwIfTaskCancelled(options.signal);
     const item = queue.shift();
     if (item.depth > maxDepth) continue;
     if (visited.has(item.url)) continue;
