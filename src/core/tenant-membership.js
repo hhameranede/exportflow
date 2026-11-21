@@ -12,7 +12,7 @@ ORDER BY m.created_at ASC, m.tenant_id ASC
 
 const GET_ACTIVE_MEMBERSHIP_SQL = `
 SELECT
-  m.membership_id, m.user_id, m.tenant_id, m.role,
+  m.membership_id, m.user_id, m.tenant_id, m.role, m.membership_version,
   t.plan_code, p.quota_period, p.request_limit, p.policy_version
 FROM tenant_memberships AS m
 JOIN tenants AS t ON t.tenant_id = m.tenant_id
