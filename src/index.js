@@ -6,6 +6,7 @@ import { executeWebTask } from "./core/tasks.js";
 import { handleWebsiteRequest } from "./site/router.js";
 import { renderMarketingNotFoundPage } from "./site/marketing.js";
 import { handleAuthRequest } from "./core/auth-app.js";
+import { createTenantAdminHttpHandler } from "./core/tenant-admin-http.js";
 
 const ERROR_CODE_TO_HTTP_STATUS = Object.freeze({
   INVALID_TASK: 400,
@@ -69,6 +70,9 @@ export function createWorker(options = {}) {
     preAuthRateLimiter: options.preAuthRateLimiter,
     tenantRateLimiter: options.rateLimiter,
   });
+  const tenantAdminHandler = options.tenantAdminHandler || createTenantAdminHttpHandler({
+    authorizeOwner: options.authorizePlatformOwner,
+  });
 
   return {
     async fetch(request, env = {}) {
@@ -77,6 +81,9 @@ export function createWorker(options = {}) {
 
         const authResponse = await handleAuthRequest(request, env);
         if (authResponse) return authResponse;
+
+        const adminResponse = await tenantAdminHandler(request, env);
+        if (adminResponse) return adminResponse;
 
         if (url.pathname === "/api/v1/tasks") {
           if (request.method !== "POST") {
