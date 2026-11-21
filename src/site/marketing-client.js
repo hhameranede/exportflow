@@ -280,6 +280,15 @@ export const MARKETING_JS = `(function () {
         first.focus();
       }
     });
+
+    // Also listen at document level so Escape closes the drawer even during
+    // the opening animation, before the requestAnimationFrame focus move.
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape" || menuBtn.getAttribute("aria-expanded") !== "true") return;
+      e.preventDefault();
+      setDrawerOpen(false);
+      menuBtn.focus();
+    });
   }
 
   /* ========================================================================
