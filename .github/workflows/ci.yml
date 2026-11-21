@@ -17,6 +17,8 @@ jobs:
    - run: npm run check
    - name: Build isolated Auth Lab bundle (dry-run only)
      run: npx --yes wrangler@4 deploy --dry-run --outdir dist/auth-lab --config cloudflare/auth-lab/wrangler.toml
+   - name: Build Platform Worker bundle (dry-run only)
+     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/platform --config wrangler.toml
    - name: Build MCP Worker bundle (dry-run only)
      run: npx --yes wrangler@4 deploy --dry-run --outdir dist/mcp-preview --config cloudflare/mcp/wrangler.toml
    - name: Locate Wrangler build output
@@ -125,4 +127,25 @@ jobs:
         if (!names.includes(expected)) throw new Error("MCP tools/list is missing " + expected);
       }
       console.log("mcp-tools-list: HTTP " + listResponse.status + " OK (" + names.length + " tools)");
+
+      const capabilityResponse = await fetch("https://mcp.exportflow.me/mcp", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          "mcp-protocol-version": "2025-11-25",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: { name: "exportflow_capabilities", arguments: {} },
+        }),
+      });
+      if (!capabilityResponse.ok) throw new Error("MCP capabilities call returned HTTP " + capabilityResponse.status + ": " + (await capabilityResponse.text()).slice(0, 300));
+      const capabilities = await capabilityResponse.json();
+      if (capabilities.result?.isError || capabilities.result?.structuredContent?.name !== "ExportFlow") {
+        throw new Error("MCP capabilities tool returned an unexpected response");
+      }
+      console.log("mcp-capabilities: HTTP " + capabilityResponse.status + " OK");
       NODE
