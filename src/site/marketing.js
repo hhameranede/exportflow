@@ -604,12 +604,12 @@ function homeBody(t, locale) {
   </div>`;
 }
 
-function genericBody(route, path, t, locale) {
+function genericBody(route, path, t, locale, oauthDetails = {}) {
   const [url, title, description, type] = route;
   const isLegal = path.startsWith("/legal/");
 
   if (type && type.startsWith("auth-")) {
-    return renderAuthPage(type, t, locale, hrefFor, escapeHtml, arrowRightIcon, arrowUpRightIcon);
+    return renderAuthPage(type, t, locale, hrefFor, escapeHtml, arrowRightIcon, arrowUpRightIcon, oauthDetails);
   }
 
   if (type === "contact") {
@@ -734,7 +734,7 @@ function genericBody(route, path, t, locale) {
   </section>`;
 }
 
-export function renderMarketingPage(requestUrl, routePath, locale = "en") {
+export function renderMarketingPage(requestUrl, routePath, locale = "en", oauthDetails = {}) {
   const selectedLocale = LANGUAGES.includes(locale) ? locale : "en";
   const t = COPY[selectedLocale];
   const route = ROUTES.find(([path]) => path === routePath) || ROUTES[1];
@@ -743,7 +743,7 @@ export function renderMarketingPage(requestUrl, routePath, locale = "en") {
   const isAuthRoute = AUTH_ROUTES.some(([authPath]) => authPath === routePath);
 
   const body = `${header(routePath, selectedLocale, t)}${
-    routePath === "/" ? homeBody(t, selectedLocale) : genericBody(route, routePath, t, selectedLocale)
+    routePath === "/" ? homeBody(t, selectedLocale) : genericBody(route, routePath, t, selectedLocale, oauthDetails)
   }${footer(selectedLocale, t)}`;
 
   const fontFamilies = {
