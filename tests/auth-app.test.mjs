@@ -21,6 +21,7 @@ test("authentication remains disabled without a dedicated D1 binding and server 
   const status = getAuthFeatureStatus({});
   assert.deepEqual(status, {
     authConfigured: false,
+    tenantOAuthConfigured: false,
     googleEnabled: false,
     emailPasswordEnabled: false,
   });
