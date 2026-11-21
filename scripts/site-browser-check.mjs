@@ -76,13 +76,34 @@ async function openPage(browser, width, route) {
   assert.equal(await page.locator("main h1").count(), 1, "expected one main H1 for " + route);
   assert.ok(await page.title(), "missing document title for " + route);
 
-  const layout = await page.evaluate(() => ({
-    viewportWidth: window.innerWidth,
-    documentWidth: document.documentElement.scrollWidth,
-    bodyWidth: document.body.scrollWidth,
-    mainWidth: document.querySelector("main")?.scrollWidth ?? 0,
-    hasVisibleH1: Boolean(document.querySelector("main h1")?.getClientRects().length),
-  }));
+  const layout = await page.evaluate(() => {
+    const viewportWidth = window.innerWidth;
+    const overflowingNodes = Array.from(document.querySelectorAll("body *"))
+      .map((node) => {
+        const rect = node.getBoundingClientRect();
+        return {
+          tag: node.tagName.toLowerCase(),
+          id: node.id || null,
+          className: typeof node.className === "string" ? node.className.slice(0, 100) : null,
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          width: Math.round(rect.width),
+          scrollWidth: node.scrollWidth,
+          clientWidth: node.clientWidth,
+        };
+      })
+      .filter((node) => node.width > 0 && (node.right > viewportWidth + 1 || node.left < -1))
+      .sort((a, b) => b.right - a.right)
+      .slice(0, 12);
+    return {
+      viewportWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      bodyWidth: document.body.scrollWidth,
+      mainWidth: document.querySelector("main")?.scrollWidth ?? 0,
+      hasVisibleH1: Boolean(document.querySelector("main h1")?.getClientRects().length),
+      overflowingNodes,
+    };
+  });
   assert.ok(layout.hasVisibleH1, "main H1 is not visible for " + route + " at " + width + "px");
   assert.ok(
     layout.documentWidth <= layout.viewportWidth + 1,
