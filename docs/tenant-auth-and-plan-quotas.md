@@ -66,6 +66,8 @@ The isolated tenant lifecycle service is now exposed through a narrow first-part
 The owner identity is a deployment-time allowlist in `EXPORTFLOW_OWNER_USER_IDS` (comma-separated Better Auth user IDs, maximum 20). The allowlist is not read from request parameters, JSON bodies, headers or user profile fields. If it is absent, malformed, or does not include the signed-in user, access fails closed. No owner IDs are currently configured in the checked-in Wrangler config or Production Worker.
 
 Each mutating request must:
+- Pass a pre-authentication burst guard keyed only by Cloudflare's `CF-Connecting-IP`: 10 POSTs per minute per Worker isolate. Excess requests receive HTTP 429 with `Retry-After` before Better Auth session lookup.
+- This in-memory guard is a local abuse-control layer only; it is not globally consistent across Worker isolates/locations and does not replace a Cloudflare edge rate limit or durable abuse controls.
 - Use the configured `BETTER_AUTH_URL` origin and matching request URL origin; a missing or mismatched `Origin` is denied.
 - Use a Better Auth session loaded server-side from `AUTH_DB` with cookie-cache bypass (`disableCookieCache: true`).
 - Belong to an allowlisted user with a verified email and a session created within the previous 10 minutes, not expired and not impersonated.
