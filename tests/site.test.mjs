@@ -71,8 +71,17 @@ test("all six public pages render with canonical metadata and restrictive securi
 
     const html = await response.text();
     assert.ok(html.includes('<link rel="canonical" href="' + ORIGIN + (path === "/" ? "/" : path) + '">'), path);
-    assert.match(html, /href="\\/assets\\/(?:site\\.css|marketing\\.css)(?:\\?v=\\d+)?"/, path);
-    assert.match(html, /<script src="\\/assets\\/(?:site|marketing)\\.js" defer><\\/script>/, path);
+    assert.ok(
+      html.includes('href="/assets/site.css"') ||
+      html.includes('href="/assets/marketing.css"') ||
+      html.includes('href="/assets/marketing.css?v=2"'),
+      path,
+    );
+    assert.ok(
+      html.includes('<script src="/assets/site.js" defer></script>') ||
+      html.includes('<script src="/assets/marketing.js" defer></script>'),
+      path,
+    );
     assert.doesNotMatch(html, /\son(?:click|input|change|submit|load|error)\s*=/i);
   }
 });
