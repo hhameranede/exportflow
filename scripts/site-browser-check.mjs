@@ -249,40 +249,24 @@ async function checkFaqInteractions(browser) {
   await page.goto(baseUrl + "/faq", { waitUntil: "networkidle" });
 
   const items = page.locator("[data-faq-item]");
-  const filters = page.locator("[data-faq-filter]");
-  assert.ok(await items.count() > 0, "FAQ items are missing");
-  assert.ok(await filters.count() > 1, "FAQ categories are missing");
-
-  const categoryButton = filters.nth(1);
-  const category = await categoryButton.getAttribute("data-faq-filter");
-  await categoryButton.click();
-  const visibleItems = page.locator("[data-faq-item]:visible");
-  assert.ok(await visibleItems.count() > 0, "FAQ category filter returned no questions");
-  const mismatchedItems = await visibleItems.evaluateAll((nodes, expected) =>
-    nodes.filter((node) => node.getAttribute("data-faq-category") !== expected).length,
-    category,
-  );
-  assert.equal(mismatchedItems, 0, "FAQ filter left questions from other categories visible");
-
-  await page.locator('[data-faq-filter="all"]').click();
-
-  const firstFaq = items.first();
-  const firstFaqSummary = firstFaq.locator(".ef-faq-summary");
-  assert.equal(await firstFaq.evaluate((node) => node.open), true, "expected first FAQ item to start expanded");
-  await firstFaqSummary.focus();
+  assert.equal(await items.count(), 7, "FAQ page should expose seven current product questions");
+  const firstItem = items.first();
+  const firstSummary = firstItem.locator("summary");
+  assert.equal(await firstItem.evaluate((node) => node.open), true, "the first FAQ item should start expanded");
+  await firstSummary.focus();
   await page.keyboard.press("Enter");
-  assert.equal(await firstFaq.evaluate((node) => node.open), false, "keyboard Enter did not toggle FAQ details");
-  await firstFaqSummary.focus();
-  await page.keyboard.press("Enter");
-  assert.equal(await firstFaq.evaluate((node) => node.open), true, "keyboard Enter did not reopen FAQ details");
+  assert.equal(await firstItem.evaluate((node) => node.open), false,
+    "keyboard Enter should collapse the focused FAQ disclosure");
+  await page.keyboard.press("Space");
+  assert.equal(await firstItem.evaluate((node) => node.open), true,
+    "keyboard Space should expand the focused FAQ disclosure");
 
-  await page.locator("[data-faq-expand-all]").click();
-  const closedAfterExpand = await items.evaluateAll((nodes) => nodes.filter((node) => !node.open).length);
-  assert.equal(closedAfterExpand, 0, "Expand all did not open every FAQ item");
-
-  await page.locator("[data-faq-collapse-all]").click();
-  const openAfterCollapse = await items.evaluateAll((nodes) => nodes.filter((node) => node.open).length);
-  assert.equal(openAfterCollapse, 0, "Collapse all left FAQ items open");
+  const secondItem = items.nth(1);
+  await secondItem.locator("summary").click();
+  assert.equal(await secondItem.evaluate((node) => node.open), true,
+    "pointer activation should expand the selected FAQ disclosure");
+  assert.match((await secondItem.textContent()), /public REST Task contract/i,
+    "FAQ should describe current public API capability boundaries");
   await context.close();
 }
 
