@@ -624,6 +624,47 @@ test("task executor forwards AbortSignal to the selected adapter", async () => {
   assert.equal(receivedSignal, controller.signal);
 });
 
+test("task executor enforces an overall timeout and aborts the adapter signal", async () => {
+  let receivedSignal;
+  const task = await executeWebTask(
+    { goal: "Wait for a slow adapter", url: "https://example.com/" },
+    {
+      idFactory: () => "task-timeout-0001",
+      taskTimeoutMs: 10,
+      executeAdapter: async (_id, _input, options = {}) => {
+        receivedSignal = options.signal;
+        return new Promise(() => {});
+      },
+    },
+  );
+  assert.equal(task.state, "failed");
+  assert.equal(task.errors[0].code, "TASK_TIMEOUT");
+  assert.equal(receivedSignal.aborted, true);
+});
+
+test("task executor immediately settles when caller cancels an active adapter", async () => {
+  const controller = new AbortController();
+  let receivedSignal;
+  const pending = executeWebTask(
+    { goal: "Wait for a cancellable adapter", url: "https://example.com/" },
+    {
+      idFactory: () => "task-abort-0001",
+      signal: controller.signal,
+      taskTimeoutMs: 5_000,
+      executeAdapter: async (_id, _input, options = {}) => {
+        receivedSignal = options.signal;
+        return new Promise(() => {});
+      },
+    },
+  );
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  controller.abort();
+  const task = await pending;
+  assert.equal(task.state, "failed");
+  assert.equal(task.errors[0].code, "TASK_CANCELLED");
+  assert.equal(receivedSignal.aborted, true);
+});
+
 test("task executor stops pre-cancelled work before invoking an adapter", async () => {
   const controller = new AbortController();
   controller.abort();
@@ -1259,7 +1300,9 @@ test("task executor dispatches query-only search operations to an injected Searc
   );
   assert.equal(task.state, "succeeded");
   assert.equal(task.execution.adapterId, "web.search.v1");
-  assert.deepEqual(received, { query: "Cloudflare Workers docs", limit: 4 });
+  assert.equal(received.query, "Cloudflare Workers docs");
+  assert.equal(received.limit, 4);
+  assert.ok(received.signal instanceof AbortSignal);
 });
 
 test("task executor keeps search unsupported when its AI binding is not configured", async () => {
@@ -1459,7 +1502,11 @@ test("task executor dispatches query-only research tasks to an injected Research
   );
   assert.equal(task.state, "partial");
   assert.equal(task.execution.adapterId, "web.research.v1");
-  assert.deepEqual(received, { query: "sample product", schema, limit: undefined, candidateLimit: 2 });
+  assert.equal(received.query, "sample product");
+  assert.equal(received.schema, schema);
+  assert.equal(received.limit, undefined);
+  assert.equal(received.candidateLimit, 2);
+  assert.ok(received.signal instanceof AbortSignal);
 });
 
 test("task executor keeps research unsupported when no pipeline is configured", async () => {
