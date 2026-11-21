@@ -185,7 +185,7 @@ async function checkHomeInteractions(browser) {
 
   await menuButton.click();
   assert.equal(await menuButton.getAttribute("aria-expanded"), "true", "mobile drawer did not reopen");
-  const productLink = page.locator('[data-mobile-drawer] a[href="/product"]');
+  const productLink = page.locator('[data-mobile-drawer] nav[aria-label="Mobile links"] a[href="/product"]');
   assert.ok(await productLink.isVisible(), "mobile Product link not visible after opening drawer");
   await productLink.click();
   await page.waitForURL("**/product");
