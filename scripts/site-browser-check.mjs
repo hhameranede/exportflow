@@ -70,7 +70,7 @@ async function openPage(browser, width, route) {
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text());
   });
-  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("pageerror", (error) => pageErrors.push(error.stack || error.message));
   page.on("request", (request) => {
     try {
       if (new URL(request.url()).origin !== baseUrl && !isExpectedFontAsset(request.url())) externalRequests.push(request.url());
