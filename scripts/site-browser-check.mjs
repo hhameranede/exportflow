@@ -147,6 +147,17 @@ async function checkHomeInteractions(browser) {
     "compact mobile language control lost its accessible language name");
   assert.equal(await languageButton.locator(":scope > span").isVisible(), false,
     "mobile language name should be visually compact at 360px");
+  await languageButton.click();
+  assert.equal(await languageButton.getAttribute("aria-expanded"), "true", "language menu did not open");
+  await page.keyboard.press("Escape");
+  assert.equal(await languageButton.getAttribute("aria-expanded"), "false", "Escape did not close language menu");
+
+  const themeButton = page.locator("header [data-theme-toggle]");
+  await themeButton.click();
+  assert.equal(await themeButton.getAttribute("aria-pressed"), "true", "theme control did not enable dark theme");
+  assert.equal(await page.locator("html").getAttribute("data-theme"), "dark");
+  await themeButton.click();
+  assert.equal(await themeButton.getAttribute("aria-pressed"), "false", "theme control did not restore light theme");
 
   const menuButton = page.locator("[data-menu-toggle]");
   assert.equal(await menuButton.count(), 1, "mobile navigation toggle missing");
@@ -160,28 +171,38 @@ async function checkHomeInteractions(browser) {
 
   await menuButton.click();
   assert.equal(await menuButton.getAttribute("aria-expanded"), "true", "mobile drawer did not reopen");
-  const platformLink = page.locator('[data-mobile-drawer] a[href="/platform"]');
-  assert.ok(await platformLink.isVisible(), "mobile Platform link not visible after opening drawer");
-  await platformLink.click();
-  await page.waitForURL("**/platform");
+  const productLink = page.locator('[data-mobile-drawer] a[href="/product"]');
+  assert.ok(await productLink.isVisible(), "mobile Product link not visible after opening drawer");
+  await productLink.click();
+  await page.waitForURL("**/product");
   assert.equal(await menuButton.getAttribute("aria-expanded"), "false", "mobile drawer did not close after navigation");
 
   await page.goto(baseUrl + "/", { waitUntil: "networkidle" });
-  const prototypeFilter = page.locator('[data-cap-filter="prototype"]');
-  assert.equal(await prototypeFilter.count(), 1, "homepage prototype filter missing");
-  await prototypeFilter.click();
+  const developmentFilter = page.locator('[data-cap-filter="development"]');
+  assert.equal(await developmentFilter.count(), 1, "homepage development filter missing");
+  await developmentFilter.click();
   const visibleCards = page.locator("[data-cap-card]:visible");
-  assert.ok(await visibleCards.count() > 0, "prototype filter hid every capability card");
+  assert.ok(await visibleCards.count() > 0, "development filter hid every capability card");
   const mismatchedCards = await visibleCards.evaluateAll((cards) =>
-    cards.filter((card) => card.getAttribute("data-maturity-key") !== "prototype").length
+    cards.filter((card) => card.getAttribute("data-cap-state") !== "development").length
   );
-  assert.equal(mismatchedCards, 0, "homepage maturity filter left mismatched capability cards visible");
+  assert.equal(mismatchedCards, 0, "homepage maturity filter left cards from other states visible");
 
-  const detailToggle = page.locator('[data-cap-card]:visible [data-cap-toggle]').first();
-  const detailId = await detailToggle.getAttribute("aria-controls");
-  await detailToggle.click();
-  assert.equal(await detailToggle.getAttribute("aria-expanded"), "true", "homepage details did not expand");
-  assert.ok(await page.locator("#" + detailId).isVisible(), "homepage details panel stayed hidden");
+  const graph = page.locator("[data-exec-graph]");
+  await graph.locator('[data-graph-scenario="search"]').click();
+  assert.equal(await graph.getAttribute("data-active-scenario"), "search",
+    "execution graph did not switch to the Search scenario");
+  assert.equal((await graph.locator("[data-gt-title]").textContent()).trim(), "Search",
+    "execution graph inspector did not update for Search");
+  assert.equal((await graph.locator("[data-gt-status]").textContent()).trim(), "In development",
+    "execution graph reported an incorrect Search maturity state");
+
+  const secondStep = page.locator('[data-step-trigger="1"]');
+  await secondStep.click();
+  assert.equal(await secondStep.getAttribute("aria-pressed"), "true",
+    "execution timeline did not select the second step");
+  assert.equal((await page.locator("[data-step-insp-title]").textContent()).trim(), "Auth & Policy Validation",
+    "execution timeline inspector did not update to the selected step");
   await context.close();
 }
 
