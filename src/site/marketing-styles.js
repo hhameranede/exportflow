@@ -3521,6 +3521,19 @@ html[data-motion="paused"] *::after {
     stroke-dashoffset: 0 !important;
   }
 }
+
+/* Keep the mobile header controls inside the viewport on narrow phones. */
+@media (max-width: 420px) {
+  .ef-header .ef-lang-switcher .ef-lang-trigger > span {
+    display: none;
+  }
+
+  .ef-header .ef-lang-switcher .ef-lang-trigger {
+    min-width: 44px;
+    justify-content: center;
+    padding-inline: 8px;
+  }
+}
 `;
 
 
