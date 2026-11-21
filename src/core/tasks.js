@@ -451,12 +451,13 @@ export async function executeWebTask(input, options = {}) {
     const code = typeof error?.code === "string" && /^[A-Z0-9_]{2,64}$/.test(error.code)
       ? error.code
       : "TASK_EXECUTION_FAILED";
-    events.push(event("task.failed", completedAt, { reason: code }));
+    const cancelled = code === "TASK_CANCELLED";
+    events.push(event(cancelled ? "task.cancelled" : "task.failed", completedAt, { reason: code }));
     return buildTask({
       id,
       goal,
       requestedUrl,
-      state: "failed",
+      state: cancelled ? "cancelled" : "failed",
       execution,
       createdAt,
       startedAt,
