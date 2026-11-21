@@ -191,6 +191,19 @@ test("fetch distinguishes caller cancellation from its own request timeout", asy
   );
 });
 
+test("fetch rejects a late response after its own timeout has fired", async () => {
+  await assert.rejects(
+    fetchPublicResource("https://example.com/late", {
+      timeoutMs: 1,
+      fetchImpl: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return response(null);
+      },
+    }),
+    (error) => error instanceof FetchAdapterError && error.code === "UPSTREAM_TIMEOUT",
+  );
+});
+
 test("fetch stops before following a redirect when the caller cancels", async () => {
   const controller = new AbortController();
   let calls = 0;
