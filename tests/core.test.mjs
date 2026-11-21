@@ -1242,6 +1242,39 @@ test("browser adapter closes the browser session after navigation failure", asyn
   assert.equal(closeCalls, 1);
 });
 
+test("browser cancellation handles a rejected close promise without losing cancellation", async () => {
+  const controller = new AbortController();
+  let closeCalls = 0;
+  const adapter = createBrowserAdapter({
+    browserBinding: {},
+    puppeteer: {
+      launch: async () => ({
+        newPage: async () => ({
+          setUserAgent: async () => {},
+          setRequestInterception: async () => {},
+          on: () => {},
+          goto: async () => {
+            controller.abort();
+            throw new Error("navigation interrupted by cancellation");
+          },
+        }),
+        close: async () => {
+          closeCalls++;
+          if (closeCalls === 1) throw new Error("synthetic browser close failure");
+        },
+      }),
+    },
+    fetchResource: async (url) => ({
+      status: 200, finalUrl: url, body: "", contentType: "text/plain", bytes: 0,
+    }),
+  });
+  await assert.rejects(
+    adapter.execute({ url: "https://example.com/", signal: controller.signal }),
+    (error) => error.code === "TASK_CANCELLED",
+  );
+  assert.equal(closeCalls, 2);
+});
+
 test("task executor routes JavaScript rendering to an injected Browser adapter", async () => {
   let received;
   const task = await executeWebTask(
