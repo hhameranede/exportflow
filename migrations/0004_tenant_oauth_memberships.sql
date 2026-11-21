@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS tenant_memberships (
   user_id TEXT NOT NULL CHECK (length(trim(user_id)) BETWEEN 1 AND 128),
   tenant_id TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('owner', 'admin', 'member')),
+  membership_version INTEGER NOT NULL DEFAULT 1 CHECK (typeof(membership_version) = 'integer' AND membership_version > 0),
   status TEXT NOT NULL CHECK (status IN ('active', 'revoked', 'suspended')),
   created_by TEXT NOT NULL CHECK (length(trim(created_by)) BETWEEN 1 AND 128),
   created_at TEXT NOT NULL,
@@ -54,4 +55,16 @@ CREATE TRIGGER IF NOT EXISTS prevent_tenant_membership_delete
 BEFORE DELETE ON tenant_memberships
 BEGIN
   SELECT RAISE(ABORT, 'TENANT_MEMBERSHIP_DELETE_FORBIDDEN');
+END;
+
+-- Any tenant suspension/reactivation or plan change invalidates all previously issued
+-- tenant-bound OAuth tokens. The resource server still re-checks the live membership.
+CREATE TRIGGER IF NOT EXISTS bump_tenant_membership_version_on_tenant_state_change
+AFTER UPDATE OF status, plan_code ON tenants
+WHEN OLD.status <> NEW.status OR OLD.plan_code <> NEW.plan_code
+BEGIN
+  UPDATE tenant_memberships
+  SET membership_version = membership_version + 1,
+      updated_at = NEW.updated_at
+  WHERE tenant_id = NEW.tenant_id;
 END;
