@@ -5,13 +5,14 @@ import {
   getActiveTenantMembership,
   getSelectedOAuthTenant,
   listActiveTenantMemberships,
+  resolveOAuthTenantPrincipal,
   storeOAuthTenantSelection,
 } from "../src/core/tenant-membership.js";
 
 const rowsV8 = [
-  { membership_id: "mem_1", user_id: "user_1", tenant_id: "tenant_1", role: "owner", plan_code: "starter", quota_period: "daily", request_limit: 25, policy_version: "v1", status: "active", tenant_status: "active", plan_status: "active" },
-  { membership_id: "mem_2", user_id: "user_1", tenant_id: "tenant_2", role: "member", plan_code: "starter", quota_period: "daily", request_limit: 25, policy_version: "v1", status: "active", tenant_status: "active", plan_status: "active" },
-  { membership_id: "mem_3", user_id: "user_1", tenant_id: "tenant_3", role: "member", plan_code: "starter", quota_period: "daily", request_limit: 25, policy_version: "v1", status: "revoked", tenant_status: "active", plan_status: "active" },
+  { membership_id: "mem_1", membership_version: 1, user_id: "user_1", tenant_id: "tenant_1", role: "owner", plan_code: "starter", quota_period: "daily", request_limit: 25, policy_version: "v1", status: "active", tenant_status: "active", plan_status: "active" },
+  { membership_id: "mem_2", membership_version: 1, user_id: "user_1", tenant_id: "tenant_2", role: "member", plan_code: "starter", quota_period: "daily", request_limit: 25, policy_version: "v1", status: "active", tenant_status: "active", plan_status: "active" },
+  { membership_id: "mem_3", membership_version: 1, user_id: "user_1", tenant_id: "tenant_3", role: "member", plan_code: "starter", quota_period: "daily", request_limit: 25, policy_version: "v1", status: "revoked", tenant_status: "active", plan_status: "active" },
 ];
 
 function makeMembershipDbV8() {
@@ -27,8 +28,8 @@ function makeMembershipDbV8() {
           return { results: rowsV8.filter(row =>
             row.user_id === params[0] && row.status === "active" &&
             row.tenant_status === "active" && row.plan_status === "active"
-          ).map(({ membership_id, user_id, tenant_id, role, plan_code, quota_period, request_limit, policy_version }) =>
-            ({ membership_id, user_id, tenant_id, role, plan_code, quota_period, request_limit, policy_version })
+          ).map(({ membership_id, user_id, tenant_id, role, membership_version, plan_code, quota_period, request_limit, policy_version }) =>
+            ({ membership_id, user_id, tenant_id, role, membership_version, plan_code, quota_period, request_limit, policy_version })
           ) };
         },
         async first() {
@@ -40,8 +41,8 @@ function makeMembershipDbV8() {
             const row = rowsV8.find(item => item.user_id === params[0] && item.tenant_id === params[1] &&
               item.status === "active" && item.tenant_status === "active" && item.plan_status === "active");
             if (!row) return null;
-            const { membership_id, user_id, tenant_id, role, plan_code, quota_period, request_limit, policy_version } = row;
-            return { membership_id, user_id, tenant_id, role, plan_code, quota_period, request_limit, policy_version };
+            const { membership_id, user_id, tenant_id, role, membership_version, plan_code, quota_period, request_limit, policy_version } = row;
+            return { membership_id, user_id, tenant_id, role, membership_version, plan_code, quota_period, request_limit, policy_version };
           }
           throw new Error("Unexpected query.");
         },
@@ -104,7 +105,9 @@ test("OAuth access-token claims require active membership and preserve its role"
     user: { id: "user_1" }, referenceId: "tenant_2"
   });
   assert.deepEqual(claims, {
-    tenant_id: "tenant_2", tenant_role: "member", tenant_membership_id: "mem_2"
+    "https://exportflow.me/claims/tenant": {
+      id: "tenant_2", role: "member", membership_id: "mem_2", membership_version: 1
+    }
   });
   await assert.rejects(
     createTenantOAuthAccessTokenClaims(db, {
@@ -112,4 +115,51 @@ test("OAuth access-token claims require active membership and preserve its role"
     }),
     /active tenant membership and plan are required/i
   );
+});
+
+test("OAuth tenant principal is resolved from current D1 membership and scope claims", async () => {
+  const db = makeMembershipDbV8();
+  const principal = await resolveOAuthTenantPrincipal(db, {
+    sub: "user_1",
+    scope: "openid tasks:fetch tasks:map",
+    "https://exportflow.me/claims/tenant": {
+      id: "tenant_2", membership_id: "mem_2", membership_version: 1
+    }
+  });
+  assert.equal(principal.tenantId, "tenant_2");
+  assert.equal(principal.userId, "user_1");
+  assert.equal(principal.authMethod, "oauth2");
+  assert.deepEqual(principal.scopes, ["openid", "tasks:fetch", "tasks:map"]);
+});
+
+test("OAuth tokens issued before membership changes are rejected", async () => {
+  const db = makeMembershipDbV8();
+  rowsV8[1].membership_version = 2;
+  await assert.rejects(
+    resolveOAuthTenantPrincipal(db, {
+      sub: "user_1",
+      scope: "tasks:fetch",
+      "https://exportflow.me/claims/tenant": {
+        id: "tenant_2", membership_id: "mem_2", membership_version: 1
+      }
+    }),
+    (error) => error.code === "TENANT_MEMBERSHIP_CHANGED"
+  );
+  rowsV8[1].membership_version = 1;
+});
+
+test("OAuth tokens are rejected when D1 no longer has an active membership", async () => {
+  const db = makeMembershipDbV8();
+  rowsV8[1].status = "revoked";
+  await assert.rejects(
+    resolveOAuthTenantPrincipal(db, {
+      sub: "user_1",
+      scope: "tasks:fetch",
+      "https://exportflow.me/claims/tenant": {
+        id: "tenant_2", membership_id: "mem_2", membership_version: 1
+      }
+    }),
+    (error) => error.code === "TENANT_MEMBERSHIP_INACTIVE"
+  );
+  rowsV8[1].status = "active";
 });
