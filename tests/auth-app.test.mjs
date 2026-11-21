@@ -260,6 +260,13 @@ test("account API security wrapper preserves multiple Set-Cookie headers", () =>
   downstream.headers.append("set-cookie", "exportflow.session=first; Path=/; HttpOnly; Secure; SameSite=Lax");
   downstream.headers.append("set-cookie", "exportflow.state=second; Path=/; HttpOnly; Secure; SameSite=Lax");
 
+  // Simulate the Cloudflare Workers-specific API, which exposes getAll().
+  Object.defineProperty(downstream.headers, "getAll", {
+    value: (name) => name.toLowerCase() === "set-cookie"
+      ? downstream.headers.getSetCookie()
+      : (() => { throw new Error("getAll is only supported for Set-Cookie"); })(),
+  });
+
   const secured = withAuthSecurityHeaders(downstream);
   assert.equal(secured.status, 200);
   assert.equal(secured.headers.get("strict-transport-security"), "max-age=63072000");
@@ -268,7 +275,9 @@ test("account API security wrapper preserves multiple Set-Cookie headers", () =>
 
   const cookies = typeof secured.headers.getSetCookie === "function"
     ? secured.headers.getSetCookie()
-    : [secured.headers.get("set-cookie")];
+    : typeof secured.headers.getAll === "function"
+      ? secured.headers.getAll("Set-Cookie")
+      : [secured.headers.get("set-cookie")];
   assert.equal(cookies.length, 2);
   assert.ok(cookies[0].includes("exportflow.session=first"));
   assert.ok(cookies[1].includes("exportflow.state=second"));
