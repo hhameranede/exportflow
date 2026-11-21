@@ -1386,6 +1386,54 @@ test("search adapter calls Cloudflare Web Search with a fixed provider and bound
   assert.equal(result.sources[0].url, "https://example.com/one");
 });
 
+test("search adapter does not start a Web Search call for an already-cancelled Task", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let calls = 0;
+  const adapter = createSearchAdapter({
+    webSearch: async () => {
+      calls += 1;
+      return { items: [] };
+    },
+  });
+
+  await assert.rejects(
+    adapter.execute({ query: "cloudflare workers", signal: controller.signal }),
+    (error) => error instanceof SearchAdapterError && error.code === "TASK_CANCELLED",
+  );
+  assert.equal(calls, 0);
+});
+
+test("search adapter stops waiting for Web Search when its Task is cancelled", async () => {
+  const controller = new AbortController();
+  let finishProvider;
+  let calls = 0;
+  const providerPromise = new Promise((resolve) => { finishProvider = resolve; });
+  const adapter = createSearchAdapter({
+    webSearch: () => {
+      calls += 1;
+      return providerPromise;
+    },
+  });
+
+  const pending = adapter.execute({
+    query: "cloudflare workers",
+    signal: controller.signal,
+  });
+  assert.equal(calls, 1);
+
+  controller.abort();
+  await assert.rejects(
+    pending,
+    (error) => error instanceof SearchAdapterError && error.code === "TASK_CANCELLED",
+  );
+
+  // The Workers AI websearch() binding has no AbortSignal parameter; its
+  // underlying operation may finish later, but the cancelled Task stops waiting.
+  finishProvider({ items: [] });
+  await Promise.resolve();
+});
+
 test("search adapter drops unsafe and duplicate result URLs", async () => {
   const adapter = createSearchAdapter({
     webSearch: async () => ({
