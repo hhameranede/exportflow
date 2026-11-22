@@ -190,15 +190,28 @@ authorizationUrl.searchParams.set("code_challenge_method", "S256");
 authorizationUrl.searchParams.set("resource", resource);
 
 const authorizationResponse = await fetch(authorizationUrl, {
-  headers: { cookie: jar.header(), accept: "text/html" },
+  headers: {
+    cookie: jar.header(),
+    accept: "text/html",
+    "sec-fetch-mode": "navigate",
+    "sec-fetch-dest": "document",
+  },
   redirect: "manual",
 });
 jar.absorb(authorizationResponse.headers);
-const authorization = await expectJson(authorizationResponse, "OAuth authorization");
-assert.equal(authorization.redirect, true, "OAuth authorization should return a client-navigation result");
-assert.ok(typeof authorization.url === "string", "OAuth authorization should provide the consent continuation URL");
 
-let pageUrl = new URL(authorization.url, authBase);
+let pageUrl;
+const browserLocation = authorizationResponse.headers.get("location");
+if ([302, 303, 307, 308].includes(authorizationResponse.status) && browserLocation) {
+  // A top-level browser navigation uses an HTTP redirect.
+  pageUrl = new URL(browserLocation, authBase);
+} else {
+  // Browser fetch-based clients receive Better Auth's explicit redirect result.
+  const authorization = await expectJson(authorizationResponse, "OAuth authorization");
+  assert.equal(authorization.redirect, true, "OAuth authorization should return a navigation result");
+  assert.ok(typeof authorization.url === "string", "OAuth authorization should provide the consent continuation URL");
+  pageUrl = new URL(authorization.url, authBase);
+}
 for (let index = 0; index < 4 && pageUrl.pathname === "/oauth/select-tenant"; index += 1) {
   const page = await fetch(pageUrl, { headers: { cookie: jar.header(), accept: "text/html" }, redirect: "manual" });
   jar.absorb(page.headers);
