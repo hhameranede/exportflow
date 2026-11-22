@@ -79,18 +79,18 @@ jobs:
       - name: Create synthetic account and verify first TOTP enrollment
         run: node scripts/mfa-acceptance-smoke.mjs bootstrap
       - name: Add the synthetic account to the isolated Worker owner allowlist
+        id: owner_allowlist
         shell: bash
         run: |
           set -euo pipefail
           OWNER_ID="$(node scripts/mfa-acceptance-smoke.mjs owner-id)"
           test -n "$OWNER_ID"
           echo "::add-mask::$OWNER_ID"
-          echo "MFA_OWNER_USER_ID=$OWNER_ID" >> "$GITHUB_ENV"
           npx --yes wrangler@4 deploy --config cloudflare/auth-acceptance/wrangler.toml             --var "EXPORTFLOW_OWNER_USER_IDS:$OWNER_ID"             --message "PR #107 temporary synthetic MFA owner allowlist"
       - name: Verify owner guards, session-bound proof, replay and D1 attempt limits
         run: node scripts/mfa-acceptance-smoke.mjs verify
       - name: Remove the temporary owner allowlist from the Acceptance Worker
-        if: ${{ always() && env.CLOUDFLARE_API_TOKEN != '' }}
+        if: ${{ always() && steps.owner_allowlist.outcome != 'skipped' && env.CLOUDFLARE_API_TOKEN != '' }}
         run: npx --yes wrangler@4 deploy --config cloudflare/auth-acceptance/wrangler.toml --message "PR #107 clear temporary MFA owner allowlist"
       - name: Remove synthetic MFA account and plan from Acceptance D1
         if: ${{ always() }}
