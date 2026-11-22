@@ -1388,3 +1388,83 @@ test("research pipeline attempts Browser escalation only once after comparing st
   assert.equal(result.status, "succeeded");
   assert.equal(result.data.browserEscalated, true);
 });
+
+
+test("oversized upstream body does not wait for a stalled reader cancellation", { timeout: 1500 }, async () => {
+  let cancelCalls = 0;
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("12345"));
+    },
+    cancel() {
+      cancelCalls += 1;
+      return new Promise(() => {});
+    },
+  });
+
+  await assert.rejects(
+    fetchPublicResource("https://example.com/oversized", {
+      maxBytes: 4,
+      fetchImpl: async () => new Response(stream, {
+        headers: { "content-type": "text/plain" },
+      }),
+    }),
+    (error) => error instanceof FetchAdapterError && error.code === "RESPONSE_TOO_LARGE",
+  );
+  assert.equal(cancelCalls, 1);
+});
+
+test("declared oversized upstream body does not wait for a stalled body cancellation", { timeout: 1500 }, async () => {
+  let cancelCalls = 0;
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("large body"));
+    },
+    cancel() {
+      cancelCalls += 1;
+      return new Promise(() => {});
+    },
+  });
+
+  await assert.rejects(
+    fetchPublicResource("https://example.com/declared-large", {
+      maxBytes: 4,
+      fetchImpl: async () => new Response(stream, {
+        headers: { "content-type": "text/plain", "content-length": "10" },
+      }),
+    }),
+    (error) => error instanceof FetchAdapterError && error.code === "RESPONSE_TOO_LARGE",
+  );
+  assert.equal(cancelCalls, 1);
+});
+
+test("fetch follows a safe redirect without waiting for a stalled redirect-body cancellation", { timeout: 1500 }, async () => {
+  let cancelCalls = 0;
+  const redirectBody = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array([1]));
+    },
+    cancel() {
+      cancelCalls += 1;
+      return new Promise(() => {});
+    },
+  });
+
+  const result = await fetchPublicResource("https://example.com/start", {
+    fetchImpl: async (url) => {
+      if (url.endsWith("/start")) {
+        return new Response(redirectBody, {
+          status: 302,
+          headers: { location: "/final" },
+        });
+      }
+      return new Response("done", {
+        headers: { "content-type": "text/plain" },
+      });
+    },
+  });
+
+  assert.equal(result.body, "done");
+  assert.equal(result.redirects.length, 1);
+  assert.equal(cancelCalls, 1);
+});
