@@ -1,0 +1,97 @@
+name: Owner MFA Worker Acceptance
+
+# Intentionally manual-only. The boolean input is an action-specific approval
+# for an isolated Acceptance Worker deployment and writes to its dedicated D1.
+# Never add push, pull_request, schedule or workflow_run triggers to this file.
+on:
+  workflow_dispatch:
+    inputs:
+      approve_isolated_acceptance:
+        description: "Approve deploying the isolated Auth Acceptance Worker and mutating only its dedicated Acceptance D1 for PR #107."
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  mfa-acceptance:
+    if: ${{ inputs.approve_isolated_acceptance == true && github.ref == 'refs/heads/feat/owner-step-up-mfa-20261122' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: exportflow-oauth-acceptance-20261122
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+      MFA_ACCEPTANCE_STATE_FILE: ${{ runner.temp }}/exportflow-mfa-acceptance.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install deployment tooling
+        run: npm install --no-audit --no-fund
+      - name: Verify the exact isolated Acceptance target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CLOUDFLARE_ACCOUNT_ID" = "435030befbb9df09ab76f69209c05347"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          grep -Fx 'name = "exportflow-auth-acceptance-20261122"' cloudflare/auth-acceptance/wrangler.toml
+          grep -Fx 'database_id = "0dd14d21-5d56-4b01-8c0f-a14959521dde"' cloudflare/auth-acceptance/wrangler.toml
+          grep -Fx 'database_id = "1f94eee0-219e-4a41-86ce-49c29067ef06"' cloudflare/auth-acceptance/wrangler.toml
+          if grep -q '0bd9f873-a1d5-4d90-b3fc-1c4b47e1aa67' cloudflare/auth-acceptance/wrangler.toml; then
+            echo "::error::Production AUTH_DB ID found in Acceptance config."
+            exit 1
+          fi
+          node --check scripts/mfa-acceptance-smoke.mjs
+      - name: Generate isolated Better Auth secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          BETTER_AUTH_SECRET="$(openssl rand -hex 48)"
+          AUTH_MIGRATION_TOKEN="$(openssl rand -hex 48)"
+          echo "::add-mask::$BETTER_AUTH_SECRET"
+          echo "::add-mask::$AUTH_MIGRATION_TOKEN"
+          printf '%s' "$BETTER_AUTH_SECRET" | npx --yes wrangler@4 secret put BETTER_AUTH_SECRET --config cloudflare/auth-acceptance/wrangler.toml
+          printf '%s' "$AUTH_MIGRATION_TOKEN" | npx --yes wrangler@4 secret put AUTH_MIGRATION_TOKEN --config cloudflare/auth-acceptance/wrangler.toml
+          echo "AUTH_MIGRATION_TOKEN=$AUTH_MIGRATION_TOKEN" >> "$GITHUB_ENV"
+      - name: Deploy the PR Auth Worker to the isolated Acceptance Worker
+        run: npx --yes wrangler@4 deploy --config cloudflare/auth-acceptance/wrangler.toml --message "PR #107 isolated owner MFA Acceptance"
+      - name: Apply Better Auth schema migration to Acceptance AUTH_DB only
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output /tmp/mfa-auth-migration.json --write-out '%{http_code}'             --request POST             --header "Authorization: Bearer $AUTH_MIGRATION_TOKEN"             https://exportflow-auth-acceptance-20261122.hhameranede.workers.dev/api/auth/_ops/migrate)"
+          test "$status" = "200"
+          node -e "const x=require('/tmp/mfa-auth-migration.json'); if(x.ok!==true) process.exit(1); console.log('Acceptance Better Auth migration completed.')"
+      - name: Reset only isolated Acceptance JWKS after secret rotation
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4 d1 execute exportflow-auth-acceptance-20261122             --remote --yes --config cloudflare/auth-acceptance/wrangler.toml             --command "DELETE FROM jwks"
+          npx --yes wrangler@4 d1 execute exportflow-auth-acceptance-20261122             --remote --yes --config cloudflare/auth-acceptance/wrangler.toml             --command "SELECT COUNT(*) AS remaining_jwks FROM jwks"
+      - name: Create synthetic account and verify first TOTP enrollment
+        run: node scripts/mfa-acceptance-smoke.mjs bootstrap
+      - name: Add the synthetic account to the isolated Worker owner allowlist
+        shell: bash
+        run: |
+          set -euo pipefail
+          OWNER_ID="$(node scripts/mfa-acceptance-smoke.mjs owner-id)"
+          test -n "$OWNER_ID"
+          echo "::add-mask::$OWNER_ID"
+          echo "MFA_OWNER_USER_ID=$OWNER_ID" >> "$GITHUB_ENV"
+          npx --yes wrangler@4 deploy --config cloudflare/auth-acceptance/wrangler.toml             --var "EXPORTFLOW_OWNER_USER_IDS:$OWNER_ID"             --message "PR #107 temporary synthetic MFA owner allowlist"
+      - name: Verify owner guards, session-bound proof, replay and D1 attempt limits
+        run: node scripts/mfa-acceptance-smoke.mjs verify
+      - name: Remove the temporary owner allowlist from the Acceptance Worker
+        if: ${{ always() && env.CLOUDFLARE_API_TOKEN != '' }}
+        run: npx --yes wrangler@4 deploy --config cloudflare/auth-acceptance/wrangler.toml --message "PR #107 clear temporary MFA owner allowlist"
+      - name: Remove synthetic MFA account and plan from Acceptance D1
+        if: ${{ always() }}
+        run: node scripts/mfa-acceptance-smoke.mjs cleanup
