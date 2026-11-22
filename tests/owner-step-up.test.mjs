@@ -95,9 +95,10 @@ function makeAuthDb({ factor = { twoFactorEnabled: 1, factorVerified: 1 } } = {}
 function fixture({ factor, verify, now = NOW } = {}) {
   const db = makeAuthDb({ factor });
   let calls = 0;
+  let currentNow = now;
   const service = createOwnerStepUpService({
     cryptoImpl: webcrypto,
-    now: () => now,
+    now: () => currentNow,
     authFactory: () => ({
       api: {
         async verifyTOTP(args) {
@@ -117,6 +118,7 @@ function fixture({ factor, verify, now = NOW } = {}) {
     db,
     service,
     calls: () => calls,
+    setNow: (value) => { currentNow = value; },
     env: { AUTH_DB: db, BETTER_AUTH_SECRET: SECRET },
     owner: { allowed: true, actorId: OWNER, sessionId: SESSION },
   };
@@ -161,7 +163,8 @@ test("tampered and expired proofs fail closed", async () => {
   const outcome = await f.service.verifyCode(request(), f.env, f.owner, "123456");
   const tampered = outcome.token.slice(0, -1) + (outcome.token.endsWith("a") ? "b" : "a");
   assert.deepEqual(await f.service.consumeProof(request(tampered), f.env, f.owner), { allowed: false });
-  assert.deepEqual(await f.service.consumeProof(request(outcome.token), f.env, f.owner), { allowed: true });
+  f.setNow(NOW + 5 * 60_000 + 1);
+  assert.deepEqual(await f.service.consumeProof(request(outcome.token), f.env, f.owner), { allowed: false });
 });
 
 test("unconfigured or unverified TOTP enrollment is rejected before code verification", async () => {
