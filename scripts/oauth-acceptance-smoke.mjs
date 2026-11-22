@@ -270,14 +270,26 @@ for (let index = 0; index < 6; index += 1) {
     break;
   }
   assert.equal(nextUrl.origin, authBase, "Authorization continuation must stay on the isolated Auth Worker until the registered callback");
-  const response = await fetch(nextUrl, { headers: { cookie: jar.header(), accept: "text/html, application/json" }, redirect: "manual" });
+  const response = await fetch(nextUrl, {
+    headers: {
+      cookie: jar.header(),
+      accept: "text/html, application/json",
+      "sec-fetch-mode": "navigate",
+      "sec-fetch-dest": "document",
+    },
+    redirect: "manual",
+  });
   jar.absorb(response.headers);
   const location = response.headers.get("location");
-  if (!location) {
-    const body = await response.text();
-    throw new Error("OAuth authorization continuation did not redirect: HTTP " + response.status + " " + body.slice(0, 300));
+  if (location) {
+    nextUrl = new URL(location, nextUrl);
+  } else {
+    const redirectResult = await response.json().catch(() => null);
+    if (!response.ok || redirectResult?.redirect !== true || typeof redirectResult.url !== "string") {
+      throw new Error("OAuth authorization continuation returned no valid redirect (HTTP " + response.status + ").");
+    }
+    nextUrl = new URL(redirectResult.url, nextUrl);
   }
-  nextUrl = new URL(location, nextUrl);
 }
 assert.ok(authorizationCode, "OAuth authorization should issue a code to the registered callback");
 
