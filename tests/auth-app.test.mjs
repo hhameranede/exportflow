@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { authorizePlatformOwner, getAuthFeatureStatus, getAuthOptions, handleAuthRequest } from "../src/core/auth-app.js";
+import { authorizePlatformOwner, getAuthFeatureStatus, getAuthOptions, handleAuthRequest, guardOwnerTwoFactorEndpoint } from "../src/core/auth-app.js";
 import { createWorker } from "../src/index.js";
 import { getOAuthRuntimeConfig } from "../src/core/oauth-config.js";
 
@@ -17,6 +17,101 @@ function createD1BindingStub(tableNames = []) {
     batch() {},
   };
 }
+
+test("verified platform owners cannot bypass step-up through Better Auth TOTP re-verification or disable", async () => {
+  const db = {
+    prepare(sql) {
+      assert.match(sql, /twoFactor/);
+      return {
+        bind(userId) {
+          assert.equal(userId, "owner_123");
+          return {
+            async first() { return { twoFactorEnabled: 1, factorVerified: 1 }; },
+          };
+        },
+      };
+    },
+  };
+  const getSession = async () => ({
+    user: { id: "owner_123", emailVerified: true },
+    session: { id: "session_123" },
+  });
+  const options = {
+    ownerUserIds: new Set(["owner_123"]),
+    authDb: db,
+    getSession,
+  };
+
+  const verify = await guardOwnerTwoFactorEndpoint(
+    new Request("https://exportflow.me/api/auth/two-factor/verify-totp", {
+      method: "POST",
+      headers: { origin: "https://exportflow.me" },
+      body: JSON.stringify({ code: "123456" }),
+    }),
+    options,
+  );
+  assert.equal(verify.status, 403);
+  assert.equal((await verify.json()).error, "OWNER_STEP_UP_ENDPOINT_REQUIRED");
+
+  const disable = await guardOwnerTwoFactorEndpoint(
+    new Request("https://exportflow.me/api/auth/two-factor/disable", {
+      method: "POST",
+      headers: { origin: "https://exportflow.me" },
+      body: JSON.stringify({}),
+    }),
+    options,
+  );
+  assert.equal(disable.status, 403);
+  assert.equal((await disable.json()).error, "OWNER_TWO_FACTOR_DISABLE_BLOCKED");
+});
+
+test("direct Better Auth TOTP challenge remains available to non-owners and unverified enrollments", async () => {
+  const db = {
+    prepare() {
+      return {
+        bind() {
+          return {
+            async first() { return { twoFactorEnabled: 0, factorVerified: null }; },
+          };
+        },
+      };
+    },
+  };
+  const request = new Request("https://exportflow.me/api/auth/two-factor/verify-totp", {
+    method: "POST",
+    headers: { origin: "https://exportflow.me" },
+    body: JSON.stringify({ code: "123456" }),
+  });
+  const nonOwner = await guardOwnerTwoFactorEndpoint(request, {
+    ownerUserIds: new Set(["another_owner"]),
+    authDb: db,
+    getSession: async () => ({ user: { id: "ordinary_user" }, session: { id: "ordinary_session" } }),
+  });
+  assert.equal(nonOwner, null);
+
+  const pendingOwner = await guardOwnerTwoFactorEndpoint(request, {
+    ownerUserIds: new Set(["owner_123"]),
+    authDb: db,
+    getSession: async () => ({ user: { id: "owner_123" }, session: { id: "session_123" } }),
+  });
+  assert.equal(pendingOwner, null);
+});
+
+test("owner TOTP endpoint guard fails closed when factor storage is unavailable", async () => {
+  const response = await guardOwnerTwoFactorEndpoint(
+    new Request("https://exportflow.me/api/auth/two-factor/disable", {
+      method: "POST",
+      headers: { origin: "https://exportflow.me" },
+    }),
+    {
+      ownerUserIds: new Set(["owner_123"]),
+      authDb: { prepare() { throw new Error("synthetic D1 outage"); } },
+      getSession: async () => ({ user: { id: "owner_123" }, session: { id: "session_123" } }),
+    },
+  );
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, "OWNER_TWO_FACTOR_GUARD_UNAVAILABLE");
+});
 
 test("authentication remains disabled without a dedicated D1 binding and server secret", () => {
   const status = getAuthFeatureStatus({});
