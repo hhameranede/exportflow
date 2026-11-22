@@ -23,7 +23,6 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
-      MFA_ACCEPTANCE_STATE_FILE: ${{ runner.temp }}/exportflow-mfa-acceptance.json
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,6 +32,11 @@ jobs:
           node-version: 24
       - name: Install deployment tooling
         run: npm install --no-audit --no-fund
+      - name: Set the private ephemeral Acceptance state path
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "MFA_ACCEPTANCE_STATE_FILE=$RUNNER_TEMP/exportflow-mfa-acceptance.json" >> "$GITHUB_ENV"
       - name: Run tests before any Acceptance mutation
         run: npm test && npm run check
       - name: Verify the exact isolated Acceptance target and existing secrets
