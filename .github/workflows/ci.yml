@@ -108,5 +108,18 @@ jobs:
        https://exportflow-auth-acceptance-20261122.hhameranede.workers.dev/api/auth/_ops/migrate)"
       cat /tmp/auth-migration.json
       test "$status" = "200"
+   - name: Reset isolated acceptance signing keys after secret rotation
+     shell: bash
+     run: |
+      set -euo pipefail
+      # The test-only Auth secret is rotated for each CI run while this
+      # dedicated acceptance D1 persists. Remove only its encrypted JWKS
+      # rows so Better Auth generates a key pair using the current secret.
+      npx --yes wrangler@4 d1 execute exportflow-auth-acceptance-20261122 \
+       --remote --yes --config cloudflare/auth-acceptance/wrangler.toml \
+       --command "DELETE FROM jwks"
+      npx --yes wrangler@4 d1 execute exportflow-auth-acceptance-20261122 \
+       --remote --yes --config cloudflare/auth-acceptance/wrangler.toml \
+       --command "SELECT COUNT(*) AS remaining_jwks FROM jwks"
    - name: Verify complete isolated OAuth, tenant and MCP flow
      run: node scripts/oauth-acceptance-smoke.mjs
