@@ -23,6 +23,7 @@ database_id = "1f94eee0-219e-4a41-86ce-49c29067ef06"
 [observability]
 enabled = true
 head_sampling_rate = 1
+redact_query_string = true
 
 [observability.logs]
 enabled = true
