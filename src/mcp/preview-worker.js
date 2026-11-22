@@ -474,7 +474,19 @@ export function createExportFlowPreviewWorker({
         return jsonResponse(rpcResult(message.id, result));
       });
 
-      const protectedResponse = await protectedHandler(authRequest);
+      let protectedResponse;
+      try {
+        protectedResponse = await protectedHandler(authRequest);
+      } catch (error) {
+        if (env?.EXPORTFLOW_ACCEPTANCE_MODE === "true") {
+          console.error("[exportflow-mcp-acceptance-jwks-verify-error]", JSON.stringify({
+            issuer: oauthEndpoints.issuer,
+            jwksUrl: oauthEndpoints.jwksUrl,
+            message: typeof error?.message === "string" ? error.message.slice(0, 500) : "Unclassified verification error",
+          }));
+        }
+        throw error;
+      }
       if (protectedResponse.status === 401 || protectedResponse.status === 403) {
         const challenge = oauthToolChallenge(requiredScope, protectedResponse.status, oauthEndpoints.resourceMetadataUrl);
         const failed = toolContent({
