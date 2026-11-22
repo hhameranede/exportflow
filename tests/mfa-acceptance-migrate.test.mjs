@@ -71,6 +71,6 @@ test("Acceptance MFA schema migration is safe to rerun without replacing existin
   const result = await applyTwoFactorSchema((sql) => db.query(sql));
 
   assert.deepEqual(result, { addedUserColumn: false, createdTwoFactorTable: false });
-  assert.equal(db.statements.length, before + 5);
+  assert.equal(db.statements.length, before + 7);
   assert.equal(db.statements.some((sql) => /\b(DELETE|DROP|TRUNCATE)\b/i.test(sql)), false);
 });
