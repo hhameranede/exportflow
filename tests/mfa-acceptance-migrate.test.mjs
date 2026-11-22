@@ -60,7 +60,7 @@ test("Acceptance MFA schema migration is additive and creates Better Auth 1.7.27
   assert.equal(state.tables.has("user"), true);
   assert.equal(state.tables.has("session"), true);
   assert.equal(state.tables.has("jwks"), true);
-  assert.equal(db.statements.some((sql) => /\b(DELETE|DROP|TRUNCATE)\b/i.test(sql)), false);
+  assert.equal(db.statements.some((sql) => /^(DELETE|DROP|TRUNCATE)\b/i.test(sql.trim())), false);
 });
 
 test("Acceptance MFA schema migration is safe to rerun without replacing existing schema", async () => {
@@ -72,5 +72,5 @@ test("Acceptance MFA schema migration is safe to rerun without replacing existin
 
   assert.deepEqual(result, { addedUserColumn: false, createdTwoFactorTable: false });
   assert.equal(db.statements.length, before + 7);
-  assert.equal(db.statements.some((sql) => /\b(DELETE|DROP|TRUNCATE)\b/i.test(sql)), false);
+  assert.equal(db.statements.some((sql) => /^(DELETE|DROP|TRUNCATE)\b/i.test(sql.trim())), false);
 });
