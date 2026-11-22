@@ -328,11 +328,17 @@ export function createOwnerStepUpService({
     }
     try {
       const deleted = await authDb.prepare(
-        "DELETE FROM verification WHERE identifier = ?1 AND value = ?2 AND expiresAt > ?3",
+        "DELETE FROM verification " +
+        "WHERE identifier = ?1 AND value = ?2 AND expiresAt > ?3 " +
+        "AND EXISTS (" +
+        "SELECT 1 FROM session WHERE id = ?4 AND userId = ?5 AND expiresAt > ?3" +
+        ")",
       ).bind(
         PROOF_PREFIX + owner.actorId,
         payload.jti,
         new Date(nowMs).toISOString(),
+        owner.sessionId,
+        owner.actorId,
       ).run();
       return { allowed: changesFrom(deleted) === 1 };
     } catch {
