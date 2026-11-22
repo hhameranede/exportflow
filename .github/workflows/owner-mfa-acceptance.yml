@@ -20,7 +20,7 @@ jobs:
   mfa-acceptance:
     if: >-
       ${{ (github.event_name == 'workflow_dispatch' &&
-            inputs.approve_isolated_acceptance == true &&
+            github.event.inputs.approve_isolated_acceptance == 'true' &&
             github.ref == 'refs/heads/feat/owner-step-up-mfa-20261122') ||
           (github.event_name == 'pull_request' &&
             github.event.action == 'labeled' &&
