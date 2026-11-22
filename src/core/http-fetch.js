@@ -47,24 +47,37 @@ function isTextContentType(contentType) {
     mime.endsWith("+xml");
 }
 
-async function cancelBody(response) {
+// Upstream-controlled stream cancellation is best-effort. Never let a slow
+// or stalled cancel() callback hold the task open after its result is unusable.
+function cancelBestEffort(cancel) {
   try {
-    await response.body?.cancel();
+    const cancellation = cancel();
+    if (cancellation && typeof cancellation.catch === "function") {
+      void cancellation.catch(() => {});
+    }
   } catch {
-    // The stream may already be closed or canceled.
+    // The stream may already be closed, errored, or locked by the runtime.
   }
+}
+
+function cancelBody(response) {
+  cancelBestEffort(() => response.body?.cancel());
+}
+
+function cancelReader(reader) {
+  cancelBestEffort(() => reader.cancel());
 }
 
 async function readTextBody(response, maxBytes, getAbortError) {
   const initialAbortError = getAbortError?.();
   if (initialAbortError) {
-    await cancelBody(response);
+    cancelBody(response);
     throw initialAbortError;
   }
 
   const declaredLength = response.headers.get("content-length");
   if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxBytes) {
-    await cancelBody(response);
+    cancelBody(response);
     throw new FetchAdapterError("RESPONSE_TOO_LARGE", "Upstream response exceeds the configured size limit.", 413);
   }
 
@@ -81,19 +94,19 @@ async function readTextBody(response, maxBytes, getAbortError) {
       const { done, value } = await reader.read();
       const abortError = getAbortError?.();
       if (abortError) {
-        await reader.cancel().catch(() => {});
+        cancelReader(reader);
         throw abortError;
       }
       if (done) break;
       totalBytes += value.byteLength;
       if (totalBytes > maxBytes) {
-        await reader.cancel();
+        cancelReader(reader);
         throw new FetchAdapterError("RESPONSE_TOO_LARGE", "Upstream response exceeds the configured size limit.", 413);
       }
       chunks.push(value);
     }
   } catch (error) {
-    await reader.cancel().catch(() => {});
+    cancelReader(reader);
     if (error instanceof FetchAdapterError) throw error;
     const abortError = getAbortError?.();
     if (abortError) throw abortError;
@@ -221,13 +234,13 @@ export async function fetchPublicResource(input, options = {}) {
 
       const abortAfterFetch = getAbortError();
       if (abortAfterFetch) {
-        await cancelBody(response);
+        cancelBody(response);
         throw abortAfterFetch;
       }
 
       if (REDIRECT_STATUSES.has(response.status)) {
         const location = response.headers.get("location");
-        await cancelBody(response);
+        cancelBody(response);
         const abortAfterRedirectBody = getAbortError();
         if (abortAfterRedirectBody) throw abortAfterRedirectBody;
         if (!location) {
@@ -267,7 +280,7 @@ export async function fetchPublicResource(input, options = {}) {
 
       const contentType = response.headers.get("content-type") || "";
       if (response.body && !isTextContentType(contentType)) {
-        await cancelBody(response);
+        cancelBody(response);
         throw new FetchAdapterError("UNSUPPORTED_CONTENT_TYPE", "Only text, HTML, JSON, and XML responses are supported.", 415);
       }
 
