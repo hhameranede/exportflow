@@ -51,7 +51,7 @@ test("verified platform owners cannot bypass step-up through Better Auth TOTP re
     options,
   );
   assert.equal(verify.status, 403);
-  assert.equal((await verify.json()).error, "OWNER_STEP_UP_ENDPOINT_REQUIRED");
+  assert.equal((await verify.json()).error, "OWNER_TWO_FACTOR_MANAGEMENT_BLOCKED");
 
   const disable = await guardOwnerTwoFactorEndpoint(
     new Request("https://exportflow.me/api/auth/two-factor/disable", {
@@ -62,10 +62,10 @@ test("verified platform owners cannot bypass step-up through Better Auth TOTP re
     options,
   );
   assert.equal(disable.status, 403);
-  assert.equal((await disable.json()).error, "OWNER_TWO_FACTOR_DISABLE_BLOCKED");
+  assert.equal((await disable.json()).error, "OWNER_TWO_FACTOR_MANAGEMENT_BLOCKED");
 });
 
-test("direct Better Auth TOTP challenge remains available to non-owners and unverified enrollments", async () => {
+test("direct TOTP re-verification remains available to non-owners but an allowlisted owner must finish bootstrap first", async () => {
   const db = {
     prepare() {
       return {
@@ -94,7 +94,8 @@ test("direct Better Auth TOTP challenge remains available to non-owners and unve
     authDb: db,
     getSession: async () => ({ user: { id: "owner_123" }, session: { id: "session_123" } }),
   });
-  assert.equal(pendingOwner, null);
+  assert.equal(pendingOwner.status, 403);
+  assert.equal((await pendingOwner.json()).error, "OWNER_TWO_FACTOR_BOOTSTRAP_REQUIRED");
 });
 
 test("owner TOTP endpoint guard fails closed when factor storage is unavailable", async () => {
