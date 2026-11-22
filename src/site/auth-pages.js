@@ -277,6 +277,7 @@ export function renderAuthPage(type, t, locale, hrefFor, escapeHtml, arrowRightI
             '<div data-two-factor-enrollment hidden>' +
               '<p class="ef-acc-card-desc">Add this key in your authenticator app as a TOTP account, then enter the current six-digit code to confirm setup.</p>' +
               '<p><strong>Authenticator setup key</strong></p><code data-two-factor-secret></code>' +
+              '<button type="button" class="ef-code-btn" data-two-factor-copy-secret>Copy setup key</button>' +
               '<ul class="ef-session-list" data-two-factor-backup-codes aria-label="One-time backup codes"></ul>' +
               '<form class="ef-auth-form" data-two-factor-verify-form>' +
                 '<div class="ef-field"><label for="acc-totp-code">Six-digit authenticator code</label><input id="acc-totp-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" required></div>' +
