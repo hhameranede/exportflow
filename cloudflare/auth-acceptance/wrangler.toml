@@ -1,0 +1,22 @@
+name = "exportflow-auth-acceptance-20261122"
+main = "../../src/index.js"
+compatibility_date = "2026-11-17"
+workers_dev = true
+preview_urls = false
+keep_vars = true
+account_id = "435030befbb9df09ab76f69209c05347"
+
+[vars]
+BETTER_AUTH_URL = "https://exportflow-auth-acceptance-20261122.hhameranede.workers.dev"
+EXPORTFLOW_OAUTH_ISSUER = "https://exportflow-auth-acceptance-20261122.hhameranede.workers.dev/api/auth"
+EXPORTFLOW_MCP_RESOURCE = "https://exportflow-mcp-acceptance-20261122.hhameranede.workers.dev/mcp"
+
+[[d1_databases]]
+binding = "AUTH_DB"
+database_name = "exportflow-auth-acceptance-20261122"
+database_id = "0dd14d21-5d56-4b01-8c0f-a14959521dde"
+
+[[d1_databases]]
+binding = "EXPORTFLOW_AUTH_DB"
+database_name = "exportflow-tenant-acceptance-20261122"
+database_id = "1f94eee0-219e-4a41-86ce-49c29067ef06"
