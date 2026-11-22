@@ -86,6 +86,10 @@ async function verifyProof(token, secret, cryptoImpl, nowMs) {
   const signature = base64UrlDecode(pieces[1]);
   const payloadBytes = base64UrlDecode(pieces[0]);
   if (!signature || !payloadBytes) return null;
+  // Reject non-canonical Base64URL spellings. The last character can contain
+  // unused padding bits; alternate spellings must not alias the same proof.
+  if (base64UrlEncode(signature) !== pieces[1] ||
+      base64UrlEncode(payloadBytes) !== pieces[0]) return null;
 
   let payload;
   try {
