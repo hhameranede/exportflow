@@ -401,6 +401,34 @@ export function createExportFlowPreviewWorker({
         return jsonResponse(rpcResult(message.id, result));
       }
 
+      if (env?.EXPORTFLOW_ACCEPTANCE_MODE === "true") {
+        try {
+          const jwksUrl = new URL(oauthEndpoints.jwksUrl);
+          const jwksResponse = await fetch(oauthEndpoints.jwksUrl, {
+            method: "GET",
+            headers: { accept: "application/json" },
+            redirect: "manual",
+          });
+          console.info("[exportflow-mcp-acceptance-jwks-preflight]", JSON.stringify({
+            hostname: jwksUrl.hostname,
+            path: jwksUrl.pathname,
+            status: jwksResponse.status,
+            contentType: jwksResponse.headers.get("content-type"),
+            locationPath: (() => {
+              const location = jwksResponse.headers.get("location");
+              if (!location) return undefined;
+              try { return new URL(location, jwksUrl).pathname; } catch { return "[invalid]"; }
+            })(),
+          }));
+          await jwksResponse.body?.cancel();
+        } catch (error) {
+          console.error("[exportflow-mcp-acceptance-jwks-preflight-error]", JSON.stringify({
+            name: typeof error?.name === "string" ? error.name.slice(0, 120) : "Error",
+            message: typeof error?.message === "string" ? error.message.slice(0, 500) : "JWKS preflight failed",
+          }));
+        }
+      }
+
       const protectedHandler = createMcpProtectedRequestHandler({
         issuer: oauthEndpoints.issuer,
         audience: oauthEndpoints.resource,
