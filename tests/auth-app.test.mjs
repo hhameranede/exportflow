@@ -360,4 +360,16 @@ test("email/password is enabled without email delivery only on the isolated acce
     BETTER_AUTH_URL: "https://exportflow.me",
   });
   assert.equal(productionLike.emailPasswordEnabled, false);
+
+  const untrustedWorkerOrigin = getAuthFeatureStatus({
+    ...env,
+    BETTER_AUTH_URL: "https://another-worker.hhameranede.workers.dev",
+  });
+  assert.equal(untrustedWorkerOrigin.emailPasswordEnabled, false);
+
+  const mismatchedMcpResource = getAuthFeatureStatus({
+    ...env,
+    MCP_RESOURCE_URL: "https://other-mcp.hhameranede.workers.dev/mcp",
+  });
+  assert.equal(mismatchedMcpResource.emailPasswordEnabled, false);
 });

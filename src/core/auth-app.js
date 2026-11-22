@@ -29,12 +29,18 @@ function isD1Binding(binding) {
   );
 }
 
+const ACCEPTANCE_AUTH_ORIGIN = "https://exportflow-auth-acceptance-20261122.hhameranede.workers.dev";
+const ACCEPTANCE_MCP_RESOURCE_URL = "https://exportflow-mcp-acceptance-20261122.hhameranede.workers.dev/mcp";
+
 function isAcceptanceRuntime(env = {}) {
-  if (env.EXPORTFLOW_ACCEPTANCE_MODE !== "true" || !isNonEmptyString(env.BETTER_AUTH_URL)) return false;
+  if (env.EXPORTFLOW_ACCEPTANCE_MODE !== "true" ||
+      !isNonEmptyString(env.BETTER_AUTH_URL) ||
+      !isNonEmptyString(env.MCP_RESOURCE_URL)) return false;
   try {
     const url = new URL(env.BETTER_AUTH_URL.trim());
-    return url.protocol === "https:" && url.hostname.endsWith(".workers.dev") &&
-      !url.username && !url.password && url.pathname === "/" && !url.search && !url.hash;
+    return url.origin === ACCEPTANCE_AUTH_ORIGIN &&
+      url.pathname === "/" && !url.search && !url.hash &&
+      env.MCP_RESOURCE_URL.trim() === ACCEPTANCE_MCP_RESOURCE_URL;
   } catch {
     return false;
   }
