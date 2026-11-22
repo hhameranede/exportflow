@@ -221,7 +221,7 @@ export function createTenantAdminHttpHandler({
       validatePayload(payload, route.allowed, route.required);
     } catch (error) {
       if (error instanceof TaskContractError) {
-        return jsonResponse({ error: { code: error.code, message: error.message } }, error.httpStatus);
+        return jsonResponse({ error: { code: error.code, message: error.message } }, error.httpStatus, { "set-cookie": clearOwnerStepUpCookie() });
       }
       return jsonResponse({ error: { code: "INVALID_ADMIN_INPUT", message: "The administrative request is invalid." } }, 400);
     }
