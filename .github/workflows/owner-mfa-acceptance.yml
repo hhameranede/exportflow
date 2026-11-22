@@ -1,32 +1,20 @@
 name: Owner MFA Worker Acceptance
 
-# Runs only from a one-shot, exact commit on the isolated PR branch, or a future
-# manual dispatch after this workflow is present on the default branch.
-# This workflow is pinned to the isolated Acceptance account and D1 resources.
+# One-shot approval: this workflow runs only when the dedicated approval
+# sentinel is added on the isolated MFA PR branch. It does not run on ordinary
+# code commits, PR events, schedules, or default-branch pushes.
 on:
   push:
     branches:
       - feat/owner-step-up-mfa-20261122
-  workflow_dispatch:
-    inputs:
-      approve_isolated_acceptance:
-        description: "Approve deploying PR #107 to the isolated Auth Acceptance Worker and migrating its dedicated Acceptance D1."
-        required: true
-        default: false
-        type: boolean
+    paths:
+      - .github/acceptance/mfa-acceptance.approved
 
 permissions:
   contents: read
 
 jobs:
   mfa-acceptance:
-    if: >-
-      ${{ (github.event_name == 'push' &&
-            github.ref == 'refs/heads/feat/owner-step-up-mfa-20261122' &&
-            github.event.head_commit.message == 'test: approve isolated MFA Acceptance run PR #107') ||
-          (github.event_name == 'workflow_dispatch' &&
-            github.event.inputs.approve_isolated_acceptance == 'true' &&
-            github.ref == 'refs/heads/feat/owner-step-up-mfa-20261122') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency:
