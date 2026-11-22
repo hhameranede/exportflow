@@ -1,0 +1,72 @@
+name: Auth Acceptance Delivery
+
+on:
+  push:
+    branches:
+      - auth/acceptance-delivery-20261122
+    paths:
+      - "src/**"
+      - "cloudflare/auth-acceptance/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/auth-acceptance-delivery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exportflow-auth-acceptance
+  cancel-in-progress: true
+
+jobs:
+  deploy-acceptance:
+    name: Test and deploy isolated Auth Acceptance Worker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout isolated delivery branch
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run test suite
+        run: npm test
+
+      - name: Run syntax and build checks
+        run: npm run check
+
+      - name: Verify Cloudflare credential is configured
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Repository secret CLOUDFLARE_API_TOKEN is not configured. No Worker deployment was attempted."
+            exit 1
+          fi
+
+      - name: Deploy only the isolated Auth Acceptance Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: "435030befbb9df09ab76f69209c05347"
+          command: deploy --config cloudflare/auth-acceptance/wrangler.toml
+
+      - name: Generate and bind test-only Better Auth secrets
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          auth_secret="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(48).toString("base64url"))')"
+          migration_token="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(48).toString("base64url"))')"
+          echo "::add-mask::$auth_secret"
+          echo "::add-mask::$migration_token"
+          printf '%s' "$auth_secret" | npx --yes wrangler@4 secret put BETTER_AUTH_SECRET --config cloudflare/auth-acceptance/wrangler.toml
+          printf '%s' "$migration_token" | npx --yes wrangler@4 secret put AUTH_MIGRATION_TOKEN --config cloudflare/auth-acceptance/wrangler.toml
