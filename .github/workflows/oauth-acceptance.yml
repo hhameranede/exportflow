@@ -1,0 +1,143 @@
+name: ExportFlow OAuth Acceptance
+
+on:
+  push:
+    branches:
+      - fix/oauth-environment-endpoints-20261122
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Run tests
+        run: npm test
+      - name: Run syntax checks
+        run: npm run check
+      - name: Build isolated Auth Acceptance Worker
+        run: npx --yes wrangler@4 deploy --dry-run --outdir dist/auth-acceptance --config cloudflare/auth-acceptance/wrangler.toml
+      - name: Build isolated MCP Acceptance Worker
+        run: npx --yes wrangler@4 deploy --dry-run --outdir dist/mcp-acceptance --config cloudflare/mcp-acceptance/wrangler.toml
+      - name: Upload reviewable acceptance bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: exportflow-oauth-acceptance-${{ github.sha }}
+          path: |
+            dist/auth-acceptance/
+            dist/mcp-acceptance/
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy-acceptance-only:
+    needs: verify-and-build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/fix/oauth-environment-endpoints-20261122'
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install deployment tooling
+        run: npm install --no-audit --no-fund
+      - name: Verify Cloudflare credential exists
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Missing CLOUDFLARE_API_TOKEN (or CF_API_TOKEN) GitHub Actions secret."
+            exit 1
+          fi
+      - name: Deploy isolated Auth Acceptance Worker
+        run: npx --yes wrangler@4 deploy --config cloudflare/auth-acceptance/wrangler.toml
+      - name: Generate and install test-only Better Auth secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          BETTER_AUTH_SECRET="$(openssl rand -hex 48)"
+          AUTH_MIGRATION_TOKEN="$(openssl rand -hex 48)"
+          echo "::add-mask::$BETTER_AUTH_SECRET"
+          echo "::add-mask::$AUTH_MIGRATION_TOKEN"
+          printf '%s' "$BETTER_AUTH_SECRET" | npx --yes wrangler@4 secret put BETTER_AUTH_SECRET --config cloudflare/auth-acceptance/wrangler.toml
+          printf '%s' "$AUTH_MIGRATION_TOKEN" | npx --yes wrangler@4 secret put AUTH_MIGRATION_TOKEN --config cloudflare/auth-acceptance/wrangler.toml
+          {
+            echo "AUTH_MIGRATION_TOKEN=$AUTH_MIGRATION_TOKEN"
+          } >> "$GITHUB_ENV"
+      - name: Deploy isolated MCP Acceptance Worker
+        run: npx --yes wrangler@4 deploy --config cloudflare/mcp-acceptance/wrangler.toml
+      - name: Run Better Auth schema migration on acceptance D1 only
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output /tmp/auth-migration.json --write-out '%{http_code}' \
+            --request POST \
+            --header "Authorization: Bearer $AUTH_MIGRATION_TOKEN" \
+            https://exportflow-auth-acceptance-20261122.hhameranede.workers.dev/api/auth/_ops/migrate)"
+          cat /tmp/auth-migration.json
+          test "$status" = "200"
+      - name: Verify isolated Auth and OAuth discovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const authBase = "https://exportflow-auth-acceptance-20261122.hhameranede.workers.dev";
+          const issuer = authBase + "/api/auth";
+          const resource = "https://exportflow-mcp-acceptance-20261122.hhameranede.workers.dev/mcp";
+          const configResponse = await fetch(authBase + "/api/auth/config", { headers: { accept: "application/json" } });
+          if (!configResponse.ok) throw new Error("Auth config returned HTTP " + configResponse.status);
+          const config = await configResponse.json();
+          if (config.authReady !== true || config.oauthReady !== true) {
+            throw new Error("Acceptance Auth/OAuth schema is not ready: " + JSON.stringify(config));
+          }
+
+          const metadataResponse = await fetch(issuer + "/.well-known/oauth-authorization-server", { headers: { accept: "application/json" } });
+          if (!metadataResponse.ok) throw new Error("OAuth discovery returned HTTP " + metadataResponse.status);
+          const metadata = await metadataResponse.json();
+          if (metadata.issuer !== issuer || !metadata.authorization_endpoint?.startsWith(issuer + "/")) {
+            throw new Error("OAuth discovery points outside the isolated Auth Worker: " + JSON.stringify(metadata));
+          }
+
+          const resourceMetadataUrl = resource.replace(/\/mcp$/, "/.well-known/oauth-protected-resource/mcp");
+          const resourceResponse = await fetch(resourceMetadataUrl, { headers: { accept: "application/json" } });
+          if (!resourceResponse.ok) throw new Error("Protected-resource metadata returned HTTP " + resourceResponse.status);
+          const protectedResource = await resourceResponse.json();
+          if (protectedResource.resource !== resource || protectedResource.authorization_servers?.[0] !== issuer) {
+            throw new Error("MCP metadata does not point to the isolated Auth Worker: " + JSON.stringify(protectedResource));
+          }
+
+          const listResponse = await fetch(resource, {
+            method: "POST",
+            headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-11-25" },
+            body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+          });
+          if (!listResponse.ok) throw new Error("MCP tools/list returned HTTP " + listResponse.status);
+          const listed = await listResponse.json();
+          const toolNames = listed.result?.tools?.map((tool) => tool.name) || [];
+          for (const name of ["exportflow_capabilities", "web_fetch", "web_map", "web_crawl", "web_extract"]) {
+            if (!toolNames.includes(name)) throw new Error("MCP tool is missing: " + name);
+          }
+
+          const challengeResponse = await fetch(resource, {
+            method: "POST",
+            headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-11-25" },
+            body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "web_fetch", arguments: { url: "https://example.com/" } } }),
+          });
+          if (!challengeResponse.ok) throw new Error("Unauthenticated MCP request returned HTTP " + challengeResponse.status);
+          const challengeBody = await challengeResponse.json();
+          const challenge = challengeBody.result?._meta?.["mcp/www_authenticate"]?.[0] || "";
+          if (!challenge.includes('resource_metadata="' + resourceMetadataUrl + '"')) {
+            throw new Error("MCP challenge did not point to the isolated protected-resource metadata.");
+          }
+          if (challengeBody.result?.structuredContent?.error !== "authentication_required") {
+            throw new Error("Unauthenticated MCP execution did not fail closed.");
+          }
+          console.log("Acceptance Auth/OAuth schema, discovery, protected resource, tools/list and unauthenticated challenge passed.");
+          NODE
