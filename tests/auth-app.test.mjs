@@ -345,6 +345,7 @@ test("email/password is enabled without email delivery only on the isolated acce
     AUTH_DB: createD1BindingStub(),
     BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
     BETTER_AUTH_URL: "https://exportflow-auth-acceptance-20261122.hhameranede.workers.dev",
+    MCP_RESOURCE_URL: "https://exportflow-mcp-acceptance-20261122.hhameranede.workers.dev/mcp",
     EXPORTFLOW_ACCEPTANCE_MODE: "true",
   };
   const status = getAuthFeatureStatus(env);
