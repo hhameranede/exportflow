@@ -297,3 +297,25 @@ test("OAuth endpoints reject non-HTTPS, credential-bearing, or unexpected paths"
   assert.throws(() => getOAuthRuntimeConfig({ BETTER_AUTH_URL: "https://user:pass@auth.example.test" }));
   assert.throws(() => getOAuthRuntimeConfig({ MCP_RESOURCE_URL: "https://mcp.example.test/other" }));
 });
+
+test("email/password is enabled without email delivery only on the isolated acceptance Worker", () => {
+  const env = {
+    AUTH_DB: createD1BindingStub(),
+    BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
+    BETTER_AUTH_URL: "https://exportflow-auth-acceptance-20261122.hhameranede.workers.dev",
+    EXPORTFLOW_ACCEPTANCE_MODE: "true",
+  };
+  const status = getAuthFeatureStatus(env);
+  assert.equal(status.authConfigured, true);
+  assert.equal(status.emailPasswordEnabled, true);
+  const options = getAuthOptions(env);
+  assert.equal(options.emailAndPassword.enabled, true);
+  assert.equal(options.emailAndPassword.requireEmailVerification, false);
+  assert.equal(options.emailVerification, undefined);
+
+  const productionLike = getAuthFeatureStatus({
+    ...env,
+    BETTER_AUTH_URL: "https://exportflow.me",
+  });
+  assert.equal(productionLike.emailPasswordEnabled, false);
+});
