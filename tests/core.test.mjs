@@ -12,6 +12,7 @@ import { normalizeResult } from "../src/core/result.js";
 import { registerAdapter, getAdapterCatalog, executeAdapter } from "../src/core/adapters.js";
 import {
   FetchAdapterError,
+  HTTP_FETCH_LIMITS,
   fetchPublicResource,
   validatePublicHttpUrl,
 } from "../src/core/http-fetch.js";
