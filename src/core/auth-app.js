@@ -29,6 +29,17 @@ function isD1Binding(binding) {
   );
 }
 
+function isAcceptanceRuntime(env = {}) {
+  if (env.EXPORTFLOW_ACCEPTANCE_MODE !== "true" || !isNonEmptyString(env.BETTER_AUTH_URL)) return false;
+  try {
+    const url = new URL(env.BETTER_AUTH_URL.trim());
+    return url.protocol === "https:" && url.hostname.endsWith(".workers.dev") &&
+      !url.username && !url.password && url.pathname === "/" && !url.search && !url.hash;
+  } catch {
+    return false;
+  }
+}
+
 function validOrigin(value) {
   try {
     const parsed = new URL(value);
@@ -156,11 +167,12 @@ export function getAuthFeatureStatus(env = {}) {
     env.EMAIL &&
     typeof env.EMAIL.send === "function" &&
     isNonEmptyString(env.AUTH_EMAIL_FROM);
+  const acceptanceRuntime = isAcceptanceRuntime(env);
   return Object.freeze({
     authConfigured,
     tenantOAuthConfigured: authConfigured && oauthEndpointsConfigured && isD1Binding(env.EXPORTFLOW_AUTH_DB),
     googleEnabled: authConfigured && googleCredentialsPresent,
-    emailPasswordEnabled: authConfigured && Boolean(emailServiceReady),
+    emailPasswordEnabled: authConfigured && (Boolean(emailServiceReady) || acceptanceRuntime),
   });
 }
 
@@ -321,11 +333,14 @@ function buildAuthOptions(env, status) {
   }
 
   if (status.emailPasswordEnabled) {
-    options.emailAndPassword = {
+    const acceptanceRuntime = isAcceptanceRuntime(env);
+    const emailAndPassword = {
       enabled: true,
-      requireEmailVerification: true,
+      requireEmailVerification: !acceptanceRuntime,
       revokeSessionsOnPasswordReset: true,
-      sendResetPassword: async ({ user, url }) => {
+    };
+    if (!acceptanceRuntime) {
+      emailAndPassword.sendResetPassword = async ({ user, url }) => {
         await sendAccountEmail({
           to: user.email,
           subject: "Reset your ExportFlow password",
@@ -334,12 +349,11 @@ function buildAuthOptions(env, status) {
           actionUrl: url,
           actionLabel: "Reset password",
         });
-      },
-    };
-    options.emailVerification = {
-      sendOnSignUp: true,
-      autoSignInAfterVerification: true,
-      sendVerificationEmail: async ({ user, url }) => {
+      };
+      options.emailVerification = {
+        sendOnSignUp: true,
+        autoSignInAfterVerification: true,
+        sendVerificationEmail: async ({ user, url }) => {
         await sendAccountEmail({
           to: user.email,
           subject: "Verify your ExportFlow email",
@@ -349,7 +363,9 @@ function buildAuthOptions(env, status) {
           actionLabel: "Verify email",
         });
       },
-    };
+      };
+    }
+    options.emailAndPassword = emailAndPassword;
   } else {
     options.emailAndPassword = { enabled: false };
   }
