@@ -560,8 +560,8 @@ export function createExportFlowPreviewWorker({
         if (env?.EXPORTFLOW_ACCEPTANCE_MODE === "true") {
           const rawMessage = typeof error?.message === "string" ? error.message : "Unclassified MCP runtime error";
           const safeMessage = rawMessage
-            .replace(/(access_token|refresh_token|client_secret|code_verifier|password|authorization|cookie|secret)\\s*[:=]\\s*[^\\s,;]+/gi, "$1=[redacted]")
-            .replace(/https?:\\/\\/[^\\s"'<>]+/gi, (value) => {
+            .replace(/(access_token|refresh_token|client_secret|code_verifier|password|authorization|cookie|secret)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
+            .replace(/https?:\/\/[^\s"'<>]+/gi, (value) => {
               try {
                 const parsed = new URL(value);
                 return parsed.origin + parsed.pathname;
