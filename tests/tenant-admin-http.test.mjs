@@ -233,6 +233,7 @@ test("each request gets a new service bound to that request's verified owner ide
   const calls = [];
   const handler = createTenantAdminHttpHandler({
     authorizeOwner: async () => ({ allowed: true, actorId: nextActor, sessionId: "session_" + nextActor }),
+    ownerStepUpService: { verifyCode: async () => ({ allowed: true }), consumeProof: async () => ({ allowed: true }) },
     serviceFactory: (options) => {
       calls.push(options);
       return { async provisionTenant(input) {
