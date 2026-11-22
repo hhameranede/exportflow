@@ -134,10 +134,11 @@ test("Durable Object rejects unsupported methods, paths, malformed JSON, and inv
   assert.equal((await limiter.fetch(makeRequest(JSON.stringify({ limit: 1, windowMs: 60_000, tenantId: "spoof" })))).status, 400);
 });
 
-test("Durable Object storage failures fail closed with HTTP 503", async () => {
-  const limiter = new TenantBurstRateLimiter({
-    storage: { sql: { exec() { throw new Error("synthetic storage failure"); } } },
-  });
+test("Durable Object storage failures during a request fail closed with HTTP 503", async () => {
+  const storage = makeSqlStorage();
+  const limiter = new TenantBurstRateLimiter({ storage });
+  storage.sql.exec = () => { throw new Error("synthetic storage failure"); };
+
   const response = await limiter.fetch(makeRequest(JSON.stringify({ limit: 1, windowMs: 60_000 })));
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), { error: "rate_limiter_unavailable" });
