@@ -112,7 +112,12 @@ test("Auth Service Binding JWKS fetch fails closed on upstream errors or malform
   const malformed = createAuthServiceJwksFetcher({
     AUTH_SERVICE: { async fetch() { return Response.json({ keys: "not-an-array" }); } },
   }, target);
-  await assert.rejects(malformed(), /invalid JWKS document/);
+  await assert.rejects(malformed(), /invalid or empty JWKS document/);
+
+  const empty = createAuthServiceJwksFetcher({
+    AUTH_SERVICE: { async fetch() { return Response.json({ keys: [] }); } },
+  }, target);
+  await assert.rejects(empty(), /invalid or empty JWKS document/);
 });
 
 test("health route describes the read-only MCP preview", async () => {

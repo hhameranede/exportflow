@@ -5,6 +5,8 @@ import { validatePublicHttpUrl } from "../core/http-fetch.js";
 import { validateExtractionSchema } from "../core/extract.js";
 import { getOAuthRuntimeConfig } from "../core/oauth-config.js";
 
+const AUTH_SERVICE_JWKS_CACHE_KEY = Object.freeze({ purpose: "exportflow-auth-service-jwks" });
+
 export function createAuthServiceJwksFetcher(env, jwksUrl) {
   const service = env?.AUTH_SERVICE;
   if (!service || typeof service.fetch !== "function") return undefined;
@@ -15,11 +17,12 @@ export function createAuthServiceJwksFetcher(env, jwksUrl) {
       headers: { accept: "application/json" },
     }));
     if (!response.ok) {
+      await response.body?.cancel();
       throw new Error("Auth service JWKS request failed (HTTP " + response.status + ").");
     }
     const jwks = await response.json();
-    if (!jwks || !Array.isArray(jwks.keys)) {
-      throw new Error("Auth service returned an invalid JWKS document.");
+    if (!jwks || !Array.isArray(jwks.keys) || jwks.keys.length === 0) {
+      throw new Error("Auth service returned an invalid or empty JWKS document.");
     }
     return jwks;
   };
@@ -461,7 +464,9 @@ export function createExportFlowPreviewWorker({
       const protectedHandler = createMcpProtectedRequestHandler({
         issuer: oauthEndpoints.issuer,
         audience: oauthEndpoints.resource,
-        ...(serviceJwksFetch ? { jwksFetch: serviceJwksFetch } : { jwksUrl: oauthEndpoints.jwksUrl }),
+        ...(serviceJwksFetch
+          ? { jwksFetch: serviceJwksFetch, jwksCacheKey: AUTH_SERVICE_JWKS_CACHE_KEY }
+          : { jwksUrl: oauthEndpoints.jwksUrl }),
         jwtVerifyOptions: { typ: "at+jwt", requiredClaims: ["sub", "azp"] },
         requiredScopes: [requiredScope],
         challengeScopes: [requiredScope],
