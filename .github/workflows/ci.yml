@@ -25,6 +25,10 @@ jobs:
      run: npx --yes wrangler@4 deploy --dry-run --outdir dist/tenant-platform-acceptance --config cloudflare/acceptance/tenant-platform.wrangler.toml
    - name: Build tenant MCP Acceptance bundle (dry-run only)
      run: npx --yes wrangler@4 deploy --dry-run --outdir dist/tenant-mcp-acceptance --config cloudflare/acceptance/tenant-mcp.wrangler.toml
+   - name: Build isolated OAuth Auth Acceptance bundle (dry-run only)
+     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/auth-acceptance --config cloudflare/auth-acceptance/wrangler.toml
+   - name: Build isolated OAuth MCP Acceptance bundle (dry-run only)
+     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/mcp-acceptance --config cloudflare/mcp-acceptance/wrangler.toml
    - name: Locate Wrangler build output
      run: |
       echo "Root dist output:"
