@@ -375,7 +375,17 @@ const closed = await d1Query(
   "UPDATE tenants SET status = 'closed', updated_at = ? WHERE tenant_id = ? AND status = 'active'",
   [cleanupAt, membership.tenantId],
 );
-assert.equal(closed.meta?.changes, 1, "Synthetic acceptance workspace should be closed after acceptance");
+assert.ok((closed.meta?.changes ?? 0) >= 1, "Synthetic acceptance workspace close should update the tenant");
+const closedState = await d1Query(
+  tenantDatabaseId,
+  "SELECT status FROM tenants WHERE tenant_id = ?",
+  [membership.tenantId],
+);
+assert.equal(
+  closedState.results?.[0]?.status,
+  "closed",
+  "Synthetic acceptance workspace should be closed after acceptance (membership-version trigger updates are expected)",
+);
 await d1Query(
   tenantDatabaseId,
   "DELETE FROM tenant_request_usage WHERE tenant_id = ?",
