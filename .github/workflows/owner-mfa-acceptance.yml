@@ -65,7 +65,7 @@ jobs:
           node --check scripts/mfa-acceptance-smoke.mjs
           node --check scripts/mfa-acceptance-migrate.mjs
       - name: Deploy the PR Auth Worker to the isolated Acceptance Worker
-        run: npx --yes wrangler@4 deploy --config cloudflare/auth-acceptance/wrangler.toml --message "PR #107 isolated owner MFA Acceptance; existing secrets preserved"
+        run: 'npx --yes wrangler@4 deploy --config cloudflare/auth-acceptance/wrangler.toml --message "PR #107 isolated owner MFA Acceptance; existing secrets preserved"'
       - name: Apply additive Better Auth 1.7.27 schema to Acceptance AUTH_DB only
         run: node scripts/mfa-acceptance-migrate.mjs
       - name: Create synthetic account and verify first TOTP enrollment
