@@ -589,6 +589,12 @@ export async function handleOAuthBrowserPage(request, env = {}) {
   }
 
   const status = getAuthFeatureStatus(env);
+  let oauthEndpoints;
+  try {
+    oauthEndpoints = getOAuthRuntimeConfig(env);
+  } catch {
+    return oauthBrowserError(503, "Authorization unavailable", "The configured OAuth endpoints are invalid.");
+  }
   if (!status.authConfigured || !status.tenantOAuthConfigured ||
       !(await isAuthSchemaReady(env.AUTH_DB)) ||
       !(await isOAuthAuthSchemaReady(env.AUTH_DB)) ||
