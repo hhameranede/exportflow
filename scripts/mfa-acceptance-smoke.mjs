@@ -262,10 +262,12 @@ async function bootstrap() {
   assert.equal(verifiedEmail.meta?.changes, 1, "Synthetic acceptance user must be email-verified.");
 
 
+  // Better Auth 1.7.27 still requires the credential password when the
+  // account has a password, even with allowPasswordless enabled.
   const enableResponse = await request("/api/auth/two-factor/enable", {
     method: "POST",
     jar,
-    payload: { method: "totp", issuer: "ExportFlow MFA Acceptance" },
+    payload: { password: state.password, method: "totp", issuer: "ExportFlow MFA Acceptance" },
   });
   const enabled = await responseJson(enableResponse, "TOTP enrollment");
   assert.equal(enabled.method, "totp");
