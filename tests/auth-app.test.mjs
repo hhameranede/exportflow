@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { authorizePlatformOwner, getAuthFeatureStatus, getAuthOptions, handleAuthRequest } from "../src/core/auth-app.js";
 import { createWorker } from "../src/index.js";
+import { getOAuthRuntimeConfig } from "../src/core/oauth-config.js";
 
 function createD1BindingStub(tableNames = []) {
   return {
@@ -279,4 +280,20 @@ test("platform owner authorization fails closed when auth schema is incomplete",
     },
   );
   assert.deepEqual(response, { allowed: false });
+});
+test("OAuth endpoints derive from the configured Auth and MCP origins", () => {
+  const endpoints = getOAuthRuntimeConfig({
+    BETTER_AUTH_URL: "https://auth-acceptance.hhameranede.workers.dev",
+    MCP_RESOURCE_URL: "https://mcp-acceptance.hhameranede.workers.dev/mcp",
+  });
+  assert.equal(endpoints.issuer, "https://auth-acceptance.hhameranede.workers.dev/api/auth");
+  assert.equal(endpoints.jwksUrl, "https://auth-acceptance.hhameranede.workers.dev/api/auth/jwks");
+  assert.equal(endpoints.resource, "https://mcp-acceptance.hhameranede.workers.dev/mcp");
+  assert.equal(endpoints.resourceMetadataUrl, "https://mcp-acceptance.hhameranede.workers.dev/.well-known/oauth-protected-resource/mcp");
+});
+
+test("OAuth endpoints reject non-HTTPS, credential-bearing, or unexpected paths", () => {
+  assert.throws(() => getOAuthRuntimeConfig({ BETTER_AUTH_URL: "http://auth.example.test" }));
+  assert.throws(() => getOAuthRuntimeConfig({ BETTER_AUTH_URL: "https://user:pass@auth.example.test" }));
+  assert.throws(() => getOAuthRuntimeConfig({ MCP_RESOURCE_URL: "https://mcp.example.test/other" }));
 });
