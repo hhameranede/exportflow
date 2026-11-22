@@ -51,11 +51,9 @@ jobs:
           fi
 
       - name: Deploy only the isolated Auth Acceptance Worker
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: "435030befbb9df09ab76f69209c05347"
-          command: deploy --config cloudflare/auth-acceptance/wrangler.toml
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx --yes wrangler@4 deploy --config cloudflare/auth-acceptance/wrangler.toml
 
       - name: Generate and bind test-only Better Auth secrets
         shell: bash
