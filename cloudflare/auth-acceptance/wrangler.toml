@@ -19,3 +19,12 @@ database_id = "0dd14d21-5d56-4b01-8c0f-a14959521dde"
 binding = "EXPORTFLOW_AUTH_DB"
 database_name = "exportflow-tenant-acceptance-20261122"
 database_id = "1f94eee0-219e-4a41-86ce-49c29067ef06"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+head_sampling_rate = 1
