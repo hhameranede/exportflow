@@ -194,18 +194,11 @@ const authorizationResponse = await fetch(authorizationUrl, {
   redirect: "manual",
 });
 jar.absorb(authorizationResponse.headers);
-const firstLocation = authorizationResponse.headers.get("location");
-if (![302, 303, 307, 308].includes(authorizationResponse.status) || !firstLocation) {
-  const body = await authorizationResponse.text().catch(() => "");
-  const details = body.slice(0, 1_000).replace(/\s+/g, " ");
-  const locationPath = firstLocation ? new URL(firstLocation, authBase).pathname : "(none)";
-  throw new Error(
-    "OAuth authorization did not redirect (HTTP " + authorizationResponse.status +
-    ", location path " + locationPath + "): " + details,
-  );
-}
+const authorization = await expectJson(authorizationResponse, "OAuth authorization");
+assert.equal(authorization.redirect, true, "OAuth authorization should return a client-navigation result");
+assert.ok(typeof authorization.url === "string", "OAuth authorization should provide the consent continuation URL");
 
-let pageUrl = new URL(firstLocation, authBase);
+let pageUrl = new URL(authorization.url, authBase);
 for (let index = 0; index < 4 && pageUrl.pathname === "/oauth/select-tenant"; index += 1) {
   const page = await fetch(pageUrl, { headers: { cookie: jar.header(), accept: "text/html" }, redirect: "manual" });
   jar.absorb(page.headers);
