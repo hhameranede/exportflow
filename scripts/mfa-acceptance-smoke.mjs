@@ -224,6 +224,7 @@ async function d1Query(databaseId, sql, params = []) {
 }
 
 async function bootstrap() {
+  assertTarget();
   const suffix = randomUUID().replaceAll("-", "");
   const state = {
     email: "mfa-acceptance-" + suffix + "@example.net",
@@ -250,6 +251,16 @@ async function bootstrap() {
   state.cookies = jar.snapshot();
   await saveState(state);
   assert.ok(jar.header(), "Acceptance sign-up did not create a session cookie.");
+
+  // Tenant administration accepts only verified-email owners. Mark only this
+  // new synthetic account as verified in the pinned Acceptance Auth D1.
+  const verifiedEmail = await d1Query(
+    AUTH_DATABASE_ID,
+    "UPDATE user SET emailVerified = 1 WHERE id = ?",
+    [state.userId],
+  );
+  assert.equal(verifiedEmail.meta?.changes, 1, "Synthetic acceptance user must be email-verified.");
+
 
   const enableResponse = await request("/api/auth/two-factor/enable", {
     method: "POST",
