@@ -146,8 +146,8 @@ This implementation does not include:
 4. Verify the same API key and quota policy across both REST and MCP.
 5. Exercise migration 0003 and the owner-only HTTP API against a dedicated test Worker and D1 Binding; verify origin/session/allowlist denial, audit immutability, cross-tenant isolation and atomic rollback when audit writes fail.
 6. Verify tenant membership assignment accepts only an existing `AUTH_DB` user with `emailVerified = 1`; missing/unverified users and directory failures must fail closed without tenant D1 writes. Verify last-owner revocation denial and tenant-state membership-version invalidation.
-6. Confirm the Production and MCP Workers have the intended separate `EXPORTFLOW_AUTH_DB` binding, without reusing the human account `AUTH_DB`.
-7. Obtain separate owner approval before changing bindings, deploying or enabling live customer keys.
+7. Confirm the Production and MCP Workers have the intended separate `EXPORTFLOW_AUTH_DB` binding, without reusing the human account `AUTH_DB`.
+8. Obtain separate owner approval before changing bindings, deploying or enabling live customer keys.
 
 Node fixtures and Wrangler dry-run builds are supporting checks only; neither proves Cloudflare D1 Binding runtime acceptance.
 
