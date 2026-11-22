@@ -37,5 +37,6 @@ test("unit and syntax checks run before any Acceptance deployment", () => {
   assert.ok(tests >= 0 && deploy > tests, "tests must precede the first Worker deployment");
   assert.match(acceptanceWorkflow, /0dd14d21-5d56-4b01-8c0f-a14959521dde/);
   assert.match(acceptanceWorkflow, /1f94eee0-219e-4a41-86ce-49c29067ef06/);
-  assert.doesNotMatch(acceptanceWorkflow, /0bd9f873-a1d5-4d90-b3fc-1c4b47e1aa67/);
+  assert.doesNotMatch(acceptanceWorkflow, /database_id = "0bd9f873-a1d5-4d90-b3fc-1c4b47e1aa67"/);
+  assert.match(acceptanceWorkflow, /if grep -q '0bd9f873-a1d5-4d90-b3fc-1c4b47e1aa67'/);
 });
