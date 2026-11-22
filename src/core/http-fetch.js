@@ -12,6 +12,7 @@ export class FetchAdapterError extends Error {
 export const HTTP_FETCH_LIMITS = Object.freeze({
   maxUrlLength: EGRESS_POLICY.maxUrlLength,
   maxResponseBytes: 1_048_576,
+  maxResponseChunks: 8_192,
   timeoutMs: 8_000,
   maxRedirects: 3,
 });
@@ -82,11 +83,17 @@ async function readTextBody(response, maxBytes, signal, getAbortCode) {
   const reader = response.body.getReader();
   const chunks = [];
   let totalBytes = 0;
+  let chunksRead = 0;
 
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      chunksRead += 1;
+      if (chunksRead > HTTP_FETCH_LIMITS.maxResponseChunks) {
+        cancelReader(reader);
+        throw new FetchAdapterError("RESPONSE_TOO_LARGE", "Upstream response contains too many chunks.", 413);
+      }
       totalBytes += value.byteLength;
       if (totalBytes > maxBytes) {
         cancelReader(reader);
