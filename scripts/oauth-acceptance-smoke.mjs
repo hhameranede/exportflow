@@ -333,6 +333,15 @@ async function callMcp(name, argumentsValue) {
   return body.result;
 }
 
+const jwksResponse = await fetch(issuer + "/jwks", {
+  headers: { accept: "application/json" },
+});
+const jwksBody = await jwksResponse.json().catch(() => null);
+if (!jwksResponse.ok || !Array.isArray(jwksBody?.keys) || jwksBody.keys.length === 0) {
+  throw new Error("Authorization Server JWKS endpoint failed (HTTP " + jwksResponse.status + "): " + JSON.stringify(jwksBody));
+}
+assert.ok(jwksBody.keys.every((key) => typeof key.kid === "string" && typeof key.kty === "string"), "JWKS must expose public key identifiers and types");
+
 const fetchResult = await callMcp("web_fetch", { url: "https://example.com/" });
 assert.notEqual(fetchResult?.isError, true, "OAuth token should authorize web_fetch");
 assert.equal(fetchResult?.structuredContent?.state, "succeeded", "web_fetch should finish in the real MCP Worker");
