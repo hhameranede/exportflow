@@ -4,6 +4,7 @@ import { authorizePlatformOwnerRequest, parsePlatformOwnerIds } from "./platform
 import { jwt } from "better-auth/plugins";
 import { mcp } from "@better-auth/mcp";
 import { verifyOAuthQueryParams } from "@better-auth/oauth-provider";
+import { getOAuthRuntimeConfig } from "./oauth-config.js";
 import { renderMarketingPage } from "../site/marketing.js";
 import { readBoundedJsonBody, TaskContractError } from "./task-contract.js";
 import {
@@ -63,8 +64,6 @@ const REQUIRED_TENANT_OAUTH_TRIGGERS = Object.freeze([
   "prevent_tenant_membership_delete",
   "bump_tenant_membership_version_on_tenant_state_change",
 ]);
-const AUTH_ISSUER = "https://exportflow.me/api/auth";
-const MCP_RESOURCE = "https://mcp.exportflow.me/mcp";
 const MCP_SCOPES = Object.freeze([
   "openid", "profile", "email", "offline_access",
   "tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract",
@@ -143,6 +142,13 @@ export function getAuthFeatureStatus(env = {}) {
     isNonEmptyString(env.BETTER_AUTH_SECRET) && env.BETTER_AUTH_SECRET.trim().length >= 32 &&
     validOrigin(baseUrl)
   );
+  let oauthEndpointsConfigured = false;
+  try {
+    getOAuthRuntimeConfig({ ...env, BETTER_AUTH_URL: baseUrl });
+    oauthEndpointsConfigured = true;
+  } catch {
+    // OAuth remains disabled when an issuer or protected-resource URL is malformed.
+  }
   const googleCredentialsPresent =
     isNonEmptyString(env.GOOGLE_CLIENT_ID) &&
     isNonEmptyString(env.GOOGLE_CLIENT_SECRET);
@@ -152,7 +158,7 @@ export function getAuthFeatureStatus(env = {}) {
     isNonEmptyString(env.AUTH_EMAIL_FROM);
   return Object.freeze({
     authConfigured,
-    tenantOAuthConfigured: authConfigured && isD1Binding(env.EXPORTFLOW_AUTH_DB),
+    tenantOAuthConfigured: authConfigured && oauthEndpointsConfigured && isD1Binding(env.EXPORTFLOW_AUTH_DB),
     googleEnabled: authConfigured && googleCredentialsPresent,
     emailPasswordEnabled: authConfigured && Boolean(emailServiceReady),
   });
@@ -245,10 +251,11 @@ function buildAuthOptions(env, status) {
   };
 
   if (status.tenantOAuthConfigured) {
+    const oauthEndpoints = getOAuthRuntimeConfig(env);
     options.plugins = [
-      jwt({ jwt: { issuer: AUTH_ISSUER }, disableSettingJwtHeader: true }),
+      jwt({ jwt: { issuer: oauthEndpoints.issuer }, disableSettingJwtHeader: true }),
       mcp({
-        resource: MCP_RESOURCE,
+        resource: oauthEndpoints.resource,
         scopes: [...MCP_SCOPES],
         requireOpenId: true,
         loginPage: "/signin",
@@ -265,8 +272,8 @@ function buildAuthOptions(env, status) {
         clientRegistrationDefaultApplicationType: "web",
         clientRegistrationDefaultScopes: [...MCP_SCOPES],
         clientRegistrationAllowedScopes: [...MCP_SCOPES],
-        clientRegistrationDefaultResources: [MCP_RESOURCE],
-        clientRegistrationAllowedResources: [MCP_RESOURCE],
+        clientRegistrationDefaultResources: [oauthEndpoints.resource],
+        clientRegistrationAllowedResources: [oauthEndpoints.resource],
         grantTypes: ["authorization_code", "refresh_token"],
         postLogin: {
           page: "/oauth/select-tenant",
