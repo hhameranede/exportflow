@@ -1,1 +1,2 @@
 One-shot user approval recorded 2026-11-22: run PR #107 owner MFA Acceptance only against the pinned Auth/Tenant Acceptance Workers and D1 databases. Preserve existing Acceptance secrets, JWKS, users and sessions. Do not modify Production, merge PRs, DNS, permissions or unrelated resources.
+Approval reaffirmed after validation fix: run once on 2026-11-22; Acceptance-only, preserve secrets and JWKS, no Production action.
