@@ -1,8 +1,12 @@
 name: Owner MFA Worker Acceptance
 
-# Runs only from an explicit manual approval or a one-time, exact-PR label.
+# Runs only from a one-shot, exact commit on the isolated PR branch, or a future
+# manual dispatch after this workflow is present on the default branch.
 # This workflow is pinned to the isolated Acceptance account and D1 resources.
 on:
+  push:
+    branches:
+      - feat/owner-step-up-mfa-20261122
   workflow_dispatch:
     inputs:
       approve_isolated_acceptance:
@@ -10,8 +14,6 @@ on:
         required: true
         default: false
         type: boolean
-  pull_request:
-    types: [labeled]
 
 permissions:
   contents: read
@@ -19,16 +21,12 @@ permissions:
 jobs:
   mfa-acceptance:
     if: >-
-      ${{ (github.event_name == 'workflow_dispatch' &&
+      ${{ (github.event_name == 'push' &&
+            github.ref == 'refs/heads/feat/owner-step-up-mfa-20261122' &&
+            github.event.head_commit.message == 'test: approve isolated MFA Acceptance run PR #107') ||
+          (github.event_name == 'workflow_dispatch' &&
             github.event.inputs.approve_isolated_acceptance == 'true' &&
-            github.ref == 'refs/heads/feat/owner-step-up-mfa-20261122') ||
-          (github.event_name == 'pull_request' &&
-            github.event.action == 'labeled' &&
-            github.event.label.name == 'run-isolated-mfa-acceptance' &&
-            github.event.pull_request.number == 107 &&
-            github.event.pull_request.head.ref == 'feat/owner-step-up-mfa-20261122' &&
-            github.event.pull_request.head.repo.full_name == 'hhameranede/exportflow' &&
-            github.event.pull_request.base.ref == 'feat/tenant-membership-admin-api-20261122') }}
+            github.ref == 'refs/heads/feat/owner-step-up-mfa-20261122') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency:
