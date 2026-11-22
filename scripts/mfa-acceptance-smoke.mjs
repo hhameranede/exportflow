@@ -647,6 +647,95 @@ async function cleanupAcceptance() {
   }
   assertTarget();
   const now = new Date().toISOString();
+  const membership = state.membershipAcceptance;
+  if (membership) {
+    if (typeof membership.tenantId === "string" && /^tenant_[a-z0-9]+$/.test(membership.tenantId)) {
+      if (typeof membership.verifiedUserId === "string") {
+        const currentMember = await d1Query(
+          TENANT_DATABASE_ID,
+          "SELECT status FROM tenant_memberships WHERE tenant_id = ? AND user_id = ? LIMIT 1",
+          [membership.tenantId, membership.verifiedUserId],
+        );
+        if (currentMember.results?.[0]?.status === "active") {
+          const revoked = await d1Query(
+            TENANT_DATABASE_ID,
+            "UPDATE tenant_memberships SET status = 'revoked', updated_at = ?, revoked_at = ? WHERE tenant_id = ? AND user_id = ? AND status = 'active'",
+            [now, now, membership.tenantId, membership.verifiedUserId],
+          );
+          if (Number(revoked.meta?.changes) === 1) {
+            await d1Query(
+              TENANT_DATABASE_ID,
+              "INSERT INTO tenant_admin_audit_log (event_id, actor_id, action, resource_type, resource_id, details_json, created_at) " +
+                "SELECT ?, ?, 'tenant_memberships:revoke', 'tenant_membership', ?, ?, ? " +
+                "WHERE NOT EXISTS (SELECT 1 FROM tenant_admin_audit_log WHERE action = 'tenant_memberships:revoke' AND resource_id = ?)",
+              [randomUUID(), state.userId || "acceptance-cleanup", membership.tenantId + "/" + membership.verifiedUserId,
+                JSON.stringify({ tenantId: membership.tenantId, userId: membership.verifiedUserId, status: "revoked", cleanup: true }),
+                now, membership.tenantId + "/" + membership.verifiedUserId],
+            );
+          }
+        }
+      }
+
+      const currentTenant = await d1Query(
+        TENANT_DATABASE_ID,
+        "SELECT status FROM tenants WHERE tenant_id = ? LIMIT 1",
+        [membership.tenantId],
+      );
+      if (["active", "suspended"].includes(currentTenant.results?.[0]?.status)) {
+        const closed = await d1Query(
+          TENANT_DATABASE_ID,
+          "UPDATE tenants SET status = 'closed', updated_at = ? WHERE tenant_id = ? AND status <> 'closed'",
+          [now, membership.tenantId],
+        );
+        if (Number(closed.meta?.changes) === 1) {
+          await d1Query(
+            TENANT_DATABASE_ID,
+            "INSERT INTO tenant_admin_audit_log (event_id, actor_id, action, resource_type, resource_id, details_json, created_at) " +
+              "SELECT ?, ?, 'tenants:status', 'tenant', ?, ?, ? " +
+              "WHERE NOT EXISTS (SELECT 1 FROM tenant_admin_audit_log WHERE action = 'tenants:status' AND resource_id = ? AND details_json LIKE '%closed%')",
+            [randomUUID(), state.userId || "acceptance-cleanup", membership.tenantId,
+              JSON.stringify({ status: "closed", cleanup: true }), now, membership.tenantId],
+          );
+        }
+      }
+    }
+
+    for (const user of membership.users || []) {
+      await d1Query(
+        AUTH_DATABASE_ID,
+        "DELETE FROM user WHERE (? <> '' AND id = ?) OR (? <> '' AND email = ?)",
+        [user.userId || "", user.userId || "", user.email || "", user.email || ""],
+      );
+      if (user.userId) {
+        const remaining = await d1Query(
+          AUTH_DATABASE_ID,
+          "SELECT COUNT(*) AS count FROM user WHERE id = ?",
+          [user.userId],
+        );
+        assert.equal(Number(remaining.results?.[0]?.count), 0, "A synthetic membership test account remains.");
+      }
+    }
+
+    if (typeof membership.tenantId === "string") {
+      const tenant = await d1Query(
+        TENANT_DATABASE_ID,
+        "SELECT status FROM tenants WHERE tenant_id = ? LIMIT 1",
+        [membership.tenantId],
+      );
+      assert.ok(!tenant.results?.[0] || tenant.results[0].status === "closed",
+        "The synthetic membership-test tenant must be closed.");
+      if (membership.verifiedUserId) {
+        const member = await d1Query(
+          TENANT_DATABASE_ID,
+          "SELECT status FROM tenant_memberships WHERE tenant_id = ? AND user_id = ? LIMIT 1",
+          [membership.tenantId, membership.verifiedUserId],
+        );
+        assert.ok(!member.results?.[0] || member.results[0].status === "revoked",
+          "The synthetic membership must be revoked after cleanup.");
+      }
+    }
+  }
+
   if (state.userId) {
     await d1Query(
       AUTH_DATABASE_ID,
