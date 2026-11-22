@@ -539,6 +539,24 @@ async function handleTenantOAuthApi(request, env, auth) {
   }
 }
 
+const OWNER_TWO_FACTOR_MANAGEMENT_PATHS = new Set([
+  "/api/auth/two-factor/enable",
+  "/api/auth/two-factor/disable",
+  "/api/auth/two-factor/get-totp-uri",
+  "/api/auth/two-factor/generate-backup-codes",
+  "/api/auth/two-factor/verify-totp",
+  "/api/auth/two-factor/verify-backup-code",
+  "/api/auth/two-factor/verify-otp",
+  "/api/auth/two-factor/send-otp",
+]);
+
+/**
+ * Once an account is allowlisted as a platform owner, an existing authenticated
+ * session must not be able to bypass the ExportFlow step-up budget or recover
+ * its TOTP seed through Better Auth's account-management APIs. These paths are
+ * left untouched during sessionless sign-in, so the ordinary 2FA login flow
+ * continues to work.
+ */
 export async function guardOwnerTwoFactorEndpoint(request, {
   ownerUserIds,
   authDb,
@@ -548,9 +566,7 @@ export async function guardOwnerTwoFactorEndpoint(request, {
   try { pathname = new URL(request.url).pathname; }
   catch { return textResponse({ error: "INVALID_REQUEST" }, 400); }
 
-  const isVerify = pathname === "/api/auth/two-factor/verify-totp";
-  const isDisable = pathname === "/api/auth/two-factor/disable";
-  if (request.method !== "POST" || (!isVerify && !isDisable)) return null;
+  if (request.method !== "POST" || !OWNER_TWO_FACTOR_MANAGEMENT_PATHS.has(pathname)) return null;
   if (!(ownerUserIds instanceof Set) || ownerUserIds.size === 0) return null;
   if (!authDb || typeof authDb.prepare !== "function" || typeof getSession !== "function") {
     return textResponse({ error: "OWNER_TWO_FACTOR_GUARD_UNAVAILABLE" }, 503);
@@ -567,6 +583,8 @@ export async function guardOwnerTwoFactorEndpoint(request, {
   }
 
   const userId = session?.user?.id;
+  // Sessionless TOTP/backup-code challenges are Better Auth's normal login
+  // flow. The guard only applies to an already authenticated owner session.
   if (typeof userId !== "string" || !ownerUserIds.has(userId)) return null;
 
   let factor;
@@ -579,23 +597,18 @@ export async function guardOwnerTwoFactorEndpoint(request, {
   } catch {
     return textResponse({ error: "OWNER_TWO_FACTOR_GUARD_UNAVAILABLE" }, 503);
   }
-  if (!factor) return textResponse({ error: "OWNER_IDENTITY_UNAVAILABLE" }, 503);
 
-  const enabled = Number(factor.twoFactorEnabled) === 1;
-  const verified = Number(factor.factorVerified) === 1;
-  if (isVerify && enabled && verified) {
+  if (!factor || Number(factor.twoFactorEnabled) !== 1 || Number(factor.factorVerified) !== 1) {
     return textResponse({
-      error: "OWNER_STEP_UP_ENDPOINT_REQUIRED",
-      message: "Platform owners must use the rate-limited one-time step-up endpoint.",
+      error: "OWNER_TWO_FACTOR_BOOTSTRAP_REQUIRED",
+      message: "A platform owner must enroll and verify TOTP before being added to the owner allowlist.",
     }, 403);
   }
-  if (isDisable && enabled) {
-    return textResponse({
-      error: "OWNER_TWO_FACTOR_DISABLE_BLOCKED",
-      message: "Platform owners cannot disable their authenticator through the account API.",
-    }, 403);
-  }
-  return null;
+
+  return textResponse({
+    error: "OWNER_TWO_FACTOR_MANAGEMENT_BLOCKED",
+    message: "Platform owner authenticator management and re-verification must use the approved owner recovery process and step-up flow.",
+  }, 403);
 }
 
 async function handleAccountTwoFactorStatus(request, env, auth) {
