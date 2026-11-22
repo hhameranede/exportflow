@@ -539,6 +539,38 @@ async function handleTenantOAuthApi(request, env, auth) {
   }
 }
 
+async function handleAccountTwoFactorStatus(request, env, auth) {
+  const url = new URL(request.url);
+  if (url.pathname !== "/api/auth/two-factor/status") return null;
+  if (request.method !== "GET") return textResponse({ error: "method_not_allowed" }, 405);
+
+  let session;
+  try {
+    session = await auth.api.getSession({
+      headers: request.headers,
+      query: { disableCookieCache: true },
+    });
+  } catch {
+    return textResponse({ error: "AUTH_SESSION_UNAVAILABLE" }, 503);
+  }
+  if (!session?.user?.id) return textResponse({ error: "UNAUTHORIZED" }, 401);
+  if (session.user.emailVerified !== true) return textResponse({ error: "EMAIL_VERIFICATION_REQUIRED" }, 403);
+
+  try {
+    const factor = await env.AUTH_DB.prepare(
+      "SELECT u.twoFactorEnabled AS twoFactorEnabled, tf.verified AS factorVerified " +
+      "FROM user AS u LEFT JOIN twoFactor AS tf ON tf.userId = u.id " +
+      "WHERE u.id = ?1 LIMIT 1",
+    ).bind(session.user.id).first();
+    return textResponse({
+      twoFactorEnabled: Number(factor?.twoFactorEnabled) === 1,
+      twoFactorVerified: Number(factor?.factorVerified) === 1,
+    });
+  } catch {
+    return textResponse({ error: "TWO_FACTOR_STATUS_UNAVAILABLE" }, 503);
+  }
+}
+
 export async function handleAuthRequest(request, env = {}) {
   const url = new URL(request.url);
   const status = getAuthFeatureStatus(env);
@@ -608,6 +640,9 @@ export async function handleAuthRequest(request, env = {}) {
       message: "Account services are not configured yet.",
     }, 503);
   }
+
+  const twoFactorStatusResponse = await handleAccountTwoFactorStatus(request, env, auth);
+  if (twoFactorStatusResponse) return twoFactorStatusResponse;
 
   const tenantOAuthResponse = await handleTenantOAuthApi(request, env, auth);
   if (tenantOAuthResponse) return tenantOAuthResponse;
