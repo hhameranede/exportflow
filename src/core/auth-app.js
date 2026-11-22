@@ -332,6 +332,24 @@ function buildAuthOptions(env, status) {
     ];
   }
 
+  if (isAcceptanceRuntime(env)) {
+    options.onAPIError = {
+      onError(error, context) {
+        const message = typeof error?.message === "string"
+          ? error.message
+              .replace(/(access_token|refresh_token|client_secret|code_verifier|password|authorization)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
+              .slice(0, 1200)
+          : "Unclassified Better Auth API error";
+        console.error("[exportflow-acceptance-auth-api-error]", JSON.stringify({
+          name: typeof error?.name === "string" ? error.name.slice(0, 120) : "Error",
+          message,
+          path: typeof context?.path === "string" ? context.path.slice(0, 160) : undefined,
+          method: typeof context?.request?.method === "string" ? context.request.method : undefined,
+        }));
+      },
+    };
+  }
+
   if (status.emailPasswordEnabled) {
     const acceptanceRuntime = isAcceptanceRuntime(env);
     const emailAndPassword = {
@@ -560,8 +578,31 @@ export async function handleAuthRequest(request, env = {}) {
   if (tenantOAuthResponse) return tenantOAuthResponse;
 
   try {
-    return await auth.handler(request);
-  } catch {
+    const response = await auth.handler(request);
+    if (isAcceptanceRuntime(env) && response.status >= 500) {
+      console.error("[exportflow-acceptance-auth-http-error]", JSON.stringify({
+        method: request.method,
+        path: url.pathname,
+        status: response.status,
+        contentType: response.headers.get("content-type"),
+        rayId: request.headers.get("cf-ray") || undefined,
+      }));
+    }
+    return response;
+  } catch (error) {
+    if (isAcceptanceRuntime(env)) {
+      const message = typeof error?.message === "string"
+        ? error.message
+            .replace(/(access_token|refresh_token|client_secret|code_verifier|password|authorization)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
+            .slice(0, 1200)
+        : "Unclassified request error";
+      console.error("[exportflow-acceptance-auth-handler-error]", JSON.stringify({
+        name: typeof error?.name === "string" ? error.name.slice(0, 120) : "Error",
+        message,
+        method: request.method,
+        path: url.pathname,
+      }));
+    }
     return textResponse({ error: "AUTH_REQUEST_FAILED" }, 500);
   }
 }
