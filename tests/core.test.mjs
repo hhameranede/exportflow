@@ -46,6 +46,86 @@ test("rejects unsafe source URLs and invalid status", () => {
   assert.throws(() => normalizeResult({ status: "unknown" }));
 });
 
+test("web.map adapter enforces the caller's maxUrls limit", async () => {
+  const originalFetch = globalThis.fetch;
+  const links = Array.from({ length: 12 }, (_, index) =>
+    '<a href="/item-' + index + '">Item ' + index + '</a>'
+  ).join("");
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/robots.txt") {
+      return response("User-agent: *", { headers: { "content-type": "text/plain" } });
+    }
+    if (url.pathname === "/sitemap.xml") {
+      return response("", { status: 404, headers: { "content-type": "text/plain" } });
+    }
+    if (url.pathname === "/start") {
+      return response(links, { headers: { "content-type": "text/html; charset=utf-8" } });
+    }
+    throw new Error("Unexpected map request: " + url.href);
+  };
+
+  try {
+    const result = await executeAdapter("web.map.v1", {
+      url: "https://example.com/start",
+      maxUrls: 4,
+    });
+    assert.equal(result.status, "succeeded");
+    assert.equal(result.data.urls.length, 4);
+    assert.ok(result.data.urls.every((item) => item.url.startsWith("https://example.com/item-")));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("web.crawl adapter enforces caller maxPages and maxDepth limits", async () => {
+  const originalFetch = globalThis.fetch;
+  const pages = {
+    "/start": '<a href="/one">One</a><a href="/two">Two</a><a href="/three">Three</a>',
+    "/one": '<a href="/deep-one">Deep one</a><p>One</p>',
+    "/two": '<a href="/deep-two">Deep two</a><p>Two</p>',
+    "/three": '<a href="/deep-three">Deep three</a><p>Three</p>',
+    "/deep-one": "<p>Deep one</p>",
+    "/deep-two": "<p>Deep two</p>",
+    "/deep-three": "<p>Deep three</p>",
+  };
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/robots.txt") {
+      return response("User-agent: *", { headers: { "content-type": "text/plain" } });
+    }
+    if (url.pathname === "/sitemap.xml") {
+      return response("", { status: 404, headers: { "content-type": "text/plain" } });
+    }
+    if (Object.hasOwn(pages, url.pathname)) {
+      return response(pages[url.pathname], { headers: { "content-type": "text/html; charset=utf-8" } });
+    }
+    throw new Error("Unexpected crawl request: " + url.href);
+  };
+
+  try {
+    const cappedPages = await executeAdapter("web.crawl.v1", {
+      url: "https://example.com/start",
+      maxPages: 2,
+      maxDepth: 1,
+    });
+    assert.equal(cappedPages.status, "succeeded");
+    assert.equal(cappedPages.data.pageCount, 2);
+    assert.ok(cappedPages.data.pages.every((page) => page.depth <= 1));
+
+    const depthZero = await executeAdapter("web.crawl.v1", {
+      url: "https://example.com/start",
+      maxPages: 5,
+      maxDepth: 0,
+    });
+    assert.equal(depthZero.status, "succeeded");
+    assert.equal(depthZero.data.pageCount, 1);
+    assert.equal(depthZero.data.pages[0].depth, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("adapter catalog omits executable functions", () => {
   registerAdapter({ id: "fixture-http", family: "http", capabilities: ["fetch"], execute: async () => ({}) });
   assert.equal(getAdapterCatalog().find((item) => item.id === "fixture-http").id, "fixture-http");
