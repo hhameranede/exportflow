@@ -266,6 +266,26 @@ export function renderAuthPage(type, t, locale, hrefFor, escapeHtml, arrowRightI
           '<button type="button" class="ef-google-btn ef-google-btn-sm" data-auth-link-google disabled>' + googleMark() + '<span>' + escapeHtml(c.linkGoogle) + '</span></button>' +
         '</article>' +
         '<article class="ef-account-card"><div class="ef-account-card-head"><div><h2>Security</h2><p class="ef-acc-card-desc">Change your password when email sign-in is enabled, and sign out securely.</p></div></div>' +
+          '<section data-account-two-factor>' +
+            '<p class="ef-form-banner" data-two-factor-status role="status" aria-live="polite">Checking authenticator status…</p>' +
+            '<form class="ef-auth-form" data-two-factor-enable-form hidden>' +
+              '<div class="ef-field"><label for="acc-totp-password">Account password (only for password-based accounts)</label><input id="acc-totp-password" name="password" type="password" autocomplete="current-password"></div>' +
+              '<p class="ef-acc-card-desc">Set up a TOTP authenticator. Save the backup codes offline; they are shown only during setup.</p>' +
+              '<button type="submit" class="ef-btn ef-btn-secondary ef-btn-sm">Set up authenticator</button>' +
+              '<p class="ef-form-banner" data-two-factor-enable-message role="status" aria-live="polite"></p>' +
+            '</form>' +
+            '<div data-two-factor-enrollment hidden>' +
+              '<p class="ef-acc-card-desc">Add this key in your authenticator app as a TOTP account, then enter the current six-digit code to confirm setup.</p>' +
+              '<p><strong>Authenticator setup key</strong></p><code data-two-factor-secret></code>' +
+              '<button type="button" class="ef-code-btn" data-two-factor-copy-secret>Copy setup key</button>' +
+              '<ul class="ef-session-list" data-two-factor-backup-codes aria-label="One-time backup codes"></ul>' +
+              '<form class="ef-auth-form" data-two-factor-verify-form>' +
+                '<div class="ef-field"><label for="acc-totp-code">Six-digit authenticator code</label><input id="acc-totp-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" required></div>' +
+                '<button type="submit" class="ef-btn ef-btn-primary ef-btn-sm">Verify authenticator</button>' +
+                '<p class="ef-form-banner" data-two-factor-verify-message role="status" aria-live="polite"></p>' +
+              '</form>' +
+            '</div>' +
+          '</section>' +
           '<form class="ef-auth-form" data-account-password-form hidden>' +
             '<div class="ef-field"><label for="acc-current-password">Current password</label><input id="acc-current-password" name="currentPassword" type="password" autocomplete="current-password" required></div>' +
             '<div class="ef-field"><label for="acc-new-password">New password</label><input id="acc-new-password" name="newPassword" type="password" autocomplete="new-password" minlength="8" required></div>' +
