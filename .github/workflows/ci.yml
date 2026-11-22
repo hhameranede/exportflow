@@ -15,6 +15,23 @@ jobs:
    - run: npm install --no-audit --no-fund
    - run: npm test
    - run: npm run check
+   - name: Install pinned Playwright and Chromium outside project dependencies
+     run: |
+      npm install --prefix "$RUNNER_TEMP/ef-browser" --no-save --package-lock=false playwright@1.65.1
+      "$RUNNER_TEMP/ef-browser/node_modules/.bin/playwright" install --only-shell chromium
+   - name: Run real Chromium website checks
+     env:
+      PLAYWRIGHT_MODULE: ${{ runner.temp }}/ef-browser/node_modules/playwright/index.mjs
+      SITE_SCREENSHOT_DIR: ${{ runner.temp }}/exportflow-site-screenshots
+     run: node scripts/site-browser-check.mjs
+   - name: Upload browser screenshots
+     if: always()
+     uses: actions/upload-artifact@v4
+     with:
+      name: exportflow-site-browser-review
+      path: ${{ runner.temp }}/exportflow-site-screenshots
+      if-no-files-found: warn
+      retention-days: 3
    - name: Build isolated Auth Lab bundle (dry-run only)
      run: npx --yes wrangler@4 deploy --dry-run --outdir dist/auth-lab --config cloudflare/auth-lab/wrangler.toml
    - name: Build Platform Worker bundle (dry-run only)

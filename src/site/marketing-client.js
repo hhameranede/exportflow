@@ -225,6 +225,9 @@ export const MARKETING_JS = `(function () {
         drawer.hidden = false;
         if (backdrop) backdrop.classList.add("is-open");
         requestAnimationFrame(function () {
+          // The user may close the drawer before this opening frame runs.
+          // Ignore stale animation frames so they cannot reopen a closed drawer.
+          if (menuBtn.getAttribute("aria-expanded") !== "true") return;
           drawer.classList.add("is-open");
           var items = getFocusable();
           if (items.length) items[0].focus();
@@ -279,6 +282,15 @@ export const MARKETING_JS = `(function () {
         e.preventDefault();
         first.focus();
       }
+    });
+
+    // Also listen at document level so Escape closes the drawer even during
+    // the opening animation, before the requestAnimationFrame focus move.
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape" || menuBtn.getAttribute("aria-expanded") !== "true") return;
+      e.preventDefault();
+      setDrawerOpen(false);
+      menuBtn.focus();
     });
   }
 
@@ -837,7 +849,7 @@ export const MARKETING_JS = `(function () {
 
   function escapeAuthText(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (char) {
-      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[char];
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\\"": "&quot;", "'": "&#39;" })[char];
     });
   }
 
@@ -1379,7 +1391,7 @@ export const MARKETING_JS = `(function () {
     bindAuthForms();
     bindGoogleButtons();
     bindAccountControls();
-    await refreshAuthHeader();
+
     try {
       authConfig = await authRequest("config");
       setAccountConfig(authConfig);
@@ -1387,6 +1399,27 @@ export const MARKETING_JS = `(function () {
       authConfig = null;
       setAccountConfig(null);
     }
+
+    var authReady = Boolean(authConfig && authConfig.authConfigured && authConfig.authReady);
+    if (!authReady) {
+      // Do not request a session from a deployment whose account service is
+      // not configured. This keeps public pages quiet and the account UI
+      // explicitly unavailable instead of producing an avoidable 503.
+      updateAuthHeader(null);
+      var workspace = document.querySelector("[data-account-workspace]");
+      var loading = document.querySelector("[data-account-loading]");
+      var accountStatus = document.querySelector("[data-auth-account-status]");
+      if (workspace) workspace.hidden = true;
+      if (loading) loading.hidden = true;
+      authMessage(
+        accountStatus,
+        "Account services are not connected yet. The account workspace will be available after server authentication is configured.",
+        "warning",
+      );
+      return;
+    }
+
+    await refreshAuthHeader();
     if (document.querySelector("[data-account-workspace]")) {
       await loadAccountWorkspace();
     }
