@@ -61,6 +61,12 @@ test("rejects non-2xx responses and successful pages without the fixture marker"
     result: { status: "succeeded", data: { httpStatus: 200, body: "<h1>Different page</h1>" } },
   });
   assert.throws(() => assertSuccessfulFetchTask(notFound, "REST"), /REST Fetch did not complete/);
-  const error = assert.throws(() => assertSuccessfulFetchTask(wrongContent, "MCP"), /MCP Fetch did not complete/);
-  assert.equal(error.message.includes(SUCCESS_FIXTURE.marker), false);
+  let thrown;
+  try {
+    assertSuccessfulFetchTask(wrongContent, "MCP");
+  } catch (error) {
+    thrown = error;
+  }
+  assert.ok(thrown instanceof Error);
+  assert.equal(thrown.message.includes(SUCCESS_FIXTURE.marker), false);
 });
