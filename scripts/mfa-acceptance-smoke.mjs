@@ -223,6 +223,206 @@ async function d1Query(databaseId, sql, params = []) {
   return body.result[0];
 }
 
+
+async function ownerAdminMutation({ state, jar, path, payload, expectedStatus, label }) {
+  const sessionResponse = await request("/api/auth/get-session", { jar });
+  const session = await responseJson(sessionResponse, label + " owner session");
+  assert.equal(session.user?.id, state.userId);
+  assert.equal(session.session?.id, state.sessionId);
+
+  const code = generateTotpCode(state.totpSecret, Date.now(), state.totpDigits, state.totpPeriod);
+  const stepUpResponse = await request("/api/v1/admin/step-up", {
+    method: "POST",
+    jar,
+    payload: { code },
+  });
+  await responseJson(stepUpResponse, label + " TOTP step-up");
+  assert.equal(stepUpResponse.status, 200);
+  const proof = jar.get(OWNER_STEP_UP_COOKIE);
+  assert.ok(proof, label + " did not receive a one-time proof.");
+
+  const response = await request(path, {
+    method: "POST",
+    jar,
+    extraCookie: OWNER_STEP_UP_COOKIE + "=" + proof,
+    payload,
+  });
+  const body = await response.json().catch(() => null);
+  assert.equal(response.status, expectedStatus, label + " returned an unexpected HTTP status.");
+  return body;
+}
+
+async function membershipFootprint(tenantId) {
+  const result = await d1Query(
+    TENANT_DATABASE_ID,
+    "SELECT " +
+      "(SELECT COUNT(*) FROM tenant_memberships WHERE tenant_id = ?1) AS membership_count, " +
+      "(SELECT COUNT(*) FROM tenant_admin_audit_log WHERE action = 'tenant_memberships:assign' AND resource_id LIKE ?2) AS assignment_audit_count",
+    [tenantId, tenantId + "/%"],
+  );
+  return result.results?.[0];
+}
+
+async function createMembershipTestUser(state, suffix) {
+  const email = "tenant-membership-" + suffix + "-" + randomUUID().replaceAll("-", "") + "@example.net";
+  const record = { email, userId: null };
+  state.membershipAcceptance.users.push(record);
+  await saveState(state);
+  const jar = new CookieJar();
+  const response = await request("/api/auth/sign-up/email", {
+    method: "POST",
+    jar,
+    payload: {
+      name: "ExportFlow " + suffix + " Membership Acceptance",
+      email,
+      password: randomBytes(24).toString("base64url"),
+    },
+  });
+  const body = await responseJson(response, "Create synthetic " + suffix + " membership account");
+  assert.equal(response.status, 200);
+  assert.ok(typeof body.user?.id === "string" && body.user.id.length > 0);
+  record.userId = body.user.id;
+  await saveState(state);
+  return record.userId;
+}
+
+async function verifyTenantMembershipAcceptance(state, jar) {
+  const plan = await d1Query(
+    TENANT_DATABASE_ID,
+    "SELECT status FROM plan_policies WHERE plan_code = ?1 LIMIT 1",
+    ["qa_daily"],
+  );
+  assert.equal(plan.results?.[0]?.status, "active", "The pinned QA plan must be active.");
+
+  const membership = {
+    tenantId: "tenant_" + randomUUID().replaceAll("-", ""),
+    users: [],
+    verifiedUserId: null,
+    unverifiedUserId: null,
+    unknownUserId: "missing_" + randomUUID().replaceAll("-", ""),
+    completed: false,
+  };
+  state.membershipAcceptance = membership;
+  await saveState(state);
+
+  const provision = await ownerAdminMutation({
+    state,
+    jar,
+    path: "/api/v1/admin/tenants",
+    payload: { tenantId: membership.tenantId, planCode: "qa_daily" },
+    expectedStatus: 201,
+    label: "Provision membership-test tenant",
+  });
+  assert.equal(provision.data?.tenantId, membership.tenantId);
+  assert.equal(provision.data?.status, "active");
+
+  const verifiedUserId = await createMembershipTestUser(state, "verified");
+  membership.verifiedUserId = verifiedUserId;
+  await saveState(state);
+  const verifiedUpdate = await d1Query(
+    AUTH_DATABASE_ID,
+    "UPDATE user SET emailVerified = 1 WHERE id = ?1",
+    [verifiedUserId],
+  );
+  assert.equal(verifiedUpdate.meta?.changes, 1);
+
+  const unverifiedUserId = await createMembershipTestUser(state, "unverified");
+  membership.unverifiedUserId = unverifiedUserId;
+  await saveState(state);
+
+  const accepted = await ownerAdminMutation({
+    state,
+    jar,
+    path: "/api/v1/admin/tenants/" + encodeURIComponent(membership.tenantId) + "/memberships",
+    payload: { userId: verifiedUserId, role: "member" },
+    expectedStatus: 201,
+    label: "Assign email-verified synthetic user",
+  });
+  assert.equal(accepted.data?.tenantId, membership.tenantId);
+  assert.equal(accepted.data?.userId, verifiedUserId);
+  assert.equal(accepted.data?.role, "member");
+  assert.equal(accepted.data?.status, "active");
+
+  const liveMembership = await d1Query(
+    TENANT_DATABASE_ID,
+    "SELECT role, status FROM tenant_memberships WHERE tenant_id = ?1 AND user_id = ?2 LIMIT 1",
+    [membership.tenantId, verifiedUserId],
+  );
+  assert.equal(liveMembership.results?.[0]?.role, "member");
+  assert.equal(liveMembership.results?.[0]?.status, "active");
+
+  const beforeUnverified = await membershipFootprint(membership.tenantId);
+  const unverified = await ownerAdminMutation({
+    state,
+    jar,
+    path: "/api/v1/admin/tenants/" + encodeURIComponent(membership.tenantId) + "/memberships",
+    payload: { userId: unverifiedUserId, role: "member" },
+    expectedStatus: 404,
+    label: "Reject unverified synthetic user",
+  });
+  assert.equal(unverified.error?.code, "VERIFIED_USER_NOT_FOUND");
+  assert.deepEqual(await membershipFootprint(membership.tenantId), beforeUnverified,
+    "Unverified identity rejection must not write to Tenant D1.");
+
+  const beforeUnknown = await membershipFootprint(membership.tenantId);
+  const unknown = await ownerAdminMutation({
+    state,
+    jar,
+    path: "/api/v1/admin/tenants/" + encodeURIComponent(membership.tenantId) + "/memberships",
+    payload: { userId: membership.unknownUserId, role: "member" },
+    expectedStatus: 404,
+    label: "Reject unknown synthetic identity",
+  });
+  assert.equal(unknown.error?.code, "VERIFIED_USER_NOT_FOUND");
+  assert.deepEqual(await membershipFootprint(membership.tenantId), beforeUnknown,
+    "Unknown identity rejection must not write to Tenant D1.");
+
+  const revoked = await ownerAdminMutation({
+    state,
+    jar,
+    path: "/api/v1/admin/tenants/" + encodeURIComponent(membership.tenantId) +
+      "/memberships/" + encodeURIComponent(verifiedUserId) + "/revoke",
+    payload: {},
+    expectedStatus: 200,
+    label: "Revoke verified synthetic membership",
+  });
+  assert.equal(revoked.data?.status, "revoked");
+
+  const closed = await ownerAdminMutation({
+    state,
+    jar,
+    path: "/api/v1/admin/tenants/" + encodeURIComponent(membership.tenantId) + "/status",
+    payload: { status: "closed" },
+    expectedStatus: 200,
+    label: "Close synthetic membership-test tenant",
+  });
+  assert.equal(closed.data?.status, "closed");
+
+  const tenant = await d1Query(
+    TENANT_DATABASE_ID,
+    "SELECT status FROM tenants WHERE tenant_id = ?1 LIMIT 1",
+    [membership.tenantId],
+  );
+  const member = await d1Query(
+    TENANT_DATABASE_ID,
+    "SELECT status FROM tenant_memberships WHERE tenant_id = ?1 AND user_id = ?2 LIMIT 1",
+    [membership.tenantId, verifiedUserId],
+  );
+  const audit = await d1Query(
+    TENANT_DATABASE_ID,
+    "SELECT COUNT(*) AS count FROM tenant_admin_audit_log WHERE resource_id = ?1 OR resource_id = ?2",
+    [membership.tenantId, membership.tenantId + "/" + verifiedUserId],
+  );
+  assert.equal(tenant.results?.[0]?.status, "closed");
+  assert.equal(member.results?.[0]?.status, "revoked");
+  assert.ok(Number(audit.results?.[0]?.count) >= 4);
+
+  membership.completed = true;
+  state.cookies = jar.snapshot();
+  await saveState(state);
+  console.log("Dual-D1 tenant membership Acceptance passed: verified account accepted; unverified and unknown identities rejected with zero Tenant D1 writes; membership revoked; tenant closed. Append-only audit evidence retained.");
+}
+
 async function bootstrap() {
   assertTarget();
   const suffix = randomUUID().replaceAll("-", "");
@@ -313,6 +513,11 @@ async function verifyAcceptance() {
   const statusResponse = await request("/api/auth/two-factor/status", { jar });
   const factorStatus = await responseJson(statusResponse, "Read verified owner TOTP state");
   assert.deepEqual(factorStatus, { twoFactorEnabled: true, twoFactorVerified: true });
+
+  await verifyTenantMembershipAcceptance(state, jar);
+  // The same Acceptance Worker uses a per-IP burst limiter; let its 60-second
+  // window expire before exercising the separate MFA failed-attempt lockout.
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 65_000));
 
   for (const [path, payload] of OWNER_FACTOR_PATHS) {
     const response = await request(path, { method: "POST", jar, payload });
