@@ -3,3 +3,4 @@ Approval reaffirmed after validation fix: run once on 2026-11-22; Acceptance-onl
 Approval re-trigger after correcting the workflow's Tenant D1 guard to the verified Cloudflare ID (219e).
 Acceptance retry: YAML-quote the PR #107 deploy messages; no secrets, JWKS, or Production resources may be altered.
 Retry after correcting Better Auth 1.7.27 enableTwoFactor payload to include the synthetic credential password. Existing Acceptance secrets/JWKS preserved; Acceptance only.
+Re-run approved Acceptance test after fixing the temporary-owner cleanup step to use a bash block without YAML comment parsing. Remove synthetic account and restore no owner allowlist.
