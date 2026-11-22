@@ -609,7 +609,7 @@ export async function handleOAuthBrowserPage(request, env = {}) {
       signedParams.get("response_type") !== "code" ||
       signedParams.get("code_challenge_method") !== "S256" ||
       signedParams.getAll("resource").length !== 1 ||
-      signedParams.get("resource") !== MCP_RESOURCE) {
+      signedParams.get("resource") !== oauthEndpoints.resource) {
     return oauthBrowserError(400, "Unsupported authorization request", "This request does not match the ExportFlow OAuth authorization profile.");
   }
 
