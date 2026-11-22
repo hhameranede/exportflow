@@ -109,18 +109,29 @@ async function setupSyntheticTenantMembership(userId) {
   );
   assert.equal(verified.meta?.changes, 1, "Synthetic acceptance user should be marked verified");
 
-  const membershipId = "ef_accept_" + randomUUID();
+  // Each run gets its own small-quota workspace; the shared QA fixtures may already be exhausted.
+  const tenantId = "qa_oauth_" + randomUUID().replaceAll("-", "");
   const timestamp = new Date().toISOString();
+  const tenant = await d1Query(
+    tenantDatabaseId,
+    "INSERT INTO tenants (tenant_id, plan_code, status, created_at, updated_at) " +
+      "SELECT ?, 'qa_daily', 'active', ?, ? FROM plan_policies " +
+      "WHERE plan_code = 'qa_daily' AND status = 'active'",
+    [tenantId, timestamp, timestamp],
+  );
+  assert.equal(tenant.meta?.changes, 1, "A dedicated per-run OAuth acceptance workspace should be created");
+
+  const membershipId = "ef_accept_" + randomUUID();
   const membership = await d1Query(
     tenantDatabaseId,
     "INSERT INTO tenant_memberships (membership_id, user_id, tenant_id, role, membership_version, status, created_by, created_at, updated_at, revoked_at) " +
-      "SELECT ?, ?, 'qa_tenant_alpha', 'member', 1, 'active', 'oauth-acceptance-workflow', ?, ?, NULL " +
+      "SELECT ?, ?, ?, 'member', 1, 'active', 'oauth-acceptance-workflow', ?, ?, NULL " +
       "FROM tenants AS t JOIN plan_policies AS p ON p.plan_code = t.plan_code " +
-      "WHERE t.tenant_id = 'qa_tenant_alpha' AND t.status = 'active' AND p.status = 'active'",
-    [membershipId, userId, timestamp, timestamp],
+      "WHERE t.tenant_id = ? AND t.status = 'active' AND p.status = 'active'",
+    [membershipId, userId, tenantId, timestamp, timestamp, tenantId],
   );
   assert.equal(membership.meta?.changes, 1, "Synthetic user should receive one active test workspace membership");
-  return { membershipId, tenantId: "qa_tenant_alpha" };
+  return { membershipId, tenantId };
 }
 
 const suffix = randomUUID();
