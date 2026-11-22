@@ -8,6 +8,7 @@ keep_vars = false
 [vars]
 AUTH_ISSUER_URL = "https://exportflow-auth-acceptance-20261122.hhameranede.workers.dev/api/auth"
 MCP_RESOURCE_URL = "https://exportflow-mcp-acceptance-20261122.hhameranede.workers.dev/mcp"
+EXPORTFLOW_ACCEPTANCE_MODE = "true"
 
 [[d1_databases]]
 binding = "EXPORTFLOW_AUTH_DB"
@@ -18,3 +19,13 @@ database_id = "1f94eee0-219e-4a41-86ce-49c29067ef06"
 name = "MCP_RATE_LIMITER"
 namespace_id = "91420018"
 simple = { limit = 30, period = 60 }
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+redact_query_string = true
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+head_sampling_rate = 1

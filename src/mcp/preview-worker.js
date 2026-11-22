@@ -556,7 +556,29 @@ export function createExportFlowPreviewWorker({
 
       try {
         return withCors(await handleRpc(message, request, env, authRequest), request);
-      } catch {
+      } catch (error) {
+        if (env?.EXPORTFLOW_ACCEPTANCE_MODE === "true") {
+          const rawMessage = typeof error?.message === "string" ? error.message : "Unclassified MCP runtime error";
+          const safeMessage = rawMessage
+            .replace(/(access_token|refresh_token|client_secret|code_verifier|password|authorization|cookie|secret)\\s*[:=]\\s*[^\\s,;]+/gi, "$1=[redacted]")
+            .replace(/https?:\\/\\/[^\\s"'<>]+/gi, (value) => {
+              try {
+                const parsed = new URL(value);
+                return parsed.origin + parsed.pathname;
+              } catch {
+                return "[redacted-url]";
+              }
+            })
+            .slice(0, 1200);
+          console.error("[exportflow-mcp-acceptance-error]", JSON.stringify({
+            name: typeof error?.name === "string" ? error.name.slice(0, 120) : "Error",
+            message: safeMessage,
+            path: url.pathname,
+            rpcMethod: typeof message?.method === "string" ? message.method : undefined,
+            toolName: typeof message?.params?.name === "string" ? message.params.name : undefined,
+            rayId: request.headers.get("cf-ray") || undefined,
+          }));
+        }
         return withCors(jsonResponse(rpcError(message?.id ?? null, -32603, "Internal ExportFlow MCP error."), 500), request);
       }
     },
