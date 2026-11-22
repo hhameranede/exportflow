@@ -327,6 +327,6 @@ test("MCP preflight keeps the allowed ChatGPT origin and Vary header while addin
 
   assert.equal(response.status, 204);
   assert.equal(response.headers.get("access-control-allow-origin"), "https://chatgpt.com");
-  assert.ok(response.headers.get("vary").toLowerCase().includes("origin"));
+  assert.equal(response.headers.get("vary"), "Origin");
   assert.equal(response.headers.get("access-control-allow-methods"), "POST, OPTIONS");
 });
