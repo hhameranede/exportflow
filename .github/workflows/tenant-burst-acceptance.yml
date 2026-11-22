@@ -1,0 +1,67 @@
+name: Tenant Burst Acceptance
+on:
+  push:
+    branches:
+      - feat/shared-tenant-auth-quota-20261120
+    paths:
+      - .github/acceptance/tenant-burst.approved
+      - .github/workflows/tenant-burst-acceptance.yml
+      - cloudflare/acceptance/**
+      - scripts/acceptance/**
+permissions:
+  contents: read
+concurrency:
+  group: exportflow-tenant-burst-acceptance-20261122
+  cancel-in-progress: false
+jobs:
+  acceptance:
+    if: >-
+      ${{ github.event_name == 'push' &&
+          github.ref == 'refs/heads/feat/shared-tenant-auth-quota-20261120' &&
+          contains(github.event.head_commit.message, 'tenant-burst-acceptance-approved') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout approved PR #89 branch
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify isolated Worker names are unused
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "::error::Missing Cloudflare API token."; exit 1; fi
+          node scripts/acceptance/cleanup-workers.mjs --assert-absent
+      - name: Run repository tests and syntax checks
+        run: |
+          npm test
+          npm run check
+      - name: Dry-run isolated Acceptance Platform Worker
+        run: npx --yes wrangler@4 deploy --dry-run --outdir dist/tenant-platform-acceptance --config cloudflare/acceptance/tenant-platform.wrangler.toml
+      - name: Dry-run isolated Acceptance MCP Worker
+        run: npx --yes wrangler@4 deploy --dry-run --outdir dist/tenant-mcp-acceptance --config cloudflare/acceptance/tenant-mcp.wrangler.toml
+      - name: Deploy isolated Acceptance Platform Worker (namespace owner)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+        run: npx --yes wrangler@4 deploy --config cloudflare/acceptance/tenant-platform.wrangler.toml
+      - name: Deploy isolated Acceptance MCP Worker (external shared namespace)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+        run: npx --yes wrangler@4 deploy --config cloudflare/acceptance/tenant-mcp.wrangler.toml
+      - name: Verify real REST and MCP calls share one Durable Object namespace
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+        run: node scripts/acceptance/shared-tenant-burst.mjs
+      - name: Remove only temporary Acceptance Workers and DO namespace
+        if: always()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+        run: node scripts/acceptance/cleanup-workers.mjs --delete
