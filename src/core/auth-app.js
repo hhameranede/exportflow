@@ -539,6 +539,65 @@ async function handleTenantOAuthApi(request, env, auth) {
   }
 }
 
+export async function guardOwnerTwoFactorEndpoint(request, {
+  ownerUserIds,
+  authDb,
+  getSession,
+} = {}) {
+  let pathname;
+  try { pathname = new URL(request.url).pathname; }
+  catch { return textResponse({ error: "INVALID_REQUEST" }, 400); }
+
+  const isVerify = pathname === "/api/auth/two-factor/verify-totp";
+  const isDisable = pathname === "/api/auth/two-factor/disable";
+  if (request.method !== "POST" || (!isVerify && !isDisable)) return null;
+  if (!(ownerUserIds instanceof Set) || ownerUserIds.size === 0) return null;
+  if (!authDb || typeof authDb.prepare !== "function" || typeof getSession !== "function") {
+    return textResponse({ error: "OWNER_TWO_FACTOR_GUARD_UNAVAILABLE" }, 503);
+  }
+
+  let session;
+  try {
+    session = await getSession({
+      headers: request.headers,
+      query: { disableCookieCache: true },
+    });
+  } catch {
+    return textResponse({ error: "OWNER_TWO_FACTOR_GUARD_UNAVAILABLE" }, 503);
+  }
+
+  const userId = session?.user?.id;
+  if (typeof userId !== "string" || !ownerUserIds.has(userId)) return null;
+
+  let factor;
+  try {
+    factor = await authDb.prepare(
+      "SELECT u.twoFactorEnabled AS twoFactorEnabled, tf.verified AS factorVerified " +
+      "FROM user AS u LEFT JOIN twoFactor AS tf ON tf.userId = u.id " +
+      "WHERE u.id = ?1 AND u.emailVerified = 1 LIMIT 1",
+    ).bind(userId).first();
+  } catch {
+    return textResponse({ error: "OWNER_TWO_FACTOR_GUARD_UNAVAILABLE" }, 503);
+  }
+  if (!factor) return textResponse({ error: "OWNER_IDENTITY_UNAVAILABLE" }, 503);
+
+  const enabled = Number(factor.twoFactorEnabled) === 1;
+  const verified = Number(factor.factorVerified) === 1;
+  if (isVerify && enabled && verified) {
+    return textResponse({
+      error: "OWNER_STEP_UP_ENDPOINT_REQUIRED",
+      message: "Platform owners must use the rate-limited one-time step-up endpoint.",
+    }, 403);
+  }
+  if (isDisable && enabled) {
+    return textResponse({
+      error: "OWNER_TWO_FACTOR_DISABLE_BLOCKED",
+      message: "Platform owners cannot disable their authenticator through the account API.",
+    }, 403);
+  }
+  return null;
+}
+
 async function handleAccountTwoFactorStatus(request, env, auth) {
   const url = new URL(request.url);
   if (url.pathname !== "/api/auth/two-factor/status") return null;
@@ -640,6 +699,13 @@ export async function handleAuthRequest(request, env = {}) {
       message: "Account services are not configured yet.",
     }, 503);
   }
+
+  const ownerTwoFactorGuardResponse = await guardOwnerTwoFactorEndpoint(request, {
+    ownerUserIds: parsePlatformOwnerIds(env.EXPORTFLOW_OWNER_USER_IDS),
+    authDb: env.AUTH_DB,
+    getSession: ({ headers, query }) => auth.api.getSession({ headers, query }),
+  });
+  if (ownerTwoFactorGuardResponse) return ownerTwoFactorGuardResponse;
 
   const twoFactorStatusResponse = await handleAccountTwoFactorStatus(request, env, auth);
   if (twoFactorStatusResponse) return twoFactorStatusResponse;
