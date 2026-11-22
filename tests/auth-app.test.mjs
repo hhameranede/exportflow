@@ -73,6 +73,7 @@ test("Google OAuth requires a verified provider email and explicit account linki
   assert.equal(options.account.accountLinking.disableImplicitLinking, true);
   assert.deepEqual(options.account.accountLinking.trustedProviders, ["google"]);
   assert.deepEqual(options.advanced.ipAddress.ipAddressHeaders, ["cf-connecting-ip"]);
+  assert.equal(options.plugins.some((plugin) => plugin.id === "two-factor"), true);
 });
 
 test("email/password remains disabled until a Cloudflare Email binding and sender address exist", () => {
@@ -133,7 +134,7 @@ test("public auth config returns capability booleans only and never returns cred
 
 
 test("public auth capabilities stay disabled until all required Better Auth D1 tables exist", async () => {
-  const requiredTables = ["user", "session", "account", "verification"];
+  const requiredTables = ["user", "session", "account", "verification", "twoFactor"];
   const response = await handleAuthRequest(
     new Request("https://exportflow.me/api/auth/config"),
     {
@@ -260,7 +261,7 @@ test("platform owner authorization fails closed when owner allowlist is absent",
       headers: { origin: "https://exportflow.me" },
     }),
     {
-      AUTH_DB: createD1BindingStub(["user", "session", "account", "verification"]),
+      AUTH_DB: createD1BindingStub(["user", "session", "account", "verification", "twoFactor"]),
       BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
     },
   );
@@ -283,7 +284,7 @@ test("platform owner authorization fails closed when auth schema is incomplete",
 });
 test("Tenant OAuth remains unavailable until all required D1 tables and triggers exist", async () => {
   const authTables = [
-    "user", "session", "account", "verification",
+    "user", "session", "account", "verification", "twoFactor",
     "jwks", "oauthClient", "oauthResource", "oauthClientResource",
     "oauthRefreshToken", "oauthAccessToken", "oauthConsent", "oauthClientAssertion",
   ];
