@@ -305,6 +305,10 @@ export function createOwnerStepUpService({
         ),
       ]);
     } catch {
+      // D1 batch() rolls back every statement when any statement fails. That
+      // rollback restores this request's pending reservation, so remove it
+      // separately to avoid consuming an attempt for an infrastructure error.
+      try { await removeAttempt(authDb, attemptId, attemptIdentifier); } catch {}
       return { allowed: false, error: "OWNER_MFA_STORAGE_UNAVAILABLE", status: 503 };
     }
 
