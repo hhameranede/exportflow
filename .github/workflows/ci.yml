@@ -65,6 +65,11 @@ jobs:
 
  deploy-oauth-acceptance:
   needs: test
+  # These runs share one persistent Acceptance Auth/Tenant D1 and Workers.
+  # Serialize secret rotation, JWKS reset and E2E data setup to avoid races.
+  concurrency:
+   group: exportflow-oauth-acceptance-20261122
+   cancel-in-progress: false
   if: "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/oauth-environment-endpoints-20261122' && github.event.pull_request.base.ref == 'feat/oauth-tenant-memberships-20261121' }}"
   runs-on: ubuntu-latest
   env:
