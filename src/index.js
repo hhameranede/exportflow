@@ -7,6 +7,9 @@ import { handleWebsiteRequest } from "./site/router.js";
 import { renderMarketingNotFoundPage } from "./site/marketing.js";
 import { handleAuthRequest } from "./core/auth-app.js";
 
+// Shared namespace owner: the separate MCP Worker binds to this exported class.
+export { TenantBurstRateLimiter } from "./core/durable-tenant-burst-limiter.js";
+
 const ERROR_CODE_TO_HTTP_STATUS = Object.freeze({
   INVALID_TASK: 400,
   INVALID_GOAL: 400,
@@ -67,7 +70,9 @@ function taskHttpStatus(task) {
 export function createWorker(options = {}) {
   const tenantTaskGateway = options.tenantTaskGateway || createTenantTaskGateway({
     preAuthRateLimiter: options.preAuthRateLimiter,
-    tenantRateLimiter: options.rateLimiter,
+    tenantRateLimiter: options.tenantRateLimiter ?? options.rateLimiter,
+    tenantBurstLimit: options.tenantBurstLimit,
+    tenantBurstWindowMs: options.tenantBurstWindowMs,
   });
 
   return {

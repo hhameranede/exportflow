@@ -2,9 +2,7 @@ import { authenticateRequest as authenticateTenantApiKey } from "./tenant-auth.j
 import { reservePlanRequest } from "./plan-quota.js";
 import { getClientRateLimitKey, PRE_AUTH_MAX_REQUESTS_PER_ISOLATE, PRE_AUTH_WINDOW_MS } from "./client-rate-limit.js";
 import { createRateLimiter } from "./auth.js";
-
-const TENANT_WINDOW_MS = 60_000;
-const TENANT_MAX_REQUESTS = 60;
+import { createDurableTenantBurstLimiter, DEFAULT_TENANT_BURST_LIMIT, DEFAULT_TENANT_BURST_WINDOW_MS } from "./durable-tenant-burst-limiter.js";
 
 function failure(httpStatus, code, message, extra = {}) {
   return { ok: false, httpStatus, code, message, ...extra };
@@ -20,6 +18,8 @@ export function createTenantTaskGateway({
   now = () => new Date().toISOString(),
   preAuthRateLimiter,
   tenantRateLimiter,
+  tenantBurstLimit = DEFAULT_TENANT_BURST_LIMIT,
+  tenantBurstWindowMs = DEFAULT_TENANT_BURST_WINDOW_MS,
   authenticateApiKey = authenticateTenantApiKey,
   reserveRequest = reservePlanRequest,
 } = {}) {
@@ -27,11 +27,6 @@ export function createTenantTaskGateway({
     windowMs: PRE_AUTH_WINDOW_MS,
     maxRequests: PRE_AUTH_MAX_REQUESTS_PER_ISOLATE,
   });
-  const perTenant = tenantRateLimiter || createRateLimiter({
-    windowMs: TENANT_WINDOW_MS,
-    maxRequests: TENANT_MAX_REQUESTS,
-  });
-
   async function authenticate(request, env = {}, { requiredScope = "tasks:fetch" } = {}) {
     const ipRate = preAuth.check(getClientRateLimitKey(request));
     if (!ipRate.allowed) {
@@ -48,7 +43,19 @@ export function createTenantTaskGateway({
     }
     if (!identity?.ok) return identity || failure(503, "AUTH_BACKEND_UNAVAILABLE", "Tenant authentication failed.");
 
-    const tenantRate = perTenant.check(identity.tenantId);
+    let tenantRate;
+    try {
+      const sharedLimiter = tenantRateLimiter || createDurableTenantBurstLimiter(
+        env?.TENANT_BURST_LIMITER,
+        { limit: tenantBurstLimit, windowMs: tenantBurstWindowMs },
+      );
+      tenantRate = await sharedLimiter.check(identity.tenantId);
+      if (!tenantRate || typeof tenantRate.allowed !== "boolean") {
+        throw new TypeError("Tenant burst limiter returned an invalid decision.");
+      }
+    } catch {
+      return failure(503, "TENANT_RATE_LIMITER_UNAVAILABLE", "Tenant burst limiting is temporarily unavailable.");
+    }
     if (!tenantRate.allowed) {
       return failure(429, "RATE_LIMITED", "Tenant burst limit reached; retry later.", {
         retryAfterSec: tenantRate.retryAfterSec,

@@ -6,6 +6,7 @@ import { hashApiKey } from "../src/core/tenant-auth.js";
 import { TaskContractError, validateTaskRequest } from "../src/core/task-contract.js";
 import { fetchPublicResource, FetchAdapterError } from "../src/core/http-fetch.js";
 import { startServer } from "../src/server.js";
+import { createDurableTenantBurstTestNamespace } from "./helpers/durable-tenant-burst-test-namespace.js";
 
 const TEST_KEY_ID = "0123456789abcdef";
 const TEST_TOKEN = `ef_live_${TEST_KEY_ID}_${"A".repeat(43)}`;
@@ -64,7 +65,10 @@ function makeTestEnv({ requestLimit = 10_000, keyStatus = "active", tenantStatus
       };
     },
   };
-  return { EXPORTFLOW_AUTH_DB: db };
+  return {
+    EXPORTFLOW_AUTH_DB: db,
+    TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace(),
+  };
 }
 
 function makeTaskRequest(body, {

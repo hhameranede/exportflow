@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createExportFlowPreviewWorker } from "../src/mcp/preview-worker.js";
 import { hashApiKey } from "../src/core/tenant-auth.js";
+import { createDurableTenantBurstTestNamespace } from "./helpers/durable-tenant-burst-test-namespace.js";
 
 const HOST = "mcp.exportflow.me";
 const URL = "https://" + HOST + "/mcp";
@@ -440,6 +441,7 @@ test("MCP real tenant gateway authorizes, reserves one D1-shaped quota unit, the
     taskResult: { id: "task_mcp_tenant_01", state: "succeeded" },
     env: {
       EXPORTFLOW_AUTH_DB: db,
+      TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace(),
       MCP_RATE_LIMITER: { async limit() { return { success: true }; } },
     },
   });

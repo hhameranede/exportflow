@@ -16,3 +16,10 @@ simple = { limit = 30, period = 60 }
 [[routes]]
 pattern = "mcp.exportflow.me"
 custom_domain = true
+
+
+# External binding to the namespace owned by exportflow-platform.
+[[durable_objects.bindings]]
+name = "TENANT_BURST_LIMITER"
+class_name = "TenantBurstRateLimiter"
+script_name = "exportflow-platform"

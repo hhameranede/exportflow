@@ -16,3 +16,13 @@ database_id = "0bd9f873-a1d5-4d90-b3fc-1c4b47e1aa67"
 
 [secrets]
 required = ["BETTER_AUTH_SECRET", "AUTH_MIGRATION_TOKEN"]
+
+
+# One SQLite-backed tenant burst counter shared by REST and the MCP Worker.
+[[durable_objects.bindings]]
+name = "TENANT_BURST_LIMITER"
+class_name = "TenantBurstRateLimiter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = [ "TenantBurstRateLimiter" ]

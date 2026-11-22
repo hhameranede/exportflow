@@ -231,10 +231,18 @@ export function createExportFlowPreviewWorker({
   executeWebTask,
   getAdapterCatalog = () => [],
   expectedHost = null,
-  tenantTaskGateway = createTenantTaskGateway(),
+  tenantTaskGateway,
+  tenantRateLimiter,
+  tenantBurstLimit,
+  tenantBurstWindowMs,
 } = {}) {
   if (typeof executeWebTask !== "function") throw new TypeError("executeWebTask is required");
   if (typeof getAdapterCatalog !== "function") throw new TypeError("getAdapterCatalog must be a function");
+  const sharedTenantTaskGateway = tenantTaskGateway || createTenantTaskGateway({
+    tenantRateLimiter,
+    tenantBurstLimit,
+    tenantBurstWindowMs,
+  });
 
   async function callTool(name, args, request, env) {
     const validationError = validateToolArguments(name, args);
@@ -267,7 +275,7 @@ export function createExportFlowPreviewWorker({
       web_extract: "tasks:extract",
     })[name];
 
-    const auth = await tenantTaskGateway.authenticate(request, env, { requiredScope });
+    const auth = await sharedTenantTaskGateway.authenticate(request, env, { requiredScope });
     if (!auth.ok) {
       return toolContent({
         error: auth.code,
@@ -276,7 +284,7 @@ export function createExportFlowPreviewWorker({
       }, true);
     }
 
-    const reservation = await tenantTaskGateway.reserve(env, auth.identity);
+    const reservation = await sharedTenantTaskGateway.reserve(env, auth.identity);
     if (!reservation.ok) {
       return toolContent({
         error: reservation.code,

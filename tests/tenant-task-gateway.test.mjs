@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTenantTaskGateway } from "../src/core/tenant-task-gateway.js";
+import { createDurableTenantBurstTestNamespace } from "./helpers/durable-tenant-burst-test-namespace.js";
 
 const identity = {
   keyId: "0123456789abcdef",
@@ -114,4 +115,38 @@ test("quota backend failures fail closed", async () => {
   assert.equal(result.ok, false);
   assert.equal(result.httpStatus, 503);
   assert.equal(result.code, "QUOTA_BACKEND_UNAVAILABLE");
+});
+
+
+test("separate REST and MCP gateway instances share one Durable Object tenant burst counter", async () => {
+  const namespace = createDurableTenantBurstTestNamespace();
+  const allowIp = { check: () => ({ allowed: true }) };
+  const authenticateApiKey = async () => ({ ok: true, ...identity });
+  const makeGateway = () => createTenantTaskGateway({
+    preAuthRateLimiter: allowIp,
+    authenticateApiKey,
+    tenantBurstLimit: 1,
+    tenantBurstWindowMs: 60_000,
+  });
+  const restGateway = makeGateway();
+  const mcpGateway = makeGateway();
+  const env = { TENANT_BURST_LIMITER: namespace };
+  const request = makeRequest({ authorization: "Bearer synthetic-shared-tenant-key" });
+  const restDecision = await restGateway.authenticate(request, env, { requiredScope: "tasks:fetch" });
+  const mcpDecision = await mcpGateway.authenticate(request, env, { requiredScope: "tasks:fetch" });
+  assert.equal(restDecision.ok, true);
+  assert.equal(mcpDecision.ok, false);
+  assert.equal(mcpDecision.code, "RATE_LIMITED");
+  assert.equal(mcpDecision.httpStatus, 429);
+});
+
+test("the shared gateway fails closed when the Durable Object binding is missing or unavailable", async () => {
+  const gateway = createTenantTaskGateway({
+    preAuthRateLimiter: { check: () => ({ allowed: true }) },
+    authenticateApiKey: async () => ({ ok: true, ...identity }),
+  });
+  const result = await gateway.authenticate(makeRequest({ authorization: "Bearer synthetic" }), {});
+  assert.equal(result.ok, false);
+  assert.equal(result.httpStatus, 503);
+  assert.equal(result.code, "TENANT_RATE_LIMITER_UNAVAILABLE");
 });
