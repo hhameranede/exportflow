@@ -47,6 +47,8 @@ jobs:
           node-version: 24
       - name: Install deployment tooling
         run: npm install --no-audit --no-fund
+      - name: Run tests before any Acceptance mutation
+        run: npm test && npm run check
       - name: Verify the exact isolated Acceptance target and existing secrets
         shell: bash
         run: |
