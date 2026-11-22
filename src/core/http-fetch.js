@@ -12,6 +12,7 @@ export class FetchAdapterError extends Error {
 export const HTTP_FETCH_LIMITS = Object.freeze({
   maxUrlLength: EGRESS_POLICY.maxUrlLength,
   maxResponseBytes: 1_048_576,
+  maxResponseChunks: 8_192,
   timeoutMs: 8_000,
   maxRedirects: 3,
 });
@@ -47,18 +48,31 @@ function isTextContentType(contentType) {
     mime.endsWith("+xml");
 }
 
-async function cancelBody(response) {
+// Upstream-controlled stream cancellation is best-effort. Never let a slow
+// or stalled cancel() callback hold the task open after its result is unusable.
+function cancelBestEffort(cancel) {
   try {
-    await response.body?.cancel();
+    const cancellation = cancel();
+    if (cancellation && typeof cancellation.catch === "function") {
+      void cancellation.catch(() => {});
+    }
   } catch {
-    // The stream may already be closed or canceled.
+    // The stream may already be closed, errored, or locked by the runtime.
   }
+}
+
+function cancelBody(response) {
+  cancelBestEffort(() => response.body?.cancel());
+}
+
+function cancelReader(reader) {
+  cancelBestEffort(() => reader.cancel());
 }
 
 async function readTextBody(response, maxBytes, signal, getAbortCode) {
   const declaredLength = response.headers.get("content-length");
   if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxBytes) {
-    await cancelBody(response);
+    cancelBody(response);
     throw new FetchAdapterError("RESPONSE_TOO_LARGE", "Upstream response exceeds the configured size limit.", 413);
   }
 
@@ -69,20 +83,26 @@ async function readTextBody(response, maxBytes, signal, getAbortCode) {
   const reader = response.body.getReader();
   const chunks = [];
   let totalBytes = 0;
+  let chunksRead = 0;
 
   try {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      chunksRead += 1;
+      if (chunksRead > HTTP_FETCH_LIMITS.maxResponseChunks) {
+        cancelReader(reader);
+        throw new FetchAdapterError("RESPONSE_TOO_LARGE", "Upstream response contains too many chunks.", 413);
+      }
       totalBytes += value.byteLength;
       if (totalBytes > maxBytes) {
-        await reader.cancel();
+        cancelReader(reader);
         throw new FetchAdapterError("RESPONSE_TOO_LARGE", "Upstream response exceeds the configured size limit.", 413);
       }
       chunks.push(value);
     }
   } catch (error) {
-    await reader.cancel().catch(() => {});
+    cancelReader(reader);
     if (error instanceof FetchAdapterError) throw error;
     if (signal?.aborted) {
       const abortCode = getAbortCode?.();
@@ -214,17 +234,17 @@ export async function fetchPublicResource(input, options = {}) {
       }
 
       if (callerCancelled) {
-        await cancelBody(response);
+        cancelBody(response);
         throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
       }
       if (timedOut) {
-        await cancelBody(response);
+        cancelBody(response);
         throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
       }
 
       if (REDIRECT_STATUSES.has(response.status)) {
         const location = response.headers.get("location");
-        await cancelBody(response);
+        cancelBody(response);
         if (!location) {
           throw new FetchAdapterError("INVALID_REDIRECT", "Upstream redirect did not include a Location header.", 502);
         }
@@ -259,7 +279,7 @@ export async function fetchPublicResource(input, options = {}) {
 
       const contentType = response.headers.get("content-type") || "";
       if (response.body && !isTextContentType(contentType)) {
-        await cancelBody(response);
+        cancelBody(response);
         throw new FetchAdapterError("UNSUPPORTED_CONTENT_TYPE", "Only text, HTML, JSON, and XML responses are supported.", 415);
       }
 
