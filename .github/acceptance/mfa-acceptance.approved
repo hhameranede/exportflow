@@ -2,3 +2,4 @@ One-shot user approval recorded 2026-11-22: run PR #107 owner MFA Acceptance onl
 Approval reaffirmed after validation fix: run once on 2026-11-22; Acceptance-only, preserve secrets and JWKS, no Production action.
 Approval re-trigger after correcting the workflow's Tenant D1 guard to the verified Cloudflare ID (219e).
 Acceptance retry: YAML-quote the PR #107 deploy messages; no secrets, JWKS, or Production resources may be altered.
+Retry after correcting Better Auth 1.7.27 enableTwoFactor payload to include the synthetic credential password. Existing Acceptance secrets/JWKS preserved; Acceptance only.
