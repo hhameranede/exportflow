@@ -40,14 +40,17 @@ async function saveState(state) {
   await writeFile(file, JSON.stringify(state), { encoding: "utf8", mode: 0o600 });
 }
 
-async function loadState() {
+async function loadState({ allowPartial = false } = {}) {
   const file = stateFilePath();
   const value = JSON.parse(await readFile(file, "utf8"));
   assert.ok(value && typeof value === "object", "MFA acceptance state is invalid.");
-  assert.ok(typeof value.email === "string" && typeof value.password === "string", "Synthetic account credentials are missing.");
-  assert.ok(typeof value.userId === "string" && value.userId.length > 0, "Synthetic owner ID is missing.");
-  assert.ok(typeof value.totpSecret === "string" && value.totpSecret.length > 0, "TOTP seed is missing.");
-  assert.ok(Array.isArray(value.cookies), "Synthetic owner cookies are missing.");
+  assert.ok(typeof value.email === "string" && value.email.length > 0, "Synthetic account email is missing.");
+  if (!allowPartial) {
+    assert.ok(typeof value.password === "string" && value.password.length > 0, "Synthetic account password is missing.");
+    assert.ok(typeof value.userId === "string" && value.userId.length > 0, "Synthetic owner ID is missing.");
+    assert.ok(typeof value.totpSecret === "string" && value.totpSecret.length > 0, "TOTP seed is missing.");
+    assert.ok(Array.isArray(value.cookies), "Synthetic owner cookies are missing.");
+  }
   return value;
 }
 
@@ -416,11 +419,13 @@ async function cleanupAcceptance() {
   const file = stateFilePath();
   let state = null;
   try {
-    state = await loadState();
-  } catch {
-    try { await unlink(file); } catch {}
-    console.log("MFA acceptance cleanup: no synthetic account state was created.");
-    return;
+    state = await loadState({ allowPartial: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      console.log("MFA acceptance cleanup: no synthetic account state was created.");
+      return;
+    }
+    throw error;
   }
   assertTarget();
   const now = new Date().toISOString();
