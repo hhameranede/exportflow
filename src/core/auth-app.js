@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
 import { authorizePlatformOwnerRequest, parsePlatformOwnerIds } from "./platform-admin-auth.js";
-import { jwt } from "better-auth/plugins";
+import { jwt, twoFactor } from "better-auth/plugins";
 import { mcp } from "@better-auth/mcp";
 import { verifyOAuthQueryParams } from "@better-auth/oauth-provider";
 import { getOAuthRuntimeConfig } from "./oauth-config.js";
@@ -66,7 +66,7 @@ function htmlEscape(value) {
     .replaceAll("'", "&#39;");
 }
 
-const REQUIRED_AUTH_TABLES = Object.freeze(["user", "session", "account", "verification"]);
+const REQUIRED_AUTH_TABLES = Object.freeze(["user", "session", "account", "verification", "twoFactor"]);
 const REQUIRED_OAUTH_AUTH_TABLES = Object.freeze([
   "jwks", "oauthClient", "oauthResource", "oauthClientResource",
   "oauthRefreshToken", "oauthAccessToken", "oauthConsent", "oauthClientAssertion",
@@ -269,9 +269,17 @@ function buildAuthOptions(env, status) {
     },
   };
 
+  options.plugins = [twoFactor({
+    issuer: "ExportFlow",
+    allowPasswordless: true,
+    skipVerificationOnEnable: false,
+    accountLockout: { enabled: true, maxFailedAttempts: 5, durationSeconds: 15 * 60 },
+    backupCodeOptions: { storeBackupCodes: "encrypted" },
+  })];
+
   if (status.tenantOAuthConfigured) {
     const oauthEndpoints = getOAuthRuntimeConfig(env);
-    options.plugins = [
+    options.plugins.push(
       jwt({ jwt: { issuer: oauthEndpoints.issuer }, disableSettingJwtHeader: true }),
       mcp({
         resource: oauthEndpoints.resource,
@@ -336,7 +344,7 @@ function buildAuthOptions(env, status) {
           token_endpoint_auth_methods_supported: ["none"],
         },
       }),
-    ];
+    );
   }
 
   if (isAcceptanceRuntime(env)) {
