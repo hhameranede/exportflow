@@ -62,16 +62,39 @@ async function getPublicAuthFeatureStatus(env, configuredStatus) {
   });
 }
 
+export function withAuthSecurityHeaders(response) {
+  const headers = new Headers();
+  for (const [name, value] of response.headers) {
+    if (name.toLowerCase() !== "set-cookie") headers.append(name, value);
+  }
+
+  // Workers exposes getAll("Set-Cookie"); standard runtimes expose getSetCookie().
+  // Never copy Set-Cookie through iteration, which can fold distinct cookies.
+  const cookies = typeof response.headers.getAll === "function"
+    ? response.headers.getAll("Set-Cookie")
+    : typeof response.headers.getSetCookie === "function"
+      ? response.headers.getSetCookie()
+      : [];
+  for (const cookie of cookies) headers.append("Set-Cookie", cookie);
+
+  headers.set("cache-control", "no-store");
+  headers.set("strict-transport-security", "max-age=63072000");
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("referrer-policy", "no-referrer");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 function textResponse(body, status = 200) {
-  return new Response(JSON.stringify(body), {
+  return withAuthSecurityHeaders(new Response(JSON.stringify(body), {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
-      "x-content-type-options": "nosniff",
-      "referrer-policy": "no-referrer",
     },
-  });
+  }));
 }
 
 export function getAuthFeatureStatus(env = {}) {
@@ -311,7 +334,7 @@ export async function handleAuthRequest(request, env = {}) {
   }
 
   try {
-    return await auth.handler(request);
+    return withAuthSecurityHeaders(await auth.handler(request));
   } catch {
     return textResponse({ error: "AUTH_REQUEST_FAILED" }, 500);
   }

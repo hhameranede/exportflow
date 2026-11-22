@@ -16,7 +16,7 @@ import { AUTH_ROUTES } from "./auth-pages.js";
 import { MARKETING_CSS } from "./marketing-styles.js";
 import { MARKETING_JS } from "./marketing-client.js";
 
-const HTML_SECURITY_HEADERS = Object.freeze({
+export const HTML_SECURITY_HEADERS = Object.freeze({
   "content-type": "text/html; charset=utf-8",
   "cache-control": "public, max-age=60",
   "x-content-type-options": "nosniff",
@@ -25,16 +25,22 @@ const HTML_SECURITY_HEADERS = Object.freeze({
   "strict-transport-security": "max-age=63072000",
   "permissions-policy": "camera=(), microphone=(), geolocation=()",
   "content-security-policy":
-    "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+    "default-src 'self'; object-src 'none'; frame-src 'none'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+});
+
+const ASSET_SECURITY_HEADERS = Object.freeze({
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "strict-transport-security": "max-age=63072000",
 });
 
 function assetResponse(body, contentType, method, maxAge = 300) {
   return new Response(method === "HEAD" ? null : body, {
     status: 200,
     headers: {
+      ...ASSET_SECURITY_HEADERS,
       "content-type": contentType,
       "cache-control": `public, max-age=${maxAge}`,
-      "x-content-type-options": "nosniff",
     },
   });
 }

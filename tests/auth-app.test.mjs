@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getAuthFeatureStatus, getAuthOptions, handleAuthRequest } from "../src/core/auth-app.js";
+import { getAuthFeatureStatus, getAuthOptions, handleAuthRequest, withAuthSecurityHeaders } from "../src/core/auth-app.js";
 import { createWorker } from "../src/index.js";
 
 function createD1BindingStub(tableNames = []) {
@@ -238,4 +238,47 @@ test("schema migration route stays hidden unless dedicated auth storage and migr
     {},
   );
   assert.equal(response.status, 404);
+});
+
+
+test("account API errors receive HSTS and no-store response headers", async () => {
+  const response = await handleAuthRequest(
+    new Request("https://exportflow.me/api/auth/config", { method: "POST" }),
+    {},
+  );
+  assert.equal(response.status, 405);
+  assert.equal(response.headers.get("strict-transport-security"), "max-age=63072000");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(response.headers.get("cache-control"), "no-store");
+});
+
+test("account API security wrapper preserves multiple Set-Cookie headers", () => {
+  const downstream = new Response("ok", {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+  downstream.headers.append("set-cookie", "exportflow.session=first; Path=/; HttpOnly; Secure; SameSite=Lax");
+  downstream.headers.append("set-cookie", "exportflow.state=second; Path=/; HttpOnly; Secure; SameSite=Lax");
+
+  // Simulate the Cloudflare Workers-specific API, which exposes getAll().
+  Object.defineProperty(downstream.headers, "getAll", {
+    value: (name) => name.toLowerCase() === "set-cookie"
+      ? downstream.headers.getSetCookie()
+      : (() => { throw new Error("getAll is only supported for Set-Cookie"); })(),
+  });
+
+  const secured = withAuthSecurityHeaders(downstream);
+  assert.equal(secured.status, 200);
+  assert.equal(secured.headers.get("strict-transport-security"), "max-age=63072000");
+  assert.equal(secured.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(secured.headers.get("cache-control"), "no-store");
+
+  const cookies = typeof secured.headers.getSetCookie === "function"
+    ? secured.headers.getSetCookie()
+    : typeof secured.headers.getAll === "function"
+      ? secured.headers.getAll("Set-Cookie")
+      : [secured.headers.get("set-cookie")];
+  assert.equal(cookies.length, 2);
+  assert.ok(cookies[0].includes("exportflow.session=first"));
+  assert.ok(cookies[1].includes("exportflow.state=second"));
 });

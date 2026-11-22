@@ -3,7 +3,7 @@ import { getAdapterCatalog } from "./core/adapters.js";
 import { authenticateRequest, createRateLimiter } from "./core/auth.js";
 import { readBoundedJsonBody, TaskContractError, validateTaskRequest } from "./core/task-contract.js";
 import { executeWebTask } from "./core/tasks.js";
-import { handleWebsiteRequest } from "./site/router.js";
+import { handleWebsiteRequest, HTML_SECURITY_HEADERS } from "./site/router.js";
 import { renderMarketingNotFoundPage } from "./site/marketing.js";
 import { handleAuthRequest } from "./core/auth-app.js";
 
@@ -34,6 +34,7 @@ function json(data, status = 200, extraHeaders = {}) {
       "cache-control": "no-store",
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
+      "strict-transport-security": "max-age=63072000",
       ...extraHeaders,
     },
   });
@@ -165,7 +166,15 @@ export function createWorker(options = {}) {
         }
 
         if (url.pathname === "/favicon.ico") {
-          return new Response(null, { status: 204 });
+          return new Response(null, {
+            status: 204,
+            headers: {
+              "cache-control": "public, max-age=300",
+              "x-content-type-options": "nosniff",
+              "referrer-policy": "strict-origin-when-cross-origin",
+              "strict-transport-security": "max-age=63072000",
+            },
+          });
         }
 
         const acceptsHtml = request.headers.get("accept")?.includes("text/html") && !url.pathname.startsWith("/api/");
@@ -174,7 +183,7 @@ export function createWorker(options = {}) {
           const notFoundHtml = renderMarketingNotFoundPage(request.url, localeMatch?.[1] || "en");
           return new Response(request.method === "HEAD" ? null : notFoundHtml, {
             status: 404,
-            headers: { "content-type": "text/html; charset=utf-8", "x-content-type-options": "nosniff" },
+            headers: { ...HTML_SECURITY_HEADERS, "cache-control": "no-store" },
           });
         }
 

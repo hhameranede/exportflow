@@ -1,0 +1,65 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createWorker } from "../src/index.js";
+
+const REQUIRED_HTML_HEADERS = [
+  "content-security-policy",
+  "strict-transport-security",
+  "x-content-type-options",
+  "x-frame-options",
+  "referrer-policy",
+  "permissions-policy",
+];
+
+test("HTML 404 responses use the same security policy as rendered site pages", async () => {
+  const worker = createWorker();
+  const home = await worker.fetch(new Request("https://exportflow.local/"), {});
+  const missing = await worker.fetch(new Request("https://exportflow.local/en/not-a-real-page", {
+    headers: { accept: "text/html" },
+  }), {});
+
+  assert.equal(home.status, 200);
+  assert.equal(missing.status, 404);
+  assert.equal(missing.headers.get("cache-control"), "no-store");
+
+  assert.ok(home.headers.get("content-security-policy").includes("object-src 'none'"));
+  assert.ok(home.headers.get("content-security-policy").includes("frame-src 'none'"));
+
+  for (const header of REQUIRED_HTML_HEADERS) {
+    assert.equal(typeof home.headers.get(header), "string", `home missing ${header}`);
+    assert.equal(missing.headers.get(header), home.headers.get(header), `404 mismatch for ${header}`);
+  }
+});
+
+test("JSON API responses include HSTS and nosniff headers", async () => {
+  const worker = createWorker();
+  const response = await worker.fetch(new Request("https://exportflow.local/api/v1/not-a-real-route"), {});
+
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get("strict-transport-security"), "max-age=63072000");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(response.headers.get("cache-control"), "no-store");
+});
+
+test("static assets and favicon include baseline transport and content-sniffing headers", async () => {
+  const worker = createWorker();
+  const paths = [
+    "/assets/site.css",
+    "/assets/site.js",
+    "/assets/marketing.css",
+    "/assets/marketing.js",
+    "/assets/mark.svg",
+    "/assets/og-card.svg",
+    "/robots.txt",
+    "/sitemap.xml",
+    "/favicon.ico",
+  ];
+
+  for (const path of paths) {
+    const response = await worker.fetch(new Request("https://exportflow.local" + path), {});
+    assert.ok(response.status === 200 || response.status === 204, path + " status");
+    assert.equal(response.headers.get("strict-transport-security"), "max-age=63072000", path + " HSTS");
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff", path + " nosniff");
+    assert.equal(response.headers.get("referrer-policy"), "strict-origin-when-cross-origin", path + " referrer policy");
+  }
+});
