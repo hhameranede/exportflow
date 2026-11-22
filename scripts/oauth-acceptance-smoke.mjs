@@ -311,4 +311,24 @@ const staleTokenResult = await callMcp("web_fetch", { url: "https://example.com/
 assert.equal(staleTokenResult?.isError, true, "A token with stale membership must be rejected");
 assert.equal(staleTokenResult?.structuredContent?.error, "TENANT_MEMBERSHIP_CHANGED");
 
-console.log("OAuth acceptance passed: signup, active tenant selection, consent, authorization-code + S256 PKCE, token exchange, real MCP web_fetch, scope enforcement, D1 quota and membership-version invalidation.");
+// Retire the per-run synthetic workspace after proving that membership changes invalidate tokens.
+const cleanupAt = new Date().toISOString();
+const revoked = await d1Query(
+  tenantDatabaseId,
+  "UPDATE tenant_memberships SET status = 'revoked', revoked_at = ?, updated_at = ? WHERE membership_id = ? AND status = 'active'",
+  [cleanupAt, cleanupAt, membership.membershipId],
+);
+assert.equal(revoked.meta?.changes, 1, "Synthetic membership should be revoked after acceptance");
+const closed = await d1Query(
+  tenantDatabaseId,
+  "UPDATE tenants SET status = 'closed', updated_at = ? WHERE tenant_id = ? AND status = 'active'",
+  [cleanupAt, membership.tenantId],
+);
+assert.equal(closed.meta?.changes, 1, "Synthetic acceptance workspace should be closed after acceptance");
+await d1Query(
+  tenantDatabaseId,
+  "DELETE FROM tenant_request_usage WHERE tenant_id = ?",
+  [membership.tenantId],
+);
+
+console.log("OAuth acceptance passed: signup, active tenant selection, consent, authorization-code + S256 PKCE, token exchange, real MCP web_fetch, scope enforcement, D1 quota, membership-version invalidation and synthetic workspace cleanup.");
