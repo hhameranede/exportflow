@@ -20,7 +20,7 @@ function request(cookie) {
   });
 }
 
-function makeAuthDb({ factor = { twoFactorEnabled: 1, factorVerified: 1 }, activeSession = true } = {}) {
+function makeAuthDb({ factor = { twoFactorEnabled: 1, factorVerified: 1 }, activeSession = true, batchFailAt = -1 } = {}) {
   const rows = [];
   const db = {
     rows,
@@ -92,16 +92,26 @@ function makeAuthDb({ factor = { twoFactorEnabled: 1, factorVerified: 1 }, activ
       };
     },
     async batch(statements) {
+      const snapshot = rows.map((row) => ({ ...row }));
       const results = [];
-      for (const statement of statements) results.push(await statement.run());
-      return results;
+      try {
+        for (let index = 0; index < statements.length; index += 1) {
+          if (index === batchFailAt) throw new Error("synthetic D1 batch statement failure");
+          results.push(await statements[index].run());
+        }
+        return results;
+      } catch (error) {
+        // Cloudflare D1 batch() is transactional: restore the pre-batch state.
+        rows.splice(0, rows.length, ...snapshot);
+        throw error;
+      }
     },
   };
   return db;
 }
 
-function fixture({ factor, verify, now = NOW, activeSession = true } = {}) {
-  const db = makeAuthDb({ factor, activeSession });
+function fixture({ factor, verify, now = NOW, activeSession = true, batchFailAt = -1 } = {}) {
+  const db = makeAuthDb({ factor, activeSession, batchFailAt });
   let calls = 0;
   let currentNow = now;
   const service = createOwnerStepUpService({
@@ -227,6 +237,17 @@ test("verification infrastructure failures release the pending reservation", asy
   assert.deepEqual(outcome, {
     allowed: false,
     error: "OWNER_MFA_VERIFICATION_UNAVAILABLE",
+    status: 503,
+  });
+  assert.equal(f.db.rows.length, 0);
+});
+
+test("failed proof persistence rolls back and releases the pending attempt reservation", async () => {
+  const f = fixture({ batchFailAt: 2 });
+  const outcome = await f.service.verifyCode(request(), f.env, f.owner, "123456");
+  assert.deepEqual(outcome, {
+    allowed: false,
+    error: "OWNER_MFA_STORAGE_UNAVAILABLE",
     status: 503,
   });
   assert.equal(f.db.rows.length, 0);
