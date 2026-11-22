@@ -1,23 +1,34 @@
 name: Owner MFA Worker Acceptance
 
-# Intentionally manual-only. The boolean input is an action-specific approval
-# for an isolated Acceptance Worker deployment and writes to its dedicated D1.
-# Never add push, pull_request, schedule or workflow_run triggers to this file.
+# Runs only from an explicit manual approval or a one-time, exact-PR label.
+# This workflow is pinned to the isolated Acceptance account and D1 resources.
 on:
   workflow_dispatch:
     inputs:
       approve_isolated_acceptance:
-        description: "Approve deploying the isolated Auth Acceptance Worker and mutating only its dedicated Acceptance D1 for PR #107."
+        description: "Approve deploying PR #107 to the isolated Auth Acceptance Worker and migrating its dedicated Acceptance D1."
         required: true
         default: false
         type: boolean
+  pull_request:
+    types: [labeled]
 
 permissions:
   contents: read
 
 jobs:
   mfa-acceptance:
-    if: ${{ inputs.approve_isolated_acceptance == true && github.ref == 'refs/heads/feat/owner-step-up-mfa-20261122' }}
+    if: >-
+      ${{ (github.event_name == 'workflow_dispatch' &&
+            inputs.approve_isolated_acceptance == true &&
+            github.ref == 'refs/heads/feat/owner-step-up-mfa-20261122') ||
+          (github.event_name == 'pull_request' &&
+            github.event.action == 'labeled' &&
+            github.event.label.name == 'run-isolated-mfa-acceptance' &&
+            github.event.pull_request.number == 107 &&
+            github.event.pull_request.head.ref == 'feat/owner-step-up-mfa-20261122' &&
+            github.event.pull_request.head.repo.full_name == 'hhameranede/exportflow' &&
+            github.event.pull_request.base.ref == 'feat/tenant-membership-admin-api-20261122') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency:
@@ -36,7 +47,7 @@ jobs:
           node-version: 24
       - name: Install deployment tooling
         run: npm install --no-audit --no-fund
-      - name: Verify the exact isolated Acceptance target
+      - name: Verify the exact isolated Acceptance target and existing secrets
         shell: bash
         run: |
           set -euo pipefail
@@ -44,38 +55,27 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           grep -Fx 'name = "exportflow-auth-acceptance-20261122"' cloudflare/auth-acceptance/wrangler.toml
           grep -Fx 'database_id = "0dd14d21-5d56-4b01-8c0f-a14959521dde"' cloudflare/auth-acceptance/wrangler.toml
-          grep -Fx 'database_id = "1f94eee0-219e-4a41-86ce-49c29067ef06"' cloudflare/auth-acceptance/wrangler.toml
+          grep -Fx 'database_id = "1f94eee0-2191-4a41-86ce-49c29067ef06"' cloudflare/auth-acceptance/wrangler.toml
           if grep -q '0bd9f873-a1d5-4d90-b3fc-1c4b47e1aa67' cloudflare/auth-acceptance/wrangler.toml; then
             echo "::error::Production AUTH_DB ID found in Acceptance config."
             exit 1
           fi
+          npx --yes wrangler@4 secret list --config cloudflare/auth-acceptance/wrangler.toml > "$RUNNER_TEMP/mfa-acceptance-secrets.json"
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const values = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            const names = new Set(values.map((entry) => entry.name));
+            for (const name of ["AUTH_MIGRATION_TOKEN", "BETTER_AUTH_SECRET"]) {
+              if (!names.has(name)) throw new Error("Required existing Acceptance secret is missing: " + name);
+            }
+            console.log("Both existing Acceptance secrets are present; neither will be rotated.");
+          ' "$RUNNER_TEMP/mfa-acceptance-secrets.json"
           node --check scripts/mfa-acceptance-smoke.mjs
-      - name: Generate isolated Better Auth secrets
-        shell: bash
-        run: |
-          set -euo pipefail
-          BETTER_AUTH_SECRET="$(openssl rand -hex 48)"
-          AUTH_MIGRATION_TOKEN="$(openssl rand -hex 48)"
-          echo "::add-mask::$BETTER_AUTH_SECRET"
-          echo "::add-mask::$AUTH_MIGRATION_TOKEN"
-          printf '%s' "$BETTER_AUTH_SECRET" | npx --yes wrangler@4 secret put BETTER_AUTH_SECRET --config cloudflare/auth-acceptance/wrangler.toml
-          printf '%s' "$AUTH_MIGRATION_TOKEN" | npx --yes wrangler@4 secret put AUTH_MIGRATION_TOKEN --config cloudflare/auth-acceptance/wrangler.toml
-          echo "AUTH_MIGRATION_TOKEN=$AUTH_MIGRATION_TOKEN" >> "$GITHUB_ENV"
+          node --check scripts/mfa-acceptance-migrate.mjs
       - name: Deploy the PR Auth Worker to the isolated Acceptance Worker
-        run: npx --yes wrangler@4 deploy --config cloudflare/auth-acceptance/wrangler.toml --message "PR #107 isolated owner MFA Acceptance"
-      - name: Apply Better Auth schema migration to Acceptance AUTH_DB only
-        shell: bash
-        run: |
-          set -euo pipefail
-          status="$(curl --silent --show-error --output /tmp/mfa-auth-migration.json --write-out '%{http_code}'             --request POST             --header "Authorization: Bearer $AUTH_MIGRATION_TOKEN"             https://exportflow-auth-acceptance-20261122.hhameranede.workers.dev/api/auth/_ops/migrate)"
-          test "$status" = "200"
-          node -e "const x=require('/tmp/mfa-auth-migration.json'); if(x.ok!==true) process.exit(1); console.log('Acceptance Better Auth migration completed.')"
-      - name: Reset only isolated Acceptance JWKS after secret rotation
-        shell: bash
-        run: |
-          set -euo pipefail
-          npx --yes wrangler@4 d1 execute exportflow-auth-acceptance-20261122             --remote --yes --config cloudflare/auth-acceptance/wrangler.toml             --command "DELETE FROM jwks"
-          npx --yes wrangler@4 d1 execute exportflow-auth-acceptance-20261122             --remote --yes --config cloudflare/auth-acceptance/wrangler.toml             --command "SELECT COUNT(*) AS remaining_jwks FROM jwks"
+        run: npx --yes wrangler@4 deploy --config cloudflare/auth-acceptance/wrangler.toml --message "PR #107 isolated owner MFA Acceptance; existing secrets preserved"
+      - name: Apply additive Better Auth 1.7.27 schema to Acceptance AUTH_DB only
+        run: node scripts/mfa-acceptance-migrate.mjs
       - name: Create synthetic account and verify first TOTP enrollment
         run: node scripts/mfa-acceptance-smoke.mjs bootstrap
       - name: Add the synthetic account to the isolated Worker owner allowlist
@@ -86,7 +86,9 @@ jobs:
           OWNER_ID="$(node scripts/mfa-acceptance-smoke.mjs owner-id)"
           test -n "$OWNER_ID"
           echo "::add-mask::$OWNER_ID"
-          npx --yes wrangler@4 deploy --config cloudflare/auth-acceptance/wrangler.toml             --var "EXPORTFLOW_OWNER_USER_IDS:$OWNER_ID"             --message "PR #107 temporary synthetic MFA owner allowlist"
+          npx --yes wrangler@4 deploy --config cloudflare/auth-acceptance/wrangler.toml \
+            --var "EXPORTFLOW_OWNER_USER_IDS:$OWNER_ID" \
+            --message "PR #107 temporary synthetic MFA owner allowlist"
       - name: Verify owner guards, session-bound proof, replay and D1 attempt limits
         run: node scripts/mfa-acceptance-smoke.mjs verify
       - name: Remove the temporary owner allowlist from the Acceptance Worker
