@@ -63,8 +63,12 @@ const REQUIRED_TENANT_OAUTH_TRIGGERS = Object.freeze([
   "prevent_tenant_membership_delete",
   "bump_tenant_membership_version_on_tenant_state_change",
 ]);
-const AUTH_ISSUER = "https://exportflow.me/api/auth";
-const MCP_RESOURCE = "https://mcp.exportflow.me/mcp";
+function getOAuthRuntimeConfig(env = {}) {
+  const baseUrl = isNonEmptyString(env.BETTER_AUTH_URL) ? env.BETTER_AUTH_URL.trim().replace(/\/+$/, "") : "https://exportflow.me";
+  const issuer = isNonEmptyString(env.EXPORTFLOW_OAUTH_ISSUER) ? env.EXPORTFLOW_OAUTH_ISSUER.trim() : baseUrl + "/api/auth";
+  const resource = isNonEmptyString(env.EXPORTFLOW_MCP_RESOURCE) ? env.EXPORTFLOW_MCP_RESOURCE.trim() : "https://mcp.exportflow.me/mcp";
+  return Object.freeze({ issuer, resource });
+}
 const MCP_SCOPES = Object.freeze([
   "openid", "profile", "email", "offline_access",
   "tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract",
@@ -246,9 +250,9 @@ function buildAuthOptions(env, status) {
 
   if (status.tenantOAuthConfigured) {
     options.plugins = [
-      jwt({ jwt: { issuer: AUTH_ISSUER }, disableSettingJwtHeader: true }),
+      jwt({ jwt: { issuer: getOAuthRuntimeConfig(env).issuer }, disableSettingJwtHeader: true }),
       mcp({
-        resource: MCP_RESOURCE,
+        resource: getOAuthRuntimeConfig(env).resource,
         scopes: [...MCP_SCOPES],
         requireOpenId: true,
         loginPage: "/signin",
@@ -265,8 +269,8 @@ function buildAuthOptions(env, status) {
         clientRegistrationDefaultApplicationType: "web",
         clientRegistrationDefaultScopes: [...MCP_SCOPES],
         clientRegistrationAllowedScopes: [...MCP_SCOPES],
-        clientRegistrationDefaultResources: [MCP_RESOURCE],
-        clientRegistrationAllowedResources: [MCP_RESOURCE],
+        clientRegistrationDefaultResources: [getOAuthRuntimeConfig(env).resource],
+        clientRegistrationAllowedResources: [getOAuthRuntimeConfig(env).resource],
         grantTypes: ["authorization_code", "refresh_token"],
         postLogin: {
           page: "/oauth/select-tenant",
@@ -609,7 +613,7 @@ export async function handleOAuthBrowserPage(request, env = {}) {
       signedParams.get("response_type") !== "code" ||
       signedParams.get("code_challenge_method") !== "S256" ||
       signedParams.getAll("resource").length !== 1 ||
-      signedParams.get("resource") !== MCP_RESOURCE) {
+      signedParams.get("resource") !== getOAuthRuntimeConfig(env).resource) {
     return oauthBrowserError(400, "Unsupported authorization request", "This request does not match the ExportFlow OAuth authorization profile.");
   }
 
