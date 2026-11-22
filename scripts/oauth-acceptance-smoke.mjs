@@ -146,6 +146,17 @@ assert.ok(signUp.user?.id, "Better Auth sign-up should return a user id");
 assert.ok(jar.header(), "Better Auth sign-up should set a session cookie");
 const membership = await setupSyntheticTenantMembership(signUp.user.id);
 
+// Re-authenticate after the D1 verification fixture update, then prove the session is recognized.
+const signInResponse = await authRequest("sign-in/email", {
+  method: "POST",
+  payload: { email, password },
+});
+const signIn = await expectJson(signInResponse, "Better Auth acceptance sign-in");
+assert.equal(signIn.user?.id, signUp.user.id, "Sign-in should resolve the synthetic acceptance account");
+const sessionResponse = await authRequest("get-session");
+const session = await expectJson(sessionResponse, "Read authenticated acceptance session");
+assert.equal(session.user?.id, signUp.user.id, "The OAuth request must use the authenticated synthetic user session");
+
 const registrationResponse = await fetch(issuer + "/oauth2/register", {
   method: "POST",
   headers: { "content-type": "application/json", accept: "application/json" },
@@ -183,9 +194,16 @@ const authorizationResponse = await fetch(authorizationUrl, {
   redirect: "manual",
 });
 jar.absorb(authorizationResponse.headers);
-assert.ok([302, 303, 307, 308].includes(authorizationResponse.status), "OAuth authorization should redirect to the account consent flow");
 const firstLocation = authorizationResponse.headers.get("location");
-assert.ok(firstLocation, "OAuth authorization should provide a continuation URL");
+if (![302, 303, 307, 308].includes(authorizationResponse.status) || !firstLocation) {
+  const body = await authorizationResponse.text().catch(() => "");
+  const details = body.slice(0, 1_000).replace(/\s+/g, " ");
+  const locationPath = firstLocation ? new URL(firstLocation, authBase).pathname : "(none)";
+  throw new Error(
+    "OAuth authorization did not redirect (HTTP " + authorizationResponse.status +
+    ", location path " + locationPath + "): " + details,
+  );
+}
 
 let pageUrl = new URL(firstLocation, authBase);
 for (let index = 0; index < 4 && pageUrl.pathname === "/oauth/select-tenant"; index += 1) {
