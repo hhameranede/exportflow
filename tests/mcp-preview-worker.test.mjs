@@ -493,18 +493,28 @@ test("MCP real tenant gateway enforces D1-derived operation scope before quota r
 });
 
 
-test("MCP protected-resource metadata advertises the canonical resource and issuer", async () => {
-  const { worker, env } = makeWorker();
+test("MCP protected-resource metadata uses configured Auth and MCP origins", async () => {
+  const env = {
+    AUTH_ISSUER_URL: "https://auth-acceptance.hhameranede.workers.dev/api/auth",
+    MCP_RESOURCE_URL: "https://mcp-acceptance.hhameranede.workers.dev/mcp",
+    MCP_RATE_LIMITER: { async limit() { return { success: true }; } },
+  };
+  const { worker } = makeWorker({ env });
   const response = await worker.fetch(new Request("https://" + HOST + "/.well-known/oauth-protected-resource/mcp"), env);
   const body = await response.json();
   assert.equal(response.status, 200);
-  assert.equal(body.resource, "https://mcp.exportflow.me/mcp");
-  assert.deepEqual(body.authorization_servers, ["https://exportflow.me/api/auth"]);
+  assert.equal(body.resource, "https://mcp-acceptance.hhameranede.workers.dev/mcp");
+  assert.deepEqual(body.authorization_servers, ["https://auth-acceptance.hhameranede.workers.dev/api/auth"]);
   assert.deepEqual(body.scopes_supported, ["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract"]);
 });
 
-test("protected tool calls return the ChatGPT OAuth challenge when no access token is present", async () => {
-  const { worker, env, calls } = makeWorker();
+test("protected tool calls return an OAuth challenge scoped to the configured MCP resource", async () => {
+  const env = {
+    AUTH_ISSUER_URL: "https://auth-acceptance.hhameranede.workers.dev/api/auth",
+    MCP_RESOURCE_URL: "https://mcp-acceptance.hhameranede.workers.dev/mcp",
+    MCP_RATE_LIMITER: { async limit() { return { success: true }; } },
+  };
+  const { worker, calls } = makeWorker({ env });
   const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
     name: "web_fetch",
     arguments: { url: "https://example.com/" },
@@ -514,7 +524,7 @@ test("protected tool calls return the ChatGPT OAuth challenge when no access tok
   const challenge = result?._meta?.["mcp/www_authenticate"]?.[0] || "";
   assert.equal(response.status, 200);
   assert.equal(result.isError, true);
-  assert.match(challenge, /resource_metadata="https:\/\/mcp\.exportflow\.me\/\.well-known\/oauth-protected-resource\/mcp"/);
+  assert.match(challenge, /resource_metadata="https:\/\/mcp-acceptance\.hhameranede\.workers\.dev\/\.well-known\/oauth-protected-resource\/mcp"/);
   assert.match(challenge, /error="invalid_token"/);
   assert.match(challenge, /error_description="/);
   assert.equal(calls.tasks.length, 0);
