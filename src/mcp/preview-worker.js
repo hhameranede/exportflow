@@ -486,9 +486,10 @@ export function createExportFlowPreviewWorker({
         if (request.method !== "GET" && request.method !== "HEAD") {
           return jsonResponse({ error: "method_not_allowed" }, 405, { allow: "GET, HEAD" });
         }
+        const oauthEndpoints = getOAuthRuntimeConfig(env);
         const metadata = {
-          resource: MCP_RESOURCE,
-          authorization_servers: [AUTH_ISSUER],
+          resource: oauthEndpoints.resource,
+          authorization_servers: [oauthEndpoints.issuer],
           scopes_supported: Object.values(TOOL_SCOPES),
           bearer_methods_supported: ["header"],
         };
