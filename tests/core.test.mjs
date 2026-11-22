@@ -1837,6 +1837,31 @@ test("declared oversized upstream body does not wait for a stalled body cancella
   assert.equal(cancelCalls, 1);
 });
 
+test("HTTP response reader bounds zero-byte chunk floods", async () => {
+  let chunksRead = 0;
+  let cancelCalls = 0;
+  const stream = new ReadableStream({
+    pull(controller) {
+      chunksRead += 1;
+      controller.enqueue(new Uint8Array(0));
+    },
+    cancel() {
+      cancelCalls += 1;
+    },
+  }, { highWaterMark: 0 });
+
+  await assert.rejects(
+    fetchPublicResource("https://example.com/empty-chunks", {
+      fetchImpl: async () => new Response(stream, {
+        headers: { "content-type": "text/plain" },
+      }),
+    }),
+    (error) => error instanceof FetchAdapterError && error.code === "RESPONSE_TOO_LARGE",
+  );
+  assert.equal(chunksRead, HTTP_FETCH_LIMITS.maxResponseChunks + 1);
+  assert.equal(cancelCalls, 1);
+});
+
 test("fetch follows a safe redirect without waiting for a stalled redirect-body cancellation", { timeout: 1500 }, async () => {
   let cancelCalls = 0;
   const redirectBody = new ReadableStream({
