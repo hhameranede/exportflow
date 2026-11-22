@@ -9,6 +9,7 @@ import { handleAuthRequest } from "./core/auth-app.js";
 
 // Shared namespace owner: the separate MCP Worker binds to this exported class.
 export { TenantBurstRateLimiter } from "./core/durable-tenant-burst-limiter.js";
+import { createTenantAdminHttpHandler } from "./core/tenant-admin-http.js";
 
 const ERROR_CODE_TO_HTTP_STATUS = Object.freeze({
   INVALID_TASK: 400,
@@ -74,6 +75,9 @@ export function createWorker(options = {}) {
     tenantBurstLimit: options.tenantBurstLimit,
     tenantBurstWindowMs: options.tenantBurstWindowMs,
   });
+  const tenantAdminHandler = options.tenantAdminHandler || createTenantAdminHttpHandler({
+    authorizeOwner: options.authorizePlatformOwner,
+  });
 
   return {
     async fetch(request, env = {}) {
@@ -82,6 +86,9 @@ export function createWorker(options = {}) {
 
         const authResponse = await handleAuthRequest(request, env);
         if (authResponse) return authResponse;
+
+        const adminResponse = await tenantAdminHandler(request, env);
+        if (adminResponse) return adminResponse;
 
         if (url.pathname === "/api/v1/tasks") {
           if (request.method !== "POST") {
