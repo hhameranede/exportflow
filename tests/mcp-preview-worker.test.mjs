@@ -436,24 +436,22 @@ function makeTenantD1({ requestLimit = 1, scopes = ["tasks:fetch"] } = {}) {
 
 test("MCP real tenant gateway authorizes, reserves one D1-shaped quota unit, then blocks exhaustion", async () => {
   const db = makeTenantD1({ requestLimit: 1 });
+  const env = {
+    EXPORTFLOW_AUTH_DB: db,
+    TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace(),
+    MCP_RATE_LIMITER: { async limit() { return { success: true }; } },
+  };
   const { worker, calls } = makeWorker({
     useRealGateway: true,
     taskResult: { id: "task_mcp_tenant_01", state: "succeeded" },
-    env: {
-      EXPORTFLOW_AUTH_DB: db,
-      TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace(),
-      MCP_RATE_LIMITER: { async limit() { return { success: true }; } },
-    },
+    env,
   });
   const makeCall = () => makeRequest(jsonRpc("tools/call", {
     name: "web_fetch",
     arguments: { url: "https://example.com/" },
   }), { headers: { authorization: "Bearer " + TENANT_TOKEN, "cf-connecting-ip": "203.0.113.55" } });
 
-  const first = await worker.fetch(makeCall(), {
-    EXPORTFLOW_AUTH_DB: db,
-    MCP_RATE_LIMITER: { async limit() { return { success: true }; } },
-  });
+  const first = await worker.fetch(makeCall(), env);
   const firstBody = await first.json();
   assert.equal(first.status, 200);
   assert.equal(firstBody.result.structuredContent.quota.limit, 1);
@@ -461,10 +459,7 @@ test("MCP real tenant gateway authorizes, reserves one D1-shaped quota unit, the
   assert.equal(calls.tasks.length, 1);
   assert.equal([...db.usage.values()][0].requests_used, 1);
 
-  const second = await worker.fetch(makeCall(), {
-    EXPORTFLOW_AUTH_DB: db,
-    MCP_RATE_LIMITER: { async limit() { return { success: true }; } },
-  });
+  const second = await worker.fetch(makeCall(), env);
   const secondBody = await second.json();
   assert.equal(secondBody.result.isError, true);
   assert.equal(secondBody.result.structuredContent.error, "PLAN_QUOTA_EXCEEDED");
