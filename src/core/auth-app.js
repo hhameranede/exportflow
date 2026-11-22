@@ -126,6 +126,7 @@ async function getPublicAuthFeatureStatus(env, configuredStatus) {
   return Object.freeze({
     ...configuredStatus,
     authReady,
+    tenantOAuthConfigured: Boolean(tenantOAuthReady),
     oauthReady: Boolean(tenantOAuthReady),
     googleEnabled: configuredStatus.googleEnabled && authReady,
     emailPasswordEnabled: configuredStatus.emailPasswordEnabled && authReady,
@@ -440,6 +441,14 @@ function isSameOriginAuthRequest(request, env = {}) {
   return origin === expectedOrigin && (!fetchSite || fetchSite === "same-origin");
 }
 
+function isTenantOAuthEndpointPath(pathname) {
+  return typeof pathname === "string" && (
+    pathname.includes("/oauth2") ||
+    pathname.includes("/.well-known/") ||
+    pathname.endsWith("/jwks")
+  );
+}
+
 async function handleTenantOAuthApi(request, env, auth) {
   const url = new URL(request.url);
   if (url.pathname !== "/api/auth/tenant/list" && url.pathname !== "/api/auth/tenant/select") return null;
@@ -564,6 +573,18 @@ export async function handleAuthRequest(request, env = {}) {
       error: "AUTH_SCHEMA_NOT_READY",
       message: "Account storage has not been initialized yet.",
     }, 503);
+  }
+
+  if (isTenantOAuthEndpointPath(url.pathname)) {
+    const tenantOAuthReady = status.tenantOAuthConfigured &&
+      await isOAuthAuthSchemaReady(env.AUTH_DB) &&
+      await isTenantOAuthSchemaReady(env.EXPORTFLOW_AUTH_DB);
+    if (!tenantOAuthReady) {
+      return textResponse({
+        error: "TENANT_OAUTH_SCHEMA_NOT_READY",
+        message: "Tenant OAuth storage is not initialized yet.",
+      }, 503);
+    }
   }
 
   const auth = getAuthInstance(env);

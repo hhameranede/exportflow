@@ -113,6 +113,21 @@ jobs:
        https://exportflow-auth-acceptance-20261122.hhameranede.workers.dev/api/auth/_ops/migrate)"
       cat /tmp/auth-migration.json
       test "$status" = "200"
+   - name: Bootstrap isolated Tenant Acceptance schema and QA plan
+     shell: bash
+     run: |
+      set -euo pipefail
+      # This job is branch-gated to the isolated Acceptance Workers. Never point
+      # these commands at the Production tenant database.
+      for migration in \
+       migrations/0001_tenant_auth_quota.sql \
+       migrations/0002_guard_quota_period_transitions.sql \
+       migrations/0003_tenant_admin_audit_log.sql \
+       migrations/0004_tenant_oauth_memberships.sql; do
+       npx --yes wrangler@4 d1 execute exportflow-tenant-acceptance-20261122 --remote --yes --file "$migration"
+      done
+      npx --yes wrangler@4 d1 execute exportflow-tenant-acceptance-20261122 --remote --yes \
+       --command "INSERT INTO plan_policies (plan_code, quota_period, request_limit, policy_version, status, created_at, updated_at) VALUES ('qa_daily', 'daily', 2, 'acceptance-v1', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(plan_code) DO UPDATE SET quota_period='daily', request_limit=2, policy_version='acceptance-v1', status='active', updated_at=excluded.updated_at"
    - name: Reset isolated acceptance signing keys after secret rotation
      shell: bash
      run: |

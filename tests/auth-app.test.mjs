@@ -281,6 +281,48 @@ test("platform owner authorization fails closed when auth schema is incomplete",
   );
   assert.deepEqual(response, { allowed: false });
 });
+test("Tenant OAuth remains unavailable until all required D1 tables and triggers exist", async () => {
+  const authTables = [
+    "user", "session", "account", "verification",
+    "jwks", "oauthClient", "oauthResource", "oauthClientResource",
+    "oauthRefreshToken", "oauthAccessToken", "oauthConsent", "oauthClientAssertion",
+  ];
+  const tenantTables = [
+    "tenants", "plan_policies", "tenant_request_usage",
+    "tenant_memberships", "tenant_oauth_selections",
+  ];
+  const tenantTriggers = [
+    "guard_tenant_membership_last_owner",
+    "prevent_tenant_membership_identity_update",
+    "prevent_tenant_membership_delete",
+    "bump_tenant_membership_version_on_tenant_state_change",
+  ];
+  const env = {
+    AUTH_DB: createD1BindingStub(authTables),
+    EXPORTFLOW_AUTH_DB: createD1BindingStub([...tenantTables, ...tenantTriggers.slice(0, -1)]),
+    BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
+    BETTER_AUTH_URL: "https://auth-acceptance.hhameranede.workers.dev",
+    MCP_RESOURCE_URL: "https://mcp-acceptance.hhameranede.workers.dev/mcp",
+  };
+
+  const configResponse = await handleAuthRequest(
+    new Request(env.BETTER_AUTH_URL + "/api/auth/config"),
+    env,
+  );
+  const config = await configResponse.json();
+  assert.equal(config.authReady, true);
+  assert.equal(config.tenantOAuthConfigured, false);
+  assert.equal(config.oauthReady, false);
+
+  const oauthResponse = await handleAuthRequest(
+    new Request(env.BETTER_AUTH_URL + "/api/auth/oauth2/register", { method: "POST" }),
+    env,
+  );
+  assert.equal(oauthResponse.status, 503);
+  const body = await oauthResponse.json();
+  assert.equal(body.error, "TENANT_OAUTH_SCHEMA_NOT_READY");
+});
+
 test("OAuth endpoints derive from the configured Auth and MCP origins", () => {
   const endpoints = getOAuthRuntimeConfig({
     BETTER_AUTH_URL: "https://auth-acceptance.hhameranede.workers.dev",

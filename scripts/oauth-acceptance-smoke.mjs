@@ -58,6 +58,112 @@ async function d1Query(databaseId, sql, params = []) {
   return body.result[0];
 }
 
+const cleanupState = {
+  email: null,
+  userId: null,
+  tenantId: null,
+  membershipId: null,
+  sessionId: null,
+  clientName: null,
+};
+
+async function cleanupAcceptanceArtifacts() {
+  const failures = [];
+  async function attempt(label, operation) {
+    try {
+      await operation();
+    } catch (error) {
+      failures.push(label + ": " + (error instanceof Error ? error.message : String(error)));
+    }
+  }
+
+  const now = new Date().toISOString();
+  if (cleanupState.sessionId) {
+    await attempt("session tenant selection", () => d1Query(
+      tenantDatabaseId,
+      "DELETE FROM tenant_oauth_selections WHERE session_id = ?",
+      [cleanupState.sessionId],
+    ));
+  }
+  if (cleanupState.userId) {
+    await attempt("user tenant selections", () => d1Query(
+      tenantDatabaseId,
+      "DELETE FROM tenant_oauth_selections WHERE user_id = ?",
+      [cleanupState.userId],
+    ));
+  }
+  if (cleanupState.tenantId) {
+    await attempt("tenant selections", () => d1Query(
+      tenantDatabaseId,
+      "DELETE FROM tenant_oauth_selections WHERE tenant_id = ?",
+      [cleanupState.tenantId],
+    ));
+    await attempt("tenant request usage", () => d1Query(
+      tenantDatabaseId,
+      "DELETE FROM tenant_request_usage WHERE tenant_id = ?",
+      [cleanupState.tenantId],
+    ));
+    await attempt("revoke synthetic membership", () => d1Query(
+      tenantDatabaseId,
+      "UPDATE tenant_memberships SET status = 'revoked', revoked_at = COALESCE(revoked_at, ?), updated_at = ? WHERE tenant_id = ? AND created_by = 'oauth-acceptance-workflow' AND status = 'active'",
+      [now, now, cleanupState.tenantId],
+    ));
+    await attempt("close synthetic tenant", () => d1Query(
+      tenantDatabaseId,
+      "UPDATE tenants SET status = 'closed', updated_at = ? WHERE tenant_id = ? AND status = 'active'",
+      [now, cleanupState.tenantId],
+    ));
+  }
+  if (cleanupState.clientName) {
+    await attempt("dynamic OAuth client", () => d1Query(
+      authDatabaseId,
+      "DELETE FROM oauthClient WHERE name = ?",
+      [cleanupState.clientName],
+    ));
+  }
+  if (cleanupState.email) {
+    await attempt("synthetic Better Auth user", () => d1Query(
+      authDatabaseId,
+      "DELETE FROM user WHERE email = ?",
+      [cleanupState.email],
+    ));
+    await attempt("verify synthetic user removal", async () => {
+      const result = await d1Query(authDatabaseId, "SELECT COUNT(*) AS count FROM user WHERE email = ?", [cleanupState.email]);
+      assert.equal(Number(result.results?.[0]?.count), 0, "Synthetic Better Auth user should be removed");
+    });
+  }
+  if (cleanupState.clientName) {
+    await attempt("verify OAuth client removal", async () => {
+      const result = await d1Query(authDatabaseId, "SELECT COUNT(*) AS count FROM oauthClient WHERE name = ?", [cleanupState.clientName]);
+      assert.equal(Number(result.results?.[0]?.count), 0, "Synthetic dynamic OAuth client should be removed");
+    });
+  }
+  if (cleanupState.userId || cleanupState.tenantId) {
+    await attempt("verify selection cleanup", async () => {
+      const result = await d1Query(
+        tenantDatabaseId,
+        "SELECT COUNT(*) AS count FROM tenant_oauth_selections WHERE (? IS NOT NULL AND user_id = ?) OR (? IS NOT NULL AND tenant_id = ?)",
+        [cleanupState.userId, cleanupState.userId, cleanupState.tenantId, cleanupState.tenantId],
+      );
+      assert.equal(Number(result.results?.[0]?.count), 0, "Temporary tenant selection rows should be removed");
+    });
+  }
+  if (cleanupState.tenantId) {
+    await attempt("verify synthetic tenant retirement", async () => {
+      const result = await d1Query(
+        tenantDatabaseId,
+        "SELECT t.status AS tenant_status, (SELECT COUNT(*) FROM tenant_memberships AS m WHERE m.tenant_id = t.tenant_id AND m.status = 'active' AND m.created_by = 'oauth-acceptance-workflow') AS active_memberships, (SELECT COUNT(*) FROM tenant_request_usage AS u WHERE u.tenant_id = t.tenant_id) AS usage_rows FROM tenants AS t WHERE t.tenant_id = ?",
+        [cleanupState.tenantId],
+      );
+      assert.equal(result.results?.[0]?.tenant_status, "closed");
+      assert.equal(Number(result.results?.[0]?.active_memberships), 0);
+      assert.equal(Number(result.results?.[0]?.usage_rows), 0);
+    });
+  }
+
+  if (failures.length) throw new Error("Acceptance cleanup incomplete: " + failures.join("; "));
+}
+
 const jar = new CookieJar();
 async function authRequest(path, { method = "GET", payload, signedQuery, redirect = "manual" } = {}) {
   const body = payload && typeof payload === "object" && signedQuery
@@ -117,6 +223,7 @@ async function setupSyntheticTenantMembership(userId) {
 
   // Each run gets its own small-quota workspace; the shared QA fixtures may already be exhausted.
   const tenantId = "qa_oauth_" + randomUUID().replaceAll("-", "");
+  cleanupState.tenantId = tenantId;
   const timestamp = new Date().toISOString();
   const tenant = await d1Query(
     tenantDatabaseId,
@@ -136,18 +243,24 @@ async function setupSyntheticTenantMembership(userId) {
       "WHERE t.tenant_id = ? AND t.status = 'active' AND p.status = 'active'",
     [membershipId, userId, tenantId, timestamp, timestamp, tenantId],
   );
+  cleanupState.membershipId = membershipId;
   assert.equal(membership.meta?.changes, 1, "Synthetic user should receive one active test workspace membership");
   return { membershipId, tenantId };
 }
 
+try {
 const suffix = randomUUID();
 const email = "oauth-acceptance-" + suffix + "@example.net";
 const password = randomBytes(24).toString("base64url");
+const clientName = "ExportFlow OAuth Acceptance " + suffix;
+cleanupState.email = email;
+cleanupState.clientName = clientName;
 const signUpResponse = await authRequest("sign-up/email", {
   method: "POST",
   payload: { name: "ExportFlow Acceptance User", email, password },
 });
 const signUp = await expectJson(signUpResponse, "Better Auth sign-up");
+cleanupState.userId = signUp.user?.id || null;
 assert.ok(signUp.user?.id, "Better Auth sign-up should return a user id");
 assert.ok(jar.header(), "Better Auth sign-up should set a session cookie");
 const membership = await setupSyntheticTenantMembership(signUp.user.id);
@@ -162,12 +275,13 @@ assert.equal(signIn.user?.id, signUp.user.id, "Sign-in should resolve the synthe
 const sessionResponse = await authRequest("get-session");
 const session = await expectJson(sessionResponse, "Read authenticated acceptance session");
 assert.equal(session.user?.id, signUp.user.id, "The OAuth request must use the authenticated synthetic user session");
+cleanupState.sessionId = session.session?.id || null;
 
 const registrationResponse = await fetch(issuer + "/oauth2/register", {
   method: "POST",
   headers: { "content-type": "application/json", accept: "application/json" },
   body: JSON.stringify({
-    client_name: "ExportFlow OAuth Acceptance",
+    client_name: clientName,
     application_type: "web",
     redirect_uris: [redirectUri],
     grant_types: ["authorization_code", "refresh_token"],
@@ -392,4 +506,13 @@ await d1Query(
   [membership.tenantId],
 );
 
-console.log("OAuth acceptance passed: signup, active tenant selection, consent, authorization-code + S256 PKCE, token exchange, real MCP web_fetch, scope enforcement, D1 quota, membership-version invalidation and synthetic workspace cleanup.");
+console.log("OAuth acceptance passed: signup, active tenant selection, consent, authorization-code + S256 PKCE, token exchange, real MCP web_fetch, scope enforcement, D1 quota and membership-version invalidation.");
+} finally {
+  try {
+    await cleanupAcceptanceArtifacts();
+    console.log("OAuth acceptance cleanup verified: synthetic auth user, dynamic client, sessions and temporary tenant selections/usage removed; closed tenant and revoked membership retained as audit fixtures.");
+  } catch (error) {
+    console.error("OAuth acceptance cleanup failed: " + (error instanceof Error ? error.message : String(error)));
+    process.exitCode = 1;
+  }
+}
