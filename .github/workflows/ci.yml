@@ -108,55 +108,5 @@ jobs:
        https://exportflow-auth-acceptance-20261122.hhameranede.workers.dev/api/auth/_ops/migrate)"
       cat /tmp/auth-migration.json
       test "$status" = "200"
-   - name: Verify isolated OAuth and MCP runtime
-     shell: bash
-     run: |
-      set -euo pipefail
-      node --input-type=module <<'NODE'
-      const authBase = "https://exportflow-auth-acceptance-20261122.hhameranede.workers.dev";
-      const issuer = authBase + "/api/auth";
-      const resource = "https://exportflow-mcp-acceptance-20261122.hhameranede.workers.dev/mcp";
-      const configResponse = await fetch(authBase + "/api/auth/config", { headers: { accept: "application/json" } });
-      if (!configResponse.ok) throw new Error("Auth config returned HTTP " + configResponse.status);
-      const config = await configResponse.json();
-      if (config.authReady !== true || config.oauthReady !== true) throw new Error("Acceptance schemas are not ready: " + JSON.stringify(config));
-
-      const metadataResponse = await fetch(issuer + "/.well-known/oauth-authorization-server", { headers: { accept: "application/json" } });
-      if (!metadataResponse.ok) throw new Error("OAuth discovery returned HTTP " + metadataResponse.status);
-      const metadata = await metadataResponse.json();
-      if (metadata.issuer !== issuer || !metadata.authorization_endpoint?.startsWith(issuer + "/")) {
-        throw new Error("OAuth discovery points outside the acceptance Auth Worker: " + JSON.stringify(metadata));
-      }
-
-      const resourceMetadataUrl = resource.replace(/\/mcp$/, "/.well-known/oauth-protected-resource/mcp");
-      const resourceResponse = await fetch(resourceMetadataUrl, { headers: { accept: "application/json" } });
-      if (!resourceResponse.ok) throw new Error("Protected-resource metadata returned HTTP " + resourceResponse.status);
-      const protectedResource = await resourceResponse.json();
-      if (protectedResource.resource !== resource || protectedResource.authorization_servers?.[0] !== issuer) {
-        throw new Error("MCP metadata points outside the acceptance workers: " + JSON.stringify(protectedResource));
-      }
-
-      const listResponse = await fetch(resource, {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-11-25" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
-      });
-      if (!listResponse.ok) throw new Error("MCP tools/list returned HTTP " + listResponse.status);
-      const listed = await listResponse.json();
-      const toolNames = listed.result?.tools?.map((tool) => tool.name) || [];
-      for (const name of ["exportflow_capabilities", "web_fetch", "web_map", "web_crawl", "web_extract"]) {
-        if (!toolNames.includes(name)) throw new Error("MCP tool is missing: " + name);
-      }
-
-      const challengeResponse = await fetch(resource, {
-        method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-11-25" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "web_fetch", arguments: { url: "https://example.com/" } } }),
-      });
-      if (!challengeResponse.ok) throw new Error("Unauthenticated MCP request returned HTTP " + challengeResponse.status);
-      const challengeBody = await challengeResponse.json();
-      const challenge = challengeBody.result?._meta?.["mcp/www_authenticate"]?.[0] || "";
-      if (!challenge.includes('resource_metadata="' + resourceMetadataUrl + '"')) throw new Error("MCP challenge uses the wrong protected-resource URL.");
-      if (challengeBody.result?.structuredContent?.error !== "authentication_required") throw new Error("Unauthenticated MCP task did not fail closed.");
-      console.log("OAuth issuer, protected-resource metadata, MCP tools and auth challenge verified on the isolated Workers.");
-      NODE
+   - name: Verify complete isolated OAuth, tenant and MCP flow
+     run: node scripts/oauth-acceptance-smoke.mjs
