@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createExportFlowPreviewWorker } from "../src/mcp/preview-worker.js";
+import { createAuthServiceJwksFetcher, createExportFlowPreviewWorker } from "../src/mcp/preview-worker.js";
 import { hashApiKey } from "../src/core/tenant-auth.js";
 
 const HOST = "mcp.exportflow.me";
@@ -79,6 +79,41 @@ function makeWorker(options = {}) {
   };
   return { worker, env, calls };
 }
+
+test("Auth Service Binding supplies JWKS directly to the MCP verifier", async () => {
+  const target = "https://auth-acceptance.hhameranede.workers.dev/api/auth/jwks";
+  let requestSeen;
+  const fetcher = createAuthServiceJwksFetcher({
+    AUTH_SERVICE: {
+      async fetch(request) {
+        requestSeen = request;
+        return new Response(JSON.stringify({ keys: [{ kid: "acceptance-key-1", kty: "OKP" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    },
+  }, target);
+
+  assert.equal(typeof fetcher, "function");
+  const jwks = await fetcher();
+  assert.equal(requestSeen.url, target);
+  assert.equal(requestSeen.method, "GET");
+  assert.deepEqual(jwks.keys, [{ kid: "acceptance-key-1", kty: "OKP" }]);
+});
+
+test("Auth Service Binding JWKS fetch fails closed on upstream errors or malformed documents", async () => {
+  const target = "https://auth-acceptance.hhameranede.workers.dev/api/auth/jwks";
+  const unavailable = createAuthServiceJwksFetcher({
+    AUTH_SERVICE: { async fetch() { return new Response("not found", { status: 404 }); } },
+  }, target);
+  await assert.rejects(unavailable(), /HTTP 404/);
+
+  const malformed = createAuthServiceJwksFetcher({
+    AUTH_SERVICE: { async fetch() { return Response.json({ keys: "not-an-array" }); } },
+  }, target);
+  await assert.rejects(malformed(), /invalid JWKS document/);
+});
 
 test("health route describes the read-only MCP preview", async () => {
   const { worker, env, calls } = makeWorker();

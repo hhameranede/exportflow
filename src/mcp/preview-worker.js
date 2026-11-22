@@ -5,6 +5,26 @@ import { validatePublicHttpUrl } from "../core/http-fetch.js";
 import { validateExtractionSchema } from "../core/extract.js";
 import { getOAuthRuntimeConfig } from "../core/oauth-config.js";
 
+export function createAuthServiceJwksFetcher(env, jwksUrl) {
+  const service = env?.AUTH_SERVICE;
+  if (!service || typeof service.fetch !== "function") return undefined;
+
+  return async function fetchAuthServiceJwks() {
+    const response = await service.fetch(new Request(jwksUrl, {
+      method: "GET",
+      headers: { accept: "application/json" },
+    }));
+    if (!response.ok) {
+      throw new Error("Auth service JWKS request failed (HTTP " + response.status + ").");
+    }
+    const jwks = await response.json();
+    if (!jwks || !Array.isArray(jwks.keys)) {
+      throw new Error("Auth service returned an invalid JWKS document.");
+    }
+    return jwks;
+  };
+}
+
 const SUPPORTED_PROTOCOLS = new Set(["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"]);
 const DEFAULT_PROTOCOL = "2025-11-25";
 const MCP_PATH = "/mcp";
@@ -404,23 +424,31 @@ export function createExportFlowPreviewWorker({
       if (env?.EXPORTFLOW_ACCEPTANCE_MODE === "true") {
         try {
           const jwksUrl = new URL(oauthEndpoints.jwksUrl);
-          const jwksResponse = await fetch(oauthEndpoints.jwksUrl, {
-            method: "GET",
-            headers: { accept: "application/json" },
-            redirect: "manual",
-          });
-          console.info("[exportflow-mcp-acceptance-jwks-preflight]", JSON.stringify({
-            hostname: jwksUrl.hostname,
-            path: jwksUrl.pathname,
-            status: jwksResponse.status,
-            contentType: jwksResponse.headers.get("content-type"),
-            locationPath: (() => {
-              const location = jwksResponse.headers.get("location");
-              if (!location) return undefined;
-              try { return new URL(location, jwksUrl).pathname; } catch { return "[invalid]"; }
-            })(),
-          }));
-          await jwksResponse.body?.cancel();
+          const serviceJwksFetch = createAuthServiceJwksFetcher(env, oauthEndpoints.jwksUrl);
+          if (serviceJwksFetch) {
+            const jwks = await serviceJwksFetch();
+            console.info("[exportflow-mcp-acceptance-jwks-preflight]", JSON.stringify({
+              transport: "cloudflare-service-binding",
+              hostname: jwksUrl.hostname,
+              path: jwksUrl.pathname,
+              status: 200,
+              keyCount: jwks.keys.length,
+            }));
+          } else {
+            const jwksResponse = await fetch(oauthEndpoints.jwksUrl, {
+              method: "GET",
+              headers: { accept: "application/json" },
+              redirect: "manual",
+            });
+            console.info("[exportflow-mcp-acceptance-jwks-preflight]", JSON.stringify({
+              transport: "public-http-fallback",
+              hostname: jwksUrl.hostname,
+              path: jwksUrl.pathname,
+              status: jwksResponse.status,
+              contentType: jwksResponse.headers.get("content-type"),
+            }));
+            await jwksResponse.body?.cancel();
+          }
         } catch (error) {
           console.error("[exportflow-mcp-acceptance-jwks-preflight-error]", JSON.stringify({
             name: typeof error?.name === "string" ? error.name.slice(0, 120) : "Error",
@@ -429,10 +457,11 @@ export function createExportFlowPreviewWorker({
         }
       }
 
+      const serviceJwksFetch = createAuthServiceJwksFetcher(env, oauthEndpoints.jwksUrl);
       const protectedHandler = createMcpProtectedRequestHandler({
         issuer: oauthEndpoints.issuer,
         audience: oauthEndpoints.resource,
-        jwksUrl: oauthEndpoints.jwksUrl,
+        ...(serviceJwksFetch ? { jwksFetch: serviceJwksFetch } : { jwksUrl: oauthEndpoints.jwksUrl }),
         jwtVerifyOptions: { typ: "at+jwt", requiredClaims: ["sub", "azp"] },
         requiredScopes: [requiredScope],
         challengeScopes: [requiredScope],
