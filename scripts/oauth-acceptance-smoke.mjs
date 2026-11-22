@@ -94,7 +94,13 @@ function getSignedOAuthQuery(url) {
 }
 
 async function expectJson(response, label) {
-  const data = await response.json().catch(async () => ({ raw: (await response.text()).slice(0, 400) }));
+  const raw = await response.text();
+  let data;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch {
+    data = { raw: raw.slice(0, 1_000) };
+  }
   if (!response.ok) {
     throw new Error(label + " failed (HTTP " + response.status + "): " + JSON.stringify(data));
   }
