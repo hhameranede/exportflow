@@ -74,6 +74,19 @@ test("marketing JavaScript, CSS, and sitemap are served by the website router", 
   assert.deepEqual(locations, [...new Set(MARKETING_PATHS)]);
 });
 
+test("account security page exposes authenticator enrollment without embedding a secret", async () => {
+  const response = getWebsiteResponse("/account");
+  assert.ok(response);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /data-account-two-factor/);
+  assert.match(html, /data-two-factor-enable-form/);
+  assert.match(html, /data-two-factor-verify-form/);
+  assert.match(html, /data-two-factor-backup-codes/);
+  assert.match(html, /data-two-factor-copy-secret/);
+  assert.doesNotMatch(html, /otpauth:\/\/totp\//);
+});
+
 test("unknown website paths do not fall through to a marketing page", () => {
   assert.equal(getWebsiteResponse("/not-a-marketing-route"), null);
 });
