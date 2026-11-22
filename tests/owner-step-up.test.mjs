@@ -20,7 +20,7 @@ function request(cookie) {
   });
 }
 
-function makeAuthDb({ factor = { twoFactorEnabled: 1, factorVerified: 1 } } = {}) {
+function makeAuthDb({ factor = { twoFactorEnabled: 1, factorVerified: 1 }, activeSession = true } = {}) {
   const rows = [];
   const db = {
     rows,
@@ -57,6 +57,14 @@ function makeAuthDb({ factor = { twoFactorEnabled: 1, factorVerified: 1 } } = {}
                 }
                 return { meta: { changes: before - rows.length } };
               }
+              if (sql.startsWith("DELETE FROM verification") && sql.includes("AND EXISTS (")) {
+                const [identifier, value, nowIso, sessionId, userId] = params;
+                const sessionStillActive = activeSession && sessionId === SESSION && userId === OWNER;
+                const index = rows.findIndex((row) => row.identifier === identifier && row.value === value && row.expiresAt > nowIso);
+                if (!sessionStillActive || index < 0) return { meta: { changes: 0 } };
+                rows.splice(index, 1);
+                return { meta: { changes: 1 } };
+              }
               if (sql.startsWith("DELETE FROM verification") && sql.includes("expiresAt > ?3")) {
                 const [identifier, value, nowIso] = params;
                 const index = rows.findIndex((row) => row.identifier === identifier && row.value === value && row.expiresAt > nowIso);
@@ -92,8 +100,8 @@ function makeAuthDb({ factor = { twoFactorEnabled: 1, factorVerified: 1 } } = {}
   return db;
 }
 
-function fixture({ factor, verify, now = NOW } = {}) {
-  const db = makeAuthDb({ factor });
+function fixture({ factor, verify, now = NOW, activeSession = true } = {}) {
+  const db = makeAuthDb({ factor, activeSession });
   let calls = 0;
   let currentNow = now;
   const service = createOwnerStepUpService({
@@ -165,6 +173,15 @@ test("tampered and expired proofs fail closed", async () => {
   assert.deepEqual(await f.service.consumeProof(request(tampered), f.env, f.owner), { allowed: false });
   f.setNow(NOW + 5 * 60_000 + 1);
   assert.deepEqual(await f.service.consumeProof(request(outcome.token), f.env, f.owner), { allowed: false });
+});
+
+test("revoked or expired Better Auth session cannot consume a valid one-time proof", async () => {
+  const f = fixture({ activeSession: false });
+  const outcome = await f.service.verifyCode(request(), f.env, f.owner, "123456");
+  assert.equal(outcome.allowed, true);
+  const result = await f.service.consumeProof(request(outcome.token), f.env, f.owner);
+  assert.deepEqual(result, { allowed: false });
+  assert.equal(f.db.rows.some((row) => row.identifier === "exportflow:owner-step-up-proof:" + OWNER), true);
 });
 
 test("unconfigured or unverified TOTP enrollment is rejected before code verification", async () => {
