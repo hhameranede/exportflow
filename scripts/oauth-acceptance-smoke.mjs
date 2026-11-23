@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { assertSuccessfulFetchTask } from "./acceptance/fetch-assertions.mjs";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || "435030befbb9df09ab76f69209c05347";
@@ -432,6 +433,7 @@ assert.equal(token.token_type?.toLowerCase(), "bearer");
 assert.ok(token.expires_in > 0);
 assert.ok(!JSON.stringify(token).includes(password), "OAuth response must not expose the sign-up password");
 
+let lastMcpHttpStatus = null;
 async function callMcp(name, argumentsValue) {
   const response = await fetch(resource, {
     method: "POST",
@@ -443,6 +445,7 @@ async function callMcp(name, argumentsValue) {
     },
     body: JSON.stringify({ jsonrpc: "2.0", id: randomUUID(), method: "tools/call", params: { name, arguments: argumentsValue } }),
   });
+  lastMcpHttpStatus = response.status;
   const body = await expectJson(response, "Authenticated MCP " + name);
   return body.result;
 }
@@ -456,9 +459,15 @@ if (!jwksResponse.ok || !Array.isArray(jwksBody?.keys) || jwksBody.keys.length =
 }
 assert.ok(jwksBody.keys.every((key) => typeof key.kid === "string" && typeof key.kty === "string"), "JWKS must expose public key identifiers and types");
 
-const fetchResult = await callMcp("web_fetch", { url: "https://example.com/" });
-assert.notEqual(fetchResult?.isError, true, "OAuth token should authorize web_fetch");
-assert.equal(fetchResult?.structuredContent?.state, "succeeded", "web_fetch should finish in the real MCP Worker");
+const fetchResult = await callMcp("web_fetch", { url: "https://www.cloudflare.com/robots.txt" });
+assertSuccessfulFetchTask({
+  transport: "MCP",
+  httpStatus: lastMcpHttpStatus,
+  toolIsError: fetchResult?.isError === true,
+  task: fetchResult?.structuredContent,
+  expectedContent: "User-agent: *",
+  expectedHost: "cloudflare.com",
+});
 assert.equal(fetchResult?.structuredContent?.quota?.limit, 2, "MCP execution should use the tenant's D1 quota policy");
 
 const scopeDenied = await callMcp("web_map", { url: "https://example.com/" });
