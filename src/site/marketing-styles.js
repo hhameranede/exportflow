@@ -2446,9 +2446,13 @@ html[data-theme="dark"] .ef-code-tabs {
 
 .ef-sub-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   margin-top: var(--space-4);
+}
+
+.ef-sub-grid > * {
+  min-width: 0;
 }
 
 @media (min-width: 760px) {
