@@ -241,7 +241,10 @@ test("each request gets a new service bound to that request's verified owner ide
       } };
     },
   });
-  const env = { EXPORTFLOW_AUTH_DB: makeD1() };
+  const env = {
+    EXPORTFLOW_AUTH_DB: makeD1(),
+    TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace(),
+  };
   const first = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), env);
   nextActor = "owner_B";
   const second = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), env);
