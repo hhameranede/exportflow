@@ -840,8 +840,10 @@ function getSignedOAuthQuery(searchParams) {
   return signed.toString();
 }
 
-function oauthBrowserError(status, title, message) {
-  const html = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><link rel=\"stylesheet\" href=\"/assets/marketing.css?v=9\"><title>" +
+function oauthBrowserError(status, title, message, locale = "en") {
+  const safeLocale = ["en", "ar", "fr", "es", "de", "pt", "zh", "ja"].includes(locale) ? locale : "en";
+  const direction = safeLocale === "ar" ? " dir=\"rtl\"" : "";
+  const html = "<!doctype html><html lang=\"" + safeLocale + "\"" + direction + "><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><link rel=\"stylesheet\" href=\"/assets/marketing.css?v=9\"><title>" +
     htmlEscape(title) + " — ExportFlow</title></head><body><main class=\"ef-main ef-container\"><section class=\"ef-section\"><div class=\"ef-auth-page-head\"><h1 class=\"ef-auth-title\">" +
     htmlEscape(title) + "</h1><p class=\"ef-auth-lead\">" + htmlEscape(message) + "</p><a class=\"ef-btn ef-btn-primary\" href=\"/signin\">Return to sign in</a></div></section></main></body></html>";
   return new Response(html, { status, headers: OAUTH_BROWSER_HEADERS });
@@ -849,7 +851,10 @@ function oauthBrowserError(status, title, message) {
 
 export async function handleOAuthBrowserPage(request, env = {}) {
   const url = new URL(request.url);
-  if (!OAUTH_BROWSER_PATHS.has(url.pathname)) return null;
+  const localeMatch = /^\\/(en|ar|fr|es|de|pt|zh|ja)(?=\\/oauth\\/)/.exec(url.pathname);
+  const locale = localeMatch?.[1] || "en";
+  const routePath = localeMatch ? url.pathname.slice(localeMatch[0].length) : url.pathname;
+  if (!OAUTH_BROWSER_PATHS.has(routePath)) return null;
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response(null, { status: 405, headers: { ...OAUTH_BROWSER_HEADERS, allow: "GET, HEAD" } });
   }
@@ -859,28 +864,28 @@ export async function handleOAuthBrowserPage(request, env = {}) {
   try {
     oauthEndpoints = getOAuthRuntimeConfig(env);
   } catch {
-    return oauthBrowserError(503, "Authorization unavailable", "The configured OAuth endpoints are invalid.");
+    return oauthBrowserError(503, "Authorization unavailable", "The configured OAuth endpoints are invalid.", locale);
   }
   if (!status.authConfigured || !status.tenantOAuthConfigured ||
       !(await isAuthSchemaReady(env.AUTH_DB)) ||
       !(await isOAuthAuthSchemaReady(env.AUTH_DB)) ||
       !(await isTenantOAuthSchemaReady(env.EXPORTFLOW_AUTH_DB))) {
-    return oauthBrowserError(503, "Authorization unavailable", "ExportFlow account authorization is not initialized yet.");
+    return oauthBrowserError(503, "Authorization unavailable", "ExportFlow account authorization is not initialized yet.", locale);
   }
 
   const auth = getAuthInstance(env);
-  if (!auth) return oauthBrowserError(503, "Authorization unavailable", "ExportFlow account authorization is not configured.");
+  if (!auth) return oauthBrowserError(503, "Authorization unavailable", "ExportFlow account authorization is not configured.", locale);
 
   const oauthQuery = getSignedOAuthQuery(url.searchParams);
-  if (!oauthQuery) return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request is missing.");
+  if (!oauthQuery) return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request is missing.", locale);
   let context;
   try {
     context = await auth.$context;
     if (!(await verifyOAuthQueryParams(oauthQuery, context.secret))) {
-      return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request is invalid or has expired.");
+      return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request is invalid or has expired.", locale);
     }
   } catch {
-    return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request could not be verified.");
+    return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request could not be verified.", locale);
   }
 
   const signedParams = new URLSearchParams(oauthQuery);
@@ -889,14 +894,14 @@ export async function handleOAuthBrowserPage(request, env = {}) {
       signedParams.get("code_challenge_method") !== "S256" ||
       signedParams.getAll("resource").length !== 1 ||
       signedParams.get("resource") !== oauthEndpoints.resource) {
-    return oauthBrowserError(400, "Unsupported authorization request", "This request does not match the ExportFlow OAuth authorization profile.");
+    return oauthBrowserError(400, "Unsupported authorization request", "This request does not match the ExportFlow OAuth authorization profile.", locale);
   }
 
   let session;
   try {
     session = await auth.api.getSession({ headers: request.headers, query: { disableCookieCache: true } });
   } catch {
-    return oauthBrowserError(503, "Session unavailable", "Your ExportFlow session could not be checked. Try again.");
+    return oauthBrowserError(503, "Session unavailable", "Your ExportFlow session could not be checked. Try again.", locale);
   }
   if (!session?.user?.id || !session?.session?.id) {
     const next = new URL("/signin", url.origin);
