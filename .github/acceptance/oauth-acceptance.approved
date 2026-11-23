@@ -1,3 +1,0 @@
-One-shot OAuth Acceptance approved by the project owner on 2026-11-23.
-Target scope: dedicated OAuth Acceptance Workers and the pinned Auth/Tenant Acceptance D1 databases only.
-Preserve BETTER_AUTH_SECRET and existing JWKS; no Production resources.
