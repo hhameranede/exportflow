@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTenantAdminHttpHandler } from "../src/core/tenant-admin-http.js";
+import { createDurableTenantBurstTestNamespace } from "./helpers/durable-tenant-burst-test-namespace.js";
 
 const TABLES = [
   "plan_policies",
@@ -52,6 +53,7 @@ function jsonRequest(path, body = {}, method = "POST") {
     headers: {
       origin: "https://exportflow.me",
       "content-type": "application/json",
+      "cf-connecting-ip": "203.0.113.10",
     },
     body: method === "GET" || method === "HEAD" ? undefined : JSON.stringify(body),
   });
@@ -77,7 +79,10 @@ function setup({ owner = { allowed: true, actorId: "owner_123" }, tables = TABLE
       ]);
     },
   });
-  return { handler, calls, env: { EXPORTFLOW_AUTH_DB: makeD1(tables, triggers) } };
+  return { handler, calls, env: {
+    EXPORTFLOW_AUTH_DB: makeD1(tables, triggers),
+    TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace(),
+  } };
 }
 
 test("tenant admin handler ignores paths outside its namespace", async () => {
@@ -111,27 +116,29 @@ test("an unverified owner identity is rejected before D1 access", async () => {
 
 test("admin storage binding and migration readiness fail closed", async () => {
   const { handler } = setup();
-  const noBinding = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), {});
+  const noBinding = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), {
+    TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace(),
+  });
   assert.equal(noBinding.status, 503);
   assert.equal((await noBinding.json()).error.code, "ADMIN_STORAGE_NOT_CONFIGURED");
 
   const missingAuditTable = await handler(
     jsonRequest("/api/v1/admin/tenants", { planCode: "free" }),
-    { EXPORTFLOW_AUTH_DB: makeD1(TABLES.filter((name) => name !== "tenant_admin_audit_log")) },
+    { EXPORTFLOW_AUTH_DB: makeD1(TABLES.filter((name) => name !== "tenant_admin_audit_log")), TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace() },
   );
   assert.equal(missingAuditTable.status, 503);
   assert.equal((await missingAuditTable.json()).error.code, "ADMIN_SCHEMA_NOT_READY");
 
   const missingDeleteGuard = await handler(
     jsonRequest("/api/v1/admin/tenants", { planCode: "free" }),
-    { EXPORTFLOW_AUTH_DB: makeD1(TABLES, REQUIRED_TRIGGERS.filter((name) => name !== "prevent_tenant_admin_audit_delete")) },
+    { EXPORTFLOW_AUTH_DB: makeD1(TABLES, REQUIRED_TRIGGERS.filter((name) => name !== "prevent_tenant_admin_audit_delete")), TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace() },
   );
   assert.equal(missingDeleteGuard.status, 503);
   assert.equal((await missingDeleteGuard.json()).error.code, "ADMIN_SCHEMA_NOT_READY");
 
   const missingUpdateGuard = await handler(
     jsonRequest("/api/v1/admin/tenants", { planCode: "free" }),
-    { EXPORTFLOW_AUTH_DB: makeD1(TABLES, REQUIRED_TRIGGERS.filter((name) => name !== "prevent_tenant_admin_audit_update")) },
+    { EXPORTFLOW_AUTH_DB: makeD1(TABLES, REQUIRED_TRIGGERS.filter((name) => name !== "prevent_tenant_admin_audit_update")), TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace() },
   );
   assert.equal(missingUpdateGuard.status, 503);
   assert.equal((await missingUpdateGuard.json()).error.code, "ADMIN_SCHEMA_NOT_READY");
@@ -144,7 +151,7 @@ test("admin storage binding and migration readiness fail closed", async () => {
   ]) {
     const missingProtection = await handler(
       jsonRequest("/api/v1/admin/tenants", { planCode: "free" }),
-      { EXPORTFLOW_AUTH_DB: makeD1(TABLES, REQUIRED_TRIGGERS.filter((name) => name !== missingTrigger)) },
+      { EXPORTFLOW_AUTH_DB: makeD1(TABLES, REQUIRED_TRIGGERS.filter((name) => name !== missingTrigger)), TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace() },
     );
     assert.equal(missingProtection.status, 503, missingTrigger);
     assert.equal((await missingProtection.json()).error.code, "ADMIN_SCHEMA_NOT_READY", missingTrigger);
@@ -225,7 +232,7 @@ test("each request gets a new service bound to that request's verified owner ide
       } };
     },
   });
-  const env = { EXPORTFLOW_AUTH_DB: makeD1() };
+  const env = { EXPORTFLOW_AUTH_DB: makeD1(), TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace() };
   const first = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), env);
   nextActor = "owner_B";
   const second = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), env);
@@ -284,14 +291,18 @@ test("admin pre-auth rate limit rejects excess requests before loading the owner
   assert.equal(authorizationCalls, 0);
 });
 
-test("default admin burst limiter is keyed by Cloudflare client IP", async () => {
+test("default admin burst limiter is shared across handler instances for the same Cloudflare IP", async () => {
   let authorizationCalls = 0;
-  const handler = createTenantAdminHttpHandler({
+  const sharedNamespace = createDurableTenantBurstTestNamespace();
+  const createHandler = () => createTenantAdminHttpHandler({
     authorizeOwner: async () => {
       authorizationCalls += 1;
       return { allowed: false };
     },
   });
+  const firstHandler = createHandler();
+  const secondHandler = createHandler();
+  const env = { TENANT_BURST_LIMITER: sharedNamespace };
   const makeRequest = (ip) => new Request("https://exportflow.me/api/v1/admin/tenants", {
     method: "POST",
     headers: {
@@ -303,15 +314,54 @@ test("default admin burst limiter is keyed by Cloudflare client IP", async () =>
   });
 
   for (let index = 0; index < 10; index += 1) {
-    const response = await handler(makeRequest("203.0.113.10"), {});
+    const handler = index % 2 === 0 ? firstHandler : secondHandler;
+    const response = await handler(makeRequest("203.0.113.10"), env);
     assert.equal(response.status, 403);
   }
-  const limited = await handler(makeRequest("203.0.113.10"), {});
+  const limited = await secondHandler(makeRequest("203.0.113.10"), env);
   assert.equal(limited.status, 429);
-  assert.equal(limited.headers.get("retry-after") !== null, true);
+  assert.ok(Number(limited.headers.get("retry-after")) >= 1);
   assert.equal(authorizationCalls, 10);
 
-  const otherIp = await handler(makeRequest("203.0.113.11"), {});
+  const otherIp = await firstHandler(makeRequest("203.0.113.11"), env);
   assert.equal(otherIp.status, 403);
   assert.equal(authorizationCalls, 11);
+});
+
+test("admin rate limit fails closed when the Cloudflare IP or Durable Object binding is unavailable", async () => {
+  let authorizationCalls = 0;
+  const handler = createTenantAdminHttpHandler({
+    authorizeOwner: async () => {
+      authorizationCalls += 1;
+      return { allowed: false };
+    },
+  });
+  const missingIp = new Request("https://exportflow.me/api/v1/admin/tenants", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.20" },
+    body: JSON.stringify({ planCode: "free" }),
+  });
+  const noIpResponse = await handler(missingIp, { TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace() });
+  assert.equal(noIpResponse.status, 503);
+  assert.equal((await noIpResponse.json()).error.code, "ADMIN_RATE_LIMIT_UNAVAILABLE");
+
+  const noBindingResponse = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), {});
+  assert.equal(noBindingResponse.status, 503);
+  assert.equal((await noBindingResponse.json()).error.code, "ADMIN_RATE_LIMIT_UNAVAILABLE");
+  assert.equal(authorizationCalls, 0);
+});
+
+test("admin rate limit fails closed when the Durable Object backend returns an error", async () => {
+  const handler = createTenantAdminHttpHandler({
+    authorizeOwner: async () => ({ allowed: false }),
+  });
+  const failingNamespace = {
+    idFromName(name) { return { name }; },
+    get() { return { async fetch() { throw new Error("synthetic Durable Object failure"); } }; },
+  };
+  const response = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), {
+    TENANT_BURST_LIMITER: failingNamespace,
+  });
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error.code, "ADMIN_RATE_LIMIT_UNAVAILABLE");
 });
