@@ -14,6 +14,11 @@ binding = "AUTH_DB"
 database_name = "exportflow-auth-production"
 database_id = "0bd9f873-a1d5-4d90-b3fc-1c4b47e1aa67"
 
+[[d1_databases]]
+binding = "EXPORTFLOW_AUTH_DB"
+database_name = "exportflow-tenant-production"
+database_id = "535fce81-b961-4097-b83f-c87e56c390bb"
+
 [secrets]
 required = ["BETTER_AUTH_SECRET", "AUTH_MIGRATION_TOKEN"]
 
