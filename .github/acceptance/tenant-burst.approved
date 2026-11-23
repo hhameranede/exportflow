@@ -1,4 +1,0 @@
-Approved in ChatGPT on 2026-11-23 for one isolated, synthetic tenant-burst Acceptance run against the current mainline source.
-Scope: the two temporary Acceptance Workers named in cloudflare/acceptance configs, the existing isolated Tenant Acceptance D1 database, synthetic API keys/tenant rows, and the temporary shared SQLite Durable Object namespace.
-The workflow must run its preflight, repository tests, dry-run builds, real REST/MCP Fetch assertions, and its always-run cleanup.
-No Production Worker, Production D1, DNS, secret value, account permission, or Production traffic configuration is approved by this marker.
