@@ -4,9 +4,13 @@ import test from "node:test";
 
 const ciWorkflowPath = new URL("../.github/workflows/ci.yml", import.meta.url);
 const acceptancePath = new URL("../.github/workflows/oauth-acceptance.yml", import.meta.url);
-const [ciWorkflow, acceptanceWorkflow] = await Promise.all([
+const authAcceptanceConfigPath = new URL("../cloudflare/auth-acceptance/wrangler.toml", import.meta.url);
+const mcpAcceptanceConfigPath = new URL("../cloudflare/mcp-acceptance/wrangler.toml", import.meta.url);
+const [ciWorkflow, acceptanceWorkflow, authAcceptanceConfig, mcpAcceptanceConfig] = await Promise.all([
   readFile(ciWorkflowPath, "utf8"),
   readFile(acceptancePath, "utf8"),
+  readFile(authAcceptanceConfigPath, "utf8"),
+  readFile(mcpAcceptanceConfigPath, "utf8"),
 ]);
 
 test("ordinary Worker CI does not deploy OAuth Acceptance", () => {
@@ -29,6 +33,15 @@ test("Acceptance preserves Better Auth signing secret and existing JWKS rows", (
   assert.match(acceptanceWorkflow, /secret put AUTH_MIGRATION_TOKEN/);
   assert.doesNotMatch(acceptanceWorkflow, /DELETE FROM jwks/i);
   assert.match(acceptanceWorkflow, /SELECT COUNT\(\*\) AS preserved_jwks FROM jwks/);
+});
+
+test("OAuth D1 migrations resolve through the pinned Tenant Acceptance binding", () => {
+  assert.match(acceptanceWorkflow, /d1 execute EXPORTFLOW_AUTH_DB --config cloudflare\/auth-acceptance\/wrangler\.toml --remote --yes --file/);
+  assert.match(acceptanceWorkflow, /d1 execute EXPORTFLOW_AUTH_DB --config cloudflare\/auth-acceptance\/wrangler\.toml --remote --yes \\n\s+--command/);
+  assert.match(authAcceptanceConfig, /binding = "EXPORTFLOW_AUTH_DB"[\s\S]*?database_id = "1f94eee0-219e-4a41-86ce-49c29067ef06"/);
+  assert.match(mcpAcceptanceConfig, /database_id = "1f94eee0-219e-4a41-86ce-49c29067ef06"/);
+  assert.doesNotMatch(authAcceptanceConfig, /database_id = "0bd9f873-a1d5-4d90-b3fc-1c4b47e1aa67"/);
+  assert.doesNotMatch(mcpAcceptanceConfig, /database_id = "0bd9f873-a1d5-4d90-b3fc-1c4b47e1aa67"/);
 });
 
 test("unit and syntax checks run before any Acceptance deployment", () => {
