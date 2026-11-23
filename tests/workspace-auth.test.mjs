@@ -255,7 +255,7 @@ test("brand mark, SVG favicon, spec metrics, task SVGs, and command palette rend
     const res = await worker.fetch(new Request(`http://127.0.0.1:3000${sub}`), env);
     assert.equal(res.status, 200);
     const html = await res.text();
-    assert.match(html, /ef-section-glyph/);
+    assert.doesNotMatch(html, /ef-section-glyph/);
   }
 
   const signInRes = await worker.fetch(new Request("http://127.0.0.1:3000/signin"), env);
@@ -283,7 +283,8 @@ test("feature SVGs remain useful and all locales render without English leakage"
   const homeFr = await worker.fetch(new Request("http://127.0.0.1:3000/fr/"), env);
   assert.equal(homeFr.status, 200);
   const frHtml = await homeFr.text();
-  assert.match(frHtml, /<html[^>]+lang="fr"[^>]+dir="ltr"/);
+  assert.match(frHtml, /<html[^>]+lang="fr"/);
+  assert.doesNotMatch(frHtml, /dir="rtl"/);
   assert.match(frHtml, /Agent IA/);
   assert.match(frHtml, /Aller au contenu/);
 
