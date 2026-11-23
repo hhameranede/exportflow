@@ -132,6 +132,14 @@ async function cleanupAcceptanceArtifacts() {
       "DELETE FROM oauthConsent WHERE clientId = ?",
       [cleanupState.clientId],
     ));
+    await attempt("verify synthetic OAuth token and consent cleanup", async () => {
+      const result = await d1Query(
+        authDatabaseId,
+        "SELECT (SELECT COUNT(*) FROM oauthAccessToken WHERE clientId = ?) + (SELECT COUNT(*) FROM oauthRefreshToken WHERE clientId = ?) + (SELECT COUNT(*) FROM oauthConsent WHERE clientId = ?) AS count",
+        [cleanupState.clientId, cleanupState.clientId, cleanupState.clientId],
+      );
+      assert.equal(Number(result.results?.[0]?.count), 0, "Synthetic OAuth tokens and consent should be removed");
+    });
   }
   if (cleanupState.clientName) {
     await attempt("dynamic OAuth client", () => d1Query(
