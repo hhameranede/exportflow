@@ -4,11 +4,15 @@ import test from "node:test";
 
 const ciWorkflowPath = new URL("../.github/workflows/ci.yml", import.meta.url);
 const acceptancePath = new URL("../.github/workflows/oauth-acceptance.yml", import.meta.url);
+const mfaAcceptancePath = new URL("../.github/workflows/owner-mfa-acceptance.yml", import.meta.url);
+const tenantBurstAcceptancePath = new URL("../.github/workflows/tenant-burst-acceptance.yml", import.meta.url);
 const authAcceptanceConfigPath = new URL("../cloudflare/auth-acceptance/wrangler.toml", import.meta.url);
 const mcpAcceptanceConfigPath = new URL("../cloudflare/mcp-acceptance/wrangler.toml", import.meta.url);
-const [ciWorkflow, acceptanceWorkflow, authAcceptanceConfig, mcpAcceptanceConfig] = await Promise.all([
+const [ciWorkflow, acceptanceWorkflow, mfaAcceptanceWorkflow, tenantBurstAcceptanceWorkflow, authAcceptanceConfig, mcpAcceptanceConfig] = await Promise.all([
   readFile(ciWorkflowPath, "utf8"),
   readFile(acceptancePath, "utf8"),
+  readFile(mfaAcceptancePath, "utf8"),
+  readFile(tenantBurstAcceptancePath, "utf8"),
   readFile(authAcceptanceConfigPath, "utf8"),
   readFile(mcpAcceptanceConfigPath, "utf8"),
 ]);
@@ -52,4 +56,19 @@ test("unit and syntax checks run before any Acceptance deployment", () => {
   assert.match(acceptanceWorkflow, /1f94eee0-219e-4a41-86ce-49c29067ef06/);
   assert.doesNotMatch(acceptanceWorkflow, /database_id = "0bd9f873-a1d5-4d90-b3fc-1c4b47e1aa67"/);
   assert.match(acceptanceWorkflow, /if grep -q '0bd9f873-a1d5-4d90-b3fc-1c4b47e1aa67'/);
+});
+
+test("consumed one-shot Acceptance sentinels cannot rerun on deletion or workflow edits", () => {
+  assert.match(
+    acceptanceWorkflow,
+    /contains\\(github\\.event\\.head_commit\\.added, '\\.github\\/acceptance\\/oauth-acceptance\\.approved'\\)/,
+  );
+  assert.match(
+    mfaAcceptanceWorkflow,
+    /contains\\(github\\.event\\.head_commit\\.added, '\\.github\\/acceptance\\/mfa-acceptance\\.approved'\\)/,
+  );
+  assert.match(
+    tenantBurstAcceptanceWorkflow,
+    /contains\\(github\\.event\\.head_commit\\.added, '\\.github\\/acceptance\\/tenant-burst\\.approved'\\)/,
+  );
 });
