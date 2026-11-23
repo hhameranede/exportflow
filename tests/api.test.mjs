@@ -103,6 +103,26 @@ test("tenant API authentication fails closed when the dedicated D1 binding is mi
   assert.equal((await invalidBinding.json()).error.code, "AUTH_NOT_CONFIGURED");
 });
 
+test("REST rejects an unauthenticated task before reading or parsing its body", async () => {
+  let bodyReads = 0;
+  const body = new ReadableStream({
+    pull(controller) {
+      bodyReads += 1;
+      controller.enqueue(new TextEncoder().encode(JSON.stringify({ goal: "Fetch", url: "https://example.com" })));
+      controller.close();
+    },
+  });
+  const request = new Request("https://api.exportflow.local/api/v1/tasks", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body,
+    duplex: "half",
+  });
+  const response = await createWorker().fetch(request, makeTestEnv());
+  assert.equal(response.status, 401);
+  assert.equal(bodyReads, 0);
+});
+
 test("auth rejects missing, empty, oversized, malformed, and invalid Bearer tokens with 401", async () => {
   const worker = createWorker();
   const env = makeTestEnv();

@@ -146,7 +146,7 @@ export async function authenticateRequest(
   if (!Array.isArray(scopes) || scopes.some((scope) => typeof scope !== "string")) {
     return failure(503, "AUTH_BACKEND_INVALID_RECORD", "Tenant authentication data is invalid.");
   }
-  if (!scopes.includes(requiredScope) && !scopes.includes("tasks:*") && !scopes.includes("*")) {
+  if (requiredScope !== null && !scopes.includes(requiredScope) && !scopes.includes("tasks:*") && !scopes.includes("*")) {
     return failure(403, "INSUFFICIENT_SCOPE", "The API key does not have permission for this operation.");
   }
 

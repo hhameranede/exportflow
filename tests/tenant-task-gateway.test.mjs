@@ -66,6 +66,32 @@ test("shared gateway passes operation scope and only trusts database-derived ten
   assert.equal(result.identity.planCode, "developer");
 });
 
+test("shared gateway authenticates before parsing then checks operation scope without a second burst count", async () => {
+  let requestedScope;
+  let burstChecks = 0;
+  const gateway = createTenantTaskGateway({
+    authenticateApiKey: async (_request, _env, options) => {
+      requestedScope = options.requiredScope;
+      return { ok: true, ...identity };
+    },
+    preAuthRateLimiter: { check: () => ({ allowed: true }) },
+    tenantRateLimiter: { check: (tenantId) => {
+      burstChecks += 1;
+      return { allowed: tenantId === "tenant_alpha" };
+    } },
+  });
+  const authenticated = await gateway.authenticate(makeRequest({ authorization: "Bearer valid" }), {}, { requiredScope: null });
+  assert.equal(authenticated.ok, true);
+  assert.equal(requestedScope, null);
+  assert.equal(burstChecks, 1);
+  assert.equal(gateway.authorizeScope(authenticated.identity, "tasks:crawl").ok, true);
+  const denied = gateway.authorizeScope(authenticated.identity, "tasks:search");
+  assert.equal(denied.ok, false);
+  assert.equal(denied.httpStatus, 403);
+  assert.equal(denied.code, "INSUFFICIENT_SCOPE");
+  assert.equal(burstChecks, 1);
+});
+
 test("tenant burst limiter blocks after authentication and before quota reservation", async () => {
   const gateway = createTenantTaskGateway({
     authenticateApiKey: async () => ({ ok: true, ...identity }),

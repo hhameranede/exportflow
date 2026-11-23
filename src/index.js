@@ -112,26 +112,29 @@ export function createWorker(options = {}) {
             return json({ error: "method_not_allowed" }, 405, { allow: "POST" });
           }
 
-          let contract;
-          let validationError = null;
-          try {
-            contract = validateTaskRequest(await readBoundedJsonBody(request));
-          } catch (error) {
-            validationError = error instanceof TaskContractError ? error
-              : new TaskContractError("INVALID_TASK", "Task request validation failed.", 400);
-          }
-          const requiredScope = validationError ? "tasks:fetch" : ({
-            fetch: "tasks:fetch", map: "tasks:map", crawl: "tasks:crawl",
-            extract: "tasks:extract", search: "tasks:search", research: "tasks:research",
-          })[contract.operation];
-          const auth = await tenantTaskGateway.authenticate(request, env, { requiredScope });
+          const auth = await tenantTaskGateway.authenticate(request, env, { requiredScope: null });
           if (!auth.ok) {
             return json({ error: { code: auth.code, message: auth.message } }, auth.httpStatus, {
               ...(auth.headers || {}), ...(auth.retryAfterSec ? { "retry-after": String(auth.retryAfterSec) } : {}),
             });
           }
-          if (validationError) {
+
+          let contract;
+          try {
+            contract = validateTaskRequest(await readBoundedJsonBody(request));
+          } catch (error) {
+            const validationError = error instanceof TaskContractError
+              ? error
+              : new TaskContractError("INVALID_TASK", "Task request validation failed.", 400);
             return json({ error: { code: validationError.code, message: validationError.message } }, validationError.httpStatus);
+          }
+          const requiredScope = ({
+            fetch: "tasks:fetch", map: "tasks:map", crawl: "tasks:crawl",
+            extract: "tasks:extract", search: "tasks:search", research: "tasks:research",
+          })[contract.operation];
+          const scopeAuth = tenantTaskGateway.authorizeScope(auth.identity, requiredScope);
+          if (!scopeAuth.ok) {
+            return json({ error: { code: scopeAuth.code, message: scopeAuth.message } }, scopeAuth.httpStatus);
           }
 
           const reservation = await tenantTaskGateway.reserve(env, auth.identity);

@@ -20,6 +20,21 @@ function validIdentity(identity) {
   );
 }
 
+function authorizeScope(identity, requiredScope) {
+  if (!validIdentity(identity)) {
+    return failure(503, "AUTH_BACKEND_INVALID_RECORD", "Authenticated tenant identity is invalid.");
+  }
+  if (typeof requiredScope !== "string" || !requiredScope.trim()) {
+    return failure(500, "INVALID_REQUIRED_SCOPE", "An operation scope is required.");
+  }
+  if (!identity.scopes.includes(requiredScope) &&
+      !identity.scopes.includes("tasks:*") &&
+      !identity.scopes.includes("*")) {
+    return failure(403, "INSUFFICIENT_SCOPE", "The credential does not have permission for this operation.");
+  }
+  return { ok: true, identity };
+}
+
 /**
  * Shared tenant authorization and quota boundary for API-key and OAuth principals.
  * The D1 identity is authoritative; no tenant, plan, scope or quota is read from
@@ -74,12 +89,11 @@ export function createTenantTaskGateway({
       }
     }
 
-    if (!validIdentity(identity)) {
+    if (requiredScope !== null) {
+      const scopeResult = authorizeScope(identity, requiredScope);
+      if (!scopeResult.ok) return scopeResult;
+    } else if (!validIdentity(identity)) {
       return failure(503, "AUTH_BACKEND_INVALID_RECORD", "Authenticated tenant identity is invalid.");
-    }
-    if (!identity.scopes.includes(requiredScope) &&
-        !identity.scopes.includes("tasks:*") && !identity.scopes.includes("*")) {
-      return failure(403, "INSUFFICIENT_SCOPE", "The credential does not have permission for this operation.");
     }
 
     const limitFailure = await applyTenantBurstLimit(identity, env);
@@ -133,5 +147,5 @@ export function createTenantTaskGateway({
     return { ok: true, quota };
   }
 
-  return Object.freeze({ authenticate, authorizeIdentity, reserve });
+  return Object.freeze({ authenticate, authorizeIdentity, authorizeScope, reserve });
 }
