@@ -23,6 +23,12 @@ const screenshotRoutes = new Set([
   "/ar/", "/ar/platform", "/ar/account", "/ar/workspace"
 ]);
 const routeSlug = (route) => route === "/" ? "home" : route.replace(/^\/+|\/+$/g, "").replaceAll("/", "-").replace(/[^a-z0-9-]/gi, "-");
+let browserIpCounter = 1;
+function nextBrowserIpHeaders() {
+  const octet = browserIpCounter++;
+  if (octet > 254) throw new Error("Browser QA exceeded reserved synthetic IP range.");
+  return { "cf-connecting-ip": "198.51.100." + octet };
+}
 
 function buildRouteInventory() {
   const routes = new Set(MARKETING_PATHS);
@@ -80,7 +86,8 @@ function expectedLocale(path) {
 async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = false) {
   const context = await browser.newContext({
     viewport: { width, height: width <= 390 ? 844 : 960 },
-    permissions: ["clipboard-read", "clipboard-write"]
+    permissions: ["clipboard-read", "clipboard-write"],
+    extraHTTPHeaders: nextBrowserIpHeaders()
   });
   const page = await context.newPage();
   const pageErrors = [];
@@ -202,7 +209,11 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
 }
 
 async function checkHomeInteractions(browser) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ["clipboard-read", "clipboard-write"] });
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    permissions: ["clipboard-read", "clipboard-write"],
+    extraHTTPHeaders: nextBrowserIpHeaders()
+  });
   const page = await context.newPage();
   await page.goto(baseUrl + "/", { waitUntil: "domcontentloaded" });
 
@@ -265,7 +276,10 @@ async function checkHomeInteractions(browser) {
 }
 
 async function checkFeaturePages(browser) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 900 },
+    extraHTTPHeaders: nextBrowserIpHeaders()
+  });
   const page = await context.newPage();
 
   await page.goto(baseUrl + "/platform", { waitUntil: "domcontentloaded" });
@@ -305,7 +319,10 @@ async function checkFeaturePages(browser) {
 }
 
 async function checkAuthAndContactPages(browser) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    extraHTTPHeaders: nextBrowserIpHeaders()
+  });
   const page = await context.newPage();
 
   for (const path of ["/signin", "/signup", "/forgot-password", "/reset-password", "/account", "/workspace", "/oauth/consent", "/oauth/select-tenant"]) {
