@@ -16,7 +16,7 @@ import { AUTH_ROUTES } from "./auth-pages.js";
 import { MARKETING_CSS } from "./marketing-styles.js";
 import { MARKETING_JS } from "./marketing-client.js";
 
-const HTML_SECURITY_HEADERS = Object.freeze({
+export const HTML_SECURITY_HEADERS = Object.freeze({
   "content-type": "text/html; charset=utf-8",
   "cache-control": "public, max-age=60",
   "x-content-type-options": "nosniff",
