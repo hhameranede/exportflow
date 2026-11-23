@@ -1,0 +1,129 @@
+name: Production Google OAuth Secret Handoff
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_production:
+        description: Type ENABLE_GOOGLE_OAUTH_ON_EXPORTFLOW_PRODUCTION to deploy these secrets to the Production Platform Worker
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exportflow-production-google-oauth
+  cancel-in-progress: false
+
+jobs:
+  deploy-google-oauth:
+    if: >-
+      ${{ github.ref == 'refs/heads/main' &&
+          inputs.confirm_production == 'ENABLE_GOOGLE_OAUTH_ON_EXPORTFLOW_PRODUCTION' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the approved main revision
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install deployment tooling
+        run: npm install --no-audit --no-fund
+
+      - name: Run repository tests before any Production mutation
+        run: npm test && npm run check
+
+      - name: Verify deployment credentials and Google OAuth secret presence
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::Missing Cloudflare deployment credential."; exit 1; }
+          test -n "$GOOGLE_CLIENT_ID" || { echo "::error::Missing GOOGLE_CLIENT_ID repository secret."; exit 1; }
+          test -n "$GOOGLE_CLIENT_SECRET" || { echo "::error::Missing GOOGLE_CLIENT_SECRET repository secret."; exit 1; }
+          echo "Required credentials are present; values were not printed."
+
+      - name: Verify the live Platform health and Auth schema before secret deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const healthResponse = await fetch("https://exportflow.me/api/v1/health", {
+            headers: { accept: "application/json" },
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!healthResponse.ok) {
+            throw new Error("Production Platform health check failed with HTTP " + healthResponse.status);
+          }
+          const health = await healthResponse.json();
+          if (health.status !== "ok") throw new Error("Production Platform health payload is not ready.");
+
+          const authResponse = await fetch("https://exportflow.me/api/auth/config", {
+            headers: { accept: "application/json" },
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!authResponse.ok) {
+            throw new Error("Production Auth config check failed with HTTP " + authResponse.status);
+          }
+          const auth = await authResponse.json();
+          if (auth.authConfigured !== true || auth.authReady !== true) {
+            throw new Error("Production Better Auth is not ready; refusing to add Google OAuth secrets.");
+          }
+          console.log("Production Platform health and Better Auth schema are ready.");
+          NODE
+
+      - name: Add Google OAuth secrets to the Production Platform Worker only
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          secrets_file="$RUNNER_TEMP/google-oauth-production-secrets.json"
+          trap 'rm -f "$secrets_file"' EXIT
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const id = process.env.GOOGLE_CLIENT_ID;
+          const secret = process.env.GOOGLE_CLIENT_SECRET;
+          if (typeof id !== "string" || !id.trim() ||
+              typeof secret !== "string" || !secret.trim()) {
+            throw new Error("Both Google OAuth repository secrets must be non-empty.");
+          }
+          const output = `${process.env.RUNNER_TEMP}/google-oauth-production-secrets.json`;
+          fs.writeFileSync(output, JSON.stringify({
+            GOOGLE_CLIENT_ID: id,
+            GOOGLE_CLIENT_SECRET: secret,
+          }), { encoding: "utf8", mode: 0o600, flag: "wx" });
+          console.log("Prepared the temporary Production secrets file; values were not logged.");
+          NODE
+          npx --yes wrangler@4 secret bulk "$secrets_file" --name exportflow-platform --config wrangler.toml
+
+      - name: Verify Google OAuth is enabled in the live Production Auth config
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          const response = await fetch("https://exportflow.me/api/auth/config", {
+            headers: { accept: "application/json" },
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!response.ok) {
+            throw new Error("Production Auth config verification failed with HTTP " + response.status);
+          }
+          const config = await response.json();
+          if (config.authConfigured !== true ||
+              config.authReady !== true ||
+              config.googleEnabled !== true) {
+            throw new Error("Google OAuth did not become enabled in Production Auth config.");
+          }
+          console.log("Production Google OAuth flag is enabled; no credential values were read or logged.");
+          NODE
