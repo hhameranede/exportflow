@@ -27,6 +27,7 @@ function endpointFor(source, query, limit) {
   } else {
     endpoint.searchParams.set("query", query); endpoint.searchParams.set("rows", String(limit));
     endpoint.searchParams.set("select", "DOI,title,URL,published-print,published-online,type,container-title");
+    endpoint.searchParams.set("mailto", "hhameranede@gmail.com");
   }
   return endpoint;
 }

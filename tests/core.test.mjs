@@ -1447,6 +1447,8 @@ test("public search adapter calls only the explicitly selected free source", asy
   assert.ok(calls.some((call) => new URL(call.url).hostname === "api.openalex.org"));
   assert.ok(calls.some((call) => new URL(call.url).hostname === "api.crossref.org"));
   assert.ok(calls.every((call) => call.options.userAgent.startsWith("ExportFlow/")));
+  const crossrefCall = calls.find((call) => new URL(call.url).hostname === "api.crossref.org");
+  assert.equal(new URL(crossrefCall.url).searchParams.get("mailto"), "hhameranede@gmail.com");
 });
 
 test("public search adapter rejects unknown sources and invalid queries before network access", async () => {
