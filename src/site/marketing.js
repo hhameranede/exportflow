@@ -725,26 +725,30 @@ function genericBody(route, path, t, locale, oauthDetails = {}) {
     "/legal/security": "الأمان والإفصاح المسؤول",
   }[path] || title;
   const displayTitle = isLegal && isAr ? legalTitleAr : title;
+  const legalSectionLabels = isAr
+    ? ["النطاق", "المعلومات المطلوب تأكيدها", "حالة المنتج", "التواصل وتاريخ السريان"]
+    : ["Scope", "Information to confirm", "Product status", "Contact and effective date"];
+  const legalSectionIds = ["legal-scope", "legal-information", "legal-status", "legal-contact"];
 
   const content = isLegal
     ? (isAr
         ? `<div class="ef-legal-review" role="note">${escapeHtml(t.legalReview)}</div>
-           <h2>1. النطاق</h2>
+           <h2 id="legal-scope">1. النطاق</h2>
            <p>توفر هذه الوثيقة هيكلاً جاهزاً للنشر لصفحة «${escapeHtml(displayTitle)}». لا تُعد استشارة قانونية أو التزاماً تعاقدياً ملزماً.</p>
-           <h2>2. البيانات المطلوب تأكيدها</h2>
+           <h2 id="legal-information">2. البيانات المطلوب تأكيدها</h2>
            <p>يجب تأكيد الكيان القانوني والاختصاص القضائي وممارسات البيانات وفترات الاحتفاظ وقناة الاتصال المعتمدة قبل النشر.</p>
-           <h2>3. حالة المنتج</h2>
+           <h2 id="legal-status">3. حالة المنتج</h2>
            <p>تعكس أوصاف قدرات ExportFlow حالة المنتج المنشورة حالياً دون أي ضمان صريح أو ضمني لمستوى الخدمة.</p>
-           <h2>4. التواصل وتاريخ السريان</h2>
+           <h2 id="legal-contact">4. التواصل وتاريخ السريان</h2>
            <p>تُضاف وسيلة تواصل موثقة وتاريخ سريان بعد المراجعة القانونية المختصة.</p>`
         : `<div class="ef-legal-review" role="note">${escapeHtml(t.legalReview)}</div>
-           <h2>1. Scope</h2>
+           <h2 id="legal-scope">1. Scope</h2>
            <p>This document provides a publication-ready structure for the ${escapeHtml(title.toLowerCase())}. It is not legal advice and is not a binding statement of terms.</p>
-           <h2>2. Information to confirm</h2>
+           <h2 id="legal-information">2. Information to confirm</h2>
            <p>Confirm the legal entity, governing jurisdiction, data practices, applicable rights, retention periods, and contact channel before publication.</p>
-           <h2>3. Product status</h2>
+           <h2 id="legal-status">3. Product status</h2>
            <p>Descriptions of ExportFlow capabilities must reflect the current published product status. No service level, certification, warranty, or availability commitment is implied here.</p>
-           <h2>4. Contact and effective date</h2>
+           <h2 id="legal-contact">4. Contact and effective date</h2>
            <p>Add a verified contact method and effective date after review by qualified counsel.</p>`)
     : `<div class="ef-status-banner">
          ${statusBadgeHtml(badgeState, t)}
@@ -776,9 +780,17 @@ function genericBody(route, path, t, locale, oauthDetails = {}) {
       ${isLegal && isAr ? "" : `<p class="ef-page-lead">${escapeHtml(description)}</p>`}
     </div>
   </section>
-  <section class="ef-section">
-    <article class="ef-container ef-article">
+  <section class="ef-section${isLegal ? " ef-legal-section" : ""}">
+    <article class="ef-container ef-article${isLegal ? " ef-legal-document" : ""}"${isLegal ? " data-legal-document" : ""}>
+      ${isLegal ? `<div class="ef-legal-progress" role="progressbar" aria-label="${isAr ? "تقدم القراءة" : "Reading progress"}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-reading-progress><span data-reading-progress-fill></span></div>
+      <div class="ef-legal-layout">
+        <aside class="ef-legal-toc" aria-label="${isAr ? "التنقل ضمن الوثيقة" : "Document navigation"}">
+          <h2>${isAr ? "في هذه الصفحة" : "On this page"}</h2>
+          <nav>${legalSectionLabels.map((label, index) => `<a href="#${legalSectionIds[index]}" data-legal-toc-link${index === 0 ? ' aria-current="location"' : ""}>${escapeHtml(label)}</a>`).join("")}</nav>
+        </aside>
+        <div class="ef-legal-body" data-legal-body>` : ""}
       ${content}
+      ${isLegal ? "</div></div>" : ""}
     </article>
   </section>`;
 }

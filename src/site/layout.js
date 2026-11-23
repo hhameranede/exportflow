@@ -32,7 +32,7 @@ export function renderDocument({
   ogImage = null,
   includeAlternates = false,
   robots = null,
-  themeColor = "#F8FAFC",
+  themeColor = "#FBFCFE",
   skipLabel = "Skip to content",
 }) {
   const navLinksHtml = NAV_ITEMS.map((item) => {

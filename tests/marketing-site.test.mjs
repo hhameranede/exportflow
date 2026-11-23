@@ -162,12 +162,12 @@ test("404 pages omit canonical links and emit noindex nofollow", () => {
   assert.ok(SEOManager.buildAlternates({ path: "/404", includeAlternates: false }).length === 0);
 });
 
-test("light-first design system and interactive UX components are served cleanly", async () => {
+test("system-aware design system and interactive UX components are served cleanly", async () => {
   const home = getWebsiteResponse("/");
   assert.ok(home);
   const html = await home.text();
 
-  assert.match(html, /<meta name="theme-color" content="#F8FAFC">/);
+  assert.match(html, /<meta name="theme-color" content="#FBFCFE">/);
   assert.match(html, /Plus\+Jakarta\+Sans/);
   assert.match(html, /data-graph-scenario="http"/);
   assert.match(html, /data-graph-scenario="search"/);
@@ -182,7 +182,7 @@ test("light-first design system and interactive UX components are served cleanly
   const cssRes = getWebsiteResponse("/assets/marketing.css");
   const css = await cssRes.text();
   assert.match(css, /:root\s*\{\s*color-scheme:\s*light;/);
-  assert.match(css, /--bg:\s*#F8FAFC;/);
+  assert.match(css, /--bg:\s*#F3F6FA;/);
   assert.match(css, /\.ef-step-inspector\b/);
   assert.match(css, /\.ef-cap-filter-bar\b/);
   assert.match(css, /\.ef-graph-scenarios\b/);
@@ -190,7 +190,7 @@ test("light-first design system and interactive UX components are served cleanly
 
   const jsRes = getWebsiteResponse("/assets/marketing.js");
   const js = await jsRes.text();
-  assert.match(js, /function getActiveTheme\(\)[\s\S]*return "light";/);
+  assert.match(js, /function getActiveTheme\(\)[\s\S]*return "system";/);
   assert.ok(js.includes("get-session"));
   assert.ok(js.includes("sign-in/social"));
   assert.ok(js.includes("authReady"));
