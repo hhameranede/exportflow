@@ -851,10 +851,13 @@ function oauthBrowserError(status, title, message, locale = "en") {
 
 export async function handleOAuthBrowserPage(request, env = {}) {
   const url = new URL(request.url);
-  const localeMatch = /^\\/(en|ar|fr|es|de|pt|zh|ja)(?=\\/oauth\\/)/.exec(url.pathname);
-  const locale = localeMatch?.[1] || "en";
-  const routePath = localeMatch ? url.pathname.slice(localeMatch[0].length) : url.pathname;
+  const pathSegments = url.pathname.split("/");
+  const hasLocalePrefix = ["en", "ar", "fr", "es", "de", "pt", "zh", "ja"].includes(pathSegments[1]) &&
+    pathSegments[2] === "oauth";
+  const locale = hasLocalePrefix ? pathSegments[1] : "en";
+  const routePath = hasLocalePrefix ? "/" + pathSegments.slice(2).join("/") : url.pathname;
   if (!OAUTH_BROWSER_PATHS.has(routePath)) return null;
+  const fail = (status, title, message) => oauthBrowserError(status, title, message, locale);
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response(null, { status: 405, headers: { ...OAUTH_BROWSER_HEADERS, allow: "GET, HEAD" } });
   }
@@ -864,28 +867,28 @@ export async function handleOAuthBrowserPage(request, env = {}) {
   try {
     oauthEndpoints = getOAuthRuntimeConfig(env);
   } catch {
-    return oauthBrowserError(503, "Authorization unavailable", "The configured OAuth endpoints are invalid.", locale);
+    return fail(503, "Authorization unavailable", "The configured OAuth endpoints are invalid.");
   }
   if (!status.authConfigured || !status.tenantOAuthConfigured ||
       !(await isAuthSchemaReady(env.AUTH_DB)) ||
       !(await isOAuthAuthSchemaReady(env.AUTH_DB)) ||
       !(await isTenantOAuthSchemaReady(env.EXPORTFLOW_AUTH_DB))) {
-    return oauthBrowserError(503, "Authorization unavailable", "ExportFlow account authorization is not initialized yet.", locale);
+    return fail(503, "Authorization unavailable", "ExportFlow account authorization is not initialized yet.");
   }
 
   const auth = getAuthInstance(env);
-  if (!auth) return oauthBrowserError(503, "Authorization unavailable", "ExportFlow account authorization is not configured.", locale);
+  if (!auth) return fail(503, "Authorization unavailable", "ExportFlow account authorization is not configured.");
 
   const oauthQuery = getSignedOAuthQuery(url.searchParams);
-  if (!oauthQuery) return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request is missing.", locale);
+  if (!oauthQuery) return fail(400, "Invalid authorization request", "The signed authorization request is missing.");
   let context;
   try {
     context = await auth.$context;
     if (!(await verifyOAuthQueryParams(oauthQuery, context.secret))) {
-      return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request is invalid or has expired.", locale);
+      return fail(400, "Invalid authorization request", "The signed authorization request is invalid or has expired.");
     }
   } catch {
-    return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request could not be verified.", locale);
+    return fail(400, "Invalid authorization request", "The signed authorization request could not be verified.");
   }
 
   const signedParams = new URLSearchParams(oauthQuery);
@@ -894,14 +897,14 @@ export async function handleOAuthBrowserPage(request, env = {}) {
       signedParams.get("code_challenge_method") !== "S256" ||
       signedParams.getAll("resource").length !== 1 ||
       signedParams.get("resource") !== oauthEndpoints.resource) {
-    return oauthBrowserError(400, "Unsupported authorization request", "This request does not match the ExportFlow OAuth authorization profile.", locale);
+    return fail(400, "Unsupported authorization request", "This request does not match the ExportFlow OAuth authorization profile.");
   }
 
   let session;
   try {
     session = await auth.api.getSession({ headers: request.headers, query: { disableCookieCache: true } });
   } catch {
-    return oauthBrowserError(503, "Session unavailable", "Your ExportFlow session could not be checked. Try again.", locale);
+    return fail(503, "Session unavailable", "Your ExportFlow session could not be checked. Try again.");
   }
   if (!session?.user?.id || !session?.session?.id) {
     const next = new URL("/signin", url.origin);
@@ -909,27 +912,27 @@ export async function handleOAuthBrowserPage(request, env = {}) {
     return Response.redirect(next.toString(), 302);
   }
   if (session.user.emailVerified !== true) {
-    return oauthBrowserError(403, "Verify your email first", "A verified ExportFlow email address is required before authorizing an application.");
+    return fail(403, "Verify your email first", "A verified ExportFlow email address is required before authorizing an application.");
   }
 
   let details = {};
-  if (url.pathname === "/oauth/consent") {
+  if (routePath === "/oauth/consent") {
     const clientId = signedParams.get("client_id");
     const scopes = (signedParams.get("scope") || "").split(/\s+/).filter(Boolean);
     const allowedScopes = new Set(MCP_SCOPES);
     if (!clientId || !scopes.length || scopes.some((scope) => !allowedScopes.has(scope)) ||
         scopes.every((scope) => !["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract"].includes(scope))) {
-      return oauthBrowserError(400, "Invalid permission request", "The requested application permissions are invalid.");
+      return fail(400, "Invalid permission request", "The requested application permissions are invalid.");
     }
     details = { clientId, scopes };
   } else {
     try {
       const memberships = await listActiveTenantMemberships(env.EXPORTFLOW_AUTH_DB, session.user.id);
       if (memberships.length === 0) {
-        return oauthBrowserError(403, "No workspace access", "Your account is not a member of an active ExportFlow workspace.");
+        return fail(403, "No workspace access", "Your account is not a member of an active ExportFlow workspace.");
       }
     } catch {
-      return oauthBrowserError(503, "Workspace lookup unavailable", "Your workspace membership could not be checked.");
+      return fail(503, "Workspace lookup unavailable", "Your workspace membership could not be checked.");
     }
   }
 
