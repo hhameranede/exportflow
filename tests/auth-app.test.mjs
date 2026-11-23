@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { authorizePlatformOwner, getAuthFeatureStatus, getAuthOptions, handleAuthRequest, guardOwnerTwoFactorEndpoint } from "../src/core/auth-app.js";
+import { authorizePlatformOwner, getAuthFeatureStatus, getAuthOptions, handleAuthRequest, handleOAuthBrowserPage, guardOwnerTwoFactorEndpoint } from "../src/core/auth-app.js";
 import { createWorker } from "../src/index.js";
 import { getOAuthRuntimeConfig } from "../src/core/oauth-config.js";
 
@@ -619,4 +619,19 @@ test("Google OAuth and email/password can be enabled together and dispatch auth 
   ]);
   assert.match(sent[0].html, /synthetic-verification-token/);
   assert.match(sent[1].text, /synthetic-reset-token/);
+});
+
+
+test("OAuth unavailable page respects the strict Content Security Policy without inline styles", async () => {
+  const response = await handleOAuthBrowserPage(
+    new Request("https://exportflow.test/oauth/consent"),
+    {},
+  );
+  assert.ok(response, "OAuth consent route should be handled");
+  assert.equal(response.status, 503);
+  const html = await response.text();
+  assert.match(html, /<h1 class="ef-auth-title">Authorization unavailable<\/h1>/);
+  assert.match(html, /href="\/assets\/marketing\.css\?v=9"/);
+  assert.doesNotMatch(html, /\sstyle\s*=/i, "OAuth fail-closed page must not use inline style attributes");
+  assert.match(html, /account authorization is not initialized yet|configured OAuth endpoints are invalid/i);
 });
