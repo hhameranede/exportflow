@@ -545,6 +545,48 @@ test("MCP protected-resource metadata uses configured Auth and MCP origins", asy
   assert.deepEqual(body.scopes_supported, ["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract"]);
 });
 
+test("MCP responses include baseline security headers on JSON, empty, and preflight paths", async () => {
+  const { worker, env } = makeWorker();
+  const required = {
+    "strict-transport-security": "max-age=63072000",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+  };
+  const cases = [
+    ["health", await worker.fetch(new Request("https://" + HOST + "/health"), env), 200],
+    ["RPC", await worker.fetch(makeRequest(jsonRpc("ping")), env), 200],
+    ["initialized notification", await worker.fetch(makeRequest({
+      jsonrpc: "2.0",
+      method: "notifications/initialized",
+    }), env), 202],
+    ["method-not-allowed", await worker.fetch(new Request(URL, { method: "GET" }), env), 405],
+    ["preflight", await worker.fetch(makeRequest(undefined, {
+      method: "OPTIONS",
+      origin: "https://chatgpt.com",
+    }), env), 204],
+  ];
+
+  for (const [name, response, expectedStatus] of cases) {
+    assert.equal(response.status, expectedStatus, name + " status");
+    for (const [header, value] of Object.entries(required)) {
+      assert.equal(response.headers.get(header), value, name + " " + header);
+    }
+  }
+});
+
+test("MCP preflight keeps the allowed ChatGPT origin and Vary header while adding security headers", async () => {
+  const { worker, env } = makeWorker();
+  const response = await worker.fetch(makeRequest(undefined, {
+    method: "OPTIONS",
+    origin: "https://chatgpt.com",
+  }), env);
+
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("access-control-allow-origin"), "https://chatgpt.com");
+  assert.equal(response.headers.get("vary"), "Origin");
+  assert.equal(response.headers.get("access-control-allow-methods"), "POST, OPTIONS");
+});
+
 test("protected tool calls return an OAuth challenge scoped to the configured MCP resource", async () => {
   const env = {
     AUTH_ISSUER_URL: "https://auth-acceptance.hhameranede.workers.dev/api/auth",
