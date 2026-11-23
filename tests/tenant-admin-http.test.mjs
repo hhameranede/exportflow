@@ -255,7 +255,7 @@ test("admin body size and content type are enforced before service execution", a
   const oversized = JSON.stringify({ planCode: "free", note: "x".repeat(17_000) });
   const largeRequest = new Request("https://exportflow.me/api/v1/admin/tenants", {
     method: "POST",
-    headers: { origin: "https://exportflow.me", "content-type": "application/json" },
+    headers: { origin: "https://exportflow.me", "content-type": "application/json", "cf-connecting-ip": "203.0.113.10" },
     body: oversized,
   });
   const tooLarge = await handler(largeRequest, env);
@@ -264,7 +264,7 @@ test("admin body size and content type are enforced before service execution", a
 
   const wrongType = await handler(new Request("https://exportflow.me/api/v1/admin/tenants", {
     method: "POST",
-    headers: { origin: "https://exportflow.me", "content-type": "text/plain" },
+    headers: { origin: "https://exportflow.me", "content-type": "text/plain", "cf-connecting-ip": "203.0.113.10" },
     body: "{}",
   }), env);
   assert.equal(wrongType.status, 415);
