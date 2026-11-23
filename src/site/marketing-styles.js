@@ -2526,6 +2526,8 @@ html[data-theme="dark"] .ef-code-tabs {
 
 .ef-contact-form {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 18px;
   padding: 28px;
   border-radius: var(--radius-lg);
@@ -2536,7 +2538,13 @@ html[data-theme="dark"] .ef-code-tabs {
 
 .ef-field {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 6px;
+}
+
+.ef-contact-form > * {
+  min-width: 0;
 }
 
 .ef-field label {
