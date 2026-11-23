@@ -234,7 +234,19 @@ test("validateTaskRequest enforces strict numeric limit bounds and disables non-
   });
   assert.equal(valid.url, "https://example.com/docs");
   assert.equal(valid.operation, "fetch");
+  assert.equal(valid.cacheMode, "default");
   assert.deepEqual(valid.limits, { timeoutMs: 2500, maxBytes: 4096, maxRedirects: 1 });
+
+  const bypass = validateTaskRequest({
+    goal: "Fetch fresh docs",
+    url: "https://example.com/docs",
+    cacheMode: "bypass",
+  });
+  assert.equal(bypass.cacheMode, "bypass");
+  assert.throws(
+    () => validateTaskRequest({ goal: "Fetch", url: "https://example.com", cacheMode: "force" }),
+    (err) => err instanceof TaskContractError && err.code === "INVALID_CACHE_MODE" && err.httpStatus === 400,
+  );
 });
 
 test("POST /api/v1/tasks rejects private, loopback, metadata, and invalid URLs before outbound fetch", async () => {
@@ -330,6 +342,8 @@ test("POST /api/v1/tasks executes end-to-end bounded HTTP fetch and returns stru
     fetchImpl: async (url, init) => {
       assert.equal(init.method, "GET");
       assert.equal(init.redirect, "manual");
+      assert.equal(init.cache, "default");
+      assert.deepEqual(init.cf, { cacheEverything: true });
       if (url === "https://example.com/start") {
         return new Response(null, { status: 302, headers: { location: "/final" } });
       }
@@ -372,6 +386,37 @@ test("POST /api/v1/tasks executes end-to-end bounded HTTP fetch and returns stru
   assert.equal(task.result.sources[0].url, "https://example.com/final");
   assert.equal(task.result.sources[0].evidence[0].redirectCount, 1);
   assert.deepEqual(task.events.map((e) => e.type), ["task.accepted", "task.started", "task.succeeded"]);
+});
+
+test("POST /api/v1/tasks supports explicit cache bypass without custom TTL overrides", async () => {
+  let observedInit;
+  const worker = createWorker({
+    fetchImpl: async (_url, init) => {
+      observedInit = init;
+      return new Response("fresh response", {
+        headers: {
+          "content-type": "text/plain",
+          "cf-cache-status": "BYPASS",
+          "cache-control": "no-store",
+        },
+      });
+    },
+  });
+
+  const response = await worker.fetch(
+    makeTaskRequest({
+      goal: "Read a fresh public resource",
+      url: "https://example.com/fresh",
+      cacheMode: "bypass",
+    }),
+    makeTestEnv(),
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(observedInit.cache, "no-store");
+  assert.equal(Object.hasOwn(observedInit, "cf"), false);
+  const task = await response.json();
+  assert.equal(task.result.data.cacheStatus, "BYPASS");
 });
 
 test("POST /api/v1/tasks handles upstream 404, 500, and network failures without leaking secrets", async () => {
