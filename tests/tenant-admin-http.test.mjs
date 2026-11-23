@@ -284,7 +284,7 @@ test("admin body size and content type are enforced before service execution", a
   const oversized = JSON.stringify({ planCode: "free", note: "x".repeat(17_000) });
   const largeRequest = new Request("https://exportflow.me/api/v1/admin/tenants", {
     method: "POST",
-    headers: { origin: "https://exportflow.me", "content-type": "application/json" },
+    headers: { origin: "https://exportflow.me", "content-type": "application/json", "cf-connecting-ip": "203.0.113.10" },
     body: oversized,
   });
   const tooLarge = await handler(largeRequest, env);
@@ -293,7 +293,7 @@ test("admin body size and content type are enforced before service execution", a
 
   const wrongType = await handler(new Request("https://exportflow.me/api/v1/admin/tenants", {
     method: "POST",
-    headers: { origin: "https://exportflow.me", "content-type": "text/plain" },
+    headers: { origin: "https://exportflow.me", "content-type": "text/plain", "cf-connecting-ip": "203.0.113.10" },
     body: "{}",
   }), env);
   assert.equal(wrongType.status, 415);
@@ -320,14 +320,18 @@ test("admin pre-auth rate limit rejects excess requests before loading the owner
   assert.equal(authorizationCalls, 0);
 });
 
-test("default admin burst limiter is keyed by Cloudflare client IP", async () => {
+test("default admin burst limiter is shared across handler instances for the same Cloudflare IP", async () => {
   let authorizationCalls = 0;
-  const handler = createTenantAdminHttpHandler({
+  const sharedNamespace = makeDurableLimiterNamespace();
+  const createHandler = () => createTenantAdminHttpHandler({
     authorizeOwner: async () => {
       authorizationCalls += 1;
       return { allowed: false };
     },
   });
+  const firstHandler = createHandler();
+  const secondHandler = createHandler();
+  const env = { TENANT_BURST_LIMITER: sharedNamespace };
   const makeRequest = (ip) => new Request("https://exportflow.me/api/v1/admin/tenants", {
     method: "POST",
     headers: {
@@ -339,15 +343,50 @@ test("default admin burst limiter is keyed by Cloudflare client IP", async () =>
   });
 
   for (let index = 0; index < 10; index += 1) {
-    const response = await handler(makeRequest("203.0.113.10"), {});
+    const handler = index % 2 === 0 ? firstHandler : secondHandler;
+    const response = await handler(makeRequest("203.0.113.10"), env);
     assert.equal(response.status, 403);
   }
-  const limited = await handler(makeRequest("203.0.113.10"), {});
+  const limited = await secondHandler(makeRequest("203.0.113.10"), env);
   assert.equal(limited.status, 429);
-  assert.equal(limited.headers.get("retry-after") !== null, true);
+  assert.ok(Number(limited.headers.get("retry-after")) >= 1);
   assert.equal(authorizationCalls, 10);
 
-  const otherIp = await handler(makeRequest("203.0.113.11"), {});
+  const otherIp = await firstHandler(makeRequest("203.0.113.11"), env);
   assert.equal(otherIp.status, 403);
   assert.equal(authorizationCalls, 11);
+});
+
+test("admin rate limit fails closed when the Cloudflare IP or Durable Object binding is unavailable", async () => {
+  let authorizationCalls = 0;
+  const handler = createTenantAdminHttpHandler({
+    authorizeOwner: async () => {
+      authorizationCalls += 1;
+      return { allowed: false };
+    },
+  });
+  const missingIp = new Request("https://exportflow.me/api/v1/admin/tenants", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.20" },
+    body: JSON.stringify({ planCode: "free" }),
+  });
+  const noIpResponse = await handler(missingIp, { TENANT_BURST_LIMITER: makeDurableLimiterNamespace() });
+  assert.equal(noIpResponse.status, 503);
+  assert.equal((await noIpResponse.json()).error.code, "ADMIN_RATE_LIMIT_UNAVAILABLE");
+
+  const noBindingResponse = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), {});
+  assert.equal(noBindingResponse.status, 503);
+  assert.equal((await noBindingResponse.json()).error.code, "ADMIN_RATE_LIMIT_UNAVAILABLE");
+  assert.equal(authorizationCalls, 0);
+});
+
+test("admin rate limit fails closed when the Durable Object backend returns an error", async () => {
+  const handler = createTenantAdminHttpHandler({
+    authorizeOwner: async () => ({ allowed: false }),
+  });
+  const response = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), {
+    TENANT_BURST_LIMITER: makeDurableLimiterNamespace({ fail: true }),
+  });
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error.code, "ADMIN_RATE_LIMIT_UNAVAILABLE");
 });
