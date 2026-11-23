@@ -42,15 +42,16 @@ test("Acceptance preserves Better Auth signing secret and existing JWKS rows", (
 });
 
 test("Google OAuth GitHub secrets are passed only to the isolated Auth Acceptance deployment", () => {
-  assert.match(acceptanceWorkflow, /secrets\\.GOOGLE_CLIENT_ID/);
-  assert.match(acceptanceWorkflow, /secrets\\.GOOGLE_CLIENT_SECRET/);
-  assert.match(acceptanceWorkflow, /google-oauth-acceptance-secrets\\.json/);
-  assert.match(acceptanceWorkflow, /--secrets-file/);
-  assert.match(acceptanceWorkflow, /fs\\.writeFileSync\\(secretsFile/);
-  assert.match(acceptanceWorkflow, /mode: 0o600/);
-  assert.match(acceptanceWorkflow, /config\\.googleEnabled !== true/);
-  assert.match(acceptanceWorkflow, /api\\/auth\\/config/);
-  assert.doesNotMatch(acceptanceWorkflow, /secret put GOOGLE_CLIENT_(?:ID|SECRET)/);
+  assert.ok(acceptanceWorkflow.includes("secrets.GOOGLE_CLIENT_ID"));
+  assert.ok(acceptanceWorkflow.includes("secrets.GOOGLE_CLIENT_SECRET"));
+  assert.ok(acceptanceWorkflow.includes("google-oauth-acceptance-secrets.json"));
+  assert.ok(acceptanceWorkflow.includes("--secrets-file"));
+  assert.ok(acceptanceWorkflow.includes("fs.writeFileSync(secretsFile"));
+  assert.ok(acceptanceWorkflow.includes("mode: 0o600"));
+  assert.ok(acceptanceWorkflow.includes("config.googleEnabled !== true"));
+  assert.ok(acceptanceWorkflow.includes("api/auth/config"));
+  assert.ok(!acceptanceWorkflow.includes("secret put GOOGLE_CLIENT_ID"));
+  assert.ok(!acceptanceWorkflow.includes("secret put GOOGLE_CLIENT_SECRET"));
 });
 
 test("OAuth D1 migrations resolve through the pinned Tenant Acceptance binding", () => {
