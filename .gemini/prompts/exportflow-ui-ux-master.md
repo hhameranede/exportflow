@@ -463,5 +463,15 @@ Upload this single Markdown file to Google AI Studio and instruct Gemini:
 
 “Read this entire document and treat it as the operating instructions for the ExportFlow UI/UX and product-engineering work in this conversation. First inspect the current project and available tools. Summarize the verified product state and the highest-priority UX/engineering issues before making changes. Follow the approval boundaries exactly. Do not assume tools, frameworks, features, or runtime access that are not actually available.”
 
-Do not claim that uploading this prompt installs software, grants repository access, enables browser automation, or creates persistent skills. Gemini must use only the tools and permissions available in its own environment."
- https://raw.githubusercontent.com/hhameranede/exportflow-uiux-arsenal/refs/heads/main/EXPORTFLOW-MASTER-UIUX-PROMPT.md?token=GHSAT0AAAAAAEQJ4HY3ZSDJ35KVLOFQTYUO2YEQMBA#:~:text=%23%20EXPORTFLOW%20%E2%80%94%20MASTER%20UI,its%20own%20environment.
+Do not claim that uploading this prompt installs software, grants repository access, enables browser automation, or creates persistent skills. Gemini must use only the tools and permissions available in its own environment.
+
+## 17. LOCAL GEMINI UI/UX SKILLS
+
+When this repository is available to you, consult the relevant installed skill before a design task:
+- `.gemini/skills/impeccable/SKILL.md` — critique, cognitive load, craft floor, audit, and polish.
+- `.gemini/skills/ui-ux-pro-max/SKILL.md` — accessibility, interaction, responsive design, typography, and interface quality.
+- `.gemini/skills/web-interface-guidelines/SKILL.md` — browser-specific accessibility, forms, focus, motion, layout, and UX copy.
+
+Read only the references needed for the task. These are focused guidance bundles, not complete upstream CLI runtimes or searchable catalogs. Never claim that an upstream CLI or detector ran unless it is actually installed and executed. Preserve the original upstream license files and source attribution.
+
+The previous public copy of this prompt contained an unnecessary raw GitHub URL with a token-shaped query parameter. That URL has been removed from this cleaned project copy.
