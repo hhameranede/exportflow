@@ -357,7 +357,10 @@ export function createTenantAdminService({
           "INSERT INTO tenant_admin_audit_log (event_id, actor_id, action, resource_type, resource_id, details_json, created_at) SELECT ?1, ?2, 'tenants:status', 'tenant', ?3, ?4, ?5 WHERE changes() = 1"
         ).bind(cryptoImpl.randomUUID(), actorId, tenantId, JSON.stringify({ status }), updatedAt),
       ]);
-      if (safeChanges(results[0]) !== 1) {
+      // The tenant-state trigger may also update every membership row for
+      // this tenant in the same D1 statement. meta.changes can therefore be
+      // greater than one even though exactly one tenant was targeted.
+      if (safeChanges(results[0]) < 1) {
         throw new TenantAdminError("TENANT_NOT_UPDATABLE", "The tenant was not found or is already closed.", 404);
       }
       return Object.freeze({ tenantId, status, updatedAt });
@@ -380,7 +383,9 @@ export function createTenantAdminService({
           "INSERT INTO tenant_admin_audit_log (event_id, actor_id, action, resource_type, resource_id, details_json, created_at) SELECT ?1, ?2, 'tenants:plan', 'tenant', ?3, ?4, ?5 WHERE changes() = 1"
         ).bind(cryptoImpl.randomUUID(), actorId, tenantId, JSON.stringify({ planCode }), updatedAt),
       ]);
-      if (safeChanges(results[0]) !== 1) {
+      // Changing the plan also fires the tenant-state trigger and may
+      // increment membership_version on several rows in the same D1 batch.
+      if (safeChanges(results[0]) < 1) {
         throw new TenantAdminError("TENANT_OR_ACTIVE_PLAN_NOT_FOUND", "The tenant or active target plan was not found.", 404);
       }
       return Object.freeze({ tenantId, planCode, updatedAt, quotaWindowNote: "An existing UTC usage window keeps its original policy snapshot." });

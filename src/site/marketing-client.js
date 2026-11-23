@@ -1233,6 +1233,133 @@ export const MARKETING_JS = `(function () {
     return item;
   }
 
+  async function refreshTwoFactorStatus(workspace) {
+    if (!workspace) return;
+    var status = workspace.querySelector("[data-two-factor-status]");
+    var enableForm = workspace.querySelector("[data-two-factor-enable-form]");
+    var enrollment = workspace.querySelector("[data-two-factor-enrollment]");
+    try {
+      var state = await authRequest("two-factor/status");
+      var enabled = state && state.twoFactorEnabled === true;
+      var verified = state && state.twoFactorVerified === true;
+      if (enabled && verified) {
+        if (enableForm) enableForm.hidden = true;
+        if (enrollment) enrollment.hidden = true;
+        authMessage(status, "Authenticator protection is enabled and verified. Platform administration still requires a fresh one-time TOTP check.", "success");
+      } else if (enabled) {
+        if (enableForm) enableForm.hidden = true;
+        if (enrollment) enrollment.hidden = false;
+        var secret = workspace.querySelector("[data-two-factor-secret]");
+        var backups = workspace.querySelector("[data-two-factor-backup-codes]");
+        if (secret && !secret.textContent) secret.textContent = "The setup key was shown only once. Use the key you saved during enrollment.";
+        if (backups && !backups.childElementCount) {
+          var notice = document.createElement("li");
+          notice.className = "ef-session-row";
+          notice.textContent = "Backup codes were shown only during enrollment. Keep your saved offline copy.";
+          backups.appendChild(notice);
+        }
+        authMessage(status, "Authenticator enrollment is waiting for verification. Enter a current six-digit code to finish setup.", "warning");
+      } else {
+        if (enableForm) enableForm.hidden = false;
+        if (enrollment) enrollment.hidden = true;
+        authMessage(status, "Authenticator protection is not enabled yet.", "warning");
+      }
+    } catch (error) {
+      if (enableForm) enableForm.hidden = true;
+      authMessage(status, error.message || "Authenticator status is temporarily unavailable.", "error");
+    }
+  }
+
+  function bindTwoFactorControls(workspace) {
+    if (!workspace) return;
+    var enableForm = workspace.querySelector("[data-two-factor-enable-form]");
+    var enrollment = workspace.querySelector("[data-two-factor-enrollment]");
+    var status = workspace.querySelector("[data-two-factor-status]");
+    var secretNode = workspace.querySelector("[data-two-factor-secret]");
+    var backupList = workspace.querySelector("[data-two-factor-backup-codes]");
+    var verifyForm = workspace.querySelector("[data-two-factor-verify-form]");
+    var copySecret = workspace.querySelector("[data-two-factor-copy-secret]");
+
+    if (enableForm) {
+      enableForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        var button = enableForm.querySelector('button[type="submit"]');
+        var password = String(enableForm.elements.password.value || "");
+        if (button) button.disabled = true;
+        try {
+          var payload = { method: "totp" };
+          if (password) payload.password = password;
+          var result = await authRequest("two-factor/enable", "POST", payload);
+          if (!result || result.method !== "totp" || typeof result.totpURI !== "string" ||
+              !Array.isArray(result.backupCodes)) {
+            throw new Error("The authenticator setup response was incomplete.");
+          }
+          var parsed = new URL(result.totpURI);
+          var secret = parsed.searchParams.get("secret");
+          if (!secret) throw new Error("The authenticator setup key could not be read.");
+          if (secretNode) secretNode.textContent = secret;
+          if (backupList) {
+            backupList.textContent = "";
+            result.backupCodes.forEach(function (code) {
+              var item = document.createElement("li");
+              item.className = "ef-session-row";
+              item.textContent = String(code);
+              backupList.appendChild(item);
+            });
+          }
+          if (enrollment) enrollment.hidden = false;
+          enableForm.hidden = true;
+          authMessage(status, "Save the setup key and backup codes offline, then verify one current authenticator code.", "warning");
+          enableForm.reset();
+        } catch (error) {
+          authMessage(workspace.querySelector("[data-two-factor-enable-message]"), error.message || "Could not start authenticator setup.", "error");
+        } finally {
+          if (button) button.disabled = false;
+        }
+      });
+    }
+
+    if (verifyForm) {
+      verifyForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        var code = String(verifyForm.elements.code.value || "").trim();
+        var button = verifyForm.querySelector('button[type="submit"]');
+        if (!/^[0-9]{6}$/.test(code)) {
+          authMessage(workspace.querySelector("[data-two-factor-verify-message]"), "Enter the current six-digit code.", "error");
+          return;
+        }
+        if (button) button.disabled = true;
+        try {
+          await authRequest("two-factor/verify-totp", "POST", { code: code, trustDevice: false });
+          verifyForm.reset();
+          await refreshTwoFactorStatus(workspace);
+          if (secretNode) secretNode.textContent = "";
+          if (backupList) backupList.textContent = "";
+        } catch (error) {
+          authMessage(workspace.querySelector("[data-two-factor-verify-message]"), error.message || "Authenticator verification failed.", "error");
+        } finally {
+          if (button) button.disabled = false;
+        }
+      });
+    }
+
+    if (copySecret) {
+      copySecret.addEventListener("click", async function () {
+        var secret = secretNode ? secretNode.textContent : "";
+        if (!secret || !navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+          showToast("The setup key could not be copied on this device.");
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(secret);
+          showToast("Authenticator setup key copied.");
+        } catch (_error) {
+          showToast("The setup key could not be copied.");
+        }
+      });
+    }
+  }
+
   async function loadAccountWorkspace() {
     var workspace = document.querySelector("[data-account-workspace]");
     if (!workspace) return;
@@ -1252,6 +1379,7 @@ export const MARKETING_JS = `(function () {
       var emailInput = workspace.querySelector("#acc-email");
       if (nameInput) nameInput.value = user.name || "";
       if (emailInput) emailInput.value = user.email || "";
+      await refreshTwoFactorStatus(workspace);
       var accountResponse = await authRequest("list-accounts");
       var accounts = Array.isArray(accountResponse) ? accountResponse : (accountResponse && accountResponse.accounts) || [];
       var accountList = workspace.querySelector("[data-auth-account-list]");
@@ -1323,6 +1451,7 @@ export const MARKETING_JS = `(function () {
   }
 
   function bindAccountControls() {
+    bindTwoFactorControls(document.querySelector("[data-account-workspace]"));
     var profileForm = document.querySelector("[data-account-profile-form]");
     if (profileForm) {
       profileForm.addEventListener("submit", async function (event) {

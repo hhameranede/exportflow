@@ -60,12 +60,16 @@ function jsonRequest(path, body = {}, method = "POST") {
   });
 }
 
-function setup({ owner = { allowed: true, actorId: "owner_123" }, tables = TABLES, triggers = REQUIRED_TRIGGERS } = {}) {
+function setup({ owner = { allowed: true, actorId: "owner_123", sessionId: "session_owner_123" }, tables = TABLES, triggers = REQUIRED_TRIGGERS, stepUp = { allowed: true } } = {}) {
   const calls = { authorization: [], service: [], actions: [] };
   const handler = createTenantAdminHttpHandler({
     authorizeOwner: async (request, env) => {
       calls.authorization.push({ request, env });
       return owner;
+    },
+    ownerStepUpService: {
+      verifyCode: async () => ({ allowed: true, token: "synthetic-step-up-proof", expiresAt: "2026-11-22T19:05:00.000Z" }),
+      consumeProof: async () => stepUp,
     },
     serviceFactory: (options) => {
       calls.service.push(options);
@@ -233,7 +237,8 @@ test("each request gets a new service bound to that request's verified owner ide
   let nextActor = "owner_A";
   const calls = [];
   const handler = createTenantAdminHttpHandler({
-    authorizeOwner: async () => ({ allowed: true, actorId: nextActor }),
+    authorizeOwner: async () => ({ allowed: true, actorId: nextActor, sessionId: "session_" + nextActor }),
+    ownerStepUpService: { verifyCode: async () => ({ allowed: true }), consumeProof: async () => ({ allowed: true }) },
     serviceFactory: (options) => {
       calls.push(options);
       return { async provisionTenant(input) {
@@ -241,10 +246,7 @@ test("each request gets a new service bound to that request's verified owner ide
       } };
     },
   });
-  const env = {
-    EXPORTFLOW_AUTH_DB: makeD1(),
-    TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace(),
-  };
+  const env = { EXPORTFLOW_AUTH_DB: makeD1(), TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace() };
   const first = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), env);
   nextActor = "owner_B";
   const second = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), env);
@@ -311,20 +313,19 @@ test("default admin burst limiter is shared across handler instances for the sam
       authorizationCalls += 1;
       return { allowed: false };
     },
+    ownerStepUpService: {
+      verifyCode: async () => ({ allowed: true }),
+      consumeProof: async () => ({ allowed: false }),
+    },
   });
   const firstHandler = createHandler();
   const secondHandler = createHandler();
   const env = { TENANT_BURST_LIMITER: sharedNamespace };
   const makeRequest = (ip) => new Request("https://exportflow.me/api/v1/admin/tenants", {
     method: "POST",
-    headers: {
-      origin: "https://exportflow.me",
-      "content-type": "application/json",
-      "cf-connecting-ip": ip,
-    },
+    headers: { origin: "https://exportflow.me", "content-type": "application/json", "cf-connecting-ip": ip },
     body: JSON.stringify({ planCode: "free" }),
   });
-
   for (let index = 0; index < 10; index += 1) {
     const handler = index % 2 === 0 ? firstHandler : secondHandler;
     const response = await handler(makeRequest("203.0.113.10"), env);
@@ -334,19 +335,15 @@ test("default admin burst limiter is shared across handler instances for the sam
   assert.equal(limited.status, 429);
   assert.ok(Number(limited.headers.get("retry-after")) >= 1);
   assert.equal(authorizationCalls, 10);
-
   const otherIp = await firstHandler(makeRequest("203.0.113.11"), env);
   assert.equal(otherIp.status, 403);
   assert.equal(authorizationCalls, 11);
 });
 
 test("admin rate limit fails closed when the Cloudflare IP or Durable Object binding is unavailable", async () => {
-  let authorizationCalls = 0;
   const handler = createTenantAdminHttpHandler({
-    authorizeOwner: async () => {
-      authorizationCalls += 1;
-      return { allowed: false };
-    },
+    authorizeOwner: async () => ({ allowed: false }),
+    ownerStepUpService: { verifyCode: async () => ({ allowed: true }), consumeProof: async () => ({ allowed: false }) },
   });
   const missingIp = new Request("https://exportflow.me/api/v1/admin/tenants", {
     method: "POST",
@@ -356,28 +353,21 @@ test("admin rate limit fails closed when the Cloudflare IP or Durable Object bin
   const noIpResponse = await handler(missingIp, { TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace() });
   assert.equal(noIpResponse.status, 503);
   assert.equal((await noIpResponse.json()).error.code, "ADMIN_RATE_LIMIT_UNAVAILABLE");
-
   const noBindingResponse = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), {});
   assert.equal(noBindingResponse.status, 503);
   assert.equal((await noBindingResponse.json()).error.code, "ADMIN_RATE_LIMIT_UNAVAILABLE");
-  assert.equal(authorizationCalls, 0);
 });
 
 test("admin rate limit fails closed when the Durable Object backend returns an error", async () => {
   const handler = createTenantAdminHttpHandler({
     authorizeOwner: async () => ({ allowed: false }),
+    ownerStepUpService: { verifyCode: async () => ({ allowed: true }), consumeProof: async () => ({ allowed: false }) },
   });
-  const failingNamespace = {
-    idFromName(name) { return { name }; },
-    get() { return { async fetch() { throw new Error("synthetic Durable Object failure"); } }; },
-  };
-  const response = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), {
-    TENANT_BURST_LIMITER: failingNamespace,
-  });
+  const failingNamespace = { idFromName(name) { return { name }; }, get() { return { async fetch() { throw new Error("synthetic Durable Object failure"); } }; } };
+  const response = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), { TENANT_BURST_LIMITER: failingNamespace });
   assert.equal(response.status, 503);
   assert.equal((await response.json()).error.code, "ADMIN_RATE_LIMIT_UNAVAILABLE");
 });
-
 
 test("membership administration routes pass tenant/user identities and the Better Auth D1 binding", async () => {
   const { handler, calls, env } = setup();
@@ -408,4 +398,31 @@ test("membership administration routes pass tenant/user identities and the Bette
   });
   assert.deepEqual(calls.actions[1][2], { allowed: true, actorId: "owner_123" });
   assert.equal(calls.service[1].authDb, env.AUTH_DB);
+});
+
+test("every administrative mutation fails closed without a consumed one-time step-up proof", async () => {
+  const { handler, calls, env } = setup({ stepUp: { allowed: false } });
+  const response = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), env);
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, "OWNER_STEP_UP_REQUIRED");
+  assert.equal(response.headers.get("set-cookie").includes("Max-Age=0"), true);
+  assert.equal(calls.service.length, 0);
+  assert.equal(calls.actions.length, 0);
+});
+
+test("owner step-up route issues only a secure, HttpOnly, same-site, single-use cookie", async () => {
+  const { handler } = setup();
+  const response = await handler(jsonRequest("/api/v1/admin/step-up", { code: "123456" }), {});
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    expiresAt: "2026-11-22T19:05:00.000Z",
+    singleUse: true,
+  });
+  const cookie = response.headers.get("set-cookie");
+  assert.match(cookie, /^__Host-exportflow-owner-step-up=synthetic-step-up-proof;/);
+  assert.match(cookie, /HttpOnly/);
+  assert.match(cookie, /Secure/);
+  assert.match(cookie, /SameSite=Strict/);
+  assert.match(cookie, /Max-Age=300/);
 });

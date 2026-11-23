@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { authorizePlatformOwner, getAuthFeatureStatus, getAuthOptions, handleAuthRequest } from "../src/core/auth-app.js";
+import { authorizePlatformOwner, getAuthFeatureStatus, getAuthOptions, handleAuthRequest, guardOwnerTwoFactorEndpoint } from "../src/core/auth-app.js";
 import { createWorker } from "../src/index.js";
 import { getOAuthRuntimeConfig } from "../src/core/oauth-config.js";
 
@@ -17,6 +17,188 @@ function createD1BindingStub(tableNames = []) {
     batch() {},
   };
 }
+
+test("verified platform owners cannot bypass step-up through Better Auth TOTP re-verification or disable", async () => {
+  const db = {
+    prepare(sql) {
+      assert.match(sql, /twoFactor/);
+      return {
+        bind(userId) {
+          assert.equal(userId, "owner_123");
+          return {
+            async first() { return { twoFactorEnabled: 1, factorVerified: 1 }; },
+          };
+        },
+      };
+    },
+  };
+  const getSession = async () => ({
+    user: { id: "owner_123", emailVerified: true },
+    session: { id: "session_123" },
+  });
+  const options = {
+    ownerUserIds: new Set(["owner_123"]),
+    authDb: db,
+    getSession,
+  };
+
+  const verify = await guardOwnerTwoFactorEndpoint(
+    new Request("https://exportflow.me/api/auth/two-factor/verify-totp", {
+      method: "POST",
+      headers: { origin: "https://exportflow.me" },
+      body: JSON.stringify({ code: "123456" }),
+    }),
+    options,
+  );
+  assert.equal(verify.status, 403);
+  assert.equal((await verify.json()).error, "OWNER_TWO_FACTOR_MANAGEMENT_BLOCKED");
+
+  const disable = await guardOwnerTwoFactorEndpoint(
+    new Request("https://exportflow.me/api/auth/two-factor/disable", {
+      method: "POST",
+      headers: { origin: "https://exportflow.me" },
+      body: JSON.stringify({}),
+    }),
+    options,
+  );
+  assert.equal(disable.status, 403);
+  assert.equal((await disable.json()).error, "OWNER_TWO_FACTOR_MANAGEMENT_BLOCKED");
+});
+
+test("direct TOTP re-verification remains available to non-owners but an allowlisted owner must finish bootstrap first", async () => {
+  const db = {
+    prepare() {
+      return {
+        bind() {
+          return {
+            async first() { return { twoFactorEnabled: 0, factorVerified: null }; },
+          };
+        },
+      };
+    },
+  };
+  const request = new Request("https://exportflow.me/api/auth/two-factor/verify-totp", {
+    method: "POST",
+    headers: { origin: "https://exportflow.me" },
+    body: JSON.stringify({ code: "123456" }),
+  });
+  const nonOwner = await guardOwnerTwoFactorEndpoint(request, {
+    ownerUserIds: new Set(["another_owner"]),
+    authDb: db,
+    getSession: async () => ({ user: { id: "ordinary_user" }, session: { id: "ordinary_session" } }),
+  });
+  assert.equal(nonOwner, null);
+
+  const pendingOwner = await guardOwnerTwoFactorEndpoint(request, {
+    ownerUserIds: new Set(["owner_123"]),
+    authDb: db,
+    getSession: async () => ({ user: { id: "owner_123" }, session: { id: "session_123" } }),
+  });
+  assert.equal(pendingOwner.status, 403);
+  assert.equal((await pendingOwner.json()).error, "OWNER_TWO_FACTOR_BOOTSTRAP_REQUIRED");
+});
+
+test("owner TOTP endpoint guard fails closed when factor storage is unavailable", async () => {
+  const response = await guardOwnerTwoFactorEndpoint(
+    new Request("https://exportflow.me/api/auth/two-factor/disable", {
+      method: "POST",
+      headers: { origin: "https://exportflow.me" },
+    }),
+    {
+      ownerUserIds: new Set(["owner_123"]),
+      authDb: { prepare() { throw new Error("synthetic D1 outage"); } },
+      getSession: async () => ({ user: { id: "owner_123" }, session: { id: "session_123" } }),
+    },
+  );
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).error, "OWNER_TWO_FACTOR_GUARD_UNAVAILABLE");
+});
+
+
+test("verified owners cannot retrieve TOTP secrets, regenerate backup codes, or use alternate re-verification routes", async () => {
+  const db = {
+    prepare(sql) {
+      assert.match(sql, /twoFactor/);
+      return {
+        bind(userId) {
+          assert.equal(userId, "owner_123");
+          return {
+            async first() { return { twoFactorEnabled: 1, factorVerified: 1 }; },
+          };
+        },
+      };
+    },
+  };
+  const options = {
+    ownerUserIds: new Set(["owner_123"]),
+    authDb: db,
+    getSession: async () => ({
+      user: { id: "owner_123", emailVerified: true },
+      session: { id: "session_123" },
+    }),
+  };
+  const paths = [
+    "/api/auth/two-factor/get-totp-uri",
+    "/api/auth/two-factor/generate-backup-codes",
+    "/api/auth/two-factor/verify-backup-code",
+    "/api/auth/two-factor/verify-otp",
+    "/api/auth/two-factor/send-otp",
+    "/api/auth/two-factor/enable",
+  ];
+  for (const path of paths) {
+    const response = await guardOwnerTwoFactorEndpoint(
+      new Request("https://exportflow.me" + path, {
+        method: "POST",
+        headers: { origin: "https://exportflow.me" },
+        body: JSON.stringify({}),
+      }),
+      options,
+    );
+    assert.equal(response.status, 403, path);
+    assert.equal((await response.json()).error, "OWNER_TWO_FACTOR_MANAGEMENT_BLOCKED", path);
+  }
+});
+
+test("an allowlisted owner with no verified TOTP is stopped from using two-factor management endpoints", async () => {
+  const response = await guardOwnerTwoFactorEndpoint(
+    new Request("https://exportflow.me/api/auth/two-factor/get-totp-uri", {
+      method: "POST",
+      headers: { origin: "https://exportflow.me" },
+      body: JSON.stringify({}),
+    }),
+    {
+      ownerUserIds: new Set(["owner_123"]),
+      authDb: {
+        prepare() {
+          return {
+            bind() {
+              return {
+                async first() { return { twoFactorEnabled: 0, factorVerified: null }; },
+              };
+            },
+          };
+        },
+      },
+      getSession: async () => ({ user: { id: "owner_123" }, session: { id: "session_123" } }),
+    },
+  );
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error, "OWNER_TWO_FACTOR_BOOTSTRAP_REQUIRED");
+});
+
+test("sessionless owner 2FA challenge is not blocked so normal sign-in remains possible", async () => {
+  const request = new Request("https://exportflow.me/api/auth/two-factor/verify-backup-code", {
+    method: "POST",
+    headers: { origin: "https://exportflow.me" },
+    body: JSON.stringify({ code: "backup-code" }),
+  });
+  const result = await guardOwnerTwoFactorEndpoint(request, {
+    ownerUserIds: new Set(["owner_123"]),
+    authDb: { prepare() { throw new Error("must not query account without a session"); } },
+    getSession: async () => null,
+  });
+  assert.equal(result, null);
+});
 
 test("authentication remains disabled without a dedicated D1 binding and server secret", () => {
   const status = getAuthFeatureStatus({});
@@ -73,6 +255,7 @@ test("Google OAuth requires a verified provider email and explicit account linki
   assert.equal(options.account.accountLinking.disableImplicitLinking, true);
   assert.deepEqual(options.account.accountLinking.trustedProviders, ["google"]);
   assert.deepEqual(options.advanced.ipAddress.ipAddressHeaders, ["cf-connecting-ip"]);
+  assert.equal(options.plugins.some((plugin) => plugin.id === "two-factor"), true);
 });
 
 test("email/password remains disabled until a Cloudflare Email binding and sender address exist", () => {
@@ -133,7 +316,7 @@ test("public auth config returns capability booleans only and never returns cred
 
 
 test("public auth capabilities stay disabled until all required Better Auth D1 tables exist", async () => {
-  const requiredTables = ["user", "session", "account", "verification"];
+  const requiredTables = ["user", "session", "account", "verification", "twoFactor"];
   const response = await handleAuthRequest(
     new Request("https://exportflow.me/api/auth/config"),
     {
@@ -260,7 +443,7 @@ test("platform owner authorization fails closed when owner allowlist is absent",
       headers: { origin: "https://exportflow.me" },
     }),
     {
-      AUTH_DB: createD1BindingStub(["user", "session", "account", "verification"]),
+      AUTH_DB: createD1BindingStub(["user", "session", "account", "verification", "twoFactor"]),
       BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
     },
   );
@@ -283,7 +466,7 @@ test("platform owner authorization fails closed when auth schema is incomplete",
 });
 test("Tenant OAuth remains unavailable until all required D1 tables and triggers exist", async () => {
   const authTables = [
-    "user", "session", "account", "verification",
+    "user", "session", "account", "verification", "twoFactor",
     "jwks", "oauthClient", "oauthResource", "oauthClientResource",
     "oauthRefreshToken", "oauthAccessToken", "oauthConsent", "oauthClientAssertion",
   ];
