@@ -24,7 +24,7 @@ export const CAPABILITIES = Object.freeze([
     summary:
       "Bounded direct HTTP(S) retrieval for public text, HTML, JSON, and XML sources without headless browser overhead.",
     details:
-      "Verified in Node.js 22/24 and local Cloudflare Workerd via authenticated POST /api/v1/tasks when EXPORTFLOW_API_TOKEN is configured. Enforces SSRF egress checks, manual redirect revalidation, and streamed byte caps. Production rollout is pending.",
+      "Verified in Node.js 22/24 and local Cloudflare Workerd via authenticated POST /api/v1/tasks when D1 tenant auth and quota tables are configured. Enforces SSRF egress checks, manual redirect revalidation, and streamed byte caps. Production rollout is pending.",
     limits: [
       "GET only on default HTTP/HTTPS ports",
       "Max 1 MiB response body, 8s timeout, 3 redirects",
@@ -34,18 +34,18 @@ export const CAPABILITIES = Object.freeze([
   {
     id: "web-search",
     index: "02",
-    name: "Web Search",
-    adapterId: "web.search.v1 (factory)",
+    name: "Web Search & Research",
+    adapterId: "web.search.v1 / web.research.v1",
     maturity: "Internal Prototype",
     maturityKey: "prototype",
     summary:
-      "Normalized discovery interface backed by search provider factories with URL revalidation and provenance capture.",
+      "Normalized discovery and multi-source synthesis factories with URL revalidation and provenance capture.",
     details:
-      "Factory implemented in Core targeting Cloudflare Web Search via an injected Workers AI binding and AI Gateway. Not registered in default runtime catalog because no AI binding or credits are connected.",
+      "Implemented in Core as injected-binding factories targeting bounded web search and multi-candidate extraction. Not registered in default runtime endpoints until live search bindings and policy limits are enabled.",
     limits: [
       "Capped at 10 deduplicated results per query",
       "Each candidate URL revalidated against egress policy",
-      "Not exposed on public or local task endpoints",
+      "Returns 501 unsupported on live task endpoints",
     ],
   },
   {
@@ -102,17 +102,17 @@ export const CAPABILITIES = Object.freeze([
   {
     id: "orchestration",
     index: "06",
-    name: "Task Orchestration",
-    adapterId: "executeWebTask / router",
+    name: "Gateway, Auth & Quotas",
+    adapterId: "tenant-task-gateway / Better Auth",
     maturity: "In Development",
     maturityKey: "in-development",
     summary:
-      "Unified execution lifecycle managing contract validation, routing, timestamps, error normalization, and source evidence.",
+      "Unified execution lifecycle, per-tenant D1 API keys, UTC quota windows, Durable Object burst limiting, and Better Auth / OAuth foundations.",
     details:
-      "Deterministic router, strict JSON task contract, lifecycle event array, and usage metrics run today for ephemeral single tasks. Durable task persistence, queues, streaming progress, and MCP transport are planned future layers.",
+      "Includes fail-closed D1 tenant API key verification (ef_live_*), atomic UTC request quota reservations, shared Durable Object TenantBurstRateLimiter, and Better Auth account security with TOTP 2FA and OAuth/MCP consent previews. Ephemeral single-task execution runs without durable task queues.",
     limits: [
-      "Ephemeral per-request execution only (no stored history)",
-      "Token-bucket/window rate limiter is isolate-local in memory",
+      "Ephemeral per-request task execution (no stored history yet)",
+      "Quota and burst checks fail closed when D1/DO bindings are absent",
       "Usage reports measured latency and bytes; billing cost is null",
     ],
   },
@@ -162,11 +162,11 @@ export const PLATFORM_LAYERS = Object.freeze([
     id: "agent-interface",
     step: "Layer 01",
     name: "Agent Interface",
-    maturity: "Local Runtime Verified (REST) · Planned (MCP)",
+    maturity: "Local Runtime Verified (REST) · Preview (MCP OAuth)",
     responsibility:
       "Entry point where AI systems and developer services submit structured execution requests and inspect platform capabilities.",
     howItWorks:
-      "Currently exposed locally via versioned HTTP routes (/api/v1/health, /api/v1/platform, /api/v1/router-preview, and authenticated POST /api/v1/tasks). Hosted MCP transport and SDKs are planned stages rather than active endpoints.",
+      "Exposed via versioned HTTP routes (/api/v1/health, /api/v1/platform, /api/v1/router-preview, and authenticated POST /api/v1/tasks), plus a separate MCP preview worker with Better Auth OAuth 2.0 consent and tenant selection. Production public endpoints remain gated.",
     controls: "Strict HTTP method handling, content-type enforcement, fail-closed JSON errors.",
   },
   {
@@ -175,7 +175,7 @@ export const PLATFORM_LAYERS = Object.freeze([
     name: "Task Contract",
     maturity: "Local Runtime Verified",
     responsibility:
-      "Schema boundary that validates every incoming payload before routing or outbound network allocation occurs.",
+      "Schema boundary that validates every incoming payload before quota reservation, routing, or outbound network allocation occurs.",
     howItWorks:
       "Enforces a 32 KiB JSON body ceiling, fatal UTF-8 decoding, an explicit allowlist of top-level keys (goal, url, operation, requiresJavascript, requiresInteraction, limits), and bounded integer constraints on limits.",
     controls: "Unknown properties rejected with 400 INVALID_TASK; unenabled operations fail early with 501.",
@@ -183,13 +183,13 @@ export const PLATFORM_LAYERS = Object.freeze([
   {
     id: "auth-policy",
     step: "Layer 03",
-    name: "Authentication & Policy",
+    name: "Authentication, Quotas & Policy",
     maturity: "Local Runtime Verified",
     responsibility:
-      "Ensures only authorized callers execute tasks within rate budgets and safe outbound network boundaries.",
+      "Ensures only authorized tenants execute tasks within burst limits, plan quotas, and safe outbound network boundaries.",
     howItWorks:
-      "Authenticates Bearer tokens via SHA-256 constant-time digest comparison against EXPORTFLOW_API_TOKEN (failing closed with 503 if unset), enforces an isolate-local rate limiter, and applies EGRESS_POLICY before and during redirects.",
-    controls: "Rejects IP literals, local/reserved hostnames, ExportFlow origins, embedded credentials, non-default ports.",
+      "Checks pre-auth client IP burst rate, verifies D1-backed tenant API keys (ef_live_<keyId>_<secret> via SHA-256) or OAuth tenant claims, enforces a shared Durable Object TenantBurstRateLimiter, reserves D1 UTC quota windows, and applies EGRESS_POLICY before and during redirects.",
+    controls: "Fails closed without D1/DO bindings; rejects IP literals, local/reserved hostnames, ExportFlow origins, embedded credentials, non-default ports.",
   },
   {
     id: "execution-router",
@@ -472,15 +472,17 @@ export const DEMO_PRESETS = Object.freeze({
 });
 
 export const DEVELOPER_ERROR_CODES = Object.freeze([
-  { code: "AUTH_NOT_CONFIGURED", status: 503, cause: "EXPORTFLOW_API_TOKEN is missing or blank in Worker env.", recovery: "Configure token in local dev env before calling POST /api/v1/tasks." },
-  { code: "UNAUTHORIZED / INVALID_TOKEN", status: 401, cause: "Missing, malformed, oversized, or non-matching Bearer token.", recovery: "Send valid Authorization: Bearer <token> header." },
-  { code: "RATE_LIMITED", status: 429, cause: "Isolate fixed-window limit (60 req/60s default) exceeded.", recovery: "Honor Retry-After header seconds before retrying." },
+  { code: "AUTH_NOT_CONFIGURED", status: 503, cause: "EXPORTFLOW_AUTH_DB (D1) or TenantBurstRateLimiter (DO) binding is unavailable or uninitialized.", recovery: "Provision D1/DO bindings and run migrations before calling POST /api/v1/tasks." },
+  { code: "UNAUTHORIZED / INVALID_TOKEN", status: 401, cause: "Missing, malformed, revoked, expired, or non-matching ef_live_* Bearer API key.", recovery: "Send an active Authorization: Bearer ef_live_<keyId>_<secret> header." },
+  { code: "INSUFFICIENT_SCOPE", status: 403, cause: "The presented tenant key or OAuth token lacks the required tasks:fetch scope.", recovery: "Issue a credential with the tasks:fetch scope." },
+  { code: "RATE_LIMITED", status: 429, cause: "Pre-auth client IP ceiling or shared Durable Object tenant burst window exceeded.", recovery: "Honor Retry-After header seconds before retrying." },
+  { code: "QUOTA_EXCEEDED", status: 429, cause: "Tenant UTC daily or monthly plan request quota in D1 is exhausted.", recovery: "Wait for the x-plan-reset UTC boundary or upgrade tenant plan." },
   { code: "UNSUPPORTED_MEDIA_TYPE", status: 415, cause: "Request Content-Type is not application/json.", recovery: "Set Content-Type: application/json." },
   { code: "PAYLOAD_TOO_LARGE", status: 413, cause: "Task JSON request exceeds 32,768 bytes.", recovery: "Trim goal text or unused fields within 32 KiB." },
   { code: "INVALID_TASK / INVALID_GOAL / INVALID_LIMIT", status: 400, cause: "Unknown keys, invalid goal length, or out-of-range limits.", recovery: "Restrict keys to documented contract and integer limits." },
   { code: "URL_NOT_ALLOWED", status: 400, cause: "Non-HTTP(S), IP literal, embedded credentials, non-default port, or blocked host.", recovery: "Supply a public HTTP(S) DNS domain URL." },
-  { code: "OPERATION_NOT_ENABLED / BROWSER_UNAVAILABLE", status: 501, cause: "Operation other than fetch, or requiresJavascript/requiresInteraction requested.", recovery: "Wait for subsequent milestones; browser and crawl remain unexposed." },
-  { code: "RESPONSE_TOO_LARGE", status: 413, cause: "Upstream content-length or streamed body exceeded maxBytes.", recovery: "Increase limits.maxBytes up to 1,048,576 or target smaller document." },
+  { code: "OPERATION_NOT_ENABLED / BROWSER_UNAVAILABLE", status: 501, cause: "Operation other than fetch, or requiresJavascript/requiresInteraction requested.", recovery: "Use operation: \"fetch\" for Phase 1; browser and crawl remain unexposed on the task API." },
+  { code: "RESPONSE_TOO_LARGE", status: 413, cause: "Upstream content-length or streamed body exceeded maxBytes.", recovery: "Increase limits.maxBytes up to 1,048,576 or target a smaller document." },
   { code: "UPSTREAM_TIMEOUT", status: 504, cause: "Upstream server did not complete within limits.timeoutMs.", recovery: "Retry with backoff or adjust timeoutMs up to 8000." },
   { code: "REDIRECT_NOT_ALLOWED / REDIRECT_DOWNGRADE", status: 502, cause: "Redirect pointed to blocked destination or downgraded HTTPS to HTTP.", recovery: "Inspect target chain; policy intentionally blocks unsafe hops." },
 ]);
@@ -540,14 +542,14 @@ export const FAQ_ITEMS = Object.freeze([
     category: "Status",
     question: "Is the platform publicly available?",
     answer:
-      "Not as an open public SaaS execution service yet. Phase 1 implemented authenticated POST /api/v1/tasks (bounded HTTP fetch only) and verified it locally on Node.js 22/24 and Cloudflare Workerd, but remote Production Workers have not been updated, tokens are not publicly issued, and billing/queues are not built yet.",
+      "Not as an open public SaaS execution service yet. Phase 1 implemented authenticated POST /api/v1/tasks (bounded HTTP fetch only) backed by D1 tenant keys, UTC quota windows, and Durable Object burst limits, alongside Better Auth account and MCP preview foundations. Public self-serve API keys and billing are not open yet.",
   },
   {
     id: "api-or-mcp",
     category: "Integration",
     question: "Can developers integrate through an API or MCP?",
     answer:
-      "Locally, developers can test the versioned HTTP endpoint POST /api/v1/tasks (with EXPORTFLOW_API_TOKEN configured) as well as read-only inspection endpoints (/api/v1/health, /api/v1/platform, /api/v1/router-preview). MCP server support is part of the target product architecture, not yet exposed as a live endpoint.",
+      "In local and acceptance Workers with D1 and Durable Object bindings, callers can exercise POST /api/v1/tasks (with an ef_live_* tenant key) alongside unauthenticated discovery routes (/api/v1/health, /api/v1/platform, /api/v1/router-preview). An MCP preview Worker with Better Auth OAuth 2.0 consent also exists in the repository for staged verification.",
   },
   {
     id: "hosted-browser",

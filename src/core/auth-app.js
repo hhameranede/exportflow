@@ -136,6 +136,7 @@ async function getPublicAuthFeatureStatus(env, configuredStatus) {
     oauthReady: Boolean(tenantOAuthReady),
     googleEnabled: configuredStatus.googleEnabled && authReady,
     emailPasswordEnabled: configuredStatus.emailPasswordEnabled && authReady,
+    ...(env.LOCAL_DEV_MAILBOX === true ? { localMailboxEnabled: true } : {}),
   });
 }
 
@@ -223,6 +224,29 @@ function buildAuthOptions(env, status) {
     };
   }
 
+  const trustedOrigins = env.LOCAL_DEV_RUNTIME === true
+    ? (request) => {
+        const origins = [baseUrl];
+        try {
+          const originHeader = request?.headers?.get?.("origin");
+          if (originHeader) {
+            const parsed = new URL(originHeader);
+            const isLocal = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+            const isPreview = parsed.protocol === "https:" && parsed.hostname.endsWith(".run.app");
+            if (isLocal || isPreview) origins.push(parsed.origin);
+          }
+          const forwardedHost = request?.headers?.get?.("x-forwarded-host") || request?.headers?.get?.("host");
+          if (forwardedHost && (forwardedHost.startsWith("localhost") || forwardedHost.startsWith("127.0.0.1") || forwardedHost.endsWith(".run.app"))) {
+            const proto = request?.headers?.get?.("x-forwarded-proto") || (forwardedHost.endsWith(".run.app") ? "https" : "http");
+            origins.push(`${proto}://${forwardedHost}`);
+          }
+        } catch {
+          // Ignore malformed headers
+        }
+        return [...new Set(origins)];
+      }
+    : [baseUrl];
+
   const options = {
     appName: "ExportFlow",
     baseURL: baseUrl,
@@ -231,7 +255,7 @@ function buildAuthOptions(env, status) {
     // plugin's parallel session-token endpoint to prevent token-type confusion.
     disabledPaths: ["/token"],
     secret: env.BETTER_AUTH_SECRET,
-    trustedOrigins: [baseUrl],
+    trustedOrigins,
     database: binding,
     socialProviders,
     account: {
@@ -654,6 +678,43 @@ export async function handleAuthRequest(request, env = {}) {
     return textResponse(await getPublicAuthFeatureStatus(env, status));
   }
 
+  if (url.pathname === "/api/auth/dev-mailbox") {
+    if (env.LOCAL_DEV_MAILBOX !== true || !status.authConfigured || !isD1Binding(env.AUTH_DB)) {
+      return textResponse({ error: "not_found" }, 404);
+    }
+    if (request.method !== "GET") {
+      return textResponse({ error: "method_not_allowed" }, 405);
+    }
+    const email = String(url.searchParams.get("email") || "").trim().toLowerCase();
+    const kind = String(url.searchParams.get("kind") || "").trim().toLowerCase();
+    if (!email || !email.includes("@")) {
+      return textResponse({ error: "INVALID_EMAIL", message: "A valid email query parameter is required." }, 400);
+    }
+    try {
+      const nowIso = new Date().toISOString();
+      const row = (kind === "verify" || kind === "reset")
+        ? await env.AUTH_DB.prepare(
+            "SELECT kind, subject, action_path, created_at, expires_at FROM local_dev_mailbox WHERE email = ?1 AND kind = ?2 AND expires_at > ?3 ORDER BY created_at DESC LIMIT 1",
+          ).bind(email, kind, nowIso).first()
+        : await env.AUTH_DB.prepare(
+            "SELECT kind, subject, action_path, created_at, expires_at FROM local_dev_mailbox WHERE email = ?1 AND expires_at > ?2 ORDER BY created_at DESC LIMIT 1",
+          ).bind(email, nowIso).first();
+      if (!row) {
+        return textResponse({ hasMessage: false });
+      }
+      return textResponse({
+        hasMessage: true,
+        kind: row.kind,
+        subject: row.subject,
+        actionPath: row.action_path,
+        createdAt: row.created_at,
+        expiresAt: row.expires_at,
+      });
+    } catch {
+      return textResponse({ hasMessage: false });
+    }
+  }
+
   if (!url.pathname.startsWith("/api/auth/")) return null;
 
   if (url.pathname === "/api/auth/_ops/migrate") {
@@ -762,11 +823,10 @@ const OAUTH_BROWSER_HEADERS = Object.freeze({
   "content-type": "text/html; charset=utf-8",
   "cache-control": "no-store",
   "x-content-type-options": "nosniff",
-  "x-frame-options": "DENY",
   "referrer-policy": "no-referrer",
   "strict-transport-security": "max-age=63072000",
   "permissions-policy": "camera=(), microphone=(), geolocation=()",
-  "content-security-policy": "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+  "content-security-policy": "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'",
 });
 
 function getSignedOAuthQuery(searchParams) {

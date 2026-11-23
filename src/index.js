@@ -4,8 +4,10 @@ import { createTenantTaskGateway } from "./core/tenant-task-gateway.js";
 import { readBoundedJsonBody, TaskContractError, validateTaskRequest } from "./core/task-contract.js";
 import { executeWebTask } from "./core/tasks.js";
 import { handleWebsiteRequest } from "./site/router.js";
+import { BRAND_MARK_SVG } from "./site/diagrams.js";
 import { renderMarketingNotFoundPage } from "./site/marketing.js";
 import { handleAuthRequest, handleOAuthBrowserPage } from "./core/auth-app.js";
+import { handleWorkspaceRequest } from "./core/workspace-api.js";
 
 // Shared namespace owner: the separate MCP Worker binds to this exported class.
 export { TenantBurstRateLimiter } from "./core/durable-tenant-burst-limiter.js";
@@ -92,6 +94,9 @@ export function createWorker(options = {}) {
 
         const adminResponse = await tenantAdminHandler(request, env);
         if (adminResponse) return adminResponse;
+
+        const workspaceResponse = await handleWorkspaceRequest(request, env, options);
+        if (workspaceResponse) return workspaceResponse;
 
         if (url.pathname === "/api/v1/tasks") {
           if (request.method !== "POST") {
@@ -225,7 +230,14 @@ export function createWorker(options = {}) {
         }
 
         if (url.pathname === "/favicon.ico") {
-          return new Response(null, { status: 204 });
+          return new Response(request.method === "HEAD" ? null : BRAND_MARK_SVG, {
+            status: 200,
+            headers: {
+              "content-type": "image/svg+xml; charset=utf-8",
+              "cache-control": "public, max-age=3600",
+              "x-content-type-options": "nosniff",
+            },
+          });
         }
 
         const acceptsHtml = request.headers.get("accept")?.includes("text/html") && !url.pathname.startsWith("/api/");

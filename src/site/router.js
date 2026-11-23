@@ -20,12 +20,11 @@ const HTML_SECURITY_HEADERS = Object.freeze({
   "content-type": "text/html; charset=utf-8",
   "cache-control": "public, max-age=60",
   "x-content-type-options": "nosniff",
-  "x-frame-options": "DENY",
   "referrer-policy": "strict-origin-when-cross-origin",
   "strict-transport-security": "max-age=63072000",
   "permissions-policy": "camera=(), microphone=(), geolocation=()",
   "content-security-policy":
-    "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+    "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'",
 });
 
 function assetResponse(body, contentType, method, maxAge = 300) {
@@ -74,7 +73,7 @@ export function handleWebsiteRequest(request, url) {
   if (pathname === "/assets/marketing.js") {
     return assetResponse(MARKETING_JS, "application/javascript; charset=utf-8", request.method);
   }
-  if (pathname === "/assets/mark.svg") {
+  if (pathname === "/assets/mark.svg" || pathname === "/favicon.ico") {
     return assetResponse(BRAND_MARK_SVG, "image/svg+xml; charset=utf-8", request.method, 3600);
   }
   if (pathname === "/assets/og-card.svg") {
@@ -87,7 +86,7 @@ export function handleWebsiteRequest(request, url) {
     return assetResponse(renderSitemapXml(request.url, MARKETING_PATHS), "application/xml; charset=utf-8", request.method);
   }
 
-  const marketingRoute = resolveMarketingRoute(pathname);
+  const marketingRoute = resolveMarketingRoute(pathname === "/index.html" ? "/" : pathname);
   if (marketingRoute) {
     const privateAccountRoute = AUTH_ROUTES.some(([authPath]) => authPath === marketingRoute.path);
     return htmlResponse(

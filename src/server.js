@@ -1,7 +1,19 @@
+import fs from "node:fs";
 import http from "node:http";
+import path from "node:path";
 import { Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
 import worker from "./index.js";
+import { createLocalRuntimeEnv } from "./core/local-runtime.js";
+
+const PUBLIC_AISTUDIO_DIR = path.resolve(process.cwd(), "public/assets/aistudio");
+const STATIC_ASSET_MIME = Object.freeze({
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".svg": "image/svg+xml; charset=utf-8",
+  ".webp": "image/webp",
+});
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3000;
@@ -53,6 +65,27 @@ export function createNodeHandler({
         res.setHeader("content-type", "application/json; charset=utf-8");
         res.end(JSON.stringify({ error: { code: "INVALID_REQUEST_URL", message: "Invalid request path." } }));
         return;
+      }
+
+      if ((req.method === "GET" || req.method === "HEAD") && url.pathname.startsWith("/assets/aistudio/")) {
+        const relName = path.basename(decodeURIComponent(url.pathname.slice("/assets/aistudio/".length)));
+        const candidate = path.resolve(PUBLIC_AISTUDIO_DIR, relName);
+        if (candidate.startsWith(PUBLIC_AISTUDIO_DIR + path.sep) && fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+          const ext = path.extname(candidate).toLowerCase();
+          const mime = STATIC_ASSET_MIME[ext];
+          if (mime) {
+            res.statusCode = 200;
+            res.setHeader("content-type", mime);
+            res.setHeader("cache-control", "public, max-age=3600");
+            res.setHeader("x-content-type-options", "nosniff");
+            if (req.method === "HEAD") {
+              res.end();
+              return;
+            }
+            res.end(fs.readFileSync(candidate));
+            return;
+          }
+        }
       }
 
       const hasBody = req.method !== "GET" && req.method !== "HEAD";
@@ -126,7 +159,8 @@ const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv
 if (isMain) {
   const port = parsePort(process.env.PORT, DEFAULT_PORT);
   const host = (process.env.HOST || DEFAULT_HOST).trim() || DEFAULT_HOST;
-  startServer({ port, host })
+  createLocalRuntimeEnv({ port, host, baseEnv: process.env })
+    .then((localEnv) => startServer({ port, host, env: localEnv }))
     .then((server) => {
       const addr = server.address();
       const boundHost = typeof addr === "object" && addr ? addr.address : host;
@@ -144,3 +178,4 @@ if (isMain) {
       process.exitCode = 1;
     });
 }
+

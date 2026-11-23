@@ -1,19 +1,17 @@
-export const BRAND_MARK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <defs>
-    <linearGradient id="ef-mark-grad" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#1D4ED8"/>
-      <stop offset="100%" stop-color="#0284C7"/>
-    </linearGradient>
-  </defs>
-  <rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="#FFFFFF" stroke="url(#ef-mark-grad)" stroke-width="1.8"/>
-  <path d="M9 16h6.5M18 11.5h5M18 20.5h5M15.5 16l2.5-4.5m-2.5 4.5 2.5 4.5" stroke="#1D4ED8" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+import { BRAND_CAT_MARK_PATHS } from "./icons.js";
+
+export const BRAND_MARK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#FFFFFF" stroke="rgba(29,29,31,0.16)" stroke-width="2"/>
+  <g transform="translate(8,8) scale(0.75)" color="#1D1D1F">
+    ${BRAND_CAT_MARK_PATHS}
+  </g>
 </svg>`;
 
 export const OG_CARD_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" fill="none">
   <defs>
     <linearGradient id="og-accent" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#1D4ED8"/>
-      <stop offset="100%" stop-color="#0284C7"/>
+      <stop offset="0%" stop-color="#0071E3"/>
+      <stop offset="100%" stop-color="#005BB5"/>
     </linearGradient>
   </defs>
   <rect width="1200" height="630" fill="#F8FAFC"/>
@@ -23,9 +21,11 @@ export const OG_CARD_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0
     <line x1="120" y1="0" x2="120" y2="630"/>
     <line x1="1080" y1="0" x2="1080" y2="630"/>
   </g>
-  <rect x="120" y="156" width="52" height="52" rx="10" fill="#FFFFFF" stroke="url(#og-accent)" stroke-width="2"/>
-  <path d="M134 182h11M149 174h9M149 190h9M145 182l4-8m-4 8 4 8" stroke="#1D4ED8" stroke-width="2.4" stroke-linecap="round"/>
-  <text x="192" y="191" fill="#0B1220" font-family="Plus Jakarta Sans,system-ui,-apple-system,sans-serif" font-size="30" font-weight="700" letter-spacing="-0.5">ExportFlow</text>
+  <rect x="120" y="152" width="58" height="58" rx="15" fill="#FFFFFF" stroke="rgba(29,29,31,0.16)" stroke-width="2"/>
+  <g transform="translate(126,158) scale(0.72)" color="#1D1D1F">
+    ${BRAND_CAT_MARK_PATHS}
+  </g>
+  <text x="196" y="191" fill="#1D1D1F" font-family="Plus Jakarta Sans,system-ui,-apple-system,sans-serif" font-size="30" font-weight="700" letter-spacing="-0.5">ExportFlow</text>
   <text x="120" y="290" fill="#0B1220" font-family="Plus Jakarta Sans,system-ui,-apple-system,sans-serif" font-size="56" font-weight="700" letter-spacing="-1.5">Give AI the Power to Execute.</text>
   <text x="120" y="348" fill="#475569" font-family="Plus Jakarta Sans,system-ui,-apple-system,sans-serif" font-size="26" font-weight="400">One execution layer. Multiple engines. Verifiable results.</text>
   <g transform="translate(120,410)">
