@@ -557,3 +557,66 @@ test("email/password is enabled without email delivery only on the isolated acce
   });
   assert.equal(mismatchedMcpResource.emailPasswordEnabled, false);
 });
+
+
+test("Google OAuth and email/password can be enabled together with real Cloudflare Email delivery", async () => {
+  const sent = [];
+  const env = {
+    AUTH_DB: createD1BindingStub(),
+    BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
+    BETTER_AUTH_URL: "https://exportflow.me",
+    GOOGLE_CLIENT_ID: "synthetic-google-client-id",
+    GOOGLE_CLIENT_SECRET: "synthetic-google-client-secret",
+    EMAIL: {
+      async send(message) {
+        sent.push(message);
+        return { messageId: "synthetic-message-" + sent.length };
+      },
+    },
+    AUTH_EMAIL_FROM: "accounts@exportflow.me",
+  };
+
+  const status = getAuthFeatureStatus(env);
+  assert.equal(status.authConfigured, true);
+  assert.equal(status.googleEnabled, true);
+  assert.equal(status.emailPasswordEnabled, true);
+
+  const options = getAuthOptions(env);
+  assert.equal(options.socialProviders.google.clientId, env.GOOGLE_CLIENT_ID);
+  assert.equal(options.socialProviders.google.clientSecret, env.GOOGLE_CLIENT_SECRET);
+  assert.equal(options.socialProviders.google.requireEmailVerification, true);
+  assert.equal(options.emailAndPassword.enabled, true);
+  assert.equal(options.emailAndPassword.requireEmailVerification, true);
+  assert.equal(typeof options.emailAndPassword.sendResetPassword, "function");
+  assert.equal(typeof options.emailVerification.sendVerificationEmail, "function");
+
+  const user = { email: "synthetic-user@example.test" };
+  await options.emailVerification.sendVerificationEmail({
+    user,
+    url: "https://exportflow.me/api/auth/verify-email?token=synthetic-verification-token",
+  });
+  await options.emailAndPassword.sendResetPassword({
+    user,
+    url: "https://exportflow.me/reset-password?token=synthetic-reset-token",
+  });
+
+  assert.equal(sent.length, 2);
+  assert.deepEqual(sent.map((message) => ({
+    from: message.from,
+    to: message.to,
+    subject: message.subject,
+  })), [
+    {
+      from: "accounts@exportflow.me",
+      to: "synthetic-user@example.test",
+      subject: "Verify your ExportFlow email",
+    },
+    {
+      from: "accounts@exportflow.me",
+      to: "synthetic-user@example.test",
+      subject: "Reset your ExportFlow password",
+    },
+  ]);
+  assert.match(sent[0].html, /synthetic-verification-token/);
+  assert.match(sent[1].text, /synthetic-reset-token/);
+});
