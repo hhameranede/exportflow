@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feat/shared-tenant-auth-quota-20261120
+      - fix/rest-body-tests-stack-20261123
     paths:
       - .github/acceptance/tenant-burst.approved
       - .github/workflows/tenant-burst-acceptance.yml
@@ -17,11 +18,12 @@ jobs:
   acceptance:
     if: >-
       ${{ github.event_name == 'push' &&
-          github.ref == 'refs/heads/feat/shared-tenant-auth-quota-20261120' &&
-          contains(github.event.head_commit.message, 'tenant-burst-acceptance-approved') }}
+          contains(github.event.head_commit.message, 'tenant-burst-acceptance-approved') &&
+          (github.ref == 'refs/heads/feat/shared-tenant-auth-quota-20261120' ||
+           github.ref == 'refs/heads/fix/rest-body-tests-stack-20261123') }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout approved PR #89 branch
+      - name: Checkout the exact one-shot approved Acceptance branch
         uses: actions/checkout@v4
       - name: Set up Node.js
         uses: actions/setup-node@v4
