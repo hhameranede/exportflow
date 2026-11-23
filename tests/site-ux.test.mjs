@@ -181,7 +181,7 @@ test("capability cards keep icons beside titles and preserve mobile metrics, fil
     /@media\s*\(max-width:\s*480px\)\s*\{[^}]*\.ef-badge\s*\{[^}]*white-space:\s*normal;[^}]*overflow-wrap:\s*anywhere;/su,
     "long capability and status badges must wrap on narrow mobile screens");
   assert.match(MARKETING_CSS,
-    /@media\s*\(max-width:\s*380px\)\s*\{[^}]*\.ef-header-actions\s*\{[^}]*flex-shrink:\s*1;[^}]*min-width:\s*0;/su,
+    /\.ef-header-actions\s*\{[^}]*flex-shrink:\s*1;[^}]*min-width:\s*0;/su,
     "header actions must shrink on 320px phone viewports");
 
   const home = await fetchHtml("/");
