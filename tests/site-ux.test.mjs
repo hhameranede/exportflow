@@ -23,6 +23,25 @@ test("FAQ is included in the marketing routes and renders seven accessible discl
   assert.match(html, /public REST Task contract/i);
 });
 
+test("marketing hierarchy removes decorative overlines and keeps meaningful process context", async () => {
+  for (const path of ["/", "/platform", "/use-cases", "/developers", "/demo", "/faq", "/contact", "/signin", "/signup", "/account"]) {
+    const html = await fetchHtml(path);
+    assert.doesNotMatch(html, /class="ef-kicker(?:\s|")/, path + " should not render decorative overlines");
+    assert.doesNotMatch(html, /class="ef-section-glyph"/, path + " should not render repeated heading icon tiles");
+    assert.doesNotMatch(html, /class="ef-auth-brand-badge"/, path + " should not repeat the brand mark beside page titles");
+    assert.doesNotMatch(html, /assets\/aistudio\//, path + " should not reference generated Studio assets");
+  }
+
+  const homeHtml = await fetchHtml("/");
+  assert.doesNotMatch(homeHtml, /class="ef-cap-num"/, "capability cards are not a numbered sequence");
+  assert.doesNotMatch(homeHtml, /EF\/01/, "decorative graph identifiers should not be shown");
+  assert.match(homeHtml, /data-step-trigger="0"/, "the actual execution sequence remains interactive");
+  assert.match(homeHtml, /class="ef-timeline-dot"/, "the meaningful process timeline remains numbered");
+
+  const platformHtml = await fetchHtml("/platform");
+  assert.match(platformHtml, /class="ef-layer-step"/, "ordered architecture layers retain their step context");
+});
+
 test("marketing client bundle parses, protects the mobile drawer, and avoids native alert/confirm", () => {
   assert.doesNotThrow(() => new Function(MARKETING_JS));
   assert.match(MARKETING_JS, /menuBtn\.getAttribute\("aria-expanded"\) !== "true"\) return/);
