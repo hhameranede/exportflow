@@ -115,9 +115,9 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
   page.on("console", (message) => {
     if (message.type() !== "error") return;
     const text = message.text();
-    const expectedTenantNotReady = route.includes("/oauth/select-tenant") &&
+    const expectedOAuthUnavailable = (route === "/oauth/consent" || route === "/oauth/select-tenant") &&
       text.includes("status of 503 (Service Unavailable)");
-    if (!expectedTenantNotReady) consoleErrors.push(text);
+    if (!expectedOAuthUnavailable) consoleErrors.push(text);
   });
   page.on("response", (response) => {
     try {
@@ -370,13 +370,14 @@ async function checkFeaturePages(browser) {
   assert.equal(await presets.count(), 5, "Demo should expose five illustrative scenario presets");
   const publicFetch = page.locator('[data-demo-preset="public-fetch"]');
   assert.equal(await publicFetch.count(), 1, "Demo public-fetch preset is missing");
-  if (await publicFetch.isVisible()) {
+  const demoIsLocked = await publicFetch.evaluate((element) => Boolean(element.closest("[inert]")));
+  if (demoIsLocked) {
+    const authGate = page.locator("[data-auth-gate]").first();
+    assert.ok(await authGate.isVisible(), "Demo's auth gate must be visible while its workbench is inert");
+    assert.ok(await authGate.locator('a[href*="/signin"]').count(), "Demo sign-in action is missing");
+  } else {
     await publicFetch.click();
     assert.equal(await publicFetch.getAttribute("aria-pressed"), "true", "Demo preset did not become selected");
-  } else {
-    const authGate = page.locator("[data-auth-gate]");
-    assert.ok(await authGate.isVisible(), "Demo's gated state is not visible when its workbench is hidden");
-    assert.ok(await authGate.locator('a[href*="/signin"]').count(), "Demo sign-in action is missing");
   }
 
   await context.close();
@@ -393,17 +394,19 @@ async function checkAuthAndContactPages(browser) {
     await page.goto(baseUrl + path, { waitUntil: "domcontentloaded" });
     await page.locator("main h1").waitFor({ state: "visible", timeout: 8000 });
     assert.equal(await page.locator("main h1").count(), 1, "Auth route heading missing: " + path);
-    const passwordIds = await page.locator('input[type="password"]').evaluateAll((nodes) =>
-      nodes.filter((node) => node.id && !node.disabled && node.getClientRects().length).map((node) => node.id)
-    );
-    for (const id of passwordIds) {
-      const password = page.locator("#" + id);
-      const toggle = page.locator('[data-password-toggle="' + id + '"]').first();
-      if (await toggle.count()) {
-        await toggle.click();
-        assert.equal(await password.getAttribute("type"), "text", "Password visibility toggle failed on " + path);
-        await toggle.click();
-        assert.equal(await password.getAttribute("type"), "password", "Password visibility toggle did not restore masking on " + path);
+    if (["/signin", "/signup", "/reset-password"].includes(path)) {
+      const passwordIds = await page.locator('input[type="password"]').evaluateAll((nodes) =>
+        nodes.filter((node) => node.id && !node.disabled && node.getClientRects().length).map((node) => node.id)
+      );
+      for (const id of passwordIds) {
+        const password = page.locator("#" + id);
+        const toggle = page.locator('[data-password-toggle="' + id + '"]').first();
+        if (await toggle.count()) {
+          await toggle.click();
+          assert.equal(await password.getAttribute("type"), "text", "Password visibility toggle failed on " + path);
+          await toggle.click();
+          assert.equal(await password.getAttribute("type"), "password", "Password visibility toggle did not restore masking on " + path);
+        }
       }
     }
     if (path === "/account") {
@@ -563,17 +566,6 @@ async function checkLocalAccountLifecycle(browser) {
   await totpPrompt.locator('button[type="submit"]').click();
   await page.waitForURL((url) => url.pathname.endsWith("/account"), { timeout: 12000 });
 
-  await page.goto(baseUrl + "/platform", { waitUntil: "domcontentloaded" });
-  const authenticatedLayerTabs = page.locator('[data-tab-group="platform-layers"] [data-tab-trigger]');
-  await page.waitForFunction(() => {
-    const tab = document.querySelector('[data-tab-group="platform-layers"] [data-tab-trigger]');
-    return Boolean(tab && !tab.closest("[inert]"));
-  }, null, { timeout: 10000 });
-  await authenticatedLayerTabs.nth(1).scrollIntoViewIfNeeded();
-  await authenticatedLayerTabs.nth(1).click();
-  assert.equal(await authenticatedLayerTabs.nth(1).getAttribute("aria-selected"), "true",
-    "Verified account should be able to activate platform architecture layers");
-
   await page.goto(baseUrl + "/workspace", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => {
     const shell = document.querySelector("[data-workspace-shell]");
@@ -599,6 +591,51 @@ async function checkLocalAccountLifecycle(browser) {
     return Boolean(status && status.textContent.toLowerCase().includes("succeeded"));
   }, null, { timeout: 15000 });
   assert.ok(await page.locator("[data-ws-history-list] li").count() > 0, "Workspace execution was not recorded in local history");
+
+  // Prove authentication unlocks controls that were inert in the signed-out route sweep.
+  await page.goto(baseUrl + "/platform", { waitUntil: "domcontentloaded" });
+  const authenticatedLayerTabs = page.locator('[data-tab-group="platform-layers"] [data-tab-trigger]');
+  try {
+    await page.waitForFunction(() => {
+      const shell = document.querySelector('[data-requires-auth="true"]');
+      return Boolean(shell && shell.getAttribute("data-auth-locked") === "false");
+    }, null, { timeout: 15000 });
+  } catch (error) {
+    const state = await page.evaluate(async () => {
+      const shell = document.querySelector('[data-requires-auth="true"]');
+      const content = shell?.querySelector("[data-auth-gate-content]");
+      let session = { status: null, hasUser: false };
+      try {
+        const response = await fetch("/api/auth/get-session", { credentials: "include", cache: "no-store" });
+        const body = await response.json().catch(() => null);
+        session = { status: response.status, hasUser: Boolean(body?.user?.id) };
+      } catch (cause) {
+        session = { error: String(cause) };
+      }
+      return {
+        authLocked: shell?.getAttribute("data-auth-locked") ?? null,
+        contentInert: Boolean(content?.hasAttribute("inert")),
+        session
+      };
+    });
+    throw new Error("Authenticated platform gate did not unlock after Workspace simulation: " +
+      JSON.stringify(state) + "; " + (error?.message || String(error)));
+  }
+  await authenticatedLayerTabs.nth(1).scrollIntoViewIfNeeded();
+  await authenticatedLayerTabs.nth(1).click();
+  assert.equal(await authenticatedLayerTabs.nth(1).getAttribute("aria-selected"), "true",
+    "Verified account should be able to activate platform architecture layers");
+
+  await page.goto(baseUrl + "/demo", { waitUntil: "domcontentloaded" });
+  const authenticatedDemoPreset = page.locator('[data-demo-preset="public-fetch"]');
+  await page.waitForFunction(() => {
+    const button = document.querySelector('[data-demo-preset="public-fetch"]');
+    return Boolean(button && !button.closest("[inert]"));
+  }, null, { timeout: 15000 });
+  await authenticatedDemoPreset.click();
+  assert.equal(await authenticatedDemoPreset.getAttribute("aria-pressed"), "true",
+    "Verified account should be able to activate an interactive Demo preset");
+
   await context.close();
 }
 
