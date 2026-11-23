@@ -18,6 +18,7 @@ jobs:
   acceptance:
     if: >-
       ${{ github.event_name == 'push' &&
+          contains(github.event.head_commit.added, '.github/acceptance/tenant-burst.approved') &&
           contains(github.event.head_commit.message, 'tenant-burst-acceptance-approved') &&
           (github.ref == 'refs/heads/feat/shared-tenant-auth-quota-20261120' ||
            github.ref == 'refs/heads/fix/rest-body-tests-stack-20261123') }}
