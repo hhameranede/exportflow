@@ -27,6 +27,10 @@ function validateInput(input) {
   if (!["wikipedia", "openalex", "crossref"].includes(input.source)) {
     throw new ResearchPipelineError("INVALID_SEARCH_SOURCE", "Choose wikipedia, openalex, or crossref as the research source.");
   }
+  const cacheMode = input.cacheMode === undefined ? "default" : input.cacheMode;
+  if (!["default", "bypass"].includes(cacheMode)) {
+    throw new ResearchPipelineError("INVALID_CACHE_MODE", "cacheMode must be 'default' or 'bypass'.");
+  }
   const candidateLimit = input.candidateLimit === undefined
     ? RESEARCH_PIPELINE_LIMITS.defaultCandidates
     : input.candidateLimit;
@@ -46,6 +50,7 @@ function validateInput(input) {
   return {
     query: input.query.trim(),
     source: input.source,
+    cacheMode,
     limit: input.limit,
     candidateLimit,
     schema,
@@ -163,6 +168,7 @@ export function createResearchPipeline({
       const searchResult = await searchAdapter.execute({
         query: validated.query,
         source: validated.source,
+        cacheMode: validated.cacheMode,
         limit: Math.min(validated.limit ?? 5, 10),
         ...(signal ? { signal } : {}),
       });
@@ -203,7 +209,7 @@ export function createResearchPipeline({
 
         let fetched;
         try {
-          fetched = await runAdapter("http.fetch.v1", { url: target.href }, signal ? { signal } : {});
+          fetched = await runAdapter("http.fetch.v1", { url: target.href, cacheMode: validated.cacheMode }, signal ? { signal } : {});
           throwIfCancelled();
         } catch (error) {
           if (error?.code === "TASK_CANCELLED" || signal?.aborted) throw Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });

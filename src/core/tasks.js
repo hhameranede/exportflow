@@ -262,6 +262,7 @@ export async function executeWebTask(input, options = {}) {
         (signal) => researchAdapter.execute({
           query: input.query,
           source: input.source,
+          cacheMode: input.cacheMode,
           schema: input.schema,
           limit: input.limit,
           candidateLimit: input.candidateLimit,

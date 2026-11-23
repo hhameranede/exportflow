@@ -1488,13 +1488,13 @@ test("default research pipeline performs search, static fetch and deterministic 
   const calls = [];
   const task = await executeWebTask({
     goal: "Research and extract a public field", operation: "research",
-    query: "test research", source: "openalex",
+    query: "test research", source: "openalex", cacheMode: "bypass",
     schema: { type: "object", properties: { name: { type: "string", "x-source": "jsonld:name" } }, required: ["name"] },
     candidateLimit: 1,
   }, {
     idFactory: () => "task-free-research",
-    fetchImpl: async (url) => {
-      calls.push(url);
+    fetchImpl: async (url, init) => {
+      calls.push({ url, cache: init?.cache });
       if (new URL(url).hostname === "api.openalex.org") {
         return new Response(JSON.stringify({ results: [{
           id: "https://openalex.org/W1", title: "Research page",
@@ -1510,4 +1510,5 @@ test("default research pipeline performs search, static fetch and deterministic 
   assert.equal(task.result.data.fields.name, "Verified from static JSON-LD");
   assert.equal(task.result.data.rendering, "static-http-only");
   assert.equal(calls.length, 2);
+  assert.deepEqual(calls.map((call) => call.cache), ["no-store", "no-store"]);
 });
