@@ -163,7 +163,7 @@ test("tools/list exposes only the currently implemented read-only tools", async 
   const body = await response.json();
   const tools = body.result.tools;
   assert.equal(response.status, 200);
-  assert.deepEqual(tools.map((tool) => tool.name), ["exportflow_capabilities", "web_fetch", "web_map", "web_crawl", "web_extract"]);
+  assert.deepEqual(tools.map((tool) => tool.name), ["exportflow_capabilities", "web_fetch", "web_map", "web_crawl", "web_extract", "web_search", "web_research"]);
   assert.ok(tools.every((tool) => tool.annotations.readOnlyHint === true));
   const capabilityTool = tools.find((tool) => tool.name === "exportflow_capabilities");
   assert.equal(capabilityTool._meta.securitySchemes[0].type, "noauth");

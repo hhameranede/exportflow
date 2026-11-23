@@ -167,6 +167,7 @@ export function createWorker(options = {}) {
         if (url.pathname === "/api/v1/platform") {
           const authConfigured = isAuthConfigured(env);
           let authReady = false;
+          let platformScopes = [];
           if (request.headers.has("authorization")) {
             const auth = await tenantTaskGateway.authenticate(request, env, {
               requiredScope: "tasks:fetch",
@@ -181,6 +182,7 @@ export function createWorker(options = {}) {
                 },
               );
             }
+            platformScopes = auth.identity.scopes;
             authReady = await hasQuotaSchema(env);
           }
           return json({
@@ -208,9 +210,9 @@ export function createWorker(options = {}) {
                   "web.crawl.v1": "tasks:crawl", "web.extract.v1": "tasks:extract",
                   "web.search.v1": "tasks:search",
                 }[adapter.id];
-                return required && (auth.identity.scopes.includes(required) || auth.identity.scopes.includes("tasks:*") || auth.identity.scopes.includes("*"));
+                return required && (platformScopes.includes(required) || platformScopes.includes("tasks:*") || platformScopes.includes("*"));
               }).map((adapter) => adapter.id),
-              ...(auth.identity.scopes.some((scope) => ["tasks:research", "tasks:*", "*"].includes(scope)) ? ["web.research.v1"] : []),
+              ...(platformScopes.some((scope) => ["tasks:research", "tasks:*", "*"].includes(scope)) ? ["web.research.v1"] : []),
             ] : [],
           });
         }
