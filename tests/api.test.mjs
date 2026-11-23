@@ -104,19 +104,15 @@ test("tenant API authentication fails closed when the dedicated D1 binding is mi
 });
 
 test("REST rejects an unauthenticated task before reading or parsing its body", async () => {
+  const request = makeTaskRequest({ goal: "Fetch", url: "https://example.com" }, { token: null });
+  const bodyGetter = Object.getOwnPropertyDescriptor(Request.prototype, "body").get;
   let bodyReads = 0;
-  const body = new ReadableStream({
-    pull(controller) {
+  Object.defineProperty(request, "body", {
+    configurable: true,
+    get() {
       bodyReads += 1;
-      controller.enqueue(new TextEncoder().encode(JSON.stringify({ goal: "Fetch", url: "https://example.com" })));
-      controller.close();
+      return bodyGetter.call(this);
     },
-  }, { highWaterMark: 0 });
-  const request = new Request("https://api.exportflow.local/api/v1/tasks", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body,
-    duplex: "half",
   });
   const response = await createWorker().fetch(request, makeTestEnv());
   assert.equal(response.status, 401);
