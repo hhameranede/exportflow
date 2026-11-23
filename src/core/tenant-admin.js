@@ -353,5 +353,76 @@ export function createTenantAdminService({
       }
       return Object.freeze({ tenantId, planCode, updatedAt, quotaWindowNote: "An existing UTC usage window keeps its original policy snapshot." });
     },
+
+    async assignTenantMembership(input = {}) {
+      input = requireInputObject(input);
+      const tenantId = requireText(input.tenantId, "tenantId", 64);
+      const userId = requireText(input.userId, "userId", 128);
+      const role = input.role === undefined ? "member" : input.role;
+      if (!TENANT_ID_PATTERN.test(tenantId) || !["owner", "admin", "member"].includes(role) ||
+          !/^[A-Za-z0-9_:@.-]{1,128}$/.test(userId)) {
+        throw new TenantAdminError("INVALID_TENANT_MEMBERSHIP", "Tenant membership reference or role is invalid.");
+      }
+      const actorId = await requireAdmin("tenant_memberships:assign", "tenant_membership", tenantId + "/" + userId);
+      const updatedAt = timestampFrom(now);
+      const membershipId = cryptoImpl.randomUUID();
+      const results = await commit([
+        db.prepare(
+          "INSERT INTO tenant_memberships (membership_id, user_id, tenant_id, role, status, created_by, created_at, updated_at, revoked_at) " +
+          "SELECT ?1, ?2, ?3, ?4, 'active', ?5, ?6, ?6, NULL FROM tenants AS t " +
+          "JOIN plan_policies AS p ON p.plan_code = t.plan_code " +
+          "WHERE t.tenant_id = ?3 AND t.status = 'active' AND p.status = 'active' " +
+          "ON CONFLICT(user_id, tenant_id) DO UPDATE SET role = excluded.role, status = 'active', membership_version = tenant_memberships.membership_version + 1, updated_at = excluded.updated_at, revoked_at = NULL"
+        ).bind(membershipId, userId, tenantId, role, actorId, updatedAt),
+        db.prepare(
+          "INSERT INTO tenant_admin_audit_log (event_id, actor_id, action, resource_type, resource_id, details_json, created_at) " +
+          "SELECT ?1, ?2, 'tenant_memberships:assign', 'tenant_membership', ?3, ?4, ?5 WHERE changes() = 1"
+        ).bind(cryptoImpl.randomUUID(), actorId, tenantId + "/" + userId, JSON.stringify({ tenantId, userId, role, status: "active" }), updatedAt),
+      ]);
+      if (safeChanges(results[0]) !== 1) {
+        throw new TenantAdminError("ACTIVE_TENANT_NOT_FOUND", "An active tenant and plan are required before assigning a member.", 409);
+      }
+      return Object.freeze({ tenantId, userId, role, status: "active", updatedAt });
+    },
+
+    async revokeTenantMembership(input = {}) {
+      input = requireInputObject(input);
+      const tenantId = requireText(input.tenantId, "tenantId", 64);
+      const userId = requireText(input.userId, "userId", 128);
+      if (!TENANT_ID_PATTERN.test(tenantId) || !/^[A-Za-z0-9_:@.-]{1,128}$/.test(userId)) {
+        throw new TenantAdminError("INVALID_TENANT_MEMBERSHIP", "Tenant membership reference is invalid.");
+      }
+      const actorId = await requireAdmin("tenant_memberships:revoke", "tenant_membership", tenantId + "/" + userId);
+      const updatedAt = timestampFrom(now);
+      const results = await commit([
+        db.prepare(
+          "UPDATE tenant_memberships SET status = 'revoked', updated_at = ?1, revoked_at = ?1 " +
+          "WHERE tenant_id = ?2 AND user_id = ?3 AND status = 'active' " +
+          "AND (role <> 'owner' OR EXISTS (" +
+          "SELECT 1 FROM tenant_memberships AS other WHERE other.tenant_id = ?2 AND other.status = 'active' " +
+          "AND other.role = 'owner' AND other.user_id <> ?3))"
+        ).bind(updatedAt, tenantId, userId),
+        db.prepare(
+          "INSERT INTO tenant_admin_audit_log (event_id, actor_id, action, resource_type, resource_id, details_json, created_at) " +
+          "SELECT ?1, ?2, 'tenant_memberships:revoke', 'tenant_membership', ?3, ?4, ?5 WHERE changes() = 1"
+        ).bind(cryptoImpl.randomUUID(), actorId, tenantId + "/" + userId, JSON.stringify({ tenantId, userId, status: "revoked" }), updatedAt),
+      ]);
+      if (safeChanges(results[0]) !== 1) {
+        let current = null;
+        try {
+          current = await db.prepare(
+            "SELECT role, status FROM tenant_memberships WHERE tenant_id = ?1 AND user_id = ?2 LIMIT 1"
+          ).bind(tenantId, userId).first();
+        } catch {
+          throw new TenantAdminError("TENANT_ADMIN_STORAGE_UNAVAILABLE", "Tenant administration storage is temporarily unavailable.", 503);
+        }
+        if (current?.role === "owner" && current.status === "active") {
+          throw new TenantAdminError("LAST_TENANT_OWNER_REQUIRED", "A tenant must retain at least one active owner.", 409);
+        }
+        throw new TenantAdminError("TENANT_MEMBERSHIP_NOT_FOUND", "The active tenant membership was not found.", 404);
+      }
+      return Object.freeze({ tenantId, userId, status: "revoked", revokedAt: updatedAt });
+    },
+
   });
 }

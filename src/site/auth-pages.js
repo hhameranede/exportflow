@@ -4,6 +4,8 @@ export const AUTH_ROUTES = [
   ["/forgot-password", "Reset password", "Request a secure password reset link.", "auth-forgot"],
   ["/reset-password", "Choose a new password", "Set a new password for your ExportFlow account.", "auth-reset"],
   ["/account", "Account", "Manage your ExportFlow profile, connected accounts, and sessions.", "auth-account"],
+  ["/oauth/consent", "Authorize ExportFlow", "Review the permissions requested by this application.", "auth-oauth-consent"],
+  ["/oauth/select-tenant", "Select a workspace", "Choose the ExportFlow workspace for this connection.", "auth-oauth-select-tenant"],
 ];
 
 const COPY = {
@@ -139,9 +141,54 @@ export function getAuthCopy(locale = "en") {
   return COPY[locale] || COPY.en;
 }
 
-export function renderAuthPage(type, t, locale, hrefFor, escapeHtml, arrowRightIcon, arrowUpRightIcon) {
+export function renderAuthPage(type, t, locale, hrefFor, escapeHtml, arrowRightIcon, arrowUpRightIcon, oauthDetails = {}) {
   const c = getAuthCopy(locale);
   const configStatus = '<p class="ef-form-banner" data-auth-config-status role="status" aria-live="polite">' + escapeHtml(c.checking) + '</p>';
+
+  if (type === "auth-oauth-consent") {
+    const requestedScopes = Array.isArray(oauthDetails.scopes) ? oauthDetails.scopes : [];
+    const descriptions = {
+      "openid": "Confirm your account identity.",
+      "profile": "Share your basic profile information.",
+      "email": "Share your verified email address.",
+      "offline_access": "Allow the connection to refresh access while the link remains active.",
+      "tasks:fetch": "Fetch public web pages and return source evidence.",
+      "tasks:map": "Discover bounded same-origin pages on a website.",
+      "tasks:crawl": "Crawl a small number of public pages.",
+      "tasks:extract": "Extract explicitly requested fields from public pages.",
+    };
+    const scopeRows = requestedScopes.map(function (scope) {
+      return '<li class="ef-session-row"><div><strong>' + escapeHtml(scope) + '</strong><p>' +
+        escapeHtml(descriptions[scope] || "Requested application permission.") + '</p></div></li>';
+    }).join("");
+    const content =
+      '<div class="ef-account-card">' +
+        '<p class="ef-acc-card-desc">An application is requesting access to your ExportFlow account.</p>' +
+        '<p><strong>Client ID</strong><br><code>' + escapeHtml(oauthDetails.clientId || "Unknown application") + '</code></p>' +
+        '<h2>Requested permissions</h2>' +
+        '<ul class="ef-session-list">' + scopeRows + '</ul>' +
+        '<p class="ef-acc-card-desc">Only approve this connection if you recognize the application and agree with these permissions. You can disconnect access later by revoking its authorization.</p>' +
+        '<div class="ef-hero-actions ef-mt-20">' +
+          '<button type="button" class="ef-btn ef-btn-primary" data-oauth-consent-accept>Authorize</button>' +
+          '<button type="button" class="ef-btn ef-btn-secondary" data-oauth-consent-deny>Cancel</button>' +
+        '</div>' +
+        '<p class="ef-form-banner" data-oauth-flow-status role="status" aria-live="polite"></p>' +
+      '</div>';
+    return authFrame("ACCOUNT PERMISSIONS", "Authorize ExportFlow", "Review the access requested before connecting this application.", content);
+  }
+
+  if (type === "auth-oauth-select-tenant") {
+    const content =
+      '<form class="ef-auth-form" data-oauth-tenant-form>' +
+        '<div class="ef-field"><label for="oauth-tenant-choice">ExportFlow workspace</label>' +
+          '<select id="oauth-tenant-choice" name="tenantId" required><option value="">Loading workspaces…</option></select>' +
+        '</div>' +
+        '<p class="ef-acc-card-desc">The selected workspace determines which account data and usage allowance this connection can access.</p>' +
+        '<button type="submit" class="ef-btn ef-btn-primary ef-btn-full" disabled data-oauth-tenant-submit>Continue</button>' +
+        '<p class="ef-form-banner" data-oauth-flow-status role="status" aria-live="polite"></p>' +
+      '</form>';
+    return authFrame("WORKSPACE ACCESS", "Choose a workspace", "Select the workspace this AI connection should access.", content);
+  }
 
   if (type === "auth-signin") {
     const fields = [

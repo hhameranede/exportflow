@@ -21,6 +21,7 @@ test("authentication remains disabled without a dedicated D1 binding and server 
   const status = getAuthFeatureStatus({});
   assert.deepEqual(status, {
     authConfigured: false,
+    tenantOAuthConfigured: false,
     googleEnabled: false,
     emailPasswordEnabled: false,
   });
@@ -65,6 +66,7 @@ test("Google OAuth requires a verified provider email and explicit account linki
     GOOGLE_CLIENT_SECRET: "test-client-secret",
   });
 
+  assert.deepEqual(options.disabledPaths, ["/token"]);
   assert.equal(options.socialProviders.google.requireEmailVerification, true);
   assert.equal(options.account.accountLinking.enabled, true);
   assert.equal(options.account.accountLinking.disableImplicitLinking, true);
@@ -206,7 +208,7 @@ test("Worker routes /api/auth before its generic GET-only fallback", async () =>
 
   const admin = await worker.fetch(new Request("https://exportflow.me/api/v1/admin/tenants", {
     method: "POST",
-    headers: { origin: "https://exportflow.me", "content-type": "application/json" },
+    headers: { origin: "https://exportflow.me", "content-type": "application/json", "cf-connecting-ip": "203.0.113.10" },
     body: JSON.stringify({ planCode: "free" }),
   }));
   assert.equal(admin.status, 503);

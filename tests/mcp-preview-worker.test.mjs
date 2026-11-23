@@ -128,8 +128,14 @@ test("tools/list exposes only the currently implemented read-only tools", async 
   const capabilityTool = tools.find((tool) => tool.name === "exportflow_capabilities");
   assert.equal(capabilityTool._meta.securitySchemes[0].type, "noauth");
   for (const tool of tools.filter((item) => item.name !== "exportflow_capabilities")) {
-    assert.equal(tool._meta.securitySchemes[0].type, "http");
-    assert.equal(tool._meta.securitySchemes[0].scheme, "bearer");
+    assert.equal(tool.securitySchemes[0].type, "oauth2");
+    assert.deepEqual(tool.securitySchemes[0].scopes, [{
+      web_fetch: "tasks:fetch",
+      web_map: "tasks:map",
+      web_crawl: "tasks:crawl",
+      web_extract: "tasks:extract",
+    }[tool.name]]);
+    assert.deepEqual(tool._meta.securitySchemes, tool.securitySchemes);
   }
 });
 
@@ -139,7 +145,7 @@ test("web_fetch delegates to shared task execution and applies weighted rate lim
     name: "web_fetch", arguments: { url: "https://example.com/" },
   }), { headers: {
     "cf-connecting-ip": "203.0.113.42",
-    authorization: "Bearer synthetic-tenant-key",
+    authorization: "Bearer " + TENANT_TOKEN,
   } }), env);
   const body = await response.json();
   assert.equal(response.status, 200);
@@ -354,7 +360,7 @@ test("tool calls enforce operation-specific scopes before quota reservation", as
   const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
     name: "web_crawl",
     arguments: { url: "https://example.com/" },
-  }), { headers: { authorization: "Bearer synthetic-tenant-key" } }), env);
+  }), { headers: { authorization: "Bearer " + TENANT_TOKEN } }), env);
   const body = await response.json();
   assert.equal(body.result.structuredContent.error, "INSUFFICIENT_SCOPE");
   assert.equal(calls.auth[0].requiredScope, "tasks:crawl");
@@ -376,7 +382,7 @@ test("MCP rejects exhausted tenant quotas before executing a task", async () => 
   const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
     name: "web_fetch",
     arguments: { url: "https://example.com/" },
-  }), { headers: { authorization: "Bearer synthetic-tenant-key" } }), env);
+  }), { headers: { authorization: "Bearer " + TENANT_TOKEN } }), env);
   const body = await response.json();
   assert.equal(body.result.isError, true);
   assert.equal(body.result.structuredContent.error, "PLAN_QUOTA_EXCEEDED");
@@ -481,4 +487,32 @@ test("MCP real tenant gateway enforces D1-derived operation scope before quota r
   assert.equal(body.result.structuredContent.error, "INSUFFICIENT_SCOPE");
   assert.equal(calls.tasks.length, 0);
   assert.equal(db.usage.size, 0);
+});
+
+
+test("MCP protected-resource metadata advertises the canonical resource and issuer", async () => {
+  const { worker, env } = makeWorker();
+  const response = await worker.fetch(new Request("https://" + HOST + "/.well-known/oauth-protected-resource/mcp"), env);
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.resource, "https://mcp.exportflow.me/mcp");
+  assert.deepEqual(body.authorization_servers, ["https://exportflow.me/api/auth"]);
+  assert.deepEqual(body.scopes_supported, ["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract"]);
+});
+
+test("protected tool calls return the ChatGPT OAuth challenge when no access token is present", async () => {
+  const { worker, env, calls } = makeWorker();
+  const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
+    name: "web_fetch",
+    arguments: { url: "https://example.com/" },
+  })), env);
+  const body = await response.json();
+  const result = body.result;
+  const challenge = result?._meta?.["mcp/www_authenticate"]?.[0] || "";
+  assert.equal(response.status, 200);
+  assert.equal(result.isError, true);
+  assert.match(challenge, /resource_metadata="https:\/\/mcp\.exportflow\.me\/\.well-known\/oauth-protected-resource\/mcp"/);
+  assert.match(challenge, /error="invalid_token"/);
+  assert.match(challenge, /error_description="/);
+  assert.equal(calls.tasks.length, 0);
 });

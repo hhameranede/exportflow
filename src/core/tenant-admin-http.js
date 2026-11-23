@@ -14,6 +14,7 @@ const REQUIRED_ADMIN_TABLES = Object.freeze([
   "api_keys",
   "tenant_request_usage",
   "tenant_admin_audit_log",
+  "tenant_memberships",
 ]);
 const REQUIRED_ADMIN_TRIGGERS = Object.freeze([
   "guard_tenant_request_usage_limit_insert",
@@ -22,6 +23,9 @@ const REQUIRED_ADMIN_TRIGGERS = Object.freeze([
   "prevent_mid_month_tenant_plan_period_change",
   "prevent_tenant_admin_audit_update",
   "prevent_tenant_admin_audit_delete",
+  "guard_tenant_membership_last_owner",
+  "prevent_tenant_membership_identity_update",
+  "prevent_tenant_membership_delete",
 ]);
 const REQUIRED_ADMIN_SCHEMA_OBJECTS = Object.freeze([
   ...REQUIRED_ADMIN_TABLES.map((name) => Object.freeze({ type: "table", name })),
@@ -64,6 +68,37 @@ function routeFor(pathname) {
   }
   if (pathname === ADMIN_PREFIX + "/tenants") {
     return { method: "provisionTenant", allowed: ["tenantId", "planCode"], required: ["planCode"], status: 201 };
+  }
+
+
+  const membershipCollection = new RegExp("^" + ADMIN_PREFIX + "/tenants/([^/]+)/memberships$").exec(pathname);
+  if (membershipCollection) {
+    let tenantId;
+    try { tenantId = decodeURIComponent(membershipCollection[1]); } catch { return null; }
+    return {
+      method: "assignTenantMembership",
+      input: (body) => ({ tenantId, userId: body.userId, role: body.role }),
+      allowed: ["userId", "role"],
+      required: ["userId"],
+      status: 201,
+    };
+  }
+
+  const membershipRevoke = new RegExp("^" + ADMIN_PREFIX + "/tenants/([^/]+)/memberships/([^/]+)/revoke$").exec(pathname);
+  if (membershipRevoke) {
+    let tenantId;
+    let userId;
+    try {
+      tenantId = decodeURIComponent(membershipRevoke[1]);
+      userId = decodeURIComponent(membershipRevoke[2]);
+    } catch { return null; }
+    return {
+      method: "revokeTenantMembership",
+      input: () => ({ tenantId, userId }),
+      allowed: [],
+      required: [],
+      status: 200,
+    };
   }
 
   const match = new RegExp(
@@ -141,8 +176,6 @@ export function createTenantAdminHttpHandler({
 
     let rate;
     try {
-      // The platform-admin prefix isolates these IP buckets from tenant gateway
-      // quota buckets while reusing the same globally shared Durable Object.
       const limiter = adminRateLimiter || createDurableTenantBurstLimiter(
         env.TENANT_BURST_LIMITER,
         { limit: ADMIN_RATE_LIMIT_MAX_REQUESTS, windowMs: ADMIN_RATE_LIMIT_WINDOW_MS },
