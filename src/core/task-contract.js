@@ -12,6 +12,7 @@ const ALLOWED_TOP_LEVEL_KEYS = new Set([
   "operation",
   "requiresJavascript",
   "requiresInteraction",
+  "cacheMode",
   "limits",
 ]);
 
@@ -197,6 +198,11 @@ export function validateTaskRequest(payload) {
     throw new TaskContractError("INVALID_TASK", "requiresInteraction must be a boolean.", 400);
   }
 
+  const cacheMode = payload.cacheMode === undefined ? "default" : payload.cacheMode;
+  if (!["default", "bypass"].includes(cacheMode)) {
+    throw new TaskContractError("INVALID_CACHE_MODE", "cacheMode must be 'default' or 'bypass'.", 400);
+  }
+
   let validatedUrl;
   try {
     validatedUrl = validatePublicHttpUrl(payload.url);
@@ -262,6 +268,7 @@ export function validateTaskRequest(payload) {
     operation: "fetch",
     requiresJavascript: payload.requiresJavascript === true,
     requiresInteraction: payload.requiresInteraction === true,
+    cacheMode,
     limits,
   };
 }
