@@ -151,6 +151,17 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
     };
   });
 
+  if (/oauth\\/select-tenant/.test(route)) {
+    const tenantStatus = page.locator("[data-oauth-flow-status]");
+    await page.waitForFunction(() => {
+      const status = document.querySelector("[data-oauth-flow-status]");
+      return Boolean(status && status.textContent.trim());
+    }, null, { timeout: 5000 });
+    assert.ok((await tenantStatus.textContent()).trim(), "Tenant selection must explain why workspaces cannot be loaded yet");
+    assert.equal(await page.locator("[data-oauth-tenant-submit]").isEnabled(), false,
+      "OAuth continuation must remain disabled when Acceptance tenant storage is not initialized");
+  }
+
   assert.ok(diagnostics.title.trim(), "Missing document title on " + route);
   assert.equal(diagnostics.mainH1Count, 1, "Expected one visible main H1 on " + route);
   assert.ok(diagnostics.documentWidth <= diagnostics.viewportWidth + 1,
