@@ -107,6 +107,7 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
   });
   await isolateLocalBrowserClient(context);
   const page = await context.newPage();
+  try {
   const pageErrors = [];
   const consoleErrors = [];
   const failedAssets = [];
@@ -259,12 +260,14 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
   if (screenshot) {
     await page.screenshot({ path: resolve(screenshotDir, routeSlug(route) + "-" + width + ".png"), fullPage: true, animations: "disabled" });
   }
-  await context.close();
 
   return {
     route, width, title: diagnostics.title, svgCount: diagnostics.visibleSvgCount,
     documentWidth: diagnostics.documentWidth, viewportWidth: diagnostics.viewportWidth
   };
+  } finally {
+    await context.close();
+  }
 }
 
 async function checkHomeInteractions(browser) {
@@ -622,47 +625,78 @@ try {
   browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
   const combinations = [];
   const links = new Set();
+  const failures = [];
 
-  // Every declared public, localized, legacy, and account route is opened on mobile and desktop.
+  async function attempt(label, check) {
+    try {
+      await check();
+      process.stdout.write("PASS " + label + "\\n");
+    } catch (error) {
+      const failure = { label, message: error?.message || String(error), stack: error?.stack || "" };
+      failures.push(failure);
+      process.stderr.write("FAIL " + label + ": " + failure.message + "\\n");
+    }
+  }
+
+  async function routeAttempt(width, route, capture) {
+    try {
+      combinations.push(await inspectRoute(browser, width, route, links, capture));
+    } catch (error) {
+      failures.push({
+        label: "route " + route + " @ " + width + "px",
+        message: error?.message || String(error),
+        stack: error?.stack || ""
+      });
+      process.stderr.write("FAIL route " + route + " @ " + width + "px: " + (error?.message || String(error)) + "\\n");
+    }
+  }
+
+  // Visit every declared public, localized, legacy, and account route on mobile and desktop.
   for (const width of [390, 1440]) {
     for (const route of routes) {
-      const capture = screenshotRoutes.has(route);
-      combinations.push(await inspectRoute(browser, width, route, links, capture));
+      await routeAttempt(width, route, screenshotRoutes.has(route));
     }
   }
 
   // Smaller phone widths target all high-traffic, interactive, account and legal surfaces.
   for (const width of [320, 360]) {
     for (const route of mobileRegressionRoutes) {
-      combinations.push(await inspectRoute(browser, width, route, links, false));
+      await routeAttempt(width, route, false);
     }
   }
 
-  await checkHomeInteractions(browser);
-  await checkFeaturePages(browser);
-  await checkAuthAndContactPages(browser);
-  await checkLocalAccountLifecycle(browser);
-  await checkApiAndPublicAssets();
-  await verifyInternalLinks(links);
+  await attempt("home navigation, language switcher and mobile menu", () => checkHomeInteractions(browser));
+  await attempt("feature tabs, use-case actions, FAQ and demo interactions", () => checkFeaturePages(browser));
+  await attempt("auth and contact form controls", () => checkAuthAndContactPages(browser));
+  await attempt("synthetic local account lifecycle (verification, reset, TOTP, workspace)", () => checkLocalAccountLifecycle(browser));
+  await attempt("public API endpoints and unauthenticated workspace fail-closed behavior", () => checkApiAndPublicAssets());
+  await attempt("same-origin navigation targets", () => verifyInternalLinks(links));
 
   const report = {
     generatedAt: new Date().toISOString(),
     routes: routes.length,
     pageViewportCombinations: combinations.length,
+    attemptedPageViewportCombinations: routes.length * 2 + mobileRegressionRoutes.length * 2,
     uniqueInternalLinks: links.size,
     viewportCoverage: [320, 360, 390, 1440],
     locales: locales,
     testedRoutes: routes,
-    results: combinations
+    results: combinations,
+    failures
   };
   await writeFile(resolve(screenshotDir, "qa-report.json"), JSON.stringify(report, null, 2), "utf8");
-  process.stdout.write("ExportFlow full-site Chromium QA passed. Routes: " + routes.length +
-    "; page/viewport combinations: " + combinations.length +
-    "; same-origin links verified: " + links.size + ".\n");
-  process.stdout.write("All visible SVGs, image assets, accessible control names, Arabic RTL and horizontal overflow checks passed.\n");
-  process.stdout.write("Screenshots and qa-report.json: " + screenshotDir + "\n");
+  process.stdout.write("ExportFlow Chromium QA completed. Routes: " + routes.length +
+    "; passed page/viewport combinations: " + combinations.length +
+    "; attempted combinations: " + report.attemptedPageViewportCombinations +
+    "; same-origin links verified: " + links.size +
+    "; failures: " + failures.length + ".\\n");
+  process.stdout.write("Screenshots and qa-report.json: " + screenshotDir + "\\n");
+  if (failures.length) {
+    throw new Error("Browser QA recorded " + failures.length + " failure(s); see qa-report.json and logs.");
+  }
+  process.stdout.write("All visible SVGs, image assets, accessible control names, Arabic RTL and horizontal overflow checks passed.\\n");
 } catch (error) {
-  process.stderr.write("ExportFlow full-site Chromium QA failed: " + (error?.stack || String(error)) + "\n");
+  process.stderr.write("ExportFlow full-site Chromium QA failed: " + (error?.stack || String(error)) + "\\n");
   process.stderr.write(serverOutput);
   process.exitCode = 1;
 } finally {
