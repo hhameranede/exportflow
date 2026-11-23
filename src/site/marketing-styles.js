@@ -1431,9 +1431,11 @@ html[dir="rtl"] .ef-hero-title {
   flex-wrap: nowrap;
   align-items: center;
   gap: 4px;
+  min-width: 0;
   max-width: 100%;
   padding: 4px;
   overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior-inline: contain;
   scrollbar-width: none;
   border-radius: var(--radius-full);
@@ -1448,9 +1450,13 @@ html[dir="rtl"] .ef-hero-title {
   .ef-cap-filter-bar {
     display: flex;
     width: 100%;
+    min-width: 0;
     gap: 6px;
     padding-inline: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
     scroll-padding-inline: 6px;
+    touch-action: pan-x;
   }
 }
 
@@ -1536,17 +1542,25 @@ html[data-theme="dark"] .ef-cap-filter-bar {
 
 .ef-title-icon-row {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 14px;
+  flex-direction: row;
+  align-items: center;
+  align-self: stretch;
+  width: 100%;
+  gap: 12px;
   min-width: 0;
   margin-block: 16px 12px;
 }
 
+.ef-title-icon-row .ef-feature-icon {
+  flex: 0 0 38px;
+}
+
 .ef-title-icon-row h3 {
+  flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
-  overflow-wrap: anywhere;
+  margin: 0;
+  overflow-wrap: break-word;
 }
 
 .ef-cap-featured-copy,
@@ -1625,16 +1639,21 @@ html[data-theme="dark"] .ef-cap-filter-bar {
   }
 }
 
-.ef-spec-strip div {
+.ef-spec-strip > div {
   display: flex;
   flex-direction: column-reverse;
+  align-items: flex-start;
+  min-width: 0;
   gap: 6px;
 }
 
 .ef-spec-strip dt {
+  min-width: 0;
+  max-width: 100%;
   font-size: 0.8125rem;
   color: var(--text-dim);
   font-weight: 400;
+  overflow-wrap: break-word;
 }
 
 .ef-spec-strip dd,
