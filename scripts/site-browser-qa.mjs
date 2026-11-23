@@ -35,6 +35,18 @@ function nextBrowserIpHeaders() {
   return { "cf-connecting-ip": "198." + secondOctet + "." + thirdOctet + "." + fourthOctet };
 }
 
+async function isolateLocalBrowserClient(context) {
+  const headers = nextBrowserIpHeaders();
+  await context.route("**/*", async (route) => {
+    const requestUrl = new URL(route.request().url());
+    if (requestUrl.origin === baseUrl) {
+      await route.continue({ headers: { ...route.request().headers(), ...headers } });
+      return;
+    }
+    await route.continue();
+  });
+}
+
 function buildRouteInventory() {
   const routes = new Set(MARKETING_PATHS);
   for (const locale of locales.filter((value) => value !== "en")) routes.add("/" + locale + "/");
@@ -91,9 +103,9 @@ function expectedLocale(path) {
 async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = false) {
   const context = await browser.newContext({
     viewport: { width, height: width <= 390 ? 844 : 960 },
-    permissions: ["clipboard-read", "clipboard-write"],
-    extraHTTPHeaders: nextBrowserIpHeaders()
+    permissions: ["clipboard-read", "clipboard-write"]
   });
+  await isolateLocalBrowserClient(context);
   const page = await context.newPage();
   const pageErrors = [];
   const consoleErrors = [];
@@ -219,6 +231,7 @@ async function checkHomeInteractions(browser) {
     permissions: ["clipboard-read", "clipboard-write"],
     extraHTTPHeaders: nextBrowserIpHeaders()
   });
+  await isolateLocalBrowserClient(context);
   const page = await context.newPage();
   await page.goto(baseUrl + "/", { waitUntil: "domcontentloaded" });
 
@@ -282,9 +295,9 @@ async function checkHomeInteractions(browser) {
 
 async function checkFeaturePages(browser) {
   const context = await browser.newContext({
-    viewport: { width: 1280, height: 900 },
-    extraHTTPHeaders: nextBrowserIpHeaders()
+    viewport: { width: 1280, height: 900 }
   });
+  await isolateLocalBrowserClient(context);
   const page = await context.newPage();
 
   await page.goto(baseUrl + "/platform", { waitUntil: "domcontentloaded" });
@@ -325,9 +338,9 @@ async function checkFeaturePages(browser) {
 
 async function checkAuthAndContactPages(browser) {
   const context = await browser.newContext({
-    viewport: { width: 390, height: 844 },
-    extraHTTPHeaders: nextBrowserIpHeaders()
+    viewport: { width: 390, height: 844 }
   });
+  await isolateLocalBrowserClient(context);
   const page = await context.newPage();
 
   for (const path of ["/signin", "/signup", "/forgot-password", "/reset-password", "/account", "/workspace", "/oauth/consent", "/oauth/select-tenant"]) {
@@ -394,6 +407,7 @@ async function checkLocalAccountLifecycle(browser) {
     permissions: ["clipboard-read", "clipboard-write"],
     extraHTTPHeaders: nextBrowserIpHeaders()
   });
+  await isolateLocalBrowserClient(context);
   const page = await context.newPage();
   const timestamp = Date.now();
   const email = "exportflow-browser-qa-" + timestamp + "@example.test";
