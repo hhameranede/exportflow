@@ -111,11 +111,13 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
   const pageErrors = [];
   const consoleErrors = [];
   const failedAssets = [];
+  const unlocalizedRoute = route.replace(/^\/(?:en|ar|fr|es|de|pt|zh|ja)(?=\/)/, "");
+  const oauthBrowserRoute = unlocalizedRoute === "/oauth/consent" || unlocalizedRoute === "/oauth/select-tenant";
   page.on("pageerror", (error) => pageErrors.push(error.message || String(error)));
   page.on("console", (message) => {
     if (message.type() !== "error") return;
     const text = message.text();
-    const expectedOAuthUnavailable = (route === "/oauth/consent" || route === "/oauth/select-tenant") &&
+    const expectedOAuthUnavailable = oauthBrowserRoute &&
       text.includes("status of 503 (Service Unavailable)");
     if (!expectedOAuthUnavailable) consoleErrors.push(text);
   });
@@ -130,7 +132,6 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
 
   const response = await page.goto(baseUrl + route, { waitUntil: "domcontentloaded", timeout: 30000 });
   assert.ok(response, "No navigation response for " + route);
-  const oauthBrowserRoute = route === "/oauth/consent" || route === "/oauth/select-tenant";
   const expectedStatus = oauthBrowserRoute ? 503 : 200;
   assert.equal(response.status(), expectedStatus, "Unexpected page status for " + route + " at " + width + "px");
   await page.waitForFunction(() => document.readyState === "complete", null, { timeout: 10000 });
@@ -391,7 +392,14 @@ async function checkAuthAndContactPages(browser) {
   const page = await context.newPage();
 
   for (const path of ["/signin", "/signup", "/forgot-password", "/reset-password", "/account", "/workspace", "/oauth/consent", "/oauth/select-tenant"]) {
-    await page.goto(baseUrl + path, { waitUntil: "domcontentloaded" });
+    try {
+      await page.goto(baseUrl + path, { waitUntil: "domcontentloaded" });
+    } catch (error) {
+      const expectedSignedOutWorkspaceRedirect = path === "/workspace" &&
+        /ERR_ABORTED/.test(error?.message || String(error));
+      if (!expectedSignedOutWorkspaceRedirect) throw error;
+      await page.waitForURL((url) => url.pathname.endsWith("/signin"), { timeout: 8000 });
+    }
     await page.locator("main h1").waitFor({ state: "visible", timeout: 8000 });
     assert.equal(await page.locator("main h1").count(), 1, "Auth route heading missing: " + path);
     if (["/signin", "/signup", "/reset-password"].includes(path)) {
@@ -567,10 +575,44 @@ async function checkLocalAccountLifecycle(browser) {
   await page.waitForURL((url) => url.pathname.endsWith("/account"), { timeout: 12000 });
 
   await page.goto(baseUrl + "/workspace", { waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => {
-    const shell = document.querySelector("[data-workspace-shell]");
-    return Boolean(shell && !shell.hidden);
-  }, null, { timeout: 15000 });
+  try {
+    await page.waitForFunction(() => {
+      const shell = document.querySelector("[data-workspace-shell]");
+      return Boolean(shell && !shell.hidden);
+    }, null, { timeout: 15000 });
+  } catch (error) {
+    const state = await page.evaluate(async () => {
+      async function readJson(path) {
+        try {
+          const response = await fetch(path, { credentials: "include", cache: "no-store" });
+          const body = await response.json().catch(() => null);
+          return { status: response.status, body };
+        } catch (cause) {
+          return { error: String(cause) };
+        }
+      }
+      const shell = document.querySelector("[data-workspace-shell]");
+      const loading = document.querySelector("[data-workspace-loading]");
+      const [session, overview, keys, history] = await Promise.all([
+        readJson("/api/auth/get-session"),
+        readJson("/api/v1/workspace/overview"),
+        readJson("/api/v1/workspace/keys"),
+        readJson("/api/v1/workspace/history")
+      ]);
+      return {
+        url: window.location.href,
+        workspaceShellFound: Boolean(shell),
+        workspaceShellHidden: shell?.hidden ?? null,
+        loadingText: loading?.textContent?.trim() || "",
+        session,
+        overview,
+        keys,
+        history
+      };
+    });
+    throw new Error("Authenticated Workspace did not become visible. Runtime diagnostics: " +
+      JSON.stringify(state) + "; original wait error: " + (error?.message || String(error)));
+  }
   const keyForm = page.locator("[data-ws-key-form]");
   const keyName = "browser-qa-" + timestamp;
   await keyForm.locator('input[name="name"]').fill(keyName);
