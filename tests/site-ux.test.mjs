@@ -58,8 +58,8 @@ test("marketing client bundle parses, protects the mobile drawer, and avoids nat
 test("unified design system serves /platform, /use-cases, /developers, /demo, and /index.html with interactive rich content", async () => {
   for (const path of ["/", "/index.html", "/platform", "/use-cases", "/developers", "/demo", "/product", "/pricing", "/integrations", "/solutions", "/about"]) {
     const html = await fetchHtml(path);
-    assert.match(html, /<link rel="stylesheet" href="\/assets\/marketing\.css\?v=2">/);
-    assert.match(html, /<script src="\/assets\/marketing\.js" defer><\/script>/);
+    assert.match(html, /<link rel="stylesheet" href="\/assets\/marketing\.css\?v=4">/);
+    assert.match(html, /<script src="\/assets\/marketing\.js\?v=3" defer><\/script>/);
     assert.doesNotMatch(html, /\/assets\/site\.(?:css|js)/);
     assert.doesNotMatch(html, /EXPORTFLOW_API_TOKEN/);
   }

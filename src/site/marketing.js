@@ -557,7 +557,7 @@ function homeBody(t, locale) {
   </section>
 
   <!-- MOBILE THUMB-SAFE CTA BAR -->
-  <div class="ef-mobile-sticky-cta">
+  <div class="ef-mobile-sticky-cta" aria-hidden="true" inert>
     <span>${escapeHtml(ld.mobileStickyStatus)}</span>
     <a class="ef-btn ef-btn-primary ef-btn-sm" href="${hrefFor("/developers", locale)}">
       <span>${escapeHtml(t.start)}</span>

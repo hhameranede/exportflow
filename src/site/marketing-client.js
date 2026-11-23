@@ -338,6 +338,20 @@ export const MARKETING_JS = `(function () {
      ======================================================================== */
   var parallaxTarget = document.querySelector("[data-parallax-target]");
   var heroSection = document.querySelector("[data-hero-section]");
+  var mobileStickyCta = document.querySelector(".ef-mobile-sticky-cta");
+  if (mobileStickyCta && heroSection) {
+    var mobileViewport = window.matchMedia("(max-width: 767px)");
+    var syncMobileCta = function () {
+      var isVisible = mobileViewport.matches && heroSection.getBoundingClientRect().bottom <= 0;
+      mobileStickyCta.classList.toggle("is-visible", isVisible);
+      mobileStickyCta.setAttribute("aria-hidden", String(!isVisible));
+      mobileStickyCta.inert = !isVisible;
+    };
+    syncMobileCta();
+    window.addEventListener("scroll", syncMobileCta, { passive: true });
+    mobileViewport.addEventListener("change", syncMobileCta);
+  }
+
   if (parallaxTarget && heroSection && window.matchMedia("(pointer: fine)").matches) {
     var pRaf = null;
     heroSection.addEventListener("pointermove", function (e) {

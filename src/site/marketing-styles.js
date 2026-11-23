@@ -2603,6 +2603,13 @@ html[data-theme="dark"] .ef-code-tabs {
     backdrop-filter: saturate(180%) blur(16px);
     -webkit-backdrop-filter: saturate(180%) blur(16px);
     border-top: 1px solid var(--border);
+    transform: translateY(100%);
+    visibility: hidden;
+    transition: transform var(--dur-base) var(--ease-out), visibility var(--dur-base);
+  }
+  .ef-mobile-sticky-cta.is-visible {
+    transform: translateY(0);
+    visibility: visible;
   }
   .ef-mobile-sticky-cta span {
     font-size: 0.78rem;
