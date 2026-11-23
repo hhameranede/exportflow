@@ -635,3 +635,26 @@ test("OAuth unavailable page respects the strict Content Security Policy without
   assert.doesNotMatch(html, /\sstyle\s*=/i, "OAuth fail-closed page must not use inline style attributes");
   assert.match(html, /account authorization is not initialized yet|configured OAuth endpoints are invalid/i);
 });
+
+
+test("localized OAuth browser routes are handled by the OAuth fail-closed page", async () => {
+  const locales = ["en", "ar", "fr", "es", "de", "pt", "zh", "ja"];
+  const paths = ["/oauth/consent", "/oauth/select-tenant"];
+
+  for (const locale of locales) {
+    for (const path of paths) {
+      const response = await handleOAuthBrowserPage(
+        new Request("https://exportflow.test/" + locale + path),
+        {},
+      );
+      assert.ok(response, locale + path + " should be handled by the OAuth browser route");
+      assert.equal(response.status, 503, locale + path + " must fail closed while authorization storage is unavailable");
+      const html = await response.text();
+      assert.match(html, new RegExp('<html lang="' + locale + '"'));
+      if (locale === "ar") assert.match(html, /<html lang="ar" dir="rtl">/);
+      assert.match(html, /<h1 class="ef-auth-title">Authorization unavailable<\\/h1>/);
+      assert.match(html, /account authorization is not initialized yet|configured OAuth endpoints are invalid/i);
+      assert.doesNotMatch(html, /\\sstyle\\s*=/i);
+    }
+  }
+});
