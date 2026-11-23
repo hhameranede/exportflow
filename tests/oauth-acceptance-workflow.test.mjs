@@ -60,10 +60,12 @@ test("unit and syntax checks run before any Acceptance deployment", () => {
   assert.match(acceptanceWorkflow, /if grep -q '0bd9f873-a1d5-4d90-b3fc-1c4b47e1aa67'/);
 });
 
-test("consumed one-shot Acceptance sentinels cannot rerun on deletion or workflow edits", () => {
+test("tenant burst Acceptance requires an explicit approval marker and commit message", () => {
   assert.ok(acceptanceWorkflow.includes("contains(github.event.head_commit.added, '.github/acceptance/oauth-acceptance.approved')"));
   assert.ok(mfaAcceptanceWorkflow.includes("contains(github.event.head_commit.added, '.github/acceptance/mfa-acceptance.approved')"));
-  assert.ok(tenantBurstAcceptanceWorkflow.includes("contains(github.event.head_commit.added, '.github/acceptance/tenant-burst.approved')"));
+  assert.ok(tenantBurstAcceptanceWorkflow.includes("contains(github.event.head_commit.message, 'tenant-burst-acceptance-approved')"));
+  assert.ok(tenantBurstAcceptanceWorkflow.includes("test -s .github/acceptance/tenant-burst.approved"));
+  assert.ok(tenantBurstAcceptanceWorkflow.includes("one isolated, synthetic tenant-burst Acceptance run"));
 });
 
 test("OAuth Acceptance exercises refresh rotation, retry replay and RFC 7009 revocation", () => {
