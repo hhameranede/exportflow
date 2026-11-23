@@ -162,6 +162,31 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
     }).filter(Boolean);
     const overflowElements = [...document.body.querySelectorAll("*")].filter(visible).map((node) => {
       const rect = node.getBoundingClientRect();
+      const ancestors = [];
+      for (let current = node, depth = 0; current && depth < 5; current = current.parentElement, depth += 1) {
+        const box = current.getBoundingClientRect();
+        const style = getComputedStyle(current);
+        ancestors.push({
+          tag: current.tagName.toLowerCase(),
+          id: current.id || "",
+          className: typeof current.className === "string" ? current.className.slice(0, 100) : "",
+          left: Math.round(box.left * 10) / 10,
+          right: Math.round(box.right * 10) / 10,
+          width: Math.round(box.width * 10) / 10,
+          cssWidth: style.width,
+          minWidth: style.minWidth,
+          maxWidth: style.maxWidth,
+          boxSizing: style.boxSizing,
+          marginInlineStart: style.marginInlineStart,
+          marginInlineEnd: style.marginInlineEnd,
+          paddingInlineStart: style.paddingInlineStart,
+          paddingInlineEnd: style.paddingInlineEnd,
+          direction: style.direction,
+          display: style.display,
+          gridTemplateColumns: style.gridTemplateColumns,
+          transform: style.transform
+        });
+      }
       return {
         tag: node.tagName.toLowerCase(),
         id: node.id || "",
@@ -169,11 +194,12 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
         left: Math.round(rect.left * 10) / 10,
         right: Math.round(rect.right * 10) / 10,
         width: Math.round(rect.width * 10) / 10,
-        text: (node.innerText || "").trim().slice(0, 100)
+        text: (node.innerText || "").trim().slice(0, 100),
+        ancestors
       };
     }).filter((item) => item.width > 0 && (item.left < -1 || item.right > window.innerWidth + 1))
       .sort((a, b) => (b.right - window.innerWidth) - (a.right - window.innerWidth))
-      .slice(0, 20);
+      .slice(0, 12);
     const links = [...document.querySelectorAll("a[href]")].map((anchor) => anchor.href);
     return {
       title: document.title,
