@@ -150,3 +150,31 @@ test("the shared gateway fails closed when the Durable Object binding is missing
   assert.equal(result.httpStatus, 503);
   assert.equal(result.code, "TENANT_RATE_LIMITER_UNAVAILABLE");
 });
+
+
+test("OAuth-resolved identities use the same shared Durable Object tenant burst counter", async () => {
+  const namespace = createDurableTenantBurstTestNamespace();
+  const gateway = createTenantTaskGateway({
+    preAuthRateLimiter: { check: () => ({ allowed: true }) },
+    tenantBurstLimit: 1,
+    tenantBurstWindowMs: 60_000,
+  });
+  const identity = {
+    tenantId: "tenant_oauth_shared",
+    planCode: "developer",
+    policyVersion: "v1",
+    quotaPeriod: "daily",
+    requestLimit: 50,
+    scopes: ["tasks:fetch"],
+    userId: "oauth-user-1",
+    authMethod: "oauth2",
+  };
+  const env = { TENANT_BURST_LIMITER: namespace };
+  const request = makeRequest({ authorization: "Bearer OAuth-access-token" });
+  const first = await gateway.authorizeIdentity(request, identity, { requiredScope: "tasks:fetch" }, env);
+  const second = await gateway.authorizeIdentity(request, identity, { requiredScope: "tasks:fetch" }, env);
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, false);
+  assert.equal(second.code, "RATE_LIMITED");
+  assert.equal(second.httpStatus, 429);
+});

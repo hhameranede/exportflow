@@ -8,6 +8,7 @@ const TABLES = [
   "api_keys",
   "tenant_request_usage",
   "tenant_admin_audit_log",
+  "tenant_memberships",
 ];
 const REQUIRED_TRIGGERS = [
   "guard_tenant_request_usage_limit_insert",
@@ -16,6 +17,9 @@ const REQUIRED_TRIGGERS = [
   "prevent_mid_month_tenant_plan_period_change",
   "prevent_tenant_admin_audit_update",
   "prevent_tenant_admin_audit_delete",
+  "guard_tenant_membership_last_owner",
+  "prevent_tenant_membership_identity_update",
+  "prevent_tenant_membership_delete",
 ];
 
 function makeD1(tables = TABLES, triggers = REQUIRED_TRIGGERS) {
