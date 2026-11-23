@@ -125,7 +125,9 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
       const labelledText = labelledBy ? labelledBy.split(/\s+/).map((id) => document.getElementById(id)?.textContent || "").join(" ").trim() : "";
       const text = (node.innerText || node.value || "").trim();
       const title = node.getAttribute("title") || "";
-      const name = aria || labelledText || text || title;
+      const nativeLabelText = node.labels ? [...node.labels].map((label) => label.textContent || "").join(" ").trim() : "";
+      const wrappingLabelText = node.closest("label")?.textContent?.trim() || "";
+      const name = aria || labelledText || nativeLabelText || wrappingLabelText || text || title;
       return name ? null : { tag: node.tagName.toLowerCase(), type: node.getAttribute("type"), id: node.id || "", className: typeof node.className === "string" ? node.className.slice(0, 80) : "" };
     }).filter(Boolean);
     const links = [...document.querySelectorAll("a[href]")].map((anchor) => anchor.href);
