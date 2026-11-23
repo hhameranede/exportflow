@@ -3,6 +3,7 @@ import { readBoundedJsonBody, TaskContractError } from "./task-contract.js";
 import { createTenantAdminService, TenantAdminError } from "./tenant-admin.js";
 import { createRateLimiter } from "./auth.js";
 import { getClientRateLimitKey } from "./client-rate-limit.js";
+import { OWNER_STEP_UP_PATH, clearOwnerStepUpCookie, createOwnerStepUpHttpHandler, createOwnerStepUpService } from "./owner-step-up.js";
 
 const ADMIN_PREFIX = "/api/v1/admin";
 const MAX_ADMIN_BODY_BYTES = 16_384;
@@ -157,14 +158,21 @@ export function createTenantAdminHttpHandler({
     windowMs: ADMIN_RATE_LIMIT_WINDOW_MS,
     maxRequests: ADMIN_RATE_LIMIT_MAX_REQUESTS,
   }),
+  ownerStepUpService = createOwnerStepUpService(),
 } = {}) {
   if (typeof authorizeOwner !== "function" || typeof serviceFactory !== "function" ||
-      !adminRateLimiter || typeof adminRateLimiter.check !== "function") {
-    throw new TypeError("authorizeOwner, serviceFactory and adminRateLimiter must be valid.");
+      !adminRateLimiter || typeof adminRateLimiter.check !== "function" ||
+      typeof ownerStepUpService?.verifyCode !== "function" || typeof ownerStepUpService?.consumeProof !== "function") {
+    throw new TypeError("Tenant admin handler dependencies must be valid.");
   }
+  const ownerStepUpHandler = createOwnerStepUpHttpHandler({
+    authorizeOwner,
+    verifyCode: ownerStepUpService.verifyCode,
+  });
 
   return async function handleTenantAdminRequest(request, env = {}) {
     const url = new URL(request.url);
+    if (url.pathname === OWNER_STEP_UP_PATH) return ownerStepUpHandler(request, env);
     if (url.pathname !== ADMIN_PREFIX && !url.pathname.startsWith(ADMIN_PREFIX + "/")) return null;
 
     const route = routeFor(url.pathname);
@@ -194,7 +202,8 @@ export function createTenantAdminHttpHandler({
       owner = null;
     }
     if (owner?.allowed !== true || typeof owner.actorId !== "string" ||
-        owner.actorId.trim().length < 1 || owner.actorId.length > 128) {
+        owner.actorId.trim().length < 1 || owner.actorId.length > 128 ||
+        typeof owner.sessionId !== "string" || owner.sessionId.length < 1 || owner.sessionId.length > 128) {
       return jsonResponse({ error: { code: "ADMIN_FORBIDDEN", message: "A verified platform owner session is required." } }, 403);
     }
 
@@ -217,6 +226,20 @@ export function createTenantAdminHttpHandler({
       return jsonResponse({ error: { code: "INVALID_ADMIN_INPUT", message: "The administrative request is invalid." } }, 400);
     }
 
+    let stepUp;
+    try {
+      stepUp = await ownerStepUpService.consumeProof(request, env, owner);
+    } catch {
+      stepUp = { allowed: false, unavailable: true };
+    }
+    if (stepUp?.allowed !== true) {
+      return jsonResponse(
+        { error: { code: stepUp?.unavailable ? "OWNER_STEP_UP_UNAVAILABLE" : "OWNER_STEP_UP_REQUIRED", message: stepUp?.unavailable ? "Owner verification is temporarily unavailable." : "A fresh one-time authenticator verification is required before each administrative operation." } },
+        stepUp?.unavailable ? 503 : 403,
+        { "set-cookie": clearOwnerStepUpCookie() },
+      );
+    }
+
     let service;
     try {
       // Bind the verified owner identity to this one request only. Never cache
@@ -228,12 +251,12 @@ export function createTenantAdminHttpHandler({
       });
       const input = route.input ? route.input(payload) : payload;
       const result = await service[route.method](input);
-      return jsonResponse({ ok: true, data: result }, route.status);
+      return jsonResponse({ ok: true, data: result }, route.status, { "set-cookie": clearOwnerStepUpCookie() });
     } catch (error) {
       if (error instanceof TenantAdminError) {
-        return jsonResponse({ error: { code: error.code, message: error.message } }, error.httpStatus);
+        return jsonResponse({ error: { code: error.code, message: error.message } }, error.httpStatus, { "set-cookie": clearOwnerStepUpCookie() });
       }
-      return jsonResponse({ error: { code: "ADMIN_REQUEST_FAILED", message: "The administrative request could not be completed." } }, 500);
+      return jsonResponse({ error: { code: "ADMIN_REQUEST_FAILED", message: "The administrative request could not be completed." } }, 500, { "set-cookie": clearOwnerStepUpCookie() });
     }
   };
 }

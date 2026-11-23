@@ -58,12 +58,16 @@ function jsonRequest(path, body = {}, method = "POST") {
   });
 }
 
-function setup({ owner = { allowed: true, actorId: "owner_123" }, tables = TABLES, triggers = REQUIRED_TRIGGERS } = {}) {
+function setup({ owner = { allowed: true, actorId: "owner_123", sessionId: "session_owner_123" }, tables = TABLES, triggers = REQUIRED_TRIGGERS, stepUp = { allowed: true } } = {}) {
   const calls = { authorization: [], service: [], actions: [] };
   const handler = createTenantAdminHttpHandler({
     authorizeOwner: async (request, env) => {
       calls.authorization.push({ request, env });
       return owner;
+    },
+    ownerStepUpService: {
+      verifyCode: async () => ({ allowed: true, token: "synthetic-step-up-proof", expiresAt: "2026-11-22T19:05:00.000Z" }),
+      consumeProof: async () => stepUp,
     },
     serviceFactory: (options) => {
       calls.service.push(options);
@@ -228,7 +232,8 @@ test("each request gets a new service bound to that request's verified owner ide
   let nextActor = "owner_A";
   const calls = [];
   const handler = createTenantAdminHttpHandler({
-    authorizeOwner: async () => ({ allowed: true, actorId: nextActor }),
+    authorizeOwner: async () => ({ allowed: true, actorId: nextActor, sessionId: "session_" + nextActor }),
+    ownerStepUpService: { verifyCode: async () => ({ allowed: true }), consumeProof: async () => ({ allowed: true }) },
     serviceFactory: (options) => {
       calls.push(options);
       return { async provisionTenant(input) {
@@ -357,4 +362,31 @@ test("membership administration routes pass tenant/user identities and the Bette
   });
   assert.deepEqual(calls.actions[1][2], { allowed: true, actorId: "owner_123" });
   assert.equal(calls.service[1].authDb, env.AUTH_DB);
+});
+
+test("every administrative mutation fails closed without a consumed one-time step-up proof", async () => {
+  const { handler, calls, env } = setup({ stepUp: { allowed: false } });
+  const response = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), env);
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error.code, "OWNER_STEP_UP_REQUIRED");
+  assert.equal(response.headers.get("set-cookie").includes("Max-Age=0"), true);
+  assert.equal(calls.service.length, 0);
+  assert.equal(calls.actions.length, 0);
+});
+
+test("owner step-up route issues only a secure, HttpOnly, same-site, single-use cookie", async () => {
+  const { handler } = setup();
+  const response = await handler(jsonRequest("/api/v1/admin/step-up", { code: "123456" }), {});
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    expiresAt: "2026-11-22T19:05:00.000Z",
+    singleUse: true,
+  });
+  const cookie = response.headers.get("set-cookie");
+  assert.match(cookie, /^__Host-exportflow-owner-step-up=synthetic-step-up-proof;/);
+  assert.match(cookie, /HttpOnly/);
+  assert.match(cookie, /Secure/);
+  assert.match(cookie, /SameSite=Strict/);
+  assert.match(cookie, /Max-Age=300/);
 });
