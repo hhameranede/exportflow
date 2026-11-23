@@ -936,7 +936,7 @@ export async function handleOAuthBrowserPage(request, env = {}) {
     }
   }
 
-  const html = renderMarketingPage(request.url, url.pathname, "en", details);
+  const html = renderMarketingPage(request.url, routePath, locale, details);
   return new Response(request.method === "HEAD" ? null : html, {
     status: 200,
     headers: OAUTH_BROWSER_HEADERS,
