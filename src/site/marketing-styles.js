@@ -3697,7 +3697,12 @@ html[data-motion="paused"] .ef-timeline-step {
 /* Use Cases Blueprints */
 .ef-uc-stack {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-5);
+}
+
+.ef-uc-stack > * {
+  min-width: 0;
 }
 
 .ef-uc-card {
@@ -3734,9 +3739,13 @@ html[data-motion="paused"] .ef-timeline-step {
 
 .ef-uc-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   align-items: start;
+}
+
+.ef-uc-grid > * {
+  min-width: 0;
 }
 
 @media (min-width: 900px) {
