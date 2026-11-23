@@ -31,7 +31,11 @@ jobs:
         run: |
           test -s .github/acceptance/tenant-burst.approved
           grep -F "one isolated, synthetic tenant-burst Acceptance run" .github/acceptance/tenant-burst.approved
-          git diff-tree --no-commit-id --name-only --diff-filter=A -r HEAD | grep -Fx '.github/acceptance/tenant-burst.approved'
+          git cat-file -e HEAD:.github/acceptance/tenant-burst.approved
+          if git cat-file -e HEAD^:.github/acceptance/tenant-burst.approved 2>/dev/null; then
+            echo "::error::Approval marker must be newly added in this commit."
+            exit 1
+          fi
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
