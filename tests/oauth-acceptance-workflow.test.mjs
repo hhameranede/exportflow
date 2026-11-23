@@ -41,6 +41,18 @@ test("Acceptance preserves Better Auth signing secret and existing JWKS rows", (
   assert.match(acceptanceWorkflow, /SELECT COUNT\(\*\) AS preserved_jwks FROM jwks/);
 });
 
+test("Google OAuth GitHub secrets are passed only to the isolated Auth Acceptance deployment", () => {
+  assert.match(acceptanceWorkflow, /secrets\\.GOOGLE_CLIENT_ID/);
+  assert.match(acceptanceWorkflow, /secrets\\.GOOGLE_CLIENT_SECRET/);
+  assert.match(acceptanceWorkflow, /google-oauth-acceptance-secrets\\.json/);
+  assert.match(acceptanceWorkflow, /--secrets-file/);
+  assert.match(acceptanceWorkflow, /fs\\.writeFileSync\\(secretsFile/);
+  assert.match(acceptanceWorkflow, /mode: 0o600/);
+  assert.match(acceptanceWorkflow, /config\\.googleEnabled !== true/);
+  assert.match(acceptanceWorkflow, /api\\/auth\\/config/);
+  assert.doesNotMatch(acceptanceWorkflow, /secret put GOOGLE_CLIENT_(?:ID|SECRET)/);
+});
+
 test("OAuth D1 migrations resolve through the pinned Tenant Acceptance binding", () => {
   assert.match(acceptanceWorkflow, /d1 execute EXPORTFLOW_AUTH_DB --config cloudflare\/auth-acceptance\/wrangler\.toml --remote --yes --file/);
   assert.equal((acceptanceWorkflow.match(/d1 execute EXPORTFLOW_AUTH_DB/g) || []).length, 2);
