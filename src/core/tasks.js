@@ -399,6 +399,7 @@ export async function executeWebTask(input, options = {}) {
     if (operation === "extract") adapterInput.schema = input.schema;
     const adapterOptions = {};
     if (typeof options.fetchImpl === "function") adapterOptions.fetchImpl = options.fetchImpl;
+    if (typeof options.onUsageReceipt === "function") adapterOptions.onUsageReceipt = options.onUsageReceipt;
     adapterOptions.signal = controls.signal;
     const result = Object.keys(adapterOptions).length
       ? await runWithTaskControls((signal) => runAdapter(adapterId, adapterInput, { ...adapterOptions, signal }), controls)

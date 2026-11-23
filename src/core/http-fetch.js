@@ -18,6 +18,36 @@ export const HTTP_FETCH_LIMITS = Object.freeze({
 });
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+function monotonicNow() {
+  const read = globalThis.performance?.now;
+  if (typeof read === "function") {
+    const value = read.call(globalThis.performance);
+    if (Number.isFinite(value)) return value;
+  }
+  return Date.now();
+}
+
+function normalizeReceiptContentType(contentType) {
+  const mime = String(contentType || "").split(";")[0].trim().toLowerCase();
+  return /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(mime) ? mime : null;
+}
+
+function getDeclaredResponseBytes(response) {
+  const value = response?.headers?.get("content-length") || "";
+  if (!/^\d+$/.test(value)) return null;
+  const bytes = Number(value);
+  return Number.isSafeInteger(bytes) ? bytes : null;
+}
+
+function reportUsageReceipt(callback, receipt) {
+  if (typeof callback !== "function") return;
+  try {
+    callback(Object.freeze(receipt));
+  } catch {
+    // Usage observation must never change Fetch success or failure behavior.
+  }
+}
 function invalidUrl(message) {
   return new FetchAdapterError("URL_NOT_ALLOWED", message, 400);
 }
@@ -69,7 +99,7 @@ function cancelReader(reader) {
   cancelBestEffort(() => reader.cancel());
 }
 
-async function readTextBody(response, maxBytes, signal, getAbortCode) {
+async function readTextBody(response, maxBytes, signal, getAbortCode, onBytesRead) {
   const declaredLength = response.headers.get("content-length");
   if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxBytes) {
     cancelBody(response);
@@ -95,6 +125,11 @@ async function readTextBody(response, maxBytes, signal, getAbortCode) {
         throw new FetchAdapterError("RESPONSE_TOO_LARGE", "Upstream response contains too many chunks.", 413);
       }
       totalBytes += value.byteLength;
+      try {
+        onBytesRead?.(totalBytes);
+      } catch {
+        // Usage measurement is observational only.
+      }
       if (totalBytes > maxBytes) {
         cancelReader(reader);
         throw new FetchAdapterError("RESPONSE_TOO_LARGE", "Upstream response exceeds the configured size limit.", 413);
@@ -138,6 +173,8 @@ export async function fetchPublicResource(input, options = {}) {
   const timeoutMs = options.timeoutMs ?? HTTP_FETCH_LIMITS.timeoutMs;
   const maxRedirects = options.maxRedirects ?? HTTP_FETCH_LIMITS.maxRedirects;
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  const onUsageReceipt = options.onUsageReceipt;
+  let attemptsStarted = 0;
   let allowedOrigin = null;
   if (options.allowedOrigin !== undefined) {
     try {
@@ -209,7 +246,28 @@ export async function fetchPublicResource(input, options = {}) {
       }
       visited.add(current);
 
+      const attempt = ++attemptsStarted;
+      const attemptStartedMs = monotonicNow();
       let response;
+      let responseBodyBytesRead = 0;
+      let receiptEmitted = false;
+      const emitReceipt = (outcome, errorCode = null) => {
+        if (receiptEmitted) return;
+        receiptEmitted = true;
+        reportUsageReceipt(onUsageReceipt, {
+          schemaVersion: 1,
+          attempt,
+          outcome,
+          httpStatus: response && Number.isInteger(response.status) ? response.status : null,
+          contentType: normalizeReceiptContentType(response?.headers?.get("content-type")),
+          declaredResponseBytes: response ? getDeclaredResponseBytes(response) : null,
+          responseBodyBytesRead,
+          bytesSource: "stream_reader_observed",
+          elapsedMs: Math.max(0, monotonicNow() - attemptStartedMs),
+          elapsedBasis: "io_inclusive_wall_elapsed_not_cpu",
+          errorCode: typeof errorCode === "string" ? errorCode : null,
+        });
+      };
       try {
         response = await fetchImpl(current, {
           method: "GET",
@@ -225,14 +283,18 @@ export async function fetchPublicResource(input, options = {}) {
         });
       } catch {
         if (callerCancelled) {
+          emitReceipt("cancelled", "TASK_CANCELLED");
           throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
         }
         if (timedOut) {
+          emitReceipt("timeout", "UPSTREAM_TIMEOUT");
           throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
         }
+        emitReceipt("network_error", "UPSTREAM_FETCH_FAILED");
         throw new FetchAdapterError("UPSTREAM_FETCH_FAILED", "Could not retrieve the upstream resource.", 502);
       }
 
+      try {
       if (callerCancelled) {
         cancelBody(response);
         throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
@@ -268,6 +330,7 @@ export async function fetchPublicResource(input, options = {}) {
           throw new FetchAdapterError("REDIRECT_DOWNGRADE", "HTTPS redirects cannot downgrade to HTTP.", 502);
         }
 
+        emitReceipt("redirect");
         redirectChain.push({
           status: response.status,
           from: currentUrl.href,
@@ -288,6 +351,7 @@ export async function fetchPublicResource(input, options = {}) {
         maxBytes,
         controller.signal,
         () => callerCancelled ? "TASK_CANCELLED" : timedOut ? "UPSTREAM_TIMEOUT" : null,
+        (bytes) => { responseBodyBytesRead = bytes; },
       );
       if (callerCancelled) {
         throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
@@ -296,6 +360,7 @@ export async function fetchPublicResource(input, options = {}) {
         throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
       }
       const retrievedAt = new Date().toISOString();
+      emitReceipt("response");
 
       return {
         ok: response.ok,
@@ -308,6 +373,22 @@ export async function fetchPublicResource(input, options = {}) {
         redirects: redirectChain,
         retrievedAt,
       };
+      } catch (error) {
+        if (!receiptEmitted) {
+          const code = typeof error?.code === "string" ? error.code : null;
+          const outcome = code === "TASK_CANCELLED"
+            ? "cancelled"
+            : code === "UPSTREAM_TIMEOUT"
+              ? "timeout"
+              : code?.startsWith("REDIRECT_") || code === "TOO_MANY_REDIRECTS" || code === "INVALID_REDIRECT"
+                ? "redirect_rejected"
+                : code === "UNSUPPORTED_CONTENT_TYPE" || code === "RESPONSE_TOO_LARGE"
+                  ? "response_rejected"
+                  : "failed";
+          emitReceipt(outcome, code);
+        }
+        throw error;
+      }
     }
   } finally {
     clearTimeout(timeoutId);
