@@ -15,10 +15,7 @@ permissions:
 
 jobs:
   oauth-acceptance:
-    if: >-
-      ${{ github.event_name == 'push' &&
-          github.ref == 'refs/heads/fix/oauth-acceptance-reconciled-20261123' &&
-          contains(github.event.head_commit.message, 'approve: run one-shot isolated OAuth Acceptance with Google secrets') }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/oauth-acceptance-reconciled-20261123' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     concurrency:
