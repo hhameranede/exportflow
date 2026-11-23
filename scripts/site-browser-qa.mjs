@@ -25,9 +25,13 @@ const screenshotRoutes = new Set([
 const routeSlug = (route) => route === "/" ? "home" : route.replace(/^\/+|\/+$/g, "").replaceAll("/", "-").replace(/[^a-z0-9-]/gi, "-");
 let browserIpCounter = 1;
 function nextBrowserIpHeaders() {
-  const octet = browserIpCounter++;
-  if (octet > 254) throw new Error("Browser QA exceeded reserved synthetic IP range.");
-  return { "cf-connecting-ip": "198.51.100." + octet };
+  const index = browserIpCounter++ - 1;
+  const block = Math.floor(index / 254);
+  const secondOctet = 18 + Math.floor(block / 256);
+  if (secondOctet > 19) throw new Error("Browser QA exceeded reserved synthetic IP range.");
+  const thirdOctet = block % 256;
+  const fourthOctet = (index % 254) + 1;
+  return { "cf-connecting-ip": "198." + secondOctet + "." + thirdOctet + "." + fourthOctet };
 }
 
 function buildRouteInventory() {
