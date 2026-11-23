@@ -565,6 +565,10 @@ async function checkLocalAccountLifecycle(browser) {
 
   await page.goto(baseUrl + "/platform", { waitUntil: "domcontentloaded" });
   const authenticatedLayerTabs = page.locator('[data-tab-group="platform-layers"] [data-tab-trigger]');
+  await page.waitForFunction(() => {
+    const tab = document.querySelector('[data-tab-group="platform-layers"] [data-tab-trigger]');
+    return Boolean(tab && !tab.closest("[inert]"));
+  }, null, { timeout: 10000 });
   await authenticatedLayerTabs.nth(1).scrollIntoViewIfNeeded();
   await authenticatedLayerTabs.nth(1).click();
   assert.equal(await authenticatedLayerTabs.nth(1).getAttribute("aria-selected"), "true",
