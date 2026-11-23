@@ -109,7 +109,7 @@ Supported operations:
 - Rotate an active key in one D1 batch: revoke the old key, insert the replacement, and append both audit events atomically.
 - Suspend/close tenants and reassign active plans. A closed tenant cannot be reactivated through this service.
 
-Every mutating service operation requires an injected `authorizeAdmin` function. The HTTP adapter constructs the service separately for each request and binds the already-verified allowlisted owner identity only for that request. Request-body fields, query parameters and caller-supplied headers never establish authority. No Better Auth role mapping, user-role promotion endpoint or impersonation route is wired in this PR.
+Every mutating service operation requires an injected `authorizeAdmin` function. The HTTP adapter constructs the service separately for each request and binds the already-verified allowlisted owner identity only for that request. Request-body fields, query parameters and caller-supplied headers never establish authority. No Better Auth role mapping, user-role promotion endpoint or impersonation route is wired in this implementation.
 
 Migration `0003_tenant_admin_audit_log.sql` adds an append-only audit table with update/delete guards. Each D1 mutation and its audit event are submitted in the same `D1Database.batch()`; if the batch fails, the operation returns a sanitized 503. Migration 0003 was applied to a temporary isolated D1 database for the combined tenant-admin HTTP + D1 Binding acceptance (19/19 checks), then that test database and Worker were deleted and independently verified absent. That test used an injected synthetic owner at the HTTP boundary; it did not prove Better Auth browser-cookie authorization. The implementation is merged into `main`, but Production remains fail-closed pending the remaining authentication, step-up/MFA, rate-limit, recovery/lockout and owner-identity reviews, plus separate release approvals.
 
@@ -153,8 +153,6 @@ This implementation does not include:
 8. Obtain separate owner approval before changing bindings, deploying or enabling live customer keys.
 
 Node fixtures and Wrangler dry-run builds are supporting checks only; neither proves Cloudflare D1 Binding runtime acceptance.
-
-
 
 ## Current isolated Acceptance evidence and Production boundary — 23 November 2026
 
