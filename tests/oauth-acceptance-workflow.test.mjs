@@ -6,15 +6,17 @@ const ciWorkflowPath = new URL("../.github/workflows/ci.yml", import.meta.url);
 const acceptancePath = new URL("../.github/workflows/oauth-acceptance.yml", import.meta.url);
 const mfaAcceptancePath = new URL("../.github/workflows/owner-mfa-acceptance.yml", import.meta.url);
 const tenantBurstAcceptancePath = new URL("../.github/workflows/tenant-burst-acceptance.yml", import.meta.url);
+const oauthSmokePath = new URL("../scripts/oauth-acceptance-smoke.mjs", import.meta.url);
 const authAcceptanceConfigPath = new URL("../cloudflare/auth-acceptance/wrangler.toml", import.meta.url);
 const mcpAcceptanceConfigPath = new URL("../cloudflare/mcp-acceptance/wrangler.toml", import.meta.url);
-const [ciWorkflow, acceptanceWorkflow, mfaAcceptanceWorkflow, tenantBurstAcceptanceWorkflow, authAcceptanceConfig, mcpAcceptanceConfig] = await Promise.all([
+const [ciWorkflow, acceptanceWorkflow, mfaAcceptanceWorkflow, tenantBurstAcceptanceWorkflow, authAcceptanceConfig, mcpAcceptanceConfig, oauthSmoke] = await Promise.all([
   readFile(ciWorkflowPath, "utf8"),
   readFile(acceptancePath, "utf8"),
   readFile(mfaAcceptancePath, "utf8"),
   readFile(tenantBurstAcceptancePath, "utf8"),
   readFile(authAcceptanceConfigPath, "utf8"),
   readFile(mcpAcceptanceConfigPath, "utf8"),
+  readFile(oauthSmokePath, "utf8"),
 ]);
 
 test("ordinary Worker CI does not deploy OAuth Acceptance", () => {
@@ -62,4 +64,15 @@ test("consumed one-shot Acceptance sentinels cannot rerun on deletion or workflo
   assert.ok(acceptanceWorkflow.includes("contains(github.event.head_commit.added, '.github/acceptance/oauth-acceptance.approved')"));
   assert.ok(mfaAcceptanceWorkflow.includes("contains(github.event.head_commit.added, '.github/acceptance/mfa-acceptance.approved')"));
   assert.ok(tenantBurstAcceptanceWorkflow.includes("contains(github.event.head_commit.added, '.github/acceptance/tenant-burst.approved')"));
+});
+
+test("OAuth Acceptance exercises refresh rotation, retry replay and RFC 7009 revocation", () => {
+  assert.match(oauthSmoke, /grant_type: "refresh_token"/);
+  assert.match(oauthSmoke, /Refresh rotation must replace the presented refresh token/);
+  assert.match(oauthSmoke, /equivalent retry inside the configured reuse window/);
+  assert.match(oauthSmoke, /OAuth refresh-token revocation/);
+  assert.match(oauthSmoke, /revokedRefreshAttempt\.body\?\.error, "invalid_grant"/);
+  assert.match(oauthSmoke, /DELETE FROM oauthAccessToken WHERE clientId = \?/);
+  assert.match(oauthSmoke, /DELETE FROM oauthRefreshToken WHERE clientId = \?/);
+  assert.match(oauthSmoke, /DELETE FROM oauthConsent WHERE clientId = \?/);
 });
