@@ -49,8 +49,13 @@ jobs:
           grep -Fx 'name = "exportflow-auth-acceptance-20261122"' cloudflare/auth-acceptance/wrangler.toml
           grep -Fx 'database_id = "0dd14d21-5d56-4b01-8c0f-a14959521dde"' cloudflare/auth-acceptance/wrangler.toml
           grep -Fx 'database_id = "1f94eee0-219e-4a41-86ce-49c29067ef06"' cloudflare/auth-acceptance/wrangler.toml
+          grep -Fx 'database_id = "1f94eee0-219e-4a41-86ce-49c29067ef06"' cloudflare/mcp-acceptance/wrangler.toml
           if grep -q '0bd9f873-a1d5-4d90-b3fc-1c4b47e1aa67' cloudflare/auth-acceptance/wrangler.toml; then
-            echo "::error::Production AUTH_DB ID found in Acceptance config."
+            echo "::error::Production AUTH_DB ID found in Auth Acceptance config."
+            exit 1
+          fi
+          if grep -q '0bd9f873-a1d5-4d90-b3fc-1c4b47e1aa67' cloudflare/mcp-acceptance/wrangler.toml; then
+            echo "::error::Production AUTH_DB ID found in MCP Acceptance config."
             exit 1
           fi
       - name: Verify the existing Better Auth encryption secret without rotating it
@@ -100,9 +105,9 @@ jobs:
             migrations/0002_guard_quota_period_transitions.sql \
             migrations/0003_tenant_admin_audit_log.sql \
             migrations/0004_tenant_oauth_memberships.sql; do
-            npx --yes wrangler@4 d1 execute exportflow-tenant-acceptance-20261122 --remote --yes --file "$migration"
+            npx --yes wrangler@4 d1 execute EXPORTFLOW_AUTH_DB --config cloudflare/auth-acceptance/wrangler.toml --remote --yes --file "$migration"
           done
-          npx --yes wrangler@4 d1 execute exportflow-tenant-acceptance-20261122 --remote --yes \
+          npx --yes wrangler@4 d1 execute EXPORTFLOW_AUTH_DB --config cloudflare/auth-acceptance/wrangler.toml --remote --yes \
             --command "INSERT INTO plan_policies (plan_code, quota_period, request_limit, policy_version, status, created_at, updated_at) VALUES ('qa_daily', 'daily', 2, 'acceptance-v1', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now')) ON CONFLICT(plan_code) DO UPDATE SET quota_period='daily', request_limit=2, policy_version='acceptance-v1', status='active', updated_at=excluded.updated_at"
       - name: Verify existing JWKS signing keys remain intact (read-only)
         shell: bash
