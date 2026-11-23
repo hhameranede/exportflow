@@ -66,6 +66,7 @@ const cleanupState = {
   membershipId: null,
   sessionId: null,
   clientName: null,
+  clientId: null,
 };
 
 async function cleanupAcceptanceArtifacts() {
@@ -113,6 +114,23 @@ async function cleanupAcceptanceArtifacts() {
       tenantDatabaseId,
       "UPDATE tenants SET status = 'closed', updated_at = ? WHERE tenant_id = ? AND status = 'active'",
       [now, cleanupState.tenantId],
+    ));
+  }
+  if (cleanupState.clientId) {
+    await attempt("synthetic OAuth access tokens", () => d1Query(
+      authDatabaseId,
+      "DELETE FROM oauthAccessToken WHERE clientId = ?",
+      [cleanupState.clientId],
+    ));
+    await attempt("synthetic OAuth refresh tokens", () => d1Query(
+      authDatabaseId,
+      "DELETE FROM oauthRefreshToken WHERE clientId = ?",
+      [cleanupState.clientId],
+    ));
+    await attempt("synthetic OAuth consent", () => d1Query(
+      authDatabaseId,
+      "DELETE FROM oauthConsent WHERE clientId = ?",
+      [cleanupState.clientId],
     ));
   }
   if (cleanupState.clientName) {
@@ -294,6 +312,7 @@ const registrationResponse = await fetch(issuer + "/oauth2/register", {
 const registration = await expectJson(registrationResponse, "OAuth dynamic client registration");
 assert.ok(registration.client_id, "OAuth registration should return a public client id");
 assert.equal(registration.token_endpoint_auth_method, "none", "Acceptance client must be a public OAuth client");
+cleanupState.clientId = registration.client_id;
 
 const verifier = randomBytes(32).toString("base64url");
 const challenge = createHash("sha256").update(verifier).digest("base64url");
@@ -432,13 +451,49 @@ assert.ok(typeof token.access_token === "string" && token.access_token.length > 
 assert.equal(token.token_type?.toLowerCase(), "bearer");
 assert.ok(token.expires_in > 0);
 assert.ok(!JSON.stringify(token).includes(password), "OAuth response must not expose the sign-up password");
+assert.ok(typeof token.refresh_token === "string" && token.refresh_token.length > 20, "OAuth should issue a refresh token for the refresh_token grant");
 
+async function postOAuthForm(path, form, label) {
+  const response = await fetch(issuer + path, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+    body: form,
+  });
+  const raw = await response.text();
+  let body = null;
+  try {
+    body = raw ? JSON.parse(raw) : null;
+  } catch {
+    body = { raw: raw.slice(0, 1_000) };
+  }
+  return { response, body, label };
+}
+
+const originalRefreshToken = token.refresh_token;
+const refreshForm = new URLSearchParams({
+  grant_type: "refresh_token",
+  client_id: registration.client_id,
+  refresh_token: originalRefreshToken,
+  resource,
+});
+const firstRefresh = await postOAuthForm("/oauth2/token", refreshForm, "OAuth refresh rotation");
+assert.equal(firstRefresh.response.status, 200, "A valid refresh token should rotate successfully");
+assert.ok(typeof firstRefresh.body?.refresh_token === "string", "Refresh rotation should return a replacement refresh token");
+assert.notEqual(firstRefresh.body.refresh_token, originalRefreshToken, "Refresh rotation must replace the presented refresh token");
+assert.ok(typeof firstRefresh.body?.access_token === "string", "Refresh rotation should return a new access token");
+
+const retryRefresh = await postOAuthForm("/oauth2/token", refreshForm, "OAuth refresh retry");
+assert.equal(retryRefresh.response.status, 200, "An equivalent retry inside the configured reuse window should recover the same rotated response");
+assert.equal(retryRefresh.body?.refresh_token, firstRefresh.body.refresh_token, "Refresh retry must return the same replacement refresh token");
+assert.equal(retryRefresh.body?.access_token, firstRefresh.body.access_token, "Refresh retry must return the same access token");
+
+let activeAccessToken = firstRefresh.body.access_token;
 let lastMcpHttpStatus = null;
 async function callMcp(name, argumentsValue) {
   const response = await fetch(resource, {
     method: "POST",
     headers: {
-      authorization: "Bearer " + token.access_token,
+      authorization: "Bearer " + activeAccessToken,
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
       "mcp-protocol-version": "2025-11-25",
@@ -473,6 +528,22 @@ assert.equal(fetchResult?.structuredContent?.quota?.limit, 2, "MCP execution sho
 const scopeDenied = await callMcp("web_map", { url: "https://example.com/" });
 assert.equal(scopeDenied?.isError, true, "web_map should be rejected when the OAuth client only has tasks:fetch");
 assert.equal(scopeDenied?.structuredContent?.error, "insufficient_scope");
+
+const revokeResponse = await postOAuthForm("/oauth2/revoke", new URLSearchParams({
+  client_id: registration.client_id,
+  token: firstRefresh.body.refresh_token,
+  token_type_hint: "refresh_token",
+}), "OAuth refresh-token revocation");
+assert.equal(revokeResponse.response.status, 200, "A valid refresh token should be revocable through RFC 7009 endpoint");
+
+const revokedRefreshAttempt = await postOAuthForm("/oauth2/token", new URLSearchParams({
+  grant_type: "refresh_token",
+  client_id: registration.client_id,
+  refresh_token: firstRefresh.body.refresh_token,
+  resource,
+}), "Revoked OAuth refresh token");
+assert.equal(revokedRefreshAttempt.response.status, 400, "A revoked refresh token must not mint another token set");
+assert.equal(revokedRefreshAttempt.body?.error, "invalid_grant", "A revoked refresh token must return invalid_grant");
 
 const bumped = await d1Query(
   tenantDatabaseId,
@@ -515,7 +586,7 @@ await d1Query(
   [membership.tenantId],
 );
 
-console.log("OAuth acceptance passed: signup, active tenant selection, consent, authorization-code + S256 PKCE, token exchange, real MCP web_fetch, scope enforcement, D1 quota and membership-version invalidation.");
+console.log("OAuth acceptance passed: signup, active tenant selection, consent, authorization-code + S256 PKCE, token exchange, refresh rotation and in-window retry replay, refresh-token revocation, real MCP web_fetch, scope enforcement, D1 quota and membership-version invalidation.");
 } finally {
   try {
     await cleanupAcceptanceArtifacts();
