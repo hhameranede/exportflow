@@ -225,6 +225,8 @@ export const MARKETING_JS = `(function () {
         drawer.hidden = false;
         if (backdrop) backdrop.classList.add("is-open");
         requestAnimationFrame(function () {
+          // Ignore a stale opening frame if Escape or another control closed the drawer.
+          if (menuBtn.getAttribute("aria-expanded") !== "true") return;
           drawer.classList.add("is-open");
           var items = getFocusable();
           if (items.length) items[0].focus();
@@ -258,6 +260,14 @@ export const MARKETING_JS = `(function () {
 
     drawer.addEventListener("click", function (e) {
       if (e.target.closest("a")) setDrawerOpen(false);
+    });
+
+    // Handle Escape at document level, including while the opening animation is pending.
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape" || menuBtn.getAttribute("aria-expanded") !== "true") return;
+      e.preventDefault();
+      setDrawerOpen(false);
+      menuBtn.focus();
     });
 
     drawer.addEventListener("keydown", function (e) {

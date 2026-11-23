@@ -46,7 +46,7 @@ const ROUTES = [
   ["/changelog", "Changelog", "A transparent record of product changes."],
   ["/blog", "Blog", "Ideas and updates from the ExportFlow team."],
   ["/resources", "Resources", "Technical resources for agent builders."],
-  ["/faq", "Frequently Asked Questions", "Clear answers about the product and its current status."],
+  ["/faq", "Frequently Asked Questions", "Answers about ExportFlow capabilities, security boundaries, and current product status.", "faq"],
   ["/legal/terms", "Terms of Service", "Terms and conditions for use of ExportFlow."],
   ["/legal/privacy", "Privacy Policy", "How information is handled when using ExportFlow."],
   ["/legal/cookies", "Cookie Policy", "Information about cookies and similar technologies."],
@@ -610,6 +610,35 @@ function genericBody(route, path, t, locale, oauthDetails = {}) {
 
   if (type && type.startsWith("auth-")) {
     return renderAuthPage(type, t, locale, hrefFor, escapeHtml, arrowRightIcon, arrowUpRightIcon, oauthDetails);
+  }
+
+  if (type === "faq") {
+    const questions = [
+      ["What is ExportFlow?", "ExportFlow is model-agnostic agentic web infrastructure. It separates an AI agent's reasoning from bounded web execution, policy enforcement, normalized results, and source evidence."],
+      ["Which capabilities are currently enabled?", "The public REST Task contract is intentionally limited to bounded HTTP Fetch. Search, Research, and Browser execution are not generally enabled. Map, Crawl, and structured extraction have internal or preview implementations, but their presence in the repository does not make them production services."],
+      ["Can ExportFlow interact with logged-in websites or bypass protections?", "No. The platform is designed for eligible public HTTP(S) resources. It does not bypass authentication, paywalls, CAPTCHAs, or anti-bot controls, and it must enforce destination and redirect restrictions."],
+      ["Does ExportFlow depend on one AI model provider?", "No. The execution contract is model-agnostic. Agents supply task intent through the documented interface; the Core validates the request, applies policy, routes supported work, and returns normalized output with provenance."],
+      ["Is browser automation available today?", "No. Browser rendering requires a separately configured browser runtime and security acceptance. User-directed browser interactions remain unsupported until an explicitly reviewed implementation is available."],
+      ["Is ExportFlow ready for production customers?", "The project is still in a controlled development and preview phase. Local tests and Worker dry-runs are not a production availability guarantee. Customer onboarding, durable task operations, and production enablement require separate verification."],
+      ["Where can developers see the current contract?", "Start with the Developers page and API Reference. Treat illustrative examples as examples only; verify the live capability response and published API contract before integrating."],
+    ];
+    return `<section class="ef-page-hero">
+      <div class="ef-container">
+        <p class="ef-eyebrow">EXPORTFLOW / FAQ</p>
+        <h1>${escapeHtml(title)}</h1>
+        <p class="ef-page-lead">${escapeHtml(description)}</p>
+      </div>
+    </section>
+    <section class="ef-section">
+      <div class="ef-container">
+        <div class="ef-faq-list" aria-label="Frequently asked questions">
+          ${questions.map(([question, answer], index) => `<details class="ef-info-card ef-faq-item" data-faq-item${index === 0 ? " open" : ""}>
+            <summary class="ef-faq-summary">${escapeHtml(question)}</summary>
+            <div class="ef-faq-answer"><p>${escapeHtml(answer)}</p></div>
+          </details>`).join("")}
+        </div>
+      </div>
+    </section>`;
   }
 
   if (type === "contact") {
