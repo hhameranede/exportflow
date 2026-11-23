@@ -1,0 +1,22 @@
+name = "exportflow-tenant-platform-acceptance-20261122"
+main = "tenant-platform.js"
+compatibility_date = "2026-11-22"
+workers_dev = true
+preview_urls = false
+keep_vars = true
+
+[vars]
+EXPORTFLOW_ACCEPTANCE_RUN = "tenant-burst-20261122"
+
+[[d1_databases]]
+binding = "EXPORTFLOW_AUTH_DB"
+database_name = "exportflow-tenant-acceptance-20261122"
+database_id = "1f94eee0-219e-4a41-86ce-49c29067ef06"
+
+[[durable_objects.bindings]]
+name = "TENANT_BURST_LIMITER"
+class_name = "TenantBurstRateLimiter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = [ "TenantBurstRateLimiter" ]
