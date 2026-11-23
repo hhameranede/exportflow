@@ -72,6 +72,7 @@ registerAdapter({
     if (input.maxRedirects !== undefined) fetchOptions.maxRedirects = input.maxRedirects;
     if (typeof options?.fetchImpl === "function") fetchOptions.fetchImpl = options.fetchImpl;
     if (options?.signal) fetchOptions.signal = options.signal;
+    if (typeof options?.onUsageReceipt === "function") fetchOptions.onUsageReceipt = options.onUsageReceipt;
     const response = await fetchPublicResource(input.url, fetchOptions);
     return normalizeResult({
       status: response.ok ? "succeeded" : "failed",
