@@ -3,7 +3,7 @@ on:
  push:
   branches: [main]
  pull_request:
-  branches: [main, feat/mcp-source-of-truth-20261120]
+  branches: [main, feat/mcp-source-of-truth-20261120, feat/owner-authorized-tenant-admin-api-20261121]
 jobs:
  test:
   runs-on: ubuntu-latest
