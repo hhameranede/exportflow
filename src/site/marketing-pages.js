@@ -6,13 +6,12 @@ import {
   USE_CASES,
   VALUE_PILLARS,
 } from "./data.js";
-import { renderFeatureIcon, renderSectionGlyph } from "./icons.js";
+import { renderFeatureIcon } from "./icons.js";
 
-function pageHero({ eyebrow, title, description, badgeHtml = "", actionsHtml = "", glyph = "" }) {
+function pageHero({ title, description, badgeHtml = "", actionsHtml = "" }) {
   return `<section class="ef-page-hero">
     <div class="ef-container">
-      <p class="ef-kicker">${eyebrow}</p>
-      ${glyph ? `<div class="ef-section-title-row">${renderSectionGlyph(glyph)}<h1>${title}</h1></div>` : `<h1>${title}</h1>`}
+      <h1>${title}</h1>
       <p class="ef-page-lead">${description}</p>
       ${badgeHtml ? `<div class="ef-hero-meta ef-mt-20">${badgeHtml}</div>` : ""}
       ${actionsHtml ? `<div class="ef-hero-actions ef-mt-28">${actionsHtml}</div>` : ""}
@@ -63,11 +62,11 @@ function authGateWrap({ locale, hrefFor, escapeHtml, nextPath, titleEn, titleAr,
 export function renderUnifiedPlatformPage({ t, locale, hrefFor, escapeHtml, arrowRightIcon, arrowUpRightIcon, statusBadgeHtml }) {
   const pillarIcons = ["controlled", "transparent", "provenance", "resource-limits"];
   return `${pageHero({
-    eyebrow: "Platform",
+
     title: "Seven-Layer Agent Execution Architecture",
     description: "Explore how ExportFlow separates agent intent from bounded HTTP retrieval, policy verification, deterministic routing, and verifiable source evidence.",
     badgeHtml: `${statusBadgeHtml("available", { available: `${t.available} · Core & REST` })} <span aria-hidden="true">·</span> ${statusBadgeHtml("development", t)}`,
-    glyph: "architecture",
+
     actionsHtml: `
       <a class="ef-btn ef-btn-primary" href="${hrefFor("/demo", locale)}">
         <span>Inspect in interactive preview</span>
@@ -82,7 +81,6 @@ export function renderUnifiedPlatformPage({ t, locale, hrefFor, escapeHtml, arro
   <section class="ef-section ef-section-tinted" aria-labelledby="layers-heading">
     <div class="ef-container">
       <div class="ef-section-head">
-        <p class="ef-kicker">Architecture Explorer</p>
         <h2 id="layers-heading" class="ef-section-title">Inspect each execution boundary</h2>
         <p class="ef-section-lead">Select a layer to inspect its runtime maturity, module responsibility, and enforced fail-closed guardrails.</p>
       </div>
@@ -124,8 +122,10 @@ export function renderUnifiedPlatformPage({ t, locale, hrefFor, escapeHtml, arro
           >
             <div class="ef-layer-panel-head">
               <div>
-                <p class="ef-kicker">${escapeHtml(layer.step)}</p>
-                <h3>${escapeHtml(layer.name)}</h3>
+                <div class="ef-layer-panel-title">
+                  <h3>${escapeHtml(layer.name)}</h3>
+                  <span class="ef-layer-step">${escapeHtml(layer.step)}</span>
+                </div>
               </div>
               <span class="ef-badge ${layer.maturity.includes("Local Runtime Verified") ? "ef-badge-available" : "ef-badge-dev"}">
                 <span>${escapeHtml(layer.maturity)}</span>
@@ -155,7 +155,6 @@ export function renderUnifiedPlatformPage({ t, locale, hrefFor, escapeHtml, arro
   <section class="ef-section" aria-labelledby="pillars-heading">
     <div class="ef-container">
       <div class="ef-section-head">
-        <p class="ef-kicker">Design Guarantees</p>
         <h2 id="pillars-heading" class="ef-section-title">Why agent infrastructure separates reasoning from transport</h2>
       </div>
       <div class="ef-sub-grid ef-pillars-grid">
@@ -163,7 +162,6 @@ export function renderUnifiedPlatformPage({ t, locale, hrefFor, escapeHtml, arro
           <div class="ef-pillar-head">
             ${renderFeatureIcon(pillarIcons[idx] || "controlled")}
             <div>
-              <p class="ef-kicker">${escapeHtml(pillar.number)}</p>
               <h3>${escapeHtml(pillar.title)}</h3>
             </div>
           </div>
@@ -183,10 +181,10 @@ export function renderUnifiedUseCasesPage({ t, locale, hrefFor, escapeHtml, arro
     "browser-escalation": "uc-browser",
   };
   return `${pageHero({
-    eyebrow: "Use Cases",
+
     title: "Structured Workflows, Grounded in Evidence",
     description: "How AI agents delegate bounded web discovery, schema extraction, and guarded execution while preserving source provenance and explicit failure states.",
-    glyph: "workflow",
+
     actionsHtml: `
       <a class="ef-btn ef-btn-primary" href="${hrefFor("/demo", locale)}">
         <span>Run interactive simulation</span>
@@ -201,7 +199,6 @@ export function renderUnifiedUseCasesPage({ t, locale, hrefFor, escapeHtml, arro
   <section class="ef-section ef-section-tinted" aria-labelledby="uc-heading">
     <div class="ef-container">
       <div class="ef-section-head">
-        <p class="ef-kicker">Workflow Blueprints</p>
         <h2 id="uc-heading" class="ef-section-title">Execution patterns across Core adapters</h2>
         <p class="ef-section-lead">Each blueprint separates what is verified in local HTTP Fetch today from internal prototypes and planned escalation paths.</p>
       </div>
@@ -329,11 +326,11 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
   ].join("\n");
 
   return `${pageHero({
-    eyebrow: "Developer Center",
+
     title: "Contract-First Execution Reference",
     description: "Inspect the Phase 1 Task Contract, fail-closed D1 tenant authentication, Durable Object burst guards, normalized source provenance, and error recovery table.",
     badgeHtml: `${statusBadgeHtml("available", { available: `${t.available} · HTTP Fetch` })} <span aria-hidden="true">·</span> ${statusBadgeHtml("development", t)}`,
-    glyph: "developers",
+
     actionsHtml: `
       <a class="ef-btn ef-btn-primary" href="${hrefFor("/demo", locale)}">
         <span>Open interactive preview</span>
@@ -539,11 +536,11 @@ export function renderUnifiedDemoPage({ locale, hrefFor, escapeHtml, arrowRightI
   const initialPreset = DEMO_PRESETS["public-fetch"];
 
   return `${pageHero({
-    eyebrow: "Interactive Preview",
+
     title: "Bounded Execution Workbench",
     description: "Inspect how ExportFlow enforces task contract bounds, SSRF egress rules, deterministic routing, and normalized provenance — completely inside your browser.",
     badgeHtml: `<span class="ef-badge ef-badge-dev"><span>Simulation only · 0 external network requests</span></span>`,
-    glyph: "workbench",
+
     actionsHtml: `
       <a class="ef-btn ef-btn-primary ef-btn-sm" href="${hrefFor("/workspace", locale)}"><span>Open Live Execution Workspace</span></a>
       <a class="ef-text-link" href="${hrefFor("/developers", locale)}"><span>Read contract specification</span>${arrowRightIcon("ef-icon ef-icon-xs ef-dir-arrow")}</a>
@@ -729,10 +726,10 @@ export function renderUnifiedRichRoute(routePath, route, { t, locale, hrefFor, e
       ["/product/persistent-intelligence", "Persistent Intelligence", "planned", "Future durable queues, long-running task storage, and resumption.", "persistent-intelligence"],
     ];
     return `${pageHero({
-      eyebrow: "Product",
+
       title: escapeHtml(title),
       description: escapeHtml(description),
-      glyph: "capabilities",
+
       actionsHtml: `
         <a class="ef-btn ef-btn-primary" href="${hrefFor("/platform", locale)}"><span>Inspect 7-layer architecture</span></a>
         <a class="ef-text-link" href="${hrefFor("/demo", locale)}"><span>Interactive preview</span>${arrowRightIcon("ef-icon ef-icon-xs ef-dir-arrow")}</a>
@@ -790,7 +787,7 @@ export function renderUnifiedRichRoute(routePath, route, { t, locale, hrefFor, e
     }[routePath];
 
     return `${pageHero({
-      eyebrow: "Product",
+
       title: escapeHtml(title),
       description: escapeHtml(description),
       badgeHtml: statusBadgeHtml(moduleSpecs.state, t),
@@ -823,7 +820,7 @@ export function renderUnifiedRichRoute(routePath, route, { t, locale, hrefFor, e
 
   if (routePath === "/solutions") {
     return `${pageHero({
-      eyebrow: "Solutions",
+
       title: "Controlled Execution for Real Agent Workloads",
       description: "See how bounded retrieval, deterministic extraction, and fail-closed security boundaries fit agent pipelines without coupling to one LLM vendor.",
       actionsHtml: `<a class="ef-btn ef-btn-primary" href="${hrefFor("/use-cases", locale)}"><span>Inspect 5 workflow blueprints</span></a>`,
@@ -842,7 +839,7 @@ export function renderUnifiedRichRoute(routePath, route, { t, locale, hrefFor, e
 
   if (routePath === "/pricing") {
     return `${pageHero({
-      eyebrow: "Pricing",
+
       title: "Transparent Infrastructure Limits Before Billing Launches",
       description: "Public commercial plans are not open yet. D1 quota windows and Durable Object burst controls are implemented in Core ahead of future plan publication.",
       badgeHtml: statusBadgeHtml("planned", t),
@@ -864,7 +861,7 @@ export function renderUnifiedRichRoute(routePath, route, { t, locale, hrefFor, e
 
   if (routePath === "/integrations") {
     return `${pageHero({
-      eyebrow: "Integrations",
+
       title: "Provider-Neutral REST & OAuth / MCP Entry Points",
       description: "Connect any model, agent framework, or internal backend through versioned JSON contracts without vendor lock-in.",
     })}
@@ -904,7 +901,7 @@ export function renderUnifiedRichRoute(routePath, route, { t, locale, hrefFor, e
     ];
 
     return `${pageHero({
-      eyebrow: escapeHtml(title),
+
       title: escapeHtml(title),
       description: escapeHtml(description),
       actionsHtml: `
@@ -923,7 +920,7 @@ export function renderUnifiedRichRoute(routePath, route, { t, locale, hrefFor, e
         </div>
         <div class="ef-sub-grid ef-mt-20">
           ${CAPABILITIES.slice(0, 2).map((cap) => `<article class="ef-info-card">
-            <p class="ef-kicker">${escapeHtml(cap.adapterId)}</p>
+            <code class="ef-adapter-id">${escapeHtml(cap.adapterId)}</code>
             <h3>${escapeHtml(cap.name)} — ${escapeHtml(cap.maturity)}</h3>
             <p>${escapeHtml(cap.details)}</p>
           </article>`).join("")}

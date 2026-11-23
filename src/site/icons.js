@@ -11,39 +11,6 @@ export function renderBrandCatSvg(cls = "ef-brand-cat-svg", size = 24) {
   return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" aria-hidden="true">${BRAND_CAT_MARK_PATHS}</svg>`;
 }
 
-const SECTION_SVGS = {
-  capabilities: `<svg width="17" height="17" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">
-    <rect x="3.5" y="4.5" width="21" height="19" rx="4"/>
-    <path d="M9 11h10M9 15.5h6"/>
-    <circle cx="19" cy="15.5" r="1.5" fill="var(--accent)" stroke="none"/>
-  </svg>`,
-  architecture: `<svg width="17" height="17" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">
-    <rect x="3" y="10" width="6" height="8" rx="1.8"/>
-    <rect x="19" y="5" width="6" height="6.5" rx="1.8"/>
-    <rect x="19" y="16.5" width="6" height="6.5" rx="1.8"/>
-    <path d="M9 14h4.5M13.5 14l5.5-5.5M13.5 14l5.5 5.5"/>
-    <circle cx="13.5" cy="14" r="1.8" fill="var(--accent)" stroke="none"/>
-  </svg>`,
-  developers: `<svg width="17" height="17" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">
-    <rect x="3.5" y="4.5" width="21" height="19" rx="4"/>
-    <path d="M10.5 11l-3 3 3 3M17.5 11l3 3-3 3M15 10l-2 8"/>
-  </svg>`,
-  guarantees: `<svg width="17" height="17" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M14 3.5l8 3.2v6.4c0 5.4-3.4 9.5-8 11.4-4.6-1.9-8-6-8-11.4V6.7l8-3.2Z"/>
-    <path d="M10.8 14.2l2.3 2.3 4.6-4.8" stroke="var(--accent)"/>
-  </svg>`,
-  workflow: `<svg width="17" height="17" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">
-    <rect x="4" y="4.5" width="8" height="8" rx="2"/>
-    <rect x="16" y="15.5" width="8" height="8" rx="2"/>
-    <path d="M12 8.5h4.5a3.5 3.5 0 0 1 3.5 3.5v3.5M12 19.5H7.5A3.5 3.5 0 0 1 4 16v-3.5"/>
-  </svg>`,
-  workbench: `<svg width="17" height="17" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">
-    <rect x="3.5" y="4.5" width="21" height="19" rx="4"/>
-    <path d="M3.5 9.5h21"/>
-    <path d="M8.5 14.5l3 2.5-3 2.5M14 19.5h5.5"/>
-  </svg>`,
-};
-
 const FEATURE_SVGS = {
   "web-intelligence": `<svg width="16" height="16" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="15" cy="15" r="9.5"/>
@@ -153,11 +120,6 @@ const FEATURE_SVGS = {
     <path d="M12 13.5l7 2.8-3 1.3-1.3 3-2.7-7.1Z" stroke="var(--accent)"/>
   </svg>`,
 };
-
-export function renderSectionGlyph(name) {
-  const svg = SECTION_SVGS[name] || SECTION_SVGS.capabilities;
-  return `<span class="ef-section-glyph" aria-hidden="true">${svg}</span>`;
-}
 
 export function renderFeatureIcon(name) {
   const svg = FEATURE_SVGS[name] || FEATURE_SVGS["web-intelligence"];

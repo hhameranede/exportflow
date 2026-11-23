@@ -223,7 +223,7 @@ test("full local auth lifecycle: signup, verification, session login, workspace 
   assert.equal(restoredOverview.status, 200);
 });
 
-test("Cat & Mouse brand icon, favicon, proportional spec metrics, task SVGs, and command palette render across routes", async () => {
+test("brand mark, SVG favicon, spec metrics, task SVGs, and command palette render across routes", async () => {
   const env = await createLocalRuntimeEnv({ dbPath: ":memory:", port: 3000 });
   const worker = createWorker();
 
@@ -243,10 +243,10 @@ test("Cat & Mouse brand icon, favicon, proportional spec metrics, task SVGs, and
     assert.equal(home.status, 200);
     const html = await home.text();
     assert.match(html, /ef-mark ef-mark-cat/);
-    assert.match(html, /ef-hero-emblem/);
-    assert.match(html, /file_00000000292c81f4953519d18ca257b6_d8689779\.png/);
+    assert.match(html, /href="\/assets\/mark\.svg"/);
+    assert.doesNotMatch(html, /assets\/aistudio\//);
     assert.match(html, /<span class="ef-spec-num">8<\/span><span class="ef-spec-unit">sec<\/span>/);
-    assert.match(html, /ef-section-glyph/);
+    assert.doesNotMatch(html, /ef-section-glyph/);
     assert.match(html, /ef-feature-icon/);
     assert.match(html, /data-cmd-backdrop/);
   }
@@ -255,17 +255,17 @@ test("Cat & Mouse brand icon, favicon, proportional spec metrics, task SVGs, and
     const res = await worker.fetch(new Request(`http://127.0.0.1:3000${sub}`), env);
     assert.equal(res.status, 200);
     const html = await res.text();
-    assert.match(html, /ef-section-glyph/);
+    assert.doesNotMatch(html, /ef-section-glyph/);
   }
 
   const signInRes = await worker.fetch(new Request("http://127.0.0.1:3000/signin"), env);
   assert.equal(signInRes.status, 200);
   const signInHtml = await signInRes.text();
-  assert.match(signInHtml, /ef-auth-brand-badge/);
-  assert.match(signInHtml, /class="ef-title-icon-row"><span class="ef-auth-brand-badge"[\s\S]*?<h1/);
+  assert.match(signInHtml, /<h1 class="ef-auth-card-title">/);
+  assert.doesNotMatch(signInHtml, /ef-auth-brand-badge|ef-kicker/);
 });
 
-test("compact SVGs sit inline beside headings and all locales render without English leakage", async () => {
+test("feature SVGs remain useful and all locales render without English leakage", async () => {
   const env = await createLocalRuntimeEnv({ dbPath: ":memory:", port: 3000 });
   const worker = createWorker();
 
@@ -273,7 +273,8 @@ test("compact SVGs sit inline beside headings and all locales render without Eng
   assert.equal(homeAr.status, 200);
   const arHtml = await homeAr.text();
   assert.match(arHtml, /<html[^>]+lang="ar"[^>]+dir="rtl"/);
-  assert.match(arHtml, /class="ef-section-title-row">\s*<span class="ef-section-glyph"[^>]*><svg[^>]*width="17" height="17"[\s\S]*?<h2/);
+  assert.match(arHtml, /class="ef-section-title-row">\s*<h2/);
+  assert.doesNotMatch(arHtml, /ef-section-glyph|ef-kicker/);
   assert.match(arHtml, /class="ef-title-icon-row">\s*<span class="ef-feature-icon"[^>]*><svg[^>]*width="16" height="16"[\s\S]*?<h3/);
   assert.match(arHtml, /الوكيل الذكي/);
   assert.match(arHtml, /سياسة الأمان/);
@@ -282,7 +283,8 @@ test("compact SVGs sit inline beside headings and all locales render without Eng
   const homeFr = await worker.fetch(new Request("http://127.0.0.1:3000/fr/"), env);
   assert.equal(homeFr.status, 200);
   const frHtml = await homeFr.text();
-  assert.match(frHtml, /<html[^>]+lang="fr"[^>]+dir="ltr"/);
+  assert.match(frHtml, /<html[^>]+lang="fr"/);
+  assert.doesNotMatch(frHtml, /dir="rtl"/);
   assert.match(frHtml, /Agent IA/);
   assert.match(frHtml, /Aller au contenu/);
 
