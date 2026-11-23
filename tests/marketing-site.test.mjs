@@ -34,7 +34,7 @@ test("every marketing sitemap route renders one marketing client script and styl
 
     const html = await response.text();
     const scripts = html.match(/<script src="\/assets\/marketing\.js(?:\?[^"]*)?" defer><\/script>/g) ?? [];
-    const stylesheets = html.match(/<link rel="stylesheet" href="\/assets\/marketing\.css(?:\?v=4)?">/g) ?? [];
+    const stylesheets = html.match(/<link rel="stylesheet" href="\/assets\/marketing\.css(?:\?[^\"]*)?">/g) ?? [];
     assert.equal(scripts.length, 1, `${path} should include the marketing client exactly once`);
     assert.equal(stylesheets.length, 1, `${path} should include the marketing stylesheet exactly once`);
     assert.doesNotMatch(html, /<script src="\/assets\/site\.js"/);
