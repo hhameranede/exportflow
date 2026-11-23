@@ -90,8 +90,8 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
   page.on("console", (message) => {
     if (message.type() !== "error") return;
     const text = message.text();
-    const expectedTenantNotReady = /oauth\\/select-tenant/.test(route) &&
-      /status of 503 \\(Service Unavailable\\)/.test(text);
+    const expectedTenantNotReady = route.includes("/oauth/select-tenant") &&
+      text.includes("status of 503 (Service Unavailable)");
     if (!expectedTenantNotReady) consoleErrors.push(text);
   });
   page.on("response", (response) => {
@@ -151,7 +151,7 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
     };
   });
 
-  if (/oauth\\/select-tenant/.test(route)) {
+  if (route.includes("/oauth/select-tenant")) {
     const tenantStatus = page.locator("[data-oauth-flow-status]");
     await page.waitForFunction(() => {
       const status = document.querySelector("[data-oauth-flow-status]");
