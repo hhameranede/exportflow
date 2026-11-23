@@ -815,9 +815,20 @@ export const MARKETING_JS = `(function () {
         return;
       }
 
-      statusBanner.dataset.state = "success";
-      statusBanner.textContent = "Message validated and prepared locally for " + subjectVal + ". No external submission endpoint is connected yet.";
-      showToast("Inquiry prepared locally");
+      var mailtoBody = [
+        "Name: " + nameVal,
+        "Reply-to: " + emailVal,
+        "Inquiry type: " + subjectVal,
+        "",
+        messageVal
+      ].join("\\n");
+      var mailtoUrl = "mailto:hhameranede@gmail.com?subject=" +
+        encodeURIComponent("[ExportFlow] " + subjectVal) +
+        "&body=" + encodeURIComponent(mailtoBody);
+
+      statusBanner.dataset.state = "info";
+      statusBanner.textContent = contactForm.getAttribute("data-draft-status") || "Review and send the email draft in your email app.";
+      window.location.href = mailtoUrl;
     });
   }
 
@@ -837,7 +848,7 @@ export const MARKETING_JS = `(function () {
 
   function escapeAuthText(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (char) {
-      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[char];
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\\"": "&quot;", "'": "&#39;" })[char];
     });
   }
 
@@ -1649,7 +1660,7 @@ export const MARKETING_JS = `(function () {
     await bindOAuthTenantSelectionPage();
     bindGoogleButtons();
     bindAccountControls();
-    await refreshAuthHeader();
+
     try {
       authConfig = await authRequest("config");
       setAccountConfig(authConfig);
@@ -1657,6 +1668,27 @@ export const MARKETING_JS = `(function () {
       authConfig = null;
       setAccountConfig(null);
     }
+
+    var authReady = Boolean(authConfig && authConfig.authConfigured && authConfig.authReady);
+    if (!authReady) {
+      // Do not request a session from a deployment whose account service is
+      // not configured. This keeps public pages quiet and the account UI
+      // explicitly unavailable instead of producing an avoidable 503.
+      updateAuthHeader(null);
+      var workspace = document.querySelector("[data-account-workspace]");
+      var loading = document.querySelector("[data-account-loading]");
+      var accountStatus = document.querySelector("[data-auth-account-status]");
+      if (workspace) workspace.hidden = true;
+      if (loading) loading.hidden = true;
+      authMessage(
+        accountStatus,
+        "Account services are not connected yet. The account workspace will be available after server authentication is configured.",
+        "warning",
+      );
+      return;
+    }
+
+    await refreshAuthHeader();
     if (document.querySelector("[data-account-workspace]")) {
       await loadAccountWorkspace();
     }
