@@ -171,8 +171,21 @@ test("capability cards keep icons beside titles and preserve mobile metrics, fil
     /@media \(max-width: 767px\)\s*\{[\s\S]*?\.ef-mobile-sticky-cta\s*\{[^}]*position:\s*fixed;/su,
     "mobile CTA must remain fixed to the viewport after content clearance is reserved");
 
+  assert.match(MARKETING_CSS,
+    /\.ef-demo-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/su,
+    "the single-column demo grid must suppress intrinsic track expansion on narrow screens");
+  assert.match(MARKETING_CSS,
+    /\.ef-demo-grid\s*>\s*\*\s*\{\s*min-width:\s*0;/su,
+    "demo grid children must be allowed to shrink below their intrinsic content width");
+  assert.match(MARKETING_CSS,
+    /@media\s*\(max-width:\s*480px\)\s*\{[^}]*\.ef-badge\s*\{[^}]*white-space:\s*normal;[^}]*overflow-wrap:\s*anywhere;/su,
+    "long capability and status badges must wrap on narrow mobile screens");
+  assert.match(MARKETING_CSS,
+    /@media\s*\(max-width:\s*380px\)\s*\{[^}]*\.ef-header-actions\s*\{[^}]*flex-shrink:\s*1;[^}]*min-width:\s*0;/su,
+    "header actions must shrink on 320px phone viewports");
+
   const home = await fetchHtml("/");
-  assert.match(home, /marketing\.css\?v=8/u,
+  assert.match(home, /marketing\.css\?v=9/u,
     "the stylesheet URL must be versioned so mobile clients do not keep stale CSS");
 });
 
