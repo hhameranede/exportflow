@@ -31,6 +31,7 @@ jobs:
         run: |
           test -s .github/acceptance/tenant-burst.approved
           grep -F "one isolated, synthetic tenant-burst Acceptance run" .github/acceptance/tenant-burst.approved
+          git diff-tree --no-commit-id --name-only --diff-filter=A -r HEAD | grep -Fx '.github/acceptance/tenant-burst.approved'
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
