@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { handleWebsiteRequest } from "../src/site/router.js";
 import { MARKETING_PATHS, renderMarketingNotFoundPage } from "../src/site/marketing.js";
 import { SEOManager } from "../src/site/seo-manager.js";
+import { MARKETING_JS } from "../src/site/marketing-client.js";
 
 const ORIGIN = "https://exportflow.test";
 const LOCALIZED_PATH = /^\/(en|ar|fr|es|de|pt|zh|ja)\//;
@@ -11,6 +12,15 @@ function getWebsiteResponse(path) {
   const request = new Request(new URL(path, ORIGIN));
   return handleWebsiteRequest(request, new URL(request.url));
 }
+
+test("contact form creates a safely encoded email draft instead of claiming local success", () => {
+  assert.doesNotThrow(() => new Function(MARKETING_JS));
+  assert.ok(MARKETING_JS.includes('mailto:hhameranede@gmail.com?subject='));
+  assert.ok(MARKETING_JS.includes('encodeURIComponent("[ExportFlow] " + subjectVal)'));
+  assert.ok(MARKETING_JS.includes('encodeURIComponent(mailtoBody)'));
+  assert.ok(MARKETING_JS.includes("window.location.href = mailtoUrl"));
+  assert.doesNotMatch(MARKETING_JS, /No external submission endpoint is connected yet/);
+});
 
 test("every marketing sitemap route renders one marketing client script and stylesheet", async () => {
   const paths = [...new Set(MARKETING_PATHS)];
