@@ -130,7 +130,8 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
 
   const response = await page.goto(baseUrl + route, { waitUntil: "domcontentloaded", timeout: 30000 });
   assert.ok(response, "No navigation response for " + route);
-  assert.equal(response.status(), 200, "Unexpected page status for " + route + " at " + width + "px");
+  const expectedStatus = route === "/oauth/consent" ? 503 : 200;
+  assert.equal(response.status(), expectedStatus, "Unexpected page status for " + route + " at " + width + "px");
   await page.waitForFunction(() => document.readyState === "complete", null, { timeout: 10000 });
   await page.waitForTimeout(50);
 
@@ -216,6 +217,13 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
       links
     };
   });
+
+  if (route === "/oauth/consent") {
+    assert.equal(await page.locator("main h1").innerText(), "Authorization unavailable",
+      "OAuth consent must explain that account authorization is unavailable until its required storage is initialized");
+    assert.match(await page.locator("main").innerText(), /account authorization is not initialized yet/i,
+      "OAuth consent must fail closed with a clear initialization message");
+  }
 
   if (route.includes("/oauth/select-tenant")) {
     const tenantStatus = page.locator("[data-oauth-flow-status]");
