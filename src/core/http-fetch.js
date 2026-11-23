@@ -283,10 +283,10 @@ export async function fetchPublicResource(input, options = {}) {
           method: "GET",
           redirect: "manual",
           cache: cacheMode === "bypass" ? "no-store" : "default",
-          // Expand caching to HTML/text while leaving freshness, no-store/private,
-          // Set-Cookie, and revalidation decisions to Cloudflare's origin-cache rules.
-          // Deliberately do not set cacheTtl/cacheTtlByStatus: they can override origin policy.
-          ...(cacheMode === "default" ? { cf: { cacheEverything: true } } : {}),
+          // Do not force cache eligibility for arbitrary HTML/API responses.
+          // Cloudflare may cache standard static extensions or responses that
+          // explicitly opt in via origin Cache-Control / Expires headers.
+          // Deliberately do not set cacheEverything or force a cache TTL.
           signal: controller.signal,
           headers: {
             accept: "text/html,application/xhtml+xml,application/json,application/xml,text/plain;q=0.9",
