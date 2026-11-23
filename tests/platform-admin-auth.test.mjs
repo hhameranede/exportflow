@@ -21,6 +21,7 @@ function validSession(overrides = {}) {
       ...(overrides.user || {}),
     },
     session: {
+      id: "session_owner_123",
       createdAt: new Date(NOW - 60_000),
       expiresAt: new Date(NOW + 60 * 60_000),
       ...(overrides.session || {}),
@@ -58,7 +59,7 @@ test("owner allowlist parser accepts bounded user IDs and rejects malformed conf
 test("verified, allowlisted, fresh same-origin session is authorized and cache bypass is requested", async () => {
   const auth = authorizer();
   const result = await auth.run();
-  assert.deepEqual(result, { allowed: true, actorId: OWNER });
+  assert.deepEqual(result, { allowed: true, actorId: OWNER, sessionId: "session_owner_123" });
   assert.equal(auth.calls.length, 1);
   assert.equal(auth.calls[0].headers.get("origin"), EXPECTED_ORIGIN);
   assert.deepEqual(auth.calls[0].query, { disableCookieCache: true });

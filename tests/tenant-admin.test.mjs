@@ -244,6 +244,31 @@ test("tenant status updates are repeatable but a closed tenant remains terminal"
   assert.equal(db.calls.length, 4);
 });
 
+
+test("tenant state updates accept D1 batch change counts that include membership trigger effects", async () => {
+  // Updating a tenant's status or plan also updates membership_version on its
+  // memberships. Cloudflare D1 may report more than one changed row for the
+  // tenant UPDATE statement; the service must not misreport that committed
+  // tenant change as a 404.
+  const db = makeD1({ changes: [3, 1] });
+  const { service } = makeService({ db });
+
+  const status = await service.setTenantStatus({
+    tenantId: "tenant_alpha",
+    status: "suspended",
+  });
+  const plan = await service.assignTenantPlan({
+    tenantId: "tenant_alpha",
+    planCode: "pro",
+  });
+
+  assert.equal(status.status, "suspended");
+  assert.equal(plan.planCode, "pro");
+  assert.equal(db.calls.length, 2);
+  assert.equal(db.calls[0].length, 2);
+  assert.equal(db.calls[1].length, 2);
+});
+
 test("administrative methods reject null or array inputs with a controlled error", async () => {
   const { service, db } = makeService();
   await assert.rejects(
