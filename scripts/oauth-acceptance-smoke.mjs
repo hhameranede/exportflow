@@ -306,7 +306,7 @@ const registrationResponse = await fetch(issuer + "/oauth2/register", {
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],
     token_endpoint_auth_method: "none",
-    scope: "openid profile email tasks:fetch",
+    scope: "openid profile email offline_access tasks:fetch",
   }),
 });
 const registration = await expectJson(registrationResponse, "OAuth dynamic client registration");
@@ -322,7 +322,7 @@ const authorizationUrl = new URL(issuer + "/oauth2/authorize");
 authorizationUrl.searchParams.set("client_id", registration.client_id);
 authorizationUrl.searchParams.set("redirect_uri", redirectUri);
 authorizationUrl.searchParams.set("response_type", "code");
-authorizationUrl.searchParams.set("scope", "openid profile email tasks:fetch");
+authorizationUrl.searchParams.set("scope", "openid profile email offline_access tasks:fetch");
 authorizationUrl.searchParams.set("state", state);
 authorizationUrl.searchParams.set("nonce", nonce);
 authorizationUrl.searchParams.set("code_challenge", challenge);
