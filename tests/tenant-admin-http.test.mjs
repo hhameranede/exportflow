@@ -153,21 +153,21 @@ test("admin storage binding and migration readiness fail closed", async () => {
 
   const missingAuditTable = await handler(
     jsonRequest("/api/v1/admin/tenants", { planCode: "free" }),
-    { EXPORTFLOW_AUTH_DB: makeD1(TABLES.filter((name) => name !== "tenant_admin_audit_log")) },
+    { EXPORTFLOW_AUTH_DB: makeD1(TABLES.filter((name) => name !== "tenant_admin_audit_log")), TENANT_BURST_LIMITER: makeDurableLimiterNamespace() },
   );
   assert.equal(missingAuditTable.status, 503);
   assert.equal((await missingAuditTable.json()).error.code, "ADMIN_SCHEMA_NOT_READY");
 
   const missingDeleteGuard = await handler(
     jsonRequest("/api/v1/admin/tenants", { planCode: "free" }),
-    { EXPORTFLOW_AUTH_DB: makeD1(TABLES, REQUIRED_TRIGGERS.filter((name) => name !== "prevent_tenant_admin_audit_delete")) },
+    { EXPORTFLOW_AUTH_DB: makeD1(TABLES, REQUIRED_TRIGGERS.filter((name) => name !== "prevent_tenant_admin_audit_delete")), TENANT_BURST_LIMITER: makeDurableLimiterNamespace() },
   );
   assert.equal(missingDeleteGuard.status, 503);
   assert.equal((await missingDeleteGuard.json()).error.code, "ADMIN_SCHEMA_NOT_READY");
 
   const missingUpdateGuard = await handler(
     jsonRequest("/api/v1/admin/tenants", { planCode: "free" }),
-    { EXPORTFLOW_AUTH_DB: makeD1(TABLES, REQUIRED_TRIGGERS.filter((name) => name !== "prevent_tenant_admin_audit_update")) },
+    { EXPORTFLOW_AUTH_DB: makeD1(TABLES, REQUIRED_TRIGGERS.filter((name) => name !== "prevent_tenant_admin_audit_update")), TENANT_BURST_LIMITER: makeDurableLimiterNamespace() },
   );
   assert.equal(missingUpdateGuard.status, 503);
   assert.equal((await missingUpdateGuard.json()).error.code, "ADMIN_SCHEMA_NOT_READY");
