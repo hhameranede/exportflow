@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -359,6 +360,169 @@ async function checkAuthAndContactPages(browser) {
   await context.close();
 }
 
+function decodeTotpBase32(secret) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  for (const char of String(secret).toUpperCase().replace(/=+$/g, "")) {
+    const value = alphabet.indexOf(char);
+    if (value < 0) throw new Error("Invalid Base32 TOTP secret.");
+    bits += value.toString(2).padStart(5, "0");
+  }
+  const bytes = [];
+  for (let offset = 0; offset + 8 <= bits.length; offset += 8) {
+    bytes.push(parseInt(bits.slice(offset, offset + 8), 2));
+  }
+  return Buffer.from(bytes);
+}
+
+function generateLocalTotp(secret, timestamp = Date.now()) {
+  const counter = BigInt(Math.floor(timestamp / 30000));
+  const counterBuffer = Buffer.alloc(8);
+  counterBuffer.writeBigUInt64BE(counter);
+  const digest = createHmac("sha1", decodeTotpBase32(secret)).update(counterBuffer).digest();
+  const offset = digest[digest.length - 1] & 0x0f;
+  const binary = ((digest[offset] & 0x7f) << 24) |
+    ((digest[offset + 1] & 0xff) << 16) |
+    ((digest[offset + 2] & 0xff) << 8) |
+    (digest[offset + 3] & 0xff);
+  return String(binary % 1000000).padStart(6, "0");
+}
+
+async function checkLocalAccountLifecycle(browser) {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    permissions: ["clipboard-read", "clipboard-write"],
+    extraHTTPHeaders: nextBrowserIpHeaders()
+  });
+  const page = await context.newPage();
+  const timestamp = Date.now();
+  const email = "exportflow-browser-qa-" + timestamp + "@example.test";
+  const initialPassword = "EfBrowserQA!" + timestamp + "Aa1";
+  const resetPassword = "EfBrowserQA-Reset!" + timestamp + "Bb2";
+
+  async function signIn(password) {
+    await page.goto(baseUrl + "/signin", { waitUntil: "domcontentloaded" });
+    const form = page.locator('[data-auth-form="signin"]');
+    await form.waitFor({ state: "visible", timeout: 10000 });
+    await form.locator("#auth-email").fill(email);
+    await form.locator("#auth-password").fill(password);
+    await form.locator('button[type="submit"]').click();
+    await page.waitForFunction(() => Boolean(document.querySelector("[data-signin-totp-form]")), null, { timeout: 12000 }).catch(() => null);
+  }
+
+  await page.goto(baseUrl + "/signup", { waitUntil: "domcontentloaded" });
+  const signup = page.locator('[data-auth-form="signup"]');
+  await signup.waitFor({ state: "visible", timeout: 10000 });
+  await signup.locator("#signup-name").fill("ExportFlow Browser QA");
+  await signup.locator("#signup-email").fill(email);
+  await signup.locator("#signup-password").fill(initialPassword);
+  await signup.locator('button[type="submit"]').click();
+  await page.locator("[data-dev-mailbox-box]").waitFor({ state: "visible", timeout: 10000 });
+  const verificationPath = await page.locator("[data-dev-mailbox-link]").getAttribute("href");
+  assert.ok(verificationPath && verificationPath.startsWith("/"), "Local verification mailbox did not return a same-origin action path");
+  const verificationUrl = new URL(verificationPath, baseUrl);
+  assert.equal(verificationUrl.origin, baseUrl, "Synthetic account verification must stay inside Local runtime");
+  await page.goto(verificationUrl.href, { waitUntil: "domcontentloaded" });
+  await page.goto(baseUrl + "/account", { waitUntil: "domcontentloaded" });
+  if (!page.url().includes("/account")) await signIn(initialPassword);
+  await page.waitForFunction(() => {
+    const workspace = document.querySelector("[data-account-workspace]");
+    return Boolean(workspace && !workspace.hidden);
+  }, null, { timeout: 15000 });
+
+  const profile = page.locator("[data-account-profile-form]");
+  await profile.locator("#acc-name").fill("ExportFlow QA Verified");
+  await profile.locator('button[type="submit"]').click();
+  await page.waitForFunction(() => {
+    const status = document.querySelector("[data-profile-status]");
+    return Boolean(status && status.textContent.trim());
+  }, null, { timeout: 8000 });
+  assert.ok((await profile.locator("#acc-name").inputValue()).includes("QA"), "Profile name did not remain in the account form");
+
+  // Password recovery is exercised entirely through Local Dev Mailbox, not an external email provider.
+  await page.goto(baseUrl + "/forgot-password", { waitUntil: "domcontentloaded" });
+  const forgot = page.locator('[data-auth-form="forgot"]');
+  await forgot.waitFor({ state: "visible", timeout: 10000 });
+  await forgot.locator("#forgot-email").fill(email);
+  await forgot.locator('button[type="submit"]').click();
+  await page.locator("[data-dev-mailbox-box]").waitFor({ state: "visible", timeout: 10000 });
+  const resetPath = await page.locator("[data-dev-mailbox-link]").getAttribute("href");
+  assert.ok(resetPath && resetPath.startsWith("/"), "Local reset mailbox did not return a same-origin action path");
+  const resetUrl = new URL(resetPath, baseUrl);
+  assert.equal(resetUrl.origin, baseUrl, "Synthetic password reset must stay inside Local runtime");
+  await page.goto(resetUrl.href, { waitUntil: "domcontentloaded" });
+  const reset = page.locator('[data-auth-form="reset"]');
+  await reset.waitFor({ state: "visible", timeout: 10000 });
+  await reset.locator("#reset-password").fill(resetPassword);
+  await reset.locator("#reset-password-confirm").fill(resetPassword);
+  await reset.locator('button[type="submit"]').click();
+  await page.waitForURL((url) => url.pathname.endsWith("/signin"), { timeout: 12000 });
+  await signIn(resetPassword);
+
+  await page.waitForFunction(() => Boolean(document.querySelector("[data-signin-totp-form]")) ||
+    window.location.pathname.endsWith("/account"), null, { timeout: 12000 });
+  await page.waitForFunction(() => {
+    const workspace = document.querySelector("[data-account-workspace]");
+    return Boolean(workspace && !workspace.hidden);
+  }, null, { timeout: 15000 });
+
+  // TOTP enrollment and verification use a synthetic secret generated by Local Auth runtime.
+  const enableTotp = page.locator("[data-two-factor-enable-form]");
+  await enableTotp.waitFor({ state: "visible", timeout: 10000 });
+  await enableTotp.locator("#acc-totp-password").fill(resetPassword);
+  await enableTotp.locator('button[type="submit"]').click();
+  await page.locator("[data-two-factor-enrollment]").waitFor({ state: "visible", timeout: 10000 });
+  const secret = (await page.locator("[data-two-factor-secret]").textContent()).trim();
+  assert.ok(secret.length >= 16, "Local TOTP setup did not expose a usable Base32 secret");
+  assert.ok(await page.locator("[data-two-factor-backup-codes] li").count() > 0, "TOTP enrollment did not issue backup codes");
+  await page.locator("#acc-totp-code").fill(generateLocalTotp(secret));
+  await page.locator('[data-two-factor-verify-form] button[type="submit"]').click();
+  await page.waitForFunction(() => (document.querySelector("[data-two-factor-status]")?.textContent || "").toLowerCase().includes("enabled and verified"),
+    null, { timeout: 12000 });
+
+  // Verify a second authenticated session and exercise the workspace UI without external network access.
+  await page.locator("[data-auth-signout]").first().click();
+  await page.waitForURL((url) => url.pathname.endsWith("/signin"), { timeout: 12000 });
+  await page.goto(baseUrl + "/signin", { waitUntil: "domcontentloaded" });
+  const signin = page.locator('[data-auth-form="signin"]');
+  await signin.waitFor({ state: "visible", timeout: 10000 });
+  await signin.locator("#auth-email").fill(email);
+  await signin.locator("#auth-password").fill(resetPassword);
+  await signin.locator('button[type="submit"]').click();
+  const totpPrompt = page.locator("[data-signin-totp-form]");
+  await totpPrompt.waitFor({ state: "visible", timeout: 10000 });
+  await totpPrompt.locator("#signin-totp-code").fill(generateLocalTotp(secret));
+  await totpPrompt.locator('button[type="submit"]').click();
+  await page.waitForURL((url) => url.pathname.endsWith("/account"), { timeout: 12000 });
+
+  await page.goto(baseUrl + "/workspace", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => {
+    const shell = document.querySelector("[data-workspace-shell]");
+    return Boolean(shell && !shell.hidden);
+  }, null, { timeout: 15000 });
+  const keyForm = page.locator("[data-ws-key-form]");
+  const keyName = "browser-qa-" + timestamp;
+  await keyForm.locator('input[name="name"]').fill(keyName);
+  await keyForm.locator('button[type="submit"]').click();
+  await page.waitForFunction(() => {
+    const reveal = document.querySelector("[data-ws-key-reveal]");
+    const key = document.querySelector("[data-ws-key-secret]");
+    return Boolean(reveal && !reveal.hidden && key && key.textContent.startsWith("ef_ws_"));
+  }, null, { timeout: 12000 });
+
+  const executor = page.locator("[data-ws-exec-form]");
+  await executor.locator('input[name="goal"]').fill("Browser QA policy simulation");
+  await executor.locator('input[name="url"]').fill("https://example.com/");
+  await executor.locator('select[name="mode"]').selectOption("simulate");
+  await executor.locator('button[type="submit"]').click();
+  await page.waitForFunction(() => {
+    const status = document.querySelector("[data-ws-exec-status]");
+    return Boolean(status && status.textContent.toLowerCase().includes("succeeded"));
+  }, null, { timeout: 15000 });
+  assert.ok(await page.locator("[data-ws-history-list] li").count() > 0, "Workspace execution was not recorded in local history");
+  await context.close();
+}
+
 async function checkApiAndPublicAssets() {
   const endpoints = [
     ["/api/v1/health", 200],
@@ -421,6 +585,7 @@ try {
   await checkHomeInteractions(browser);
   await checkFeaturePages(browser);
   await checkAuthAndContactPages(browser);
+  await checkLocalAccountLifecycle(browser);
   await checkApiAndPublicAssets();
   await verifyInternalLinks(links);
 
