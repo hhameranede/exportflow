@@ -64,7 +64,7 @@ test("consumed one-shot Acceptance sentinels cannot rerun on deletion or workflo
   assert.ok(acceptanceWorkflow.includes("contains(github.event.head_commit.added, '.github/acceptance/oauth-acceptance.approved')"));
   assert.ok(mfaAcceptanceWorkflow.includes("contains(github.event.head_commit.added, '.github/acceptance/mfa-acceptance.approved')"));
   assert.match(tenantBurstAcceptanceWorkflow, /git diff-tree --no-commit-id --name-only --diff-filter=A -r HEAD/);
-  assert.match(tenantBurstAcceptanceWorkflow, /\\.github\\/acceptance\\/tenant-burst\\.approved/);
+  assert.ok(tenantBurstAcceptanceWorkflow.includes(".github/acceptance/tenant-burst.approved"));
 });
 
 test("OAuth Acceptance exercises refresh rotation, retry replay and RFC 7009 revocation", () => {
