@@ -24,6 +24,9 @@ function validateInput(input) {
   if (typeof input.query !== "string" || !input.query.trim() || input.query.length > 1024) {
     throw new ResearchPipelineError("INVALID_QUERY", "Research query must contain 1 to 1024 characters.");
   }
+  if (!["wikipedia", "openalex", "crossref"].includes(input.source)) {
+    throw new ResearchPipelineError("INVALID_SEARCH_SOURCE", "Choose wikipedia, openalex, or crossref as the research source.");
+  }
   const candidateLimit = input.candidateLimit === undefined
     ? RESEARCH_PIPELINE_LIMITS.defaultCandidates
     : input.candidateLimit;
@@ -42,6 +45,7 @@ function validateInput(input) {
   }
   return {
     query: input.query.trim(),
+    source: input.source,
     limit: input.limit,
     candidateLimit,
     schema,
@@ -114,45 +118,17 @@ function extractFetchedContent(fetchResult, schema, url) {
   };
 }
 
-function mergeBrowserExtraction(staticResult, renderedResult, schema) {
-  const data = { ...staticResult.data };
-  const evidence = [...staticResult.fieldEvidence];
-  const existing = new Set(Object.keys(data));
-  for (const [field, value] of Object.entries(renderedResult.data)) {
-    if (existing.has(field)) continue;
-    data[field] = value;
-    const item = renderedResult.fieldEvidence.find((entry) => entry.field === field);
-    if (item) evidence.push(item);
-  }
-  const missingFields = schema.fields.map((field) => field.name).filter((name) => !Object.hasOwn(data, name));
-  const missingRequired = schema.required.filter((name) => !Object.hasOwn(data, name));
-  const status = Object.keys(data).length === 0
-    ? "failed"
-    : missingFields.length > 0
-      ? "partial"
-      : "succeeded";
-  return {
-    status,
-    data,
-    fieldEvidence: evidence,
-    missingFields,
-    missingRequired,
-    warnings: [...staticResult.warnings, ...renderedResult.warnings],
-  };
-}
 
 /**
  * Creates a local, bounded Search -> Fetch -> Extract workflow.
  *
- * Dependencies are injected so tests can use deterministic fixtures and the
- * production Worker remains disabled until AI Gateway and Browser bindings
- * are explicitly configured. Search descriptions are never treated as page
- * instructions; only validated result URLs are passed to Fetch.
+ * Search sources are explicit public datasets; only validated result URLs
+ * are passed to bounded HTTP Fetch. JavaScript rendering and browser escalation
+ * are not part of this pipeline.
  */
 export function createResearchPipeline({
   searchAdapter,
   runAdapter = executeAdapter,
-  browserAdapter = null,
   now = () => new Date().toISOString(),
 } = {}) {
   return Object.freeze({
@@ -170,7 +146,8 @@ export function createResearchPipeline({
       "search-descriptions-untrusted",
       "result-urls-revalidated",
       "no-LLM-inference",
-      "browser-escalation-requires-injected-adapter",
+      "static-http-only",
+      "no-browser-runtime",
     ],
     async execute(input = {}) {
       const validated = validateInput(input);
@@ -185,6 +162,7 @@ export function createResearchPipeline({
 
       const searchResult = await searchAdapter.execute({
         query: validated.query,
+        source: validated.source,
         limit: Math.min(validated.limit ?? 5, 10),
         ...(signal ? { signal } : {}),
       });
@@ -263,57 +241,14 @@ export function createResearchPipeline({
         const bestFieldsFound = best ? Object.keys(best.extracted.data).length : -1;
         if (!best || requiredFound > bestRequiredFound ||
             (requiredFound === bestRequiredFound && fieldsFound > bestFieldsFound)) {
-          best = { candidate, finalUrl, fetched, extracted, browserResult: null, attempt };
+          best = { candidate, finalUrl, fetched, extracted, attempt };
         }
 
         if (extracted.missingRequired.length === 0 && extracted.status !== "failed") break;
       }
 
-      // Browser escalation is a single bounded attempt against the best static candidate.
-      let browserEscalated = false;
-      if (best && best.extracted.missingRequired.length && browserAdapter &&
-          typeof browserAdapter.execute === "function") {
-        browserEscalated = true;
-        try {
-          const browserResult = await browserAdapter.execute({
-            url: best.finalUrl,
-            goal: "Render this page to complete the requested structured extraction.",
-            requiresInteraction: false,
-            ...(signal ? { signal } : {}),
-          });
-          throwIfCancelled();
-          best.browserResult = browserResult;
-          const html = browserResult.data?.html;
-          if (browserResult.status === "succeeded" && typeof html === "string") {
-            const htmlBytes = new TextEncoder().encode(html).byteLength;
-            const renderedUrl = validatePublicHttpUrl(browserResult.data.url || best.finalUrl);
-            if (renderedUrl.origin !== new URL(best.finalUrl).origin) {
-              warnings.push("Browser rendering returned a page outside the selected origin; rendered content was ignored.");
-            } else if (htmlBytes > 524_288) {
-              warnings.push("Browser rendered HTML exceeded the extraction size limit and was ignored.");
-            } else {
-              const rendered = extractFromStructuredSources({
-                html,
-                url: renderedUrl.href,
-                contentType: "text/html",
-                schema: validated.rawSchema,
-              });
-              best.extracted = mergeBrowserExtraction(best.extracted, rendered, validated.schema);
-              best.browserEvidenceAccepted = true;
-            }
-          } else {
-            warnings.push("Browser escalation did not return a renderable HTML page.");
-          }
-        } catch (error) {
-          if (error?.code === "TASK_CANCELLED" || signal?.aborted) throw Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });
-          warnings.push("Browser escalation was attempted but did not complete.");
-        }
-        best.attempt.stage = "browser-extract";
-        best.attempt.status = best.extracted.status;
-        best.attempt.fieldsFound = Object.keys(best.extracted.data).length;
-        best.attempt.missingRequired = [...best.extracted.missingRequired];
-      } else if (best?.extracted.missingRequired.length) {
-        warnings.push("Required fields remain missing; Browser rendering is not configured for this task.");
+      if (best?.extracted.missingRequired.length) {
+        warnings.push("Some requested fields were absent from static HTML/JSON; JavaScript rendering is not supported.");
       }
 
       if (!best) {
@@ -345,10 +280,6 @@ export function createResearchPipeline({
           nodeIndex: field.nodeIndex,
         })),
       ];
-      if (best.browserEvidenceAccepted && best.browserResult?.sources?.[0]?.evidence) {
-        evidence.push(...best.browserResult.sources[0].evidence);
-      }
-
       const status = best.extracted.status;
       return normalizeResult({
         status,
@@ -365,7 +296,7 @@ export function createResearchPipeline({
           missingFields: best.extracted.missingFields,
           missingRequired: best.extracted.missingRequired,
           attempts,
-          browserEscalated,
+          rendering: "static-http-only",
         },
         sources: [{
           url: best.finalUrl,

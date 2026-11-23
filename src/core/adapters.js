@@ -2,6 +2,7 @@ import { fetchPublicResource, HTTP_FETCH_LIMITS } from "./http-fetch.js";
 import { normalizeResult } from "./result.js";
 import { extractAdapter } from "./extract.js";
 import { mapWebsite, crawlWebsite, MAP_CRAWL_LIMITS } from "./map-crawl.js";
+import { createSearchAdapter } from "./search.js";
 
 const registry = new Map();
 
@@ -128,10 +129,12 @@ registerAdapter({
     "no-authenticated-pages",
   ],
   async execute(input = {}, options = {}) {
+    const fetchResource = options.fetchResource || ((url, fetchOptions = {}) => fetchPublicResource(url, {
+      ...fetchOptions,
+      ...(typeof options.fetchImpl === "function" ? { fetchImpl: options.fetchImpl } : {}),
+    }));
     const mapped = await mapWebsite(input, {
-      maxUrls: input.maxUrls,
-      cacheMode: input.cacheMode,
-      signal: options.signal,
+      maxUrls: input.maxUrls, cacheMode: input.cacheMode, fetchResource, signal: options.signal,
     });
     return normalizeResult({
       status: mapped.homepage.status >= 200 && mapped.homepage.status < 300 ? "succeeded" : "failed",
@@ -168,11 +171,13 @@ registerAdapter({
     "no-authenticated-pages",
   ],
   async execute(input = {}, options = {}) {
+    const fetchResource = options.fetchResource || ((url, fetchOptions = {}) => fetchPublicResource(url, {
+      ...fetchOptions,
+      ...(typeof options.fetchImpl === "function" ? { fetchImpl: options.fetchImpl } : {}),
+    }));
     const crawled = await crawlWebsite(input, {
-      maxPages: input.maxPages,
-      maxDepth: input.maxDepth,
-      cacheMode: input.cacheMode,
-      signal: options.signal,
+      maxPages: input.maxPages, maxDepth: input.maxDepth, cacheMode: input.cacheMode,
+      fetchResource, signal: options.signal,
     });
     return normalizeResult({
       status: crawled.pages.length ? "succeeded" : "failed",
@@ -190,4 +195,13 @@ registerAdapter({
   },
 });
 
-registerAdapter(extractAdapter);
+registerAdapter({
+  ...extractAdapter,
+  async execute(input = {}, options = {}) {
+    const fetchResource = options.fetchResource || (typeof options.fetchImpl === "function"
+      ? (url, fetchOptions = {}) => fetchPublicResource(url, { ...fetchOptions, fetchImpl: options.fetchImpl })
+      : undefined);
+    return extractAdapter.execute(input, { ...options, ...(fetchResource ? { fetchResource } : {}) });
+  },
+});
+registerAdapter(createSearchAdapter({ fetchResource: fetchPublicResource }));

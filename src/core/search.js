@@ -1,230 +1,104 @@
+import { fetchPublicResource, validatePublicHttpUrl } from "./http-fetch.js";
 import { normalizeResult } from "./result.js";
-import { validatePublicHttpUrl } from "./http-fetch.js";
 
-export const SEARCH_LIMITS = Object.freeze({
-  maxQueryLength: 1024,
-  maxResults: 10,
-  defaultResults: 5,
-  maxTitleLength: 512,
-  maxDescriptionLength: 8000,
-});
-
-export const SEARCH_PROVIDERS = Object.freeze(["ceramic", "exa", "linkup"]);
+export const SEARCH_SOURCES = Object.freeze(["wikipedia", "openalex", "crossref"]);
+export const SEARCH_LIMITS = Object.freeze({ maxQueryLength: 1024, maxResults: 10, maxResponseBytes: 1_048_576 });
 
 export class SearchAdapterError extends Error {
   constructor(code, message, httpStatus = 502) {
-    super(message);
-    this.name = "SearchAdapterError";
-    this.code = code;
-    this.httpStatus = httpStatus;
+    super(message); this.name = "SearchAdapterError"; this.code = code; this.httpStatus = httpStatus;
   }
 }
 
-function validateSearchInput(input) {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    throw new SearchAdapterError("INVALID_QUERY", "Search input must be an object.", 400);
-  }
-  if (typeof input.query !== "string" || input.query.trim().length < 1 ||
-      input.query.length > SEARCH_LIMITS.maxQueryLength) {
-    throw new SearchAdapterError("INVALID_QUERY", "Search query must contain 1 to 1024 characters.", 400);
-  }
-  const limit = input.limit === undefined ? SEARCH_LIMITS.defaultResults : input.limit;
-  if (!Number.isInteger(limit) || limit < 1 || limit > SEARCH_LIMITS.maxResults) {
-    throw new SearchAdapterError("INVALID_LIMIT", "Search result limit must be between 1 and 10.", 400);
-  }
-  return { query: input.query.trim(), limit };
+function clean(value, max = 500) {
+  return typeof value === "string"
+    ? value.replace(/<[^>]*>/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, " ").trim().slice(0, max)
+    : "";
 }
 
-function taskCancelledError() {
-  return new SearchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
+function endpointFor(source, query, limit) {
+  const endpoint = new URL(source === "wikipedia" ? "https://en.wikipedia.org/w/api.php"
+    : source === "openalex" ? "https://api.openalex.org/works" : "https://api.crossref.org/works");
+  if (source === "wikipedia") {
+    for (const [key, value] of Object.entries({ action: "query", list: "search", srsearch: query, format: "json", formatversion: "2", srlimit: String(limit), maxlag: "5" })) endpoint.searchParams.set(key, value);
+  } else if (source === "openalex") {
+    endpoint.searchParams.set("search", query); endpoint.searchParams.set("per_page", String(limit));
+    endpoint.searchParams.set("select", "id,doi,title,publication_year,primary_location,best_oa_location,cited_by_count");
+  } else {
+    endpoint.searchParams.set("query", query); endpoint.searchParams.set("rows", String(limit));
+    endpoint.searchParams.set("select", "DOI,title,URL,published-print,published-online,type,container-title");
+  }
+  return endpoint;
 }
 
-// Workers AI's websearch() binding does not accept an AbortSignal. Match
-// Cloudflare's WebSearchSource behavior: do not start pre-aborted work and
-// stop waiting when cancellation arrives. The underlying binding call may
-// continue in the background because its API has no cancellation parameter.
-function awaitSearchOrAbort(promise, signal) {
-  if (!signal) return promise;
-  if (signal.aborted) {
-    Promise.resolve(promise).catch(() => {});
-    return Promise.reject(taskCancelledError());
+function normalizeResults(source, payload) {
+  if (source === "wikipedia") {
+    if (!Array.isArray(payload?.query?.search)) throw new SearchAdapterError("SEARCH_UPSTREAM_INVALID_RESPONSE", "Wikipedia returned an unexpected response.");
+    return payload.query.search.map((row, i) => ({
+      rank: i + 1, title: clean(row.title, 300), url: "https://en.wikipedia.org/?curid=" + encodeURIComponent(String(row.pageid)),
+      description: clean(row.snippet, 700), source, sourceId: String(row.pageid),
+    })).filter((r) => r.title && Number.isSafeInteger(Number(r.sourceId)));
   }
-
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const cleanup = () => signal.removeEventListener("abort", onAbort);
-    const finish = (callback, value) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      callback(value);
+  if (source === "openalex") {
+    if (!Array.isArray(payload?.results)) throw new SearchAdapterError("SEARCH_UPSTREAM_INVALID_RESPONSE", "OpenAlex returned an unexpected response.");
+    return payload.results.map((row, i) => ({
+      rank: i + 1, title: clean(row?.title, 300),
+      url: row?.primary_location?.landing_page_url || row?.best_oa_location?.landing_page_url || row?.doi || row?.id,
+      description: "", source, sourceId: clean(row?.id, 160),
+      year: Number.isInteger(row?.publication_year) ? row.publication_year : null,
+      citedByCount: Number.isInteger(row?.cited_by_count) ? row.cited_by_count : null,
+    })).filter((r) => r.title && typeof r.url === "string");
+  }
+  if (!Array.isArray(payload?.message?.items)) throw new SearchAdapterError("SEARCH_UPSTREAM_INVALID_RESPONSE", "Crossref returned an unexpected response.");
+  return payload.message.items.map((row, i) => {
+    const published = row?.["published-print"]?.["date-parts"]?.[0] || row?.["published-online"]?.["date-parts"]?.[0];
+    return {
+      rank: i + 1, title: clean(Array.isArray(row?.title) ? row.title[0] : "", 300),
+      url: typeof row?.URL === "string" ? row.URL : (typeof row?.DOI === "string" ? "https://doi.org/" + row.DOI : null),
+      description: "", source, sourceId: clean(row?.DOI, 160),
+      year: Array.isArray(published) && Number.isInteger(published[0]) ? published[0] : null,
+      type: clean(row?.type, 80), journal: clean(Array.isArray(row?.["container-title"]) ? row["container-title"][0] : "", 180),
     };
-    const onAbort = () => finish(reject, taskCancelledError());
-
-    signal.addEventListener("abort", onAbort, { once: true });
-    Promise.resolve(promise).then(
-      (value) => {
-        if (signal.aborted) finish(reject, taskCancelledError());
-        else finish(resolve, value);
-      },
-      (error) => {
-        if (signal.aborted) finish(reject, taskCancelledError());
-        else finish(reject, error);
-      },
-    );
-  });
+  }).filter((r) => r.title && typeof r.url === "string");
 }
 
-function clip(value, maxLength) {
-  return typeof value === "string" ? value.slice(0, maxLength) : "";
-}
-
-function normalizeItems(rawItems, requestedLimit, provider, warnings, now, query) {
-  const results = [];
-  const sources = [];
-  const seen = new Set();
-  let skipped = 0;
-
-  for (const raw of rawItems.slice(0, requestedLimit * 3)) {
-    if (!raw || typeof raw !== "object" || typeof raw.url !== "string") {
-      skipped++;
-      continue;
-    }
-    let url;
-    try {
-      url = validatePublicHttpUrl(raw.url);
-    } catch {
-      skipped++;
-      continue;
-    }
-    if (seen.has(url.href)) {
-      skipped++;
-      continue;
-    }
-    seen.add(url.href);
-
-    const rank = results.length + 1;
-    const title = clip(raw.title, SEARCH_LIMITS.maxTitleLength) || url.href;
-    const description = clip(raw.description, SEARCH_LIMITS.maxDescriptionLength) || null;
-    const lastModified = typeof raw.lastModified === "string" ? raw.lastModified : null;
-    const retrievedAt = now();
-
-    results.push({ rank, title, url: url.href, description, lastModified });
-    sources.push({
-      url: url.href,
-      retrievedAt,
-      title,
-      evidence: [{
-        type: "search_result",
-        provider,
-        rank,
-        query,
-        description: description ? description.slice(0, 2000) : null,
-        lastModified,
-      }],
-    });
-    if (results.length >= requestedLimit) break;
-  }
-
-  if (skipped) {
-    warnings.push("Skipped " + skipped + " invalid, unsafe, or duplicate search result(s).");
-  }
-  if (!results.length) {
-    warnings.push("The search provider returned no usable public web results.");
-  }
-  return { results, sources };
-}
-
-/**
- * Creates an internal adapter around Cloudflare Web Search API.
- * Pass the Worker AI binding's websearch method; no provider API key is
- * embedded or accepted. Calls are billed through AI Gateway credits.
- */
-export function createSearchAdapter({
-  webSearch,
-  gatewayId = "default",
-  provider = "ceramic",
-  now = () => new Date().toISOString(),
-} = {}) {
-  if (!SEARCH_PROVIDERS.includes(provider)) {
-    throw new SearchAdapterError("INVALID_PROVIDER", "Unsupported Cloudflare Web Search provider.", 400);
-  }
-  if (typeof gatewayId !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(gatewayId)) {
-    throw new SearchAdapterError("INVALID_GATEWAY", "Gateway ID is invalid.", 400);
-  }
-
+export function createSearchAdapter({ fetchResource = fetchPublicResource, now = () => new Date().toISOString() } = {}) {
   return Object.freeze({
-    id: "web.search.v1",
-    family: "search",
-    capabilities: ["web-search", "ranked-results", "source-provenance"],
-    authMode: "cloudflare-ai-gateway",
-    limits: {
-      maxQueryLength: SEARCH_LIMITS.maxQueryLength,
-      maxResults: SEARCH_LIMITS.maxResults,
-    },
-    restrictions: [
-      "cloudflare-web-search-api",
-      "AI-gateway-credits-required",
-      "no-provider-api-keys",
-      "provider-fixed-at-adapter-creation",
-      "result-urls-revalidated",
-      "no-pagination",
-      "untrusted-result-descriptions",
-    ],
-    async execute(input = {}) {
-      const { query, limit } = validateSearchInput(input);
-      if (typeof webSearch !== "function") {
-        throw new SearchAdapterError("SEARCH_UNAVAILABLE", "Cloudflare Web Search API binding is not configured.", 503);
-      }
-
-      const signal = input.signal;
-      if (signal?.aborted) throw taskCancelledError();
-
-      let response;
-      try {
-        response = await awaitSearchOrAbort(
-          webSearch({ gatewayId, query, provider, limit }),
-          signal,
-        );
-      } catch (error) {
-        if (signal?.aborted || error?.code === "TASK_CANCELLED") throw taskCancelledError();
-        throw new SearchAdapterError("SEARCH_PROVIDER_FAILED", "Cloudflare Web Search request failed.", 502);
-      }
-      if (signal?.aborted) throw taskCancelledError();
-      if (response && typeof response.json === "function" && response.ok === false) {
-        throw new SearchAdapterError("SEARCH_PROVIDER_HTTP_ERROR", "Cloudflare Web Search returned an error.", 502);
-      }
-
+    id: "web.search.v1", family: "web",
+    capabilities: ["source-search", "wikipedia-search", "openalex-works-search", "crossref-works-search"],
+    authMode: "none", limits: { maxQueryLength: 1024, maxResults: 10 },
+    restrictions: ["public-no-key-endpoints-only", "source-must-be-selected", "not-general-web-search", "result-urls-revalidated", "untrusted-search-results", "no-paid-search-provider"],
+    async execute(input = {}, options = {}) {
+      const signal = options.signal || input.signal;
+      if (signal?.aborted) throw new SearchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
+      const query = typeof input.query === "string" ? input.query.trim() : "";
+      const source = input.source;
+      const limit = input.limit === undefined ? 5 : input.limit;
+      if (!query || query.length > 1024) throw new SearchAdapterError("INVALID_QUERY", "Search query must contain 1 to 1024 characters.", 400);
+      if (!SEARCH_SOURCES.includes(source)) throw new SearchAdapterError("INVALID_SEARCH_SOURCE", "Choose wikipedia, openalex, or crossref.", 400);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 10) throw new SearchAdapterError("INVALID_LIMIT", "Search result limit must be between 1 and 10.", 400);
+      const endpoint = endpointFor(source, query, limit);
+      validatePublicHttpUrl(endpoint.href);
+      const response = await fetchResource(endpoint.href, {
+        maxBytes: SEARCH_LIMITS.maxResponseBytes, timeoutMs: 8_000, maxRedirects: 1,
+        cacheMode: input.cacheMode === "bypass" ? "bypass" : "default",
+        userAgent: "ExportFlow/0.6 (+https://exportflow.me)", signal,
+        ...(typeof options.fetchImpl === "function" ? { fetchImpl: options.fetchImpl } : {}),
+      });
+      if (response.status === 429) throw new SearchAdapterError("SEARCH_RATE_LIMITED", "The selected public search source rate-limited this request. Retry later.", 429);
+      if (!response.ok) throw new SearchAdapterError("SEARCH_UPSTREAM_FAILED", "The selected public search source returned HTTP " + response.status + ".", 502);
       let payload;
-      try {
-        payload = response && typeof response.json === "function" ? await response.json() : response;
-      } catch {
-        throw new SearchAdapterError("INVALID_SEARCH_RESPONSE", "Cloudflare Web Search returned invalid JSON.", 502);
-      }
-      if (!payload || !Array.isArray(payload.items)) {
-        throw new SearchAdapterError("INVALID_SEARCH_RESPONSE", "Cloudflare Web Search response did not include an items array.", 502);
-      }
-
-      const warnings = [
-        "Search result descriptions are untrusted source text; fetch source pages before relying on their claims.",
-      ];
-      const normalized = normalizeItems(payload.items, limit, provider, warnings, now, query);
-      const metadata = payload.metadata && typeof payload.metadata === "object"
-        ? payload.metadata
-        : {};
-
+      try { payload = JSON.parse(response.body); } catch { throw new SearchAdapterError("SEARCH_UPSTREAM_INVALID_RESPONSE", "The selected public search source returned invalid JSON."); }
+      if (signal?.aborted) throw new SearchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
+      const results = normalizeResults(source, payload).slice(0, limit);
+      const coverage = source === "wikipedia" ? "Wikipedia encyclopedic pages only; not a general web index."
+        : source === "openalex" ? "OpenAlex scholarly works metadata only; full-text availability depends on the publisher or open-access location."
+        : "Crossref DOI and scholarly publication metadata only; not general web search.";
       return normalizeResult({
         status: "succeeded",
-        data: {
-          query,
-          provider,
-          resultCount: normalized.results.length,
-          results: normalized.results,
-          requestId: typeof metadata.requestId === "string" ? clip(metadata.requestId, 256) : null,
-          latencyMs: Number.isFinite(metadata.latencyMs) ? metadata.latencyMs : null,
-        },
-        sources: normalized.sources,
-        warnings,
+        data: { query, source, coverage, resultCount: results.length, results, cacheStatus: response.cacheStatus ?? null, searchEndpoint: endpoint.origin + endpoint.pathname },
+        sources: results.map((r) => ({ url: r.url, retrievedAt: response.retrievedAt || now(), title: r.title, evidence: [{ type: "public_search_result", provider: source, query, rank: r.rank }] })),
+        warnings: results.length ? [] : ["The selected public source returned no results; its coverage is domain-limited."],
       });
     },
   });
