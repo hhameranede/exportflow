@@ -841,9 +841,9 @@ function getSignedOAuthQuery(searchParams) {
 }
 
 function oauthBrowserError(status, title, message) {
-  const html = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>" +
-    htmlEscape(title) + " — ExportFlow</title></head><body><main style=\"font-family:system-ui;max-width:640px;margin:10vh auto;padding:24px\"><h1>" +
-    htmlEscape(title) + "</h1><p>" + htmlEscape(message) + "</p><a href=\"/signin\">Return to sign in</a></main></body></html>";
+  const html = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><link rel=\"stylesheet\" href=\"/assets/marketing.css?v=9\"><title>" +
+    htmlEscape(title) + " — ExportFlow</title></head><body><main class=\"ef-main ef-container\"><section class=\"ef-section\"><div class=\"ef-auth-page-head\"><h1 class=\"ef-auth-title\">" +
+    htmlEscape(title) + "</h1><p class=\"ef-auth-lead\">" + htmlEscape(message) + "</p><a class=\"ef-btn ef-btn-primary\" href=\"/signin\">Return to sign in</a></div></section></main></body></html>";
   return new Response(html, { status, headers: OAUTH_BROWSER_HEADERS });
 }
 
