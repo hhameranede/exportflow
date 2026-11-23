@@ -74,7 +74,9 @@ test("unit and syntax checks run before any Acceptance deployment", () => {
 });
 
 test("tenant burst Acceptance requires an explicit approval marker and commit message", () => {
-  assert.ok(acceptanceWorkflow.includes("contains(github.event.head_commit.added, '.github/acceptance/oauth-acceptance.approved')"));
+  assert.ok(acceptanceWorkflow.includes("contains(github.event.head_commit.message, 'approve: run one-shot isolated OAuth Acceptance with Google secrets')"));
+  assert.ok(acceptanceWorkflow.includes("git diff-tree --no-commit-id --name-only --diff-filter=A -r HEAD"));
+  assert.ok(acceptanceWorkflow.includes("grep -Fx '.github/acceptance/oauth-acceptance.approved'"));
   assert.ok(mfaAcceptanceWorkflow.includes("contains(github.event.head_commit.added, '.github/acceptance/mfa-acceptance.approved')"));
   assert.ok(tenantBurstAcceptanceWorkflow.includes("contains(github.event.head_commit.message, 'tenant-burst-acceptance-approved')"));
   assert.ok(tenantBurstAcceptanceWorkflow.includes("test -s .github/acceptance/tenant-burst.approved"));
