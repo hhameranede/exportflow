@@ -213,7 +213,7 @@ test("egress guard normalizes trailing dots and strips URL fragments", () => {
   assert.equal(url.href, "https://example.com/path?q=1");
 });
 
-test("fetch returns bounded text and enables origin-governed edge caching by default", async () => {
+test("fetch returns bounded text and uses Cloudflare default cache policy", async () => {
   const receipts = [];
   const result = await fetchPublicResource("https://example.com/page", {
     onUsageReceipt: (receipt) => receipts.push(receipt),
@@ -221,7 +221,7 @@ test("fetch returns bounded text and enables origin-governed edge caching by def
       assert.equal(init.method, "GET");
       assert.equal(init.redirect, "manual");
       assert.equal(init.cache, "default");
-      assert.deepEqual(init.cf, { cacheEverything: true });
+      assert.equal(Object.hasOwn(init, "cf"), false);
       assert.equal(init.headers.accept.includes("text/html"), true);
       return response("<h1>Hello</h1>", {
         headers: {
