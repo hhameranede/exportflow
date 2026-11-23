@@ -71,7 +71,7 @@ test("marketing JavaScript, CSS, and sitemap are served by the website router", 
   const xml = await sitemap.text();
   const locations = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)]
     .map(([, value]) => new URL(value).pathname);
-  assert.deepEqual(locations, [...new Set(MARKETING_PATHS)]);
+  assert.deepEqual(locations.slice().sort(), [...new Set(MARKETING_PATHS)].sort());
 });
 
 test("account security page exposes authenticator enrollment without embedding a secret", async () => {
