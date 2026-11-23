@@ -50,3 +50,21 @@ test("auth response wrapper preserves multiple Set-Cookie values", () => {
   ]);
   assertBaseline(response);
 });
+
+test("auth response wrapper uses the Workers getAll API without folding cookies", () => {
+  const downstream = new Response("ok", { status: 200 });
+  downstream.headers.append("set-cookie", "exportflow.session=first; Path=/; HttpOnly; Secure; SameSite=Lax");
+  downstream.headers.append("set-cookie", "exportflow.state=second; Path=/; HttpOnly; Secure; SameSite=Lax");
+
+  Object.defineProperty(downstream.headers, "getAll", {
+    value: (name) => name.toLowerCase() === "set-cookie"
+      ? downstream.headers.getSetCookie()
+      : (() => { throw new Error("getAll is only supported for Set-Cookie"); })(),
+  });
+
+  const secured = withAuthSecurityHeaders(downstream);
+  const cookies = secured.headers.getSetCookie();
+  assert.equal(cookies.length, 2);
+  assert.ok(cookies[0].includes("exportflow.session=first"));
+  assert.ok(cookies[1].includes("exportflow.state=second"));
+});
