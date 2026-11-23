@@ -63,27 +63,35 @@ export const MARKETING_JS = `(function () {
   var themeToggles = document.querySelectorAll("[data-theme-toggle]");
   var themeMeta = document.querySelector('meta[name="theme-color"]');
 
+  var systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
+
   function getActiveTheme() {
     var saved = null;
     try { saved = localStorage.getItem("ef_theme"); } catch (_e) {}
-    if (saved === "dark" || saved === "light") return saved;
-    return "light";
+    if (saved === "dark" || saved === "light" || saved === "system") return saved;
+    return "system";
   }
 
   function applyTheme(theme, persist) {
-    root.setAttribute("data-theme", theme);
+    var resolvedTheme = theme === "system" ? (systemTheme.matches ? "dark" : "light") : theme;
+    root.setAttribute("data-theme", resolvedTheme);
+    root.setAttribute("data-theme-preference", theme);
     if (themeMeta) {
-      themeMeta.setAttribute("content", theme === "dark" ? "#0b0f17" : "#F8FAFC");
+      themeMeta.setAttribute("content", resolvedTheme === "dark" ? "#0A101D" : "#FBFCFE");
     }
     if (persist) {
       try { localStorage.setItem("ef_theme", theme); } catch (_e) {}
     }
-    var isDark = theme === "dark";
+    var isDark = resolvedTheme === "dark";
     themeToggles.forEach(function (btn) {
       btn.setAttribute("aria-pressed", String(isDark));
-      btn.setAttribute("aria-label", isDark
-        ? tMap({ en: "Switch to light theme", ar: "التبديل إلى المظهر الفاتح", fr: "Passer au thème clair", es: "Cambiar al tema claro", de: "Zum hellen Design wechseln", pt: "Mudar para o tema claro", zh: "切换到浅色主题", ja: "ライトテーマに切り替え" })
-        : tMap({ en: "Switch to dark theme", ar: "التبديل إلى المظهر الداكن", fr: "Passer au thème sombre", es: "Cambiar al tema oscuro", de: "Zum dunklen Design wechseln", pt: "Mudar para o tema escuro", zh: "切换到深色主题", ja: "ダークテーマに切り替え" }));
+      var nextThemeLabel = theme === "light"
+        ? tMap({ en: "Switch to dark theme", ar: "التبديل إلى المظهر الداكن", fr: "Passer au thème sombre", es: "Cambiar al tema oscuro", de: "Zum dunklen Design wechseln", pt: "Mudar para o tema escuro", zh: "切换到深色主题", ja: "ダークテーマに切り替え" })
+        : theme === "dark"
+          ? tMap({ en: "Use system theme", ar: "استخدام مظهر النظام", fr: "Utiliser le thème système", es: "Usar el tema del sistema", de: "Systemdesign verwenden", pt: "Usar o tema do sistema", zh: "使用系统主题", ja: "システムテーマを使用" })
+          : tMap({ en: "Switch to light theme", ar: "التبديل إلى المظهر الفاتح", fr: "Passer au thème clair", es: "Cambiar al tema claro", de: "Zum hellen Design wechseln", pt: "Mudar para o tema claro", zh: "切换到浅色主题", ja: "ライトテーマに切り替え" });
+      btn.setAttribute("aria-label", nextThemeLabel);
+      btn.setAttribute("title", nextThemeLabel);
       var sun = btn.querySelector("[data-icon-sun]");
       var moon = btn.querySelector("[data-icon-moon]");
       if (sun) sun.hidden = !isDark;
@@ -93,13 +101,20 @@ export const MARKETING_JS = `(function () {
 
   applyTheme(getActiveTheme(), false);
 
+  systemTheme.addEventListener("change", function () {
+    if (root.getAttribute("data-theme-preference") === "system") applyTheme("system", false);
+  });
+
   themeToggles.forEach(function (btn) {
     btn.addEventListener("click", function () {
-      var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      var currentPreference = root.getAttribute("data-theme-preference") || "system";
+      var next = currentPreference === "light" ? "dark" : currentPreference === "dark" ? "system" : "light";
       applyTheme(next, true);
-      showToast(next === "light"
-        ? tMap({ en: "Light theme active", ar: "المظهر الفاتح مفعّل", fr: "Thème clair actif", es: "Tema claro activo", de: "Helles Design aktiv", pt: "Tema claro ativo", zh: "浅色主题已启用", ja: "ライトテーマ有効" })
-        : tMap({ en: "Dark theme active", ar: "المظهر الداكن مفعّل", fr: "Thème sombre actif", es: "Tema oscuro activo", de: "Dunkles Design aktiv", pt: "Tema escuro ativo", zh: "深色主题已启用", ja: "ダークテーマ有効" }));
+      showToast(next === "system"
+        ? tMap({ en: "Following system appearance", ar: "اتباع مظهر النظام", fr: "Apparence système activée", es: "Se usa la apariencia del sistema", de: "Systemdarstellung aktiviert", pt: "Aparência do sistema ativada", zh: "已跟随系统外观", ja: "システムの外観に従います" })
+        : next === "light"
+          ? tMap({ en: "Light theme active", ar: "المظهر الفاتح مفعّل", fr: "Thème clair actif", es: "Tema claro activo", de: "Helles Design aktiv", pt: "Tema claro ativo", zh: "浅色主题已启用", ja: "ライトテーマ有効" })
+          : tMap({ en: "Dark theme active", ar: "المظهر الداكن مفعّل", fr: "Thème sombre actif", es: "Tema oscuro activo", de: "Dunkles Design aktiv", pt: "Tema escuro ativo", zh: "深色主题已启用", ja: "ダークテーマ有効" }));
     });
   });
 
@@ -323,6 +338,20 @@ export const MARKETING_JS = `(function () {
      ======================================================================== */
   var parallaxTarget = document.querySelector("[data-parallax-target]");
   var heroSection = document.querySelector("[data-hero-section]");
+  var mobileStickyCta = document.querySelector(".ef-mobile-sticky-cta");
+  if (mobileStickyCta && heroSection) {
+    var mobileViewport = window.matchMedia("(max-width: 767px)");
+    var syncMobileCta = function () {
+      var isVisible = mobileViewport.matches && heroSection.getBoundingClientRect().bottom <= 0;
+      mobileStickyCta.classList.toggle("is-visible", isVisible);
+      mobileStickyCta.setAttribute("aria-hidden", String(!isVisible));
+      mobileStickyCta.inert = !isVisible;
+    };
+    syncMobileCta();
+    window.addEventListener("scroll", syncMobileCta, { passive: true });
+    mobileViewport.addEventListener("change", syncMobileCta);
+  }
+
   if (parallaxTarget && heroSection && window.matchMedia("(pointer: fine)").matches) {
     var pRaf = null;
     heroSection.addEventListener("pointermove", function (e) {
@@ -1795,6 +1824,27 @@ export const MARKETING_JS = `(function () {
     }
   }
 
+  function syncProfileDirtyState(profileForm) {
+    if (!profileForm) return false;
+    var nameInput = profileForm.elements.name;
+    var resetButton = profileForm.querySelector("[data-profile-reset]");
+    var unsavedStatus = profileForm.querySelector("[data-profile-unsaved]");
+    var dirty = Boolean(nameInput && nameInput.value !== nameInput.defaultValue);
+    if (resetButton) resetButton.hidden = !dirty;
+    if (unsavedStatus) {
+      unsavedStatus.hidden = !dirty;
+      unsavedStatus.textContent = dirty ? tx("Unsaved changes", "تغييرات غير محفوظة", {
+        fr: "Modifications non enregistrées",
+        es: "Cambios sin guardar",
+        de: "Nicht gespeicherte Änderungen",
+        pt: "Alterações não salvas",
+        zh: "有未保存的更改",
+        ja: "未保存の変更があります"
+      }) : "";
+    }
+    return dirty;
+  }
+
   async function loadAccountWorkspace() {
     var workspace = document.querySelector("[data-account-workspace]");
     if (!workspace) return;
@@ -1813,8 +1863,15 @@ export const MARKETING_JS = `(function () {
       populateAccountIdentity(workspace, user);
       var nameInput = workspace.querySelector("#acc-name");
       var emailInput = workspace.querySelector("#acc-email");
-      if (nameInput) nameInput.value = user.name || "";
-      if (emailInput) emailInput.value = user.email || "";
+      if (nameInput) {
+        nameInput.value = user.name || "";
+        nameInput.defaultValue = user.name || "";
+        syncProfileDirtyState(workspace.querySelector("[data-account-profile-form]"));
+      }
+      if (emailInput) {
+        emailInput.value = user.email || "";
+        emailInput.defaultValue = user.email || "";
+      }
       await refreshTwoFactorStatus(workspace);
       var accountResponse = await authRequest("list-accounts");
       var accounts = Array.isArray(accountResponse) ? accountResponse : (accountResponse && accountResponse.accounts) || [];
@@ -1890,6 +1947,28 @@ export const MARKETING_JS = `(function () {
     bindTwoFactorControls(document.querySelector("[data-account-workspace]"));
     var profileForm = document.querySelector("[data-account-profile-form]");
     if (profileForm) {
+      var profileNameInput = profileForm.elements.name;
+      var profileStatus = profileForm.querySelector("[data-profile-status]");
+      if (profileNameInput) {
+        profileNameInput.addEventListener("input", function () {
+          syncProfileDirtyState(profileForm);
+        });
+      }
+      profileForm.addEventListener("reset", function () {
+        window.requestAnimationFrame(function () {
+          syncProfileDirtyState(profileForm);
+          authMessage(profileStatus, "");
+        });
+      });
+      function guardUnsavedProfile(event) {
+        if (!syncProfileDirtyState(profileForm)) return;
+        event.preventDefault();
+        event.returnValue = "";
+      }
+      window.addEventListener("beforeunload", guardUnsavedProfile);
+      window.addEventListener("pagehide", function () {
+        window.removeEventListener("beforeunload", guardUnsavedProfile);
+      }, { once: true });
       profileForm.addEventListener("submit", async function (event) {
         event.preventDefault();
         var name = String(profileForm.elements.name.value || "").trim();
@@ -1902,6 +1981,8 @@ export const MARKETING_JS = `(function () {
         if (button) button.disabled = true;
         try {
           await authRequest("update-user", "POST", { name: name });
+          profileNameInput.defaultValue = name;
+          syncProfileDirtyState(profileForm);
           authMessage(status, tx("Profile updated.", "تم تحديث الملف الشخصي."), "success");
           await refreshAuthHeader();
         } catch (error) {
@@ -2804,6 +2885,89 @@ export const MARKETING_JS = `(function () {
     });
   }
 
+  function bindLegalReadingProgress() {
+    var documentShell = document.querySelector("[data-legal-document]");
+    if (!documentShell) return;
+
+    var progress = documentShell.querySelector("[data-reading-progress]");
+    var fill = documentShell.querySelector("[data-reading-progress-fill]");
+    var tocLinks = Array.prototype.slice.call(documentShell.querySelectorAll("[data-legal-toc-link]"));
+    var headings = tocLinks.map(function (link) {
+      return document.getElementById(decodeURIComponent(link.hash.slice(1)));
+    }).filter(Boolean);
+    var frame = 0;
+    var observer = null;
+
+    function updateProgress() {
+      frame = 0;
+      if (!progress || !fill) return;
+      var maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      var value = Math.max(0, Math.min(100, Math.round((window.scrollY / maxScroll) * 100)));
+      progress.setAttribute("aria-valuenow", String(value));
+      fill.style.transform = "scaleX(" + (value / 100) + ")";
+    }
+
+    function queueProgressUpdate() {
+      if (!frame) frame = window.requestAnimationFrame(updateProgress);
+    }
+
+    if ("IntersectionObserver" in window && headings.length) {
+      observer = new IntersectionObserver(function (entries) {
+        var visible = entries.filter(function (entry) { return entry.isIntersecting; })
+          .sort(function (a, b) { return a.boundingClientRect.top - b.boundingClientRect.top; })[0];
+        if (!visible) return;
+        tocLinks.forEach(function (link) {
+          if (link.hash === "#" + visible.target.id) link.setAttribute("aria-current", "location");
+          else link.removeAttribute("aria-current");
+        });
+      }, { rootMargin: "-18% 0px -68% 0px", threshold: 0 });
+      headings.forEach(function (heading) { observer.observe(heading); });
+    }
+
+    tocLinks.forEach(function (selectedLink) {
+      selectedLink.addEventListener("click", function () {
+        tocLinks.forEach(function (link) {
+          if (link === selectedLink) link.setAttribute("aria-current", "location");
+          else link.removeAttribute("aria-current");
+        });
+      });
+    });
+
+    updateProgress();
+    window.addEventListener("scroll", queueProgressUpdate, { passive: true });
+    window.addEventListener("resize", queueProgressUpdate, { passive: true });
+    window.addEventListener("pagehide", function () {
+      if (observer) observer.disconnect();
+      window.removeEventListener("scroll", queueProgressUpdate);
+      window.removeEventListener("resize", queueProgressUpdate);
+      if (frame) window.cancelAnimationFrame(frame);
+    }, { once: true });
+  }
+
+  function bindAccountSectionNavigation() {
+    var nav = document.querySelector("[data-account-settings-nav]");
+    if (!nav || !("IntersectionObserver" in window)) return;
+
+    var links = Array.prototype.slice.call(nav.querySelectorAll("[data-account-section-link]"));
+    var sections = links.map(function (link) {
+      return document.getElementById(decodeURIComponent(link.hash.slice(1)));
+    }).filter(Boolean);
+    if (!sections.length) return;
+
+    var observer = new IntersectionObserver(function (entries) {
+      var visible = entries.filter(function (entry) { return entry.isIntersecting; })
+        .sort(function (a, b) { return a.boundingClientRect.top - b.boundingClientRect.top; })[0];
+      if (!visible) return;
+      links.forEach(function (link) {
+        if (link.hash === "#" + visible.target.id) link.setAttribute("aria-current", "location");
+        else link.removeAttribute("aria-current");
+      });
+    }, { rootMargin: "-22% 0px -66% 0px", threshold: 0 });
+
+    sections.forEach(function (section) { observer.observe(section); });
+    window.addEventListener("pagehide", function () { observer.disconnect(); }, { once: true });
+  }
+
   async function initializeAccountSystem() {
     preserveNextLinks();
     bindPasswordToggles();
@@ -2822,8 +2986,10 @@ export const MARKETING_JS = `(function () {
       authConfig = null;
       setAccountConfig(null);
     }
+    bindLegalReadingProgress();
     if (document.querySelector("[data-account-workspace]")) {
       await loadAccountWorkspace();
+      bindAccountSectionNavigation();
     }
     if (document.querySelector("[data-workspace-shell]")) {
       await loadWorkspaceConsole();

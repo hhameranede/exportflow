@@ -32,7 +32,7 @@ export function renderDocument({
   ogImage = null,
   includeAlternates = false,
   robots = null,
-  themeColor = "#F8FAFC",
+  themeColor = "#FBFCFE",
   skipLabel = "Skip to content",
 }) {
   const navLinksHtml = NAV_ITEMS.map((item) => {
@@ -84,7 +84,7 @@ export function renderDocument({
     ? `<link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="/assets/marketing.css?v=2">`
+  <link rel="stylesheet" href="/assets/marketing.css?v=7">`
     : `<link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
@@ -92,7 +92,7 @@ export function renderDocument({
 
   const scriptHtml = marketingDetected
     ? `<div class="ef-toast-region" data-toast-region aria-live="polite" aria-atomic="true"></div>
-  <script src="/assets/marketing.js" defer></script>`
+  <script src="/assets/marketing.js?v=3" defer></script>`
     : `<script src="/assets/site.js" defer></script>`;
 
   const seoHeadTags = SEOManager.renderHeadTags({

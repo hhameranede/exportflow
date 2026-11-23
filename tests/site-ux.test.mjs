@@ -58,8 +58,8 @@ test("marketing client bundle parses, protects the mobile drawer, and avoids nat
 test("unified design system serves /platform, /use-cases, /developers, /demo, and /index.html with interactive rich content", async () => {
   for (const path of ["/", "/index.html", "/platform", "/use-cases", "/developers", "/demo", "/product", "/pricing", "/integrations", "/solutions", "/about"]) {
     const html = await fetchHtml(path);
-    assert.match(html, /<link rel="stylesheet" href="\/assets\/marketing\.css\?v=2">/);
-    assert.match(html, /<script src="\/assets\/marketing\.js" defer><\/script>/);
+    assert.match(html, /<link rel="stylesheet" href="\/assets\/marketing\.css\?v=\d+">/);
+    assert.match(html, /<script src="\/assets\/marketing\.js\?v=3" defer><\/script>/);
     assert.doesNotMatch(html, /\/assets\/site\.(?:css|js)/);
     assert.doesNotMatch(html, /EXPORTFLOW_API_TOKEN/);
   }
@@ -102,5 +102,44 @@ test("execution graph and contact form expose accessible roles, states, and RTL-
   assert.match(MARKETING_CSS, /\.ef-faq-summary\s*\{[\s\S]*padding-inline-start:\s*22px;[\s\S]*padding-inline-end:\s*52px;/);
   assert.match(MARKETING_CSS, /html\[data-motion="paused"\] \.ef-reveal/);
   assert.match(MARKETING_CSS, /min-height:\s*44px;/);
+  assert.match(MARKETING_CSS, /--text: #172338/);
+  assert.match(MARKETING_CSS, /--bg: #0B1322/);
+  assert.match(MARKETING_CSS, /\.ef-account-settings-nav/);
+  assert.match(MARKETING_CSS, /\.ef-legal-progress/);
+});
+
+test("every declared marketing route renders its shared navigation and page shell", async () => {
+  for (const path of MARKETING_PATHS) {
+    const html = await fetchHtml(path);
+    assert.match(html, /<main id="main-content"/u, path + " should have a main landmark");
+    assert.match(html, /<h1(?:\s|>)/u, path + " should have a page heading");
+    assert.match(html, /aria-label="Primary navigation"/u, path + " should have primary navigation");
+  }
+});
+
+test("legal routes expose readable section navigation without changing review-gated copy", async () => {
+  for (const path of ["/legal/terms", "/legal/privacy", "/legal/cookies", "/legal/refund-policy", "/legal/acceptable-use", "/legal/security"]) {
+    const html = await fetchHtml(path);
+    assert.match(html, /data-legal-document/u, path + " should use the legal reading layout");
+    assert.match(html, /data-reading-progress/u, path + " should expose reading progress");
+    assert.equal((html.match(/data-legal-toc-link/g) || []).length, 4, path + " should link every document section");
+    assert.match(html, /Review required before publication/u, path + " must retain the legal review notice");
+    assert.match(html, /It is not legal advice/u, path + " must retain the existing legal disclaimer");
+  }
+});
+
+test("account settings navigation points only to existing profile, identity, security, and session controls", async () => {
+  const html = await fetchHtml("/account");
+  for (const section of ["profile", "connected", "security", "sessions"]) {
+    assert.match(html, new RegExp('href="#account-' + section + '"', "u"));
+    assert.match(html, new RegExp('id="account-' + section + '"', "u"));
+  }
+  assert.match(html, /data-profile-reset/u);
+  assert.match(html, /data-profile-unsaved/u);
+  assert.match(MARKETING_JS, /function syncProfileDirtyState\(/u);
+  assert.match(MARKETING_JS, /beforeunload/u);
+  assert.match(MARKETING_JS, /data-theme-preference/u);
+  assert.match(MARKETING_JS, /systemTheme\.addEventListener\("change"/u);
+  assert.match(MARKETING_JS, /data-legal-toc-link/u);
 });
 

@@ -51,6 +51,7 @@ const EN_COPY = {
   sendReset: "Send recovery link",
   savePassword: "Update password",
   save: "Save changes",
+  cancel: "Cancel",
   signOut: "Sign out",
   openWorkspace: "Open Workspace",
   openAccount: "Account settings",
@@ -199,6 +200,7 @@ const COPY = {
     sendReset: "إرسال رابط الاسترداد",
     savePassword: "تحديث كلمة المرور",
     save: "حفظ التغييرات",
+    cancel: "إلغاء",
     signOut: "تسجيل الخروج",
     openWorkspace: "فتح مساحة العمل",
     openAccount: "إعدادات الحساب",
@@ -334,6 +336,7 @@ const COPY = {
     sendReset: "Envoyer le lien",
     savePassword: "Mettre à jour",
     save: "Enregistrer",
+    cancel: "Annuler",
     signOut: "Déconnexion",
     openWorkspace: "Ouvrir l’espace",
     openAccount: "Paramètres du compte",
@@ -378,6 +381,7 @@ const COPY = {
     sendReset: "Enviar enlace",
     savePassword: "Actualizar",
     save: "Guardar cambios",
+    cancel: "Cancelar",
     signOut: "Cerrar sesión",
     openWorkspace: "Abrir espacio",
     openAccount: "Ajustes de cuenta",
@@ -422,6 +426,7 @@ const COPY = {
     sendReset: "Link senden",
     savePassword: "Aktualisieren",
     save: "Speichern",
+    cancel: "Abbrechen",
     signOut: "Abmelden",
     openWorkspace: "Arbeitsbereich öffnen",
     openAccount: "Kontoeinstellungen",
@@ -466,6 +471,7 @@ const COPY = {
     sendReset: "Enviar link",
     savePassword: "Atualizar",
     save: "Salvar alterações",
+    cancel: "Cancelar",
     signOut: "Sair",
     openWorkspace: "Abrir Espaço",
     openAccount: "Configurações da conta",
@@ -510,6 +516,7 @@ const COPY = {
     sendReset: "发送重置链接",
     savePassword: "更新密码",
     save: "保存更改",
+    cancel: "取消",
     signOut: "退出登录",
     openWorkspace: "打开工作台",
     openAccount: "账户设置",
@@ -554,6 +561,7 @@ const COPY = {
     sendReset: "リンクを送信",
     savePassword: "パスワード更新",
     save: "変更を保存",
+    cancel: "キャンセル",
     signOut: "サインアウト",
     openWorkspace: "ワークスペースを開く",
     openAccount: "アカウント設定",
@@ -865,7 +873,13 @@ export function renderAuthPage(type, t, locale, hrefFor, escapeHtml, arrowRightI
   }
 
   const content = '<div data-account-loading class="ef-form-banner" role="status">' + escapeHtml(c.loading) + '</div>' +
-    '<div data-account-workspace hidden>' +
+    '<div class="ef-account-workspace" data-account-workspace hidden>' +
+      '<nav class="ef-account-settings-nav" aria-label="' + escapeHtml(c.accountTitle) + '" data-account-settings-nav>' +
+        '<a href="#account-profile" data-account-section-link aria-current="location">' + escapeHtml(c.profile) + '</a>' +
+        '<a href="#account-connected" data-account-section-link>' + escapeHtml(c.connected) + '</a>' +
+        '<a href="#account-security" data-account-section-link>' + escapeHtml(c.security) + '</a>' +
+        '<a href="#account-sessions" data-account-section-link>' + escapeHtml(c.sessions) + '</a>' +
+      '</nav>' +
       '<div class="ef-account-hero-row ef-workspace-bar ef-mb-20">' +
         '<div class="ef-account-identity">' +
           '<div class="ef-avatar-circle ef-avatar-lg" data-account-avatar aria-hidden="true">EF</div>' +
@@ -882,16 +896,18 @@ export function renderAuthPage(type, t, locale, hrefFor, escapeHtml, arrowRightI
 
       '<div class="ef-account-grid">' +
         '<div class="ef-account-col">' +
-          '<article class="ef-account-card">' +
+          '<article id="account-profile" class="ef-account-card" tabindex="-1">' +
             '<div class="ef-account-card-head"><div><h2>' + escapeHtml(c.profile) + '</h2><p class="ef-acc-card-desc">' + escapeHtml(c.profileDesc) + '</p></div></div>' +
             '<form class="ef-auth-form" data-account-profile-form>' +
               '<div class="ef-field"><label for="acc-name">' + escapeHtml(c.name) + '</label><input id="acc-name" name="name" maxlength="100" required></div>' +
               '<div class="ef-field"><label for="acc-email">' + escapeHtml(c.email) + '</label><input id="acc-email" class="ef-ltr-input" name="email" type="email" readonly aria-readonly="true"></div>' +
-              '<button type="submit" class="ef-btn ef-btn-primary ef-btn-sm">' + escapeHtml(c.save) + '</button>' +
+              '<div class="ef-profile-actions"><button type="submit" class="ef-btn ef-btn-primary ef-btn-sm">' + escapeHtml(c.save) + '</button>' +
+              '<button type="reset" class="ef-btn ef-btn-secondary ef-btn-sm" data-profile-reset hidden>' + escapeHtml(c.cancel) + '</button></div>' +
+              '<p class="ef-profile-unsaved" data-profile-unsaved role="status" aria-live="polite" hidden></p>' +
               '<p class="ef-form-banner" data-profile-status role="status" aria-live="polite"></p>' +
             '</form>' +
           '</article>' +
-          '<article class="ef-account-card"><div class="ef-account-card-head"><div><h2>' + escapeHtml(c.sessions) + '</h2><p class="ef-acc-card-desc">' + escapeHtml(c.sessionsDesc) + '</p></div></div>' +
+          '<article id="account-sessions" class="ef-account-card" tabindex="-1"><div class="ef-account-card-head"><div><h2>' + escapeHtml(c.sessions) + '</h2><p class="ef-acc-card-desc">' + escapeHtml(c.sessionsDesc) + '</p></div></div>' +
             '<div class="ef-account-stack">' +
               '<ul class="ef-session-list" data-auth-session-list aria-live="polite"></ul>' +
               '<p class="ef-form-banner" data-auth-session-status data-session-stale-message="' + escapeHtml(c.sessionReauth) + '" data-session-error-message="' + escapeHtml(c.sessionUnavailable) + '" data-session-reauth-href="' + hrefFor("/signin", locale) + '" data-session-reauth-label="' + escapeHtml(c.signIn) + '" role="status" aria-live="polite" hidden></p>' +
@@ -900,13 +916,13 @@ export function renderAuthPage(type, t, locale, hrefFor, escapeHtml, arrowRightI
           '</article>' +
         '</div>' +
         '<div class="ef-account-col">' +
-          '<article class="ef-account-card"><div class="ef-account-card-head"><div><h2>' + escapeHtml(c.connected) + '</h2><p class="ef-acc-card-desc">' + escapeHtml(c.connectedDesc) + '</p></div></div>' +
+          '<article id="account-connected" class="ef-account-card" tabindex="-1"><div class="ef-account-card-head"><div><h2>' + escapeHtml(c.connected) + '</h2><p class="ef-acc-card-desc">' + escapeHtml(c.connectedDesc) + '</p></div></div>' +
             '<div class="ef-account-stack">' +
               '<ul class="ef-session-list" data-auth-account-list aria-live="polite"></ul>' +
               '<div><button type="button" class="ef-google-btn ef-google-btn-sm" data-auth-link-google disabled hidden>' + googleMark() + '<span>' + escapeHtml(c.linkGoogle) + '</span></button></div>' +
             '</div>' +
           '</article>' +
-          '<article class="ef-account-card"><div class="ef-account-card-head"><div><h2>' + escapeHtml(c.security) + '</h2><p class="ef-acc-card-desc">' + escapeHtml(c.securityDesc) + '</p></div></div>' +
+          '<article id="account-security" class="ef-account-card" tabindex="-1"><div class="ef-account-card-head"><div><h2>' + escapeHtml(c.security) + '</h2><p class="ef-acc-card-desc">' + escapeHtml(c.securityDesc) + '</p></div></div>' +
             '<div class="ef-account-stack">' +
               '<section data-account-two-factor>' +
                 '<p class="ef-form-banner" data-two-factor-status role="status" aria-live="polite">' + escapeHtml(c.totpChecking) + '</p>' +
