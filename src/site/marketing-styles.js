@@ -2661,7 +2661,7 @@ html[data-theme="dark"] .ef-code-tabs {
 
 @media (max-width: 767px) {
   body:has(.ef-mobile-sticky-cta.is-visible) {
-    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
   }
 
   .ef-mobile-sticky-cta {
