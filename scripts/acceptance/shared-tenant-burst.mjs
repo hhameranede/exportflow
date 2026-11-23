@@ -34,8 +34,19 @@ let primaryError=null;
 try{
  const policies=await d1("SELECT plan_code,status,quota_period,request_limit FROM plan_policies WHERE plan_code='qa_daily' LIMIT 1");
  if(policies.length!==1||policies[0].status!=="active"||Number(policies[0].request_limit)<1)throw new Error("Existing QA-only daily plan policy is not active; no policy was changed.");
- const health=await Promise.all([jsonRequest(platformUrl+"/api/v1/health",{headers:{accept:"application/json"}}),jsonRequest(mcpUrl.replace(/\/mcp$/,"")+"/health",{headers:{accept:"application/json"}})]);
- if(health.some(x=>x.response.status!==200||x.body?.status!=="ok"))throw new Error("One or both Acceptance Workers failed health checks.");
+ const healthUrls=[platformUrl+"/api/v1/health",mcpUrl.replace(/\/mcp$/,"")+"/health"];
+ let health=[];
+ for(let attempt=0;attempt<10;attempt++){
+  health=await Promise.all(healthUrls.map(async url=>{
+   try{
+    const{response,body}=await jsonRequest(url,{headers:{accept:"application/json"}});
+    return{status:response.status,bodyStatus:typeof body?.status==="string"?body.status:null};
+   }catch{return{status:0,bodyStatus:null};}
+  }));
+  if(health.every(x=>x.status===200&&x.bodyStatus==="ok"))break;
+  if(attempt<9)await new Promise(resolve=>setTimeout(resolve,1_000));
+ }
+ if(health.some(x=>x.status!==200||x.bodyStatus!=="ok"))throw new Error("Acceptance Worker health checks did not become ready: "+JSON.stringify(health));
  const restFirst=await seedTenant("rest-first"),mcpFirst=await seedTenant("mcp-first");
  const results=[await testRestThenMcp(restFirst),await testMcpThenRest(mcpFirst)];
  console.log(JSON.stringify({acceptance:"shared-rest-mcp-durable-object-tenant-burst",status:"passed",workers:{platform:platformUrl,mcp:mcpUrl},policy:{planCode:"qa_daily",quotaPeriod:policies[0].quota_period,requestLimit:Number(policies[0].request_limit)},tests:results,credentials:"synthetic API keys generated in memory; only SHA-256 hashes stored; raw tokens never logged or persisted"}));
