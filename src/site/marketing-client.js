@@ -815,9 +815,20 @@ export const MARKETING_JS = `(function () {
         return;
       }
 
-      statusBanner.dataset.state = "success";
-      statusBanner.textContent = "Message validated and prepared locally for " + subjectVal + ". No external submission endpoint is connected yet.";
-      showToast("Inquiry prepared locally");
+      var mailtoBody = [
+        "Name: " + nameVal,
+        "Reply-to: " + emailVal,
+        "Inquiry type: " + subjectVal,
+        "",
+        messageVal
+      ].join("\\n");
+      var mailtoUrl = "mailto:hhameranede@gmail.com?subject=" +
+        encodeURIComponent("[ExportFlow] " + subjectVal) +
+        "&body=" + encodeURIComponent(mailtoBody);
+
+      statusBanner.dataset.state = "info";
+      statusBanner.textContent = "Review and send the email draft in your email app.";
+      window.location.href = mailtoUrl;
     });
   }
 
@@ -837,7 +848,7 @@ export const MARKETING_JS = `(function () {
 
   function escapeAuthText(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (char) {
-      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[char];
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\\\"": "&quot;", "'": "&#39;" })[char];
     });
   }
 
@@ -859,7 +870,7 @@ export const MARKETING_JS = `(function () {
 
   async function authRequest(path, method, payload) {
     var requestMethod = String(method || "GET").toUpperCase();
-    var carriesOAuthFlow = /^(sign-in\/|sign-up\/|oauth2\/)/.test(String(path || ""));
+    var carriesOAuthFlow = /^(sign-in\\/|sign-up\\/|oauth2\\/)/.test(String(path || ""));
     if (carriesOAuthFlow && payload && typeof payload === "object" && !Array.isArray(payload) &&
         requestMethod !== "GET" && requestMethod !== "DELETE") {
       var oauthQuery = signedOAuthQueryFromLocation();
