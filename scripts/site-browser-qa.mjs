@@ -160,12 +160,27 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
       const name = aria || labelledText || nativeLabelText || wrappingLabelText || text || title;
       return name ? null : { tag: node.tagName.toLowerCase(), type: node.getAttribute("type"), id: node.id || "", className: typeof node.className === "string" ? node.className.slice(0, 80) : "" };
     }).filter(Boolean);
+    const overflowElements = [...document.body.querySelectorAll("*")].filter(visible).map((node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        tag: node.tagName.toLowerCase(),
+        id: node.id || "",
+        className: typeof node.className === "string" ? node.className.slice(0, 120) : "",
+        left: Math.round(rect.left * 10) / 10,
+        right: Math.round(rect.right * 10) / 10,
+        width: Math.round(rect.width * 10) / 10,
+        text: (node.innerText || "").trim().slice(0, 100)
+      };
+    }).filter((item) => item.width > 0 && (item.left < -1 || item.right > window.innerWidth + 1))
+      .sort((a, b) => (b.right - window.innerWidth) - (a.right - window.innerWidth))
+      .slice(0, 20);
     const links = [...document.querySelectorAll("a[href]")].map((anchor) => anchor.href);
     return {
       title: document.title,
       documentWidth: document.documentElement.scrollWidth,
       viewportWidth: window.innerWidth,
       bodyWidth: document.body.scrollWidth,
+      overflowElements,
       mainH1Count: h1s.length,
       visibleSvgCount: [...document.querySelectorAll("svg")].filter(visible).length,
       svgIssues,
@@ -191,7 +206,8 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
   assert.ok(diagnostics.documentWidth <= diagnostics.viewportWidth + 1,
     "Horizontal document overflow on " + route + " at " + width + "px: " + diagnostics.documentWidth);
   assert.ok(diagnostics.bodyWidth <= diagnostics.viewportWidth + 1,
-    "Horizontal body overflow on " + route + " at " + width + "px: " + diagnostics.bodyWidth);
+    "Horizontal body overflow on " + route + " at " + width + "px: " + diagnostics.bodyWidth +
+    "; overflowing elements: " + JSON.stringify(diagnostics.overflowElements));
   assert.deepEqual(diagnostics.svgIssues, [], "Broken or dimensionless SVG icon(s) on " + route + ": " + JSON.stringify(diagnostics.svgIssues));
   assert.deepEqual(diagnostics.brokenImages, [], "Broken image asset(s) on " + route + ": " + JSON.stringify(diagnostics.brokenImages));
   assert.deepEqual(diagnostics.unnamedControls, [], "Visible controls without accessible names on " + route + ": " + JSON.stringify(diagnostics.unnamedControls));
