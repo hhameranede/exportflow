@@ -119,8 +119,6 @@ export function renderDocument({
   <meta name="viewport" content="width=device-width, initial-scale=1">
 ${seoHeadTags}
   <link rel="icon" type="image/svg+xml" href="/assets/mark.svg">
-  <link rel="alternate icon" type="image/png" href="/assets/aistudio/file_00000000292c81f4953519d18ca257b6_d8689779.png">
-  <link rel="apple-touch-icon" href="/assets/aistudio/file_00000000292c81f4953519d18ca257b6_d8689779.png">
   ${stylesheetsHtml}
   ${extraHeadHtml}
 </head>
