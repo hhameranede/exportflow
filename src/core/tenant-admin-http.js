@@ -1,7 +1,7 @@
 import { authorizePlatformOwner } from "./auth-app.js";
 import { readBoundedJsonBody, TaskContractError } from "./task-contract.js";
 import { createTenantAdminService, TenantAdminError } from "./tenant-admin.js";
-import { createRateLimiter } from "./auth.js";
+import { createDurableTenantBurstLimiter } from "./durable-tenant-burst-limiter.js";
 import { getClientRateLimitKey } from "./client-rate-limit.js";
 import { OWNER_STEP_UP_PATH, clearOwnerStepUpCookie, createOwnerStepUpHttpHandler, createOwnerStepUpService } from "./owner-step-up.js";
 
@@ -154,14 +154,11 @@ export async function isTenantAdminSchemaReady(db) {
 export function createTenantAdminHttpHandler({
   authorizeOwner = authorizePlatformOwner,
   serviceFactory = createTenantAdminService,
-  adminRateLimiter = createRateLimiter({
-    windowMs: ADMIN_RATE_LIMIT_WINDOW_MS,
-    maxRequests: ADMIN_RATE_LIMIT_MAX_REQUESTS,
-  }),
+  adminRateLimiter = null,
   ownerStepUpService = createOwnerStepUpService(),
 } = {}) {
   if (typeof authorizeOwner !== "function" || typeof serviceFactory !== "function" ||
-      !adminRateLimiter || typeof adminRateLimiter.check !== "function" ||
+      (adminRateLimiter !== null && typeof adminRateLimiter.check !== "function") ||
       typeof ownerStepUpService?.verifyCode !== "function" || typeof ownerStepUpService?.consumeProof !== "function") {
     throw new TypeError("Tenant admin handler dependencies must be valid.");
   }
@@ -181,9 +178,18 @@ export function createTenantAdminHttpHandler({
       return jsonResponse({ error: { code: "METHOD_NOT_ALLOWED", message: "POST is required." } }, 405);
     }
 
+    const clientKey = getClientRateLimitKey(request);
+    if (clientKey === "ip:unavailable") {
+      return jsonResponse({ error: { code: "ADMIN_RATE_LIMIT_UNAVAILABLE", message: "A verified client network address is required for administrative requests." } }, 503);
+    }
+
     let rate;
     try {
-      rate = adminRateLimiter.check(getClientRateLimitKey(request));
+      const limiter = adminRateLimiter || createDurableTenantBurstLimiter(
+        env.TENANT_BURST_LIMITER,
+        { limit: ADMIN_RATE_LIMIT_MAX_REQUESTS, windowMs: ADMIN_RATE_LIMIT_WINDOW_MS },
+      );
+      rate = await limiter.check("platform-admin:" + clientKey);
     } catch {
       return jsonResponse({ error: { code: "ADMIN_RATE_LIMIT_UNAVAILABLE", message: "Administrative request protection is temporarily unavailable." } }, 503);
     }
