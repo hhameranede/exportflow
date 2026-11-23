@@ -869,7 +869,7 @@ export const MARKETING_JS = `(function () {
 
   async function authRequest(path, method, payload) {
     var requestMethod = String(method || "GET").toUpperCase();
-    var carriesOAuthFlow = /^(sign-in\/|sign-up\/|oauth2\/)/.test(String(path || ""));
+    var carriesOAuthFlow = /^(sign-in\\/|sign-up\\/|oauth2\\/)/.test(String(path || ""));
     if (carriesOAuthFlow && payload && typeof payload === "object" && !Array.isArray(payload) &&
         requestMethod !== "GET" && requestMethod !== "DELETE") {
       var oauthQuery = signedOAuthQueryFromLocation();
