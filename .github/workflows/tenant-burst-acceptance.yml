@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout the exact one-shot approved Acceptance branch
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - name: Verify one-shot approval marker
         run: |
           test -s .github/acceptance/tenant-burst.approved
