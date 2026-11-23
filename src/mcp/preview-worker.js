@@ -3,15 +3,35 @@ import { createMcpProtectedRequestHandler } from "@better-auth/mcp";
 import { TenantOAuthIdentityError, resolveOAuthTenantPrincipal } from "../core/tenant-membership.js";
 import { validatePublicHttpUrl } from "../core/http-fetch.js";
 import { validateExtractionSchema } from "../core/extract.js";
+import { getOAuthRuntimeConfig } from "../core/oauth-config.js";
+
+const AUTH_SERVICE_JWKS_CACHE_KEY = Object.freeze({ purpose: "exportflow-auth-service-jwks" });
+
+export function createAuthServiceJwksFetcher(env, jwksUrl) {
+  const service = env?.AUTH_SERVICE;
+  if (!service || typeof service.fetch !== "function") return undefined;
+
+  return async function fetchAuthServiceJwks() {
+    const response = await service.fetch(new Request(jwksUrl, {
+      method: "GET",
+      headers: { accept: "application/json" },
+    }));
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new Error("Auth service JWKS request failed (HTTP " + response.status + ").");
+    }
+    const jwks = await response.json();
+    if (!jwks || !Array.isArray(jwks.keys) || jwks.keys.length === 0) {
+      throw new Error("Auth service returned an invalid or empty JWKS document.");
+    }
+    return jwks;
+  };
+}
 
 const SUPPORTED_PROTOCOLS = new Set(["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"]);
 const DEFAULT_PROTOCOL = "2025-11-25";
 const MCP_PATH = "/mcp";
 const MAX_BODY_BYTES = 65_536;
-const MCP_RESOURCE = "https://mcp.exportflow.me/mcp";
-const AUTH_ISSUER = "https://exportflow.me/api/auth";
-const AUTH_JWKS_URL = "https://exportflow.me/api/auth/jwks";
-const RESOURCE_METADATA_URL = "https://mcp.exportflow.me/.well-known/oauth-protected-resource/mcp";
 const TOOL_SCOPES = Object.freeze({
   web_fetch: "tasks:fetch",
   web_map: "tasks:map",
@@ -230,12 +250,12 @@ function isDirectApiKeyAuthorization(value) {
   return typeof value === "string" && /^Bearer\s+ef_live_[A-Za-z0-9_-]{16}_[A-Za-z0-9_-]{43}$/i.test(value.trim());
 }
 
-function oauthToolChallenge(scope, status) {
+function oauthToolChallenge(scope, status, resourceMetadataUrl) {
   const error = status === 403 ? "insufficient_scope" : "invalid_token";
   const description = status === 403
     ? "Reconnect ExportFlow and grant the requested permission to continue."
     : "Connect your ExportFlow account to authorize this tool."; 
-  return `Bearer resource_metadata="${RESOURCE_METADATA_URL}", scope="${scope}", error="${error}", error_description="${description}"`;
+  return `Bearer resource_metadata="${resourceMetadataUrl}", scope="${scope}", error="${error}", error_description="${description}"`;
 }
 
 async function applyRateLimit(request, env, toolName) {
@@ -359,6 +379,7 @@ export function createExportFlowPreviewWorker({
     if (message.id === undefined) return new Response(null, { status: 202, headers: { "cache-control": "no-store" } });
 
     const { method, params = {} } = message;
+    const oauthEndpoints = getOAuthRuntimeConfig(env);
     if (method === "initialize") {
       const requested = params.protocolVersion;
       const version = SUPPORTED_PROTOCOLS.has(requested) && requested !== "2026-07-28" ? requested : DEFAULT_PROTOCOL;
@@ -411,10 +432,49 @@ export function createExportFlowPreviewWorker({
         return jsonResponse(rpcResult(message.id, result));
       }
 
+      if (env?.EXPORTFLOW_ACCEPTANCE_MODE === "true") {
+        try {
+          const jwksUrl = new URL(oauthEndpoints.jwksUrl);
+          const serviceJwksFetch = createAuthServiceJwksFetcher(env, oauthEndpoints.jwksUrl);
+          if (serviceJwksFetch) {
+            const jwks = await serviceJwksFetch();
+            console.info("[exportflow-mcp-acceptance-jwks-preflight]", JSON.stringify({
+              transport: "cloudflare-service-binding",
+              hostname: jwksUrl.hostname,
+              path: jwksUrl.pathname,
+              status: 200,
+              keyCount: jwks.keys.length,
+            }));
+          } else {
+            const jwksResponse = await fetch(oauthEndpoints.jwksUrl, {
+              method: "GET",
+              headers: { accept: "application/json" },
+              redirect: "manual",
+            });
+            console.info("[exportflow-mcp-acceptance-jwks-preflight]", JSON.stringify({
+              transport: "public-http-fallback",
+              hostname: jwksUrl.hostname,
+              path: jwksUrl.pathname,
+              status: jwksResponse.status,
+              contentType: jwksResponse.headers.get("content-type"),
+            }));
+            await jwksResponse.body?.cancel();
+          }
+        } catch (error) {
+          console.error("[exportflow-mcp-acceptance-jwks-preflight-error]", JSON.stringify({
+            name: typeof error?.name === "string" ? error.name.slice(0, 120) : "Error",
+            message: typeof error?.message === "string" ? error.message.slice(0, 500) : "JWKS preflight failed",
+          }));
+        }
+      }
+
+      const serviceJwksFetch = createAuthServiceJwksFetcher(env, oauthEndpoints.jwksUrl);
       const protectedHandler = createMcpProtectedRequestHandler({
-        issuer: AUTH_ISSUER,
-        audience: MCP_RESOURCE,
-        jwksUrl: AUTH_JWKS_URL,
+        issuer: oauthEndpoints.issuer,
+        audience: oauthEndpoints.resource,
+        ...(serviceJwksFetch
+          ? { jwksFetch: serviceJwksFetch, jwksCacheKey: AUTH_SERVICE_JWKS_CACHE_KEY }
+          : { jwksUrl: oauthEndpoints.jwksUrl }),
         jwtVerifyOptions: { typ: "at+jwt", requiredClaims: ["sub", "azp"] },
         requiredScopes: [requiredScope],
         challengeScopes: [requiredScope],
@@ -429,7 +489,7 @@ export function createExportFlowPreviewWorker({
             : "Tenant identity could not be verified.";
           const status = error instanceof TenantOAuthIdentityError ? error.httpStatus : 503;
           const meta = code === "TENANT_MEMBERSHIP_CHANGED"
-            ? { "mcp/www_authenticate": [oauthToolChallenge(requiredScope, 401)] }
+            ? { "mcp/www_authenticate": [oauthToolChallenge(requiredScope, 401, oauthEndpoints.resourceMetadataUrl)] }
             : undefined;
           const failed = toolContent({ error: code, message: detail }, true, meta);
           return jsonResponse(rpcResult(message.id, failed), status === 503 ? 503 : 200);
@@ -457,9 +517,21 @@ export function createExportFlowPreviewWorker({
         return jsonResponse(rpcResult(message.id, result));
       });
 
-      const protectedResponse = await protectedHandler(authRequest);
+      let protectedResponse;
+      try {
+        protectedResponse = await protectedHandler(authRequest);
+      } catch (error) {
+        if (env?.EXPORTFLOW_ACCEPTANCE_MODE === "true") {
+          console.error("[exportflow-mcp-acceptance-jwks-verify-error]", JSON.stringify({
+            issuer: oauthEndpoints.issuer,
+            jwksUrl: oauthEndpoints.jwksUrl,
+            message: typeof error?.message === "string" ? error.message.slice(0, 500) : "Unclassified verification error",
+          }));
+        }
+        throw error;
+      }
       if (protectedResponse.status === 401 || protectedResponse.status === 403) {
-        const challenge = oauthToolChallenge(requiredScope, protectedResponse.status);
+        const challenge = oauthToolChallenge(requiredScope, protectedResponse.status, oauthEndpoints.resourceMetadataUrl);
         const failed = toolContent({
           error: protectedResponse.status === 403 ? "insufficient_scope" : "authentication_required",
           message: protectedResponse.status === 403
@@ -495,9 +567,10 @@ export function createExportFlowPreviewWorker({
         if (request.method !== "GET" && request.method !== "HEAD") {
           return jsonResponse({ error: "method_not_allowed" }, 405, { allow: "GET, HEAD" });
         }
+        const oauthEndpoints = getOAuthRuntimeConfig(env);
         const metadata = {
-          resource: MCP_RESOURCE,
-          authorization_servers: [AUTH_ISSUER],
+          resource: oauthEndpoints.resource,
+          authorization_servers: [oauthEndpoints.issuer],
           scopes_supported: Object.values(TOOL_SCOPES),
           bearer_methods_supported: ["header"],
         };
@@ -566,7 +639,29 @@ export function createExportFlowPreviewWorker({
 
       try {
         return withCors(await handleRpc(message, request, env, authRequest), request);
-      } catch {
+      } catch (error) {
+        if (env?.EXPORTFLOW_ACCEPTANCE_MODE === "true") {
+          const rawMessage = typeof error?.message === "string" ? error.message : "Unclassified MCP runtime error";
+          const safeMessage = rawMessage
+            .replace(/(access_token|refresh_token|client_secret|code_verifier|password|authorization|cookie|secret)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
+            .replace(/https?:\/\/[^\s"'<>]+/gi, (value) => {
+              try {
+                const parsed = new URL(value);
+                return parsed.origin + parsed.pathname;
+              } catch {
+                return "[redacted-url]";
+              }
+            })
+            .slice(0, 1200);
+          console.error("[exportflow-mcp-acceptance-error]", JSON.stringify({
+            name: typeof error?.name === "string" ? error.name.slice(0, 120) : "Error",
+            message: safeMessage,
+            path: url.pathname,
+            rpcMethod: typeof message?.method === "string" ? message.method : undefined,
+            toolName: typeof message?.params?.name === "string" ? message.params.name : undefined,
+            rayId: request.headers.get("cf-ray") || undefined,
+          }));
+        }
         return withCors(jsonResponse(rpcError(message?.id ?? null, -32603, "Internal ExportFlow MCP error."), 500), request);
       }
     },

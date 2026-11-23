@@ -4,6 +4,7 @@ import { authorizePlatformOwnerRequest, parsePlatformOwnerIds } from "./platform
 import { jwt } from "better-auth/plugins";
 import { mcp } from "@better-auth/mcp";
 import { verifyOAuthQueryParams } from "@better-auth/oauth-provider";
+import { getOAuthRuntimeConfig } from "./oauth-config.js";
 import { renderMarketingPage } from "../site/marketing.js";
 import { readBoundedJsonBody, TaskContractError } from "./task-contract.js";
 import {
@@ -26,6 +27,23 @@ function isD1Binding(binding) {
     typeof binding.prepare === "function" &&
     typeof binding.batch === "function"
   );
+}
+
+const ACCEPTANCE_AUTH_ORIGIN = "https://exportflow-auth-acceptance-20261122.hhameranede.workers.dev";
+const ACCEPTANCE_MCP_RESOURCE_URL = "https://exportflow-mcp-acceptance-20261122.hhameranede.workers.dev/mcp";
+
+function isAcceptanceRuntime(env = {}) {
+  if (env.EXPORTFLOW_ACCEPTANCE_MODE !== "true" ||
+      !isNonEmptyString(env.BETTER_AUTH_URL) ||
+      !isNonEmptyString(env.MCP_RESOURCE_URL)) return false;
+  try {
+    const url = new URL(env.BETTER_AUTH_URL.trim());
+    return url.origin === ACCEPTANCE_AUTH_ORIGIN &&
+      url.pathname === "/" && !url.search && !url.hash &&
+      env.MCP_RESOURCE_URL.trim() === ACCEPTANCE_MCP_RESOURCE_URL;
+  } catch {
+    return false;
+  }
 }
 
 function validOrigin(value) {
@@ -63,8 +81,6 @@ const REQUIRED_TENANT_OAUTH_TRIGGERS = Object.freeze([
   "prevent_tenant_membership_delete",
   "bump_tenant_membership_version_on_tenant_state_change",
 ]);
-const AUTH_ISSUER = "https://exportflow.me/api/auth";
-const MCP_RESOURCE = "https://mcp.exportflow.me/mcp";
 const MCP_SCOPES = Object.freeze([
   "openid", "profile", "email", "offline_access",
   "tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract",
@@ -116,6 +132,7 @@ async function getPublicAuthFeatureStatus(env, configuredStatus) {
   return Object.freeze({
     ...configuredStatus,
     authReady,
+    tenantOAuthConfigured: Boolean(tenantOAuthReady),
     oauthReady: Boolean(tenantOAuthReady),
     googleEnabled: configuredStatus.googleEnabled && authReady,
     emailPasswordEnabled: configuredStatus.emailPasswordEnabled && authReady,
@@ -143,6 +160,13 @@ export function getAuthFeatureStatus(env = {}) {
     isNonEmptyString(env.BETTER_AUTH_SECRET) && env.BETTER_AUTH_SECRET.trim().length >= 32 &&
     validOrigin(baseUrl)
   );
+  let oauthEndpointsConfigured = false;
+  try {
+    getOAuthRuntimeConfig({ ...env, BETTER_AUTH_URL: baseUrl });
+    oauthEndpointsConfigured = true;
+  } catch {
+    // OAuth remains disabled when an issuer or protected-resource URL is malformed.
+  }
   const googleCredentialsPresent =
     isNonEmptyString(env.GOOGLE_CLIENT_ID) &&
     isNonEmptyString(env.GOOGLE_CLIENT_SECRET);
@@ -150,11 +174,12 @@ export function getAuthFeatureStatus(env = {}) {
     env.EMAIL &&
     typeof env.EMAIL.send === "function" &&
     isNonEmptyString(env.AUTH_EMAIL_FROM);
+  const acceptanceRuntime = isAcceptanceRuntime(env);
   return Object.freeze({
     authConfigured,
-    tenantOAuthConfigured: authConfigured && isD1Binding(env.EXPORTFLOW_AUTH_DB),
+    tenantOAuthConfigured: authConfigured && oauthEndpointsConfigured && isD1Binding(env.EXPORTFLOW_AUTH_DB),
     googleEnabled: authConfigured && googleCredentialsPresent,
-    emailPasswordEnabled: authConfigured && Boolean(emailServiceReady),
+    emailPasswordEnabled: authConfigured && (Boolean(emailServiceReady) || acceptanceRuntime),
   });
 }
 
@@ -245,10 +270,11 @@ function buildAuthOptions(env, status) {
   };
 
   if (status.tenantOAuthConfigured) {
+    const oauthEndpoints = getOAuthRuntimeConfig(env);
     options.plugins = [
-      jwt({ jwt: { issuer: AUTH_ISSUER }, disableSettingJwtHeader: true }),
+      jwt({ jwt: { issuer: oauthEndpoints.issuer }, disableSettingJwtHeader: true }),
       mcp({
-        resource: MCP_RESOURCE,
+        resource: oauthEndpoints.resource,
         scopes: [...MCP_SCOPES],
         requireOpenId: true,
         loginPage: "/signin",
@@ -265,8 +291,8 @@ function buildAuthOptions(env, status) {
         clientRegistrationDefaultApplicationType: "web",
         clientRegistrationDefaultScopes: [...MCP_SCOPES],
         clientRegistrationAllowedScopes: [...MCP_SCOPES],
-        clientRegistrationDefaultResources: [MCP_RESOURCE],
-        clientRegistrationAllowedResources: [MCP_RESOURCE],
+        clientRegistrationDefaultResources: [oauthEndpoints.resource],
+        clientRegistrationAllowedResources: [oauthEndpoints.resource],
         grantTypes: ["authorization_code", "refresh_token"],
         postLogin: {
           page: "/oauth/select-tenant",
@@ -313,12 +339,33 @@ function buildAuthOptions(env, status) {
     ];
   }
 
+  if (isAcceptanceRuntime(env)) {
+    options.onAPIError = {
+      onError(error, context) {
+        const message = typeof error?.message === "string"
+          ? error.message
+              .replace(/(access_token|refresh_token|client_secret|code_verifier|password|authorization)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
+              .slice(0, 1200)
+          : "Unclassified Better Auth API error";
+        console.error("[exportflow-acceptance-auth-api-error]", JSON.stringify({
+          name: typeof error?.name === "string" ? error.name.slice(0, 120) : "Error",
+          message,
+          path: typeof context?.path === "string" ? context.path.slice(0, 160) : undefined,
+          method: typeof context?.request?.method === "string" ? context.request.method : undefined,
+        }));
+      },
+    };
+  }
+
   if (status.emailPasswordEnabled) {
-    options.emailAndPassword = {
+    const acceptanceRuntime = isAcceptanceRuntime(env);
+    const emailAndPassword = {
       enabled: true,
-      requireEmailVerification: true,
+      requireEmailVerification: !acceptanceRuntime,
       revokeSessionsOnPasswordReset: true,
-      sendResetPassword: async ({ user, url }) => {
+    };
+    if (!acceptanceRuntime) {
+      emailAndPassword.sendResetPassword = async ({ user, url }) => {
         await sendAccountEmail({
           to: user.email,
           subject: "Reset your ExportFlow password",
@@ -327,12 +374,11 @@ function buildAuthOptions(env, status) {
           actionUrl: url,
           actionLabel: "Reset password",
         });
-      },
-    };
-    options.emailVerification = {
-      sendOnSignUp: true,
-      autoSignInAfterVerification: true,
-      sendVerificationEmail: async ({ user, url }) => {
+      };
+      options.emailVerification = {
+        sendOnSignUp: true,
+        autoSignInAfterVerification: true,
+        sendVerificationEmail: async ({ user, url }) => {
         await sendAccountEmail({
           to: user.email,
           subject: "Verify your ExportFlow email",
@@ -342,7 +388,9 @@ function buildAuthOptions(env, status) {
           actionLabel: "Verify email",
         });
       },
-    };
+      };
+    }
+    options.emailAndPassword = emailAndPassword;
   } else {
     options.emailAndPassword = { enabled: false };
   }
@@ -397,6 +445,14 @@ function isSameOriginAuthRequest(request, env = {}) {
   const origin = request.headers.get("origin");
   const fetchSite = request.headers.get("sec-fetch-site");
   return origin === expectedOrigin && (!fetchSite || fetchSite === "same-origin");
+}
+
+function isTenantOAuthEndpointPath(pathname) {
+  return typeof pathname === "string" && (
+    pathname.includes("/oauth2") ||
+    pathname.includes("/.well-known/") ||
+    pathname.endsWith("/jwks")
+  );
 }
 
 async function handleTenantOAuthApi(request, env, auth) {
@@ -525,6 +581,18 @@ export async function handleAuthRequest(request, env = {}) {
     }, 503);
   }
 
+  if (isTenantOAuthEndpointPath(url.pathname)) {
+    const tenantOAuthReady = status.tenantOAuthConfigured &&
+      await isOAuthAuthSchemaReady(env.AUTH_DB) &&
+      await isTenantOAuthSchemaReady(env.EXPORTFLOW_AUTH_DB);
+    if (!tenantOAuthReady) {
+      return textResponse({
+        error: "TENANT_OAUTH_SCHEMA_NOT_READY",
+        message: "Tenant OAuth storage is not initialized yet.",
+      }, 503);
+    }
+  }
+
   const auth = getAuthInstance(env);
   if (!auth) {
     return textResponse({
@@ -537,8 +605,31 @@ export async function handleAuthRequest(request, env = {}) {
   if (tenantOAuthResponse) return tenantOAuthResponse;
 
   try {
-    return await auth.handler(request);
-  } catch {
+    const response = await auth.handler(request);
+    if (isAcceptanceRuntime(env) && response.status >= 500) {
+      console.error("[exportflow-acceptance-auth-http-error]", JSON.stringify({
+        method: request.method,
+        path: url.pathname,
+        status: response.status,
+        contentType: response.headers.get("content-type"),
+        rayId: request.headers.get("cf-ray") || undefined,
+      }));
+    }
+    return response;
+  } catch (error) {
+    if (isAcceptanceRuntime(env)) {
+      const message = typeof error?.message === "string"
+        ? error.message
+            .replace(/(access_token|refresh_token|client_secret|code_verifier|password|authorization)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
+            .slice(0, 1200)
+        : "Unclassified request error";
+      console.error("[exportflow-acceptance-auth-handler-error]", JSON.stringify({
+        name: typeof error?.name === "string" ? error.name.slice(0, 120) : "Error",
+        message,
+        method: request.method,
+        path: url.pathname,
+      }));
+    }
     return textResponse({ error: "AUTH_REQUEST_FAILED" }, 500);
   }
 }
@@ -582,6 +673,12 @@ export async function handleOAuthBrowserPage(request, env = {}) {
   }
 
   const status = getAuthFeatureStatus(env);
+  let oauthEndpoints;
+  try {
+    oauthEndpoints = getOAuthRuntimeConfig(env);
+  } catch {
+    return oauthBrowserError(503, "Authorization unavailable", "The configured OAuth endpoints are invalid.");
+  }
   if (!status.authConfigured || !status.tenantOAuthConfigured ||
       !(await isAuthSchemaReady(env.AUTH_DB)) ||
       !(await isOAuthAuthSchemaReady(env.AUTH_DB)) ||
@@ -609,7 +706,7 @@ export async function handleOAuthBrowserPage(request, env = {}) {
       signedParams.get("response_type") !== "code" ||
       signedParams.get("code_challenge_method") !== "S256" ||
       signedParams.getAll("resource").length !== 1 ||
-      signedParams.get("resource") !== MCP_RESOURCE) {
+      signedParams.get("resource") !== oauthEndpoints.resource) {
     return oauthBrowserError(400, "Unsupported authorization request", "This request does not match the ExportFlow OAuth authorization profile.");
   }
 
