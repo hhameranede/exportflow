@@ -3948,9 +3948,13 @@ html[data-motion="paused"] .ef-timeline-step {
 
 .ef-demo-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-5);
   align-items: start;
+}
+
+.ef-demo-grid > * {
+  min-width: 0;
 }
 
 @media (min-width: 960px) {
@@ -4717,3 +4721,33 @@ html[dir="rtl"] .ef-legal-progress span {
 }
 
 `;
+
+/* Narrow-phone layout corrections from full-site Chromium QA */
+@media (max-width: 480px) {
+  .ef-badge {
+    max-width: 100%;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 380px) {
+  .ef-header-inner {
+    gap: 8px;
+  }
+
+  .ef-header-actions {
+    flex-shrink: 1;
+    min-width: 0;
+    gap: 4px;
+  }
+
+  .ef-lang-trigger {
+    padding-inline: 4px;
+  }
+
+  .ef-lang-trigger > span:first-of-type {
+    display: none;
+  }
+}
