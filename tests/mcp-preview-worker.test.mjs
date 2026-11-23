@@ -614,7 +614,7 @@ test("protected tool calls return an OAuth challenge scoped to the configured MC
 test("web_search maps the selected public source to shared task execution with its own scope", async () => {
   const { worker, env, calls } = makeWorker({ taskResult: { id: "task_search_123", state: "succeeded" } });
   const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
-    name: "web_search", arguments: { query: "public APIs", source: "openalex", limit: 4 },
+    name: "web_search", arguments: { query: "public APIs", source: "openalex", limit: 4, cacheMode: "bypass" },
   }), { headers: { "cf-connecting-ip": "203.0.113.47", authorization: "Bearer " + TENANT_TOKEN } }), env);
   const body = await response.json();
   assert.equal(response.status, 200);
@@ -622,6 +622,7 @@ test("web_search maps the selected public source to shared task execution with i
   assert.equal(calls.tasks[0].input.operation, "search");
   assert.equal(calls.tasks[0].input.source, "openalex");
   assert.equal(calls.tasks[0].input.query, "public APIs");
+  assert.equal(calls.tasks[0].input.cacheMode, "bypass");
   assert.equal(calls.auth[0].requiredScope, "tasks:search");
   assert.deepEqual(calls.limits, [{ key: "203.0.113.47", delta: 2 }]);
 });
@@ -630,7 +631,7 @@ test("web_research requires its own scope and passes source and schema", async (
   const { worker, env, calls } = makeWorker({ taskResult: { id: "task_research_123", state: "succeeded" } });
   const schema = { type: "object", properties: { title: { type: "string" } } };
   const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
-    name: "web_research", arguments: { query: "public APIs", source: "crossref", schema, candidateLimit: 2 },
+    name: "web_research", arguments: { query: "public APIs", source: "crossref", schema, candidateLimit: 2, cacheMode: "default" },
   }), { headers: { "cf-connecting-ip": "203.0.113.48", authorization: "Bearer " + TENANT_TOKEN } }), env);
   const body = await response.json();
   assert.equal(response.status, 200);
@@ -638,6 +639,7 @@ test("web_research requires its own scope and passes source and schema", async (
   assert.equal(calls.tasks[0].input.operation, "research");
   assert.equal(calls.tasks[0].input.source, "crossref");
   assert.deepEqual(calls.tasks[0].input.schema, schema);
+  assert.equal(calls.tasks[0].input.cacheMode, "default");
   assert.equal(calls.auth[0].requiredScope, "tasks:research");
   assert.deepEqual(calls.limits, [{ key: "203.0.113.48", delta: 5 }]);
 });

@@ -93,6 +93,7 @@ const READ_ONLY_ANNOTATIONS = Object.freeze({
 
 const SEARCH_SOURCE_SCHEMA = { type: "string", enum: ["wikipedia", "openalex", "crossref"] };
 const QUERY_SCHEMA = { type: "string", minLength: 1, maxLength: 1024 };
+const CACHE_MODE_SCHEMA = { type: "string", enum: ["default", "bypass"] };
 const SCHEMA_SCHEMA = { type: "object", additionalProperties: true };
 const TOOL_DEFINITIONS = Object.freeze([
   { name: "exportflow_capabilities", title: "ExportFlow capabilities",
@@ -100,22 +101,22 @@ const TOOL_DEFINITIONS = Object.freeze([
     inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "web_fetch", title: "Fetch a public web page",
     description: "Fetches bounded public HTTP(S) resources using GET only. Requires tasks:fetch.",
-    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH } }, required: ["url"], additionalProperties: false } },
+    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, cacheMode: CACHE_MODE_SCHEMA }, required: ["url"], additionalProperties: false } },
   { name: "web_map", title: "Map a website",
     description: "Discovers same-origin public URLs through robots.txt, sitemaps and static links. Requires tasks:map; no browser runtime.",
-    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, maxUrls: { type: "integer", minimum: 1, maximum: 15 } }, required: ["url"], additionalProperties: false } },
+    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, maxUrls: { type: "integer", minimum: 1, maximum: 15 }, cacheMode: CACHE_MODE_SCHEMA }, required: ["url"], additionalProperties: false } },
   { name: "web_crawl", title: "Crawl a public website",
     description: "Crawls at most three same-origin static pages to depth one, respecting robots.txt and bounded byte limits. Requires tasks:crawl.",
-    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, maxPages: { type: "integer", minimum: 1, maximum: 3 }, maxDepth: { type: "integer", minimum: 0, maximum: 1 } }, required: ["url"], additionalProperties: false } },
+    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, maxPages: { type: "integer", minimum: 1, maximum: 3 }, maxDepth: { type: "integer", minimum: 0, maximum: 1 }, cacheMode: CACHE_MODE_SCHEMA }, required: ["url"], additionalProperties: false } },
   { name: "web_extract", title: "Extract structured page data",
     description: "Extracts explicit fields from public static HTML or JSON through metadata and JSON-LD. Missing fields are not guessed. Requires tasks:extract.",
-    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, schema: SCHEMA_SCHEMA }, required: ["url", "schema"], additionalProperties: false } },
+    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, schema: SCHEMA_SCHEMA, cacheMode: CACHE_MODE_SCHEMA }, required: ["url", "schema"], additionalProperties: false } },
   { name: "web_search", title: "Search a selected public dataset",
     description: "Searches one selected no-key source: Wikipedia (encyclopedic), OpenAlex (scholarly works), or Crossref (DOI metadata). Not a whole-web search engine. Requires tasks:search.",
-    inputSchema: { type: "object", properties: { query: QUERY_SCHEMA, source: SEARCH_SOURCE_SCHEMA, limit: { type: "integer", minimum: 1, maximum: 10 } }, required: ["query", "source"], additionalProperties: false } },
+    inputSchema: { type: "object", properties: { query: QUERY_SCHEMA, source: SEARCH_SOURCE_SCHEMA, limit: { type: "integer", minimum: 1, maximum: 10 }, cacheMode: CACHE_MODE_SCHEMA }, required: ["query", "source"], additionalProperties: false } },
   { name: "web_research", title: "Research and extract from public sources",
     description: "Runs selected-source search, bounded static HTTP fetch, and deterministic schema extraction. JavaScript rendering is not supported. Requires tasks:research.",
-    inputSchema: { type: "object", properties: { query: QUERY_SCHEMA, source: SEARCH_SOURCE_SCHEMA, schema: SCHEMA_SCHEMA, limit: { type: "integer", minimum: 1, maximum: 10 }, candidateLimit: { type: "integer", minimum: 1, maximum: 3 } }, required: ["query", "source", "schema"], additionalProperties: false } },
+    inputSchema: { type: "object", properties: { query: QUERY_SCHEMA, source: SEARCH_SOURCE_SCHEMA, schema: SCHEMA_SCHEMA, limit: { type: "integer", minimum: 1, maximum: 10 }, candidateLimit: { type: "integer", minimum: 1, maximum: 3 }, cacheMode: CACHE_MODE_SCHEMA }, required: ["query", "source", "schema"], additionalProperties: false } },
 ]);
 
 function jsonResponse(body, status = 200, extraHeaders = {}) {
@@ -190,13 +191,15 @@ function validateToolArguments(name, args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) return "Tool arguments must be an object.";
   if (name === "exportflow_capabilities") return Object.keys(args).length ? "This tool accepts no arguments." : null;
   const allowed = {
-    web_fetch: ["url"], web_map: ["url", "maxUrls"], web_crawl: ["url", "maxPages", "maxDepth"],
-    web_extract: ["url", "schema"], web_search: ["query", "source", "limit"],
-    web_research: ["query", "source", "schema", "limit", "candidateLimit"],
+    web_fetch: ["url", "cacheMode"], web_map: ["url", "maxUrls", "cacheMode"],
+    web_crawl: ["url", "maxPages", "maxDepth", "cacheMode"],
+    web_extract: ["url", "schema", "cacheMode"], web_search: ["query", "source", "limit", "cacheMode"],
+    web_research: ["query", "source", "schema", "limit", "candidateLimit", "cacheMode"],
   }[name];
   if (!allowed) return "Unknown tool.";
   if (Object.keys(args).some((key) => !allowed.includes(key))) return "Unknown tool argument.";
   if (["web_fetch", "web_map", "web_crawl", "web_extract"].includes(name) && !isValidHttpUrl(args.url)) return "url must be a valid credential-free HTTP(S) URL.";
+  if (args.cacheMode !== undefined && !["default", "bypass"].includes(args.cacheMode)) return "cacheMode must be default or bypass.";
   if (["web_search", "web_research"].includes(name)) {
     if (typeof args.query !== "string" || !args.query.trim() || args.query.length > 1024) return "query must contain 1 to 1024 characters.";
     if (!["wikipedia", "openalex", "crossref"].includes(args.source)) return "source must be wikipedia, openalex, or crossref.";
@@ -341,6 +344,7 @@ export function createExportFlowPreviewWorker({
       if (args.limit !== undefined) input.limit = args.limit;
     }
     if (name === "web_research" && args.candidateLimit !== undefined) input.candidateLimit = args.candidateLimit;
+    if (args.cacheMode !== undefined) input.cacheMode = args.cacheMode;
 
     const task = await executeWebTask(input, { signal: request.signal });
     const result = {
