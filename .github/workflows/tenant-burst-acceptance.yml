@@ -18,7 +18,6 @@ jobs:
   acceptance:
     if: >-
       ${{ github.event_name == 'push' &&
-          hashFiles('.github/acceptance/tenant-burst.approved') != '' &&
           contains(github.event.head_commit.message, 'tenant-burst-acceptance-approved') &&
           (github.ref == 'refs/heads/feat/shared-tenant-auth-quota-20261120' ||
            github.ref == 'refs/heads/fix/rest-body-tests-stack-20261123') }}
@@ -26,6 +25,10 @@ jobs:
     steps:
       - name: Checkout the exact one-shot approved Acceptance branch
         uses: actions/checkout@v4
+      - name: Verify one-shot approval marker
+        run: |
+          test -s .github/acceptance/tenant-burst.approved
+          grep -F "one isolated, synthetic tenant-burst Acceptance run" .github/acceptance/tenant-burst.approved
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
