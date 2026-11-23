@@ -343,7 +343,7 @@ test("POST /api/v1/tasks executes end-to-end bounded HTTP fetch and returns stru
       assert.equal(init.method, "GET");
       assert.equal(init.redirect, "manual");
       assert.equal(init.cache, "default");
-      assert.deepEqual(init.cf, { cacheEverything: true });
+      assert.equal(Object.hasOwn(init, "cf"), false);
       if (url === "https://example.com/start") {
         return new Response(null, { status: 302, headers: { location: "/final" } });
       }
