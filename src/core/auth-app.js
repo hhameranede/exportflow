@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
+import { authorizePlatformOwnerRequest, parsePlatformOwnerIds } from "./platform-admin-auth.js";
 
 const authInstances = new WeakMap();
 
@@ -315,4 +316,33 @@ export async function handleAuthRequest(request, env = {}) {
   } catch {
     return textResponse({ error: "AUTH_REQUEST_FAILED" }, 500);
   }
+}
+
+
+/**
+ * Resolves the current request to a deployment-allowlisted platform owner.
+ * The allowlist is configuration-only; no client field or Better Auth role
+ * assignment endpoint can promote an account into this owner set.
+ */
+export async function authorizePlatformOwner(request, env = {}) {
+  const ownerUserIds = parsePlatformOwnerIds(env.EXPORTFLOW_OWNER_USER_IDS);
+  if (ownerUserIds.size === 0) return Object.freeze({ allowed: false });
+
+  const status = getAuthFeatureStatus(env);
+  if (!status.authConfigured || !(await isAuthSchemaReady(env.AUTH_DB))) {
+    return Object.freeze({ allowed: false });
+  }
+
+  const auth = getAuthInstance(env);
+  if (!auth || typeof auth.api?.getSession !== "function") {
+    return Object.freeze({ allowed: false });
+  }
+
+  return authorizePlatformOwnerRequest(request, {
+    ownerUserIds,
+    expectedOrigin: isNonEmptyString(env.BETTER_AUTH_URL)
+      ? env.BETTER_AUTH_URL.trim()
+      : "https://exportflow.me",
+    getSession: ({ headers, query }) => auth.api.getSession({ headers, query }),
+  });
 }

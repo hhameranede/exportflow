@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getAuthFeatureStatus, getAuthOptions, handleAuthRequest } from "../src/core/auth-app.js";
+import { authorizePlatformOwner, getAuthFeatureStatus, getAuthOptions, handleAuthRequest } from "../src/core/auth-app.js";
 import { createWorker } from "../src/index.js";
 
 function createD1BindingStub(tableNames = []) {
@@ -203,6 +203,15 @@ test("Worker routes /api/auth before its generic GET-only fallback", async () =>
   assert.equal(session.status, 503);
   const sessionBody = await session.json();
   assert.equal(sessionBody.error, "AUTH_NOT_CONFIGURED");
+
+  const admin = await worker.fetch(new Request("https://exportflow.me/api/v1/admin/tenants", {
+    method: "POST",
+    headers: { origin: "https://exportflow.me", "content-type": "application/json" },
+    body: JSON.stringify({ planCode: "free" }),
+  }));
+  assert.equal(admin.status, 403);
+  const adminBody = await admin.json();
+  assert.equal(adminBody.error.code, "ADMIN_FORBIDDEN");
 });
 
 test("account API requests return 503 until the Better Auth schema is migrated", async () => {
@@ -238,4 +247,34 @@ test("schema migration route stays hidden unless dedicated auth storage and migr
     {},
   );
   assert.equal(response.status, 404);
+});
+
+
+test("platform owner authorization fails closed when owner allowlist is absent", async () => {
+  const response = await authorizePlatformOwner(
+    new Request("https://exportflow.me/api/v1/admin/tenants", {
+      method: "POST",
+      headers: { origin: "https://exportflow.me" },
+    }),
+    {
+      AUTH_DB: createD1BindingStub(["user", "session", "account", "verification"]),
+      BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
+    },
+  );
+  assert.deepEqual(response, { allowed: false });
+});
+
+test("platform owner authorization fails closed when auth schema is incomplete", async () => {
+  const response = await authorizePlatformOwner(
+    new Request("https://exportflow.me/api/v1/admin/tenants", {
+      method: "POST",
+      headers: { origin: "https://exportflow.me" },
+    }),
+    {
+      AUTH_DB: createD1BindingStub(["user", "session", "account"]),
+      BETTER_AUTH_SECRET: "a-long-test-secret-that-is-not-a-real-credential",
+      EXPORTFLOW_OWNER_USER_IDS: "owner_user_id",
+    },
+  );
+  assert.deepEqual(response, { allowed: false });
 });
