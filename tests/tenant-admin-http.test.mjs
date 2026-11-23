@@ -180,7 +180,7 @@ test("admin storage binding and migration readiness fail closed", async () => {
   ]) {
     const missingProtection = await handler(
       jsonRequest("/api/v1/admin/tenants", { planCode: "free" }),
-      { EXPORTFLOW_AUTH_DB: makeD1(TABLES, REQUIRED_TRIGGERS.filter((name) => name !== missingTrigger)) },
+      { EXPORTFLOW_AUTH_DB: makeD1(TABLES, REQUIRED_TRIGGERS.filter((name) => name !== missingTrigger)), TENANT_BURST_LIMITER: makeDurableLimiterNamespace() },
     );
     assert.equal(missingProtection.status, 503, missingTrigger);
     assert.equal((await missingProtection.json()).error.code, "ADMIN_SCHEMA_NOT_READY", missingTrigger);
