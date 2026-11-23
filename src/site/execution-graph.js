@@ -19,8 +19,7 @@ export function renderExecutionGraph({
   return `<div class="ef-graph-card" data-exec-graph data-active-scenario="http" data-parallax-target>
   <div class="ef-graph-head">
     <div class="ef-graph-title-group">
-      <span class="ef-graph-kicker">${escapeHtml(g.kicker)}</span>
-      <span class="ef-graph-id">${escapeHtml(g.idLabel)}</span>
+      <h2 class="ef-graph-title">${escapeHtml(g.kicker)}</h2>
     </div>
     <div class="ef-graph-scenarios" role="group" aria-label="${escapeHtml(g.routeGroupAria)}">
       <button type="button" class="ef-graph-tab" data-graph-scenario="http" aria-pressed="true">${escapeHtml(g.httpTitle)}</button>
