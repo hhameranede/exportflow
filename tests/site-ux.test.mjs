@@ -128,6 +128,67 @@ test("legal routes expose readable section navigation without changing review-ga
   }
 });
 
+
+test("capability cards keep icons beside titles and preserve mobile metrics, filters, and CTA clearance", async () => {
+  for (const path of ["/", "/ar/"]) {
+    const html = await fetchHtml(path);
+    const rows = [...html.matchAll(/<div class="ef-title-icon-row">([\s\S]*?)<\/div>/gu)].map((match) => match[1]);
+    const cards = html.match(/\bdata-cap-card(?:\s|>)/gu) ?? [];
+
+    assert.ok(rows.length > 0, path + " should render capability title rows");
+    assert.equal(rows.length, cards.length, path + " should render one icon/title row per capability card");
+    for (const row of rows) {
+      assert.match(row, /<span class="ef-feature-icon"[^>]*>[\s\S]*?<h3>/u,
+        path + " should place the feature icon before its heading in the same row");
+    }
+  }
+
+  assert.match(MARKETING_CSS,
+    /\.ef-title-icon-row\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*row;[^}]*align-items:\s*center;/su,
+    "feature icon and title must share a horizontal, vertically centered flex row");
+  assert.match(MARKETING_CSS, /\.ef-feature-icon\s*\{[^}]*flex:\s*0 0 38px;/su,
+    "feature icons must keep a stable 38px basis and must not shrink");
+  assert.match(MARKETING_CSS,
+    /\.ef-title-icon-row h3\s*\{[^}]*flex:\s*1 1 auto;[^}]*min-width:\s*0;[^}]*margin:\s*0;/su,
+    "feature titles must use the remaining row width and wrap without pushing the icon");
+
+  assert.match(MARKETING_CSS,
+    /\.ef-spec-strip dd,\s*\.ef-spec-value\s*\{[^}]*white-space:\s*nowrap;/su,
+    "metric number and unit must remain on one line");
+  assert.match(MARKETING_CSS, /\.ef-spec-num\s*\{[^}]*flex:\s*0 0 auto;[^}]*white-space:\s*nowrap;/su);
+  assert.match(MARKETING_CSS, /\.ef-spec-unit\s*\{[^}]*flex:\s*0 0 auto;[^}]*white-space:\s*nowrap;/su);
+
+  assert.match(MARKETING_CSS,
+    /\.ef-cap-filter-bar\s*\{[^}]*flex-wrap:\s*nowrap;[^}]*overflow-x:\s*auto;/su,
+    "mobile category filters must stay in one horizontally scrollable row");
+  assert.match(MARKETING_CSS,
+    /\.ef-filter-pill\s*\{[^}]*flex:\s*0 0 auto;[^}]*white-space:\s*nowrap;/su);
+
+  assert.match(MARKETING_CSS,
+    /body:has\(\.ef-mobile-sticky-cta\.is-visible\)\s*\{[^}]*padding-bottom:\s*calc\(76px \+ env\(safe-area-inset-bottom, 0px\)\);/su,
+    "page content must retain clearance above the fixed mobile CTA");
+  assert.match(MARKETING_CSS,
+    /@media \(max-width: 767px\)\s*\{[\s\S]*?\.ef-mobile-sticky-cta\s*\{[^}]*position:\s*fixed;/su,
+    "mobile CTA must remain fixed to the viewport after content clearance is reserved");
+
+  assert.match(MARKETING_CSS,
+    /\.ef-demo-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);/su,
+    "the single-column demo grid must suppress intrinsic track expansion on narrow screens");
+  assert.match(MARKETING_CSS,
+    /\.ef-demo-grid\s*>\s*\*\s*\{\s*min-width:\s*0;/su,
+    "demo grid children must be allowed to shrink below their intrinsic content width");
+  assert.match(MARKETING_CSS,
+    /@media\s*\(max-width:\s*480px\)\s*\{[^}]*\.ef-badge\s*\{[^}]*white-space:\s*normal;[^}]*overflow-wrap:\s*anywhere;/su,
+    "long capability and status badges must wrap on narrow mobile screens");
+  assert.match(MARKETING_CSS,
+    /\.ef-header-actions\s*\{[^}]*flex-shrink:\s*1;[^}]*min-width:\s*0;/su,
+    "header actions must shrink on 320px phone viewports");
+
+  const home = await fetchHtml("/");
+  assert.match(home, /marketing\.css\?v=9/u,
+    "the stylesheet URL must be versioned so mobile clients do not keep stale CSS");
+});
+
 test("account settings navigation points only to existing profile, identity, security, and session controls", async () => {
   const html = await fetchHtml("/account");
   for (const section of ["profile", "connected", "security", "sessions"]) {

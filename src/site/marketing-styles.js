@@ -1370,7 +1370,7 @@ html[dir="rtl"] .ef-hero-title {
 .ef-feature-icon {
   width: 38px;
   height: 38px;
-  flex-shrink: 0;
+  flex: 0 0 38px;
   border-radius: 11px;
   border: 1px solid var(--border);
   background: var(--bg-tinted);
@@ -1536,16 +1536,19 @@ html[data-theme="dark"] .ef-cap-filter-bar {
 
 .ef-title-icon-row {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 14px;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
   min-width: 0;
   margin-block: 16px 12px;
 }
 
 .ef-title-icon-row h3 {
+  flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
+  margin: 0;
+  line-height: 1.2;
   overflow-wrap: anywhere;
 }
 
@@ -1660,6 +1663,8 @@ html[dir="rtl"] .ef-spec-value {
 }
 
 .ef-spec-num {
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-size: clamp(2.1rem, 3.2vw, 2.85rem);
   font-weight: 600;
   letter-spacing: -0.04em;
@@ -1668,6 +1673,8 @@ html[dir="rtl"] .ef-spec-value {
 }
 
 .ef-spec-unit {
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-size: clamp(0.95rem, 1.35vw, 1.18rem);
   font-weight: 500;
   letter-spacing: -0.01em;
@@ -1709,6 +1716,13 @@ html[dir="rtl"] .ef-spec-value {
   font-size: 1.3125rem;
   font-weight: 600;
   letter-spacing: -0.025em;
+}
+
+/* Capability headings share one horizontal icon/title baseline. */
+.ef-cap-featured-copy .ef-title-icon-row h3,
+.ef-cap-grid .ef-cap-card .ef-title-icon-row h3 {
+  flex: 1 1 auto;
+  margin: 0;
 }
 
 .ef-cap-grid .ef-cap-card > p {
@@ -2432,9 +2446,13 @@ html[data-theme="dark"] .ef-code-tabs {
 
 .ef-sub-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   margin-top: var(--space-4);
+}
+
+.ef-sub-grid > * {
+  min-width: 0;
 }
 
 @media (min-width: 760px) {
@@ -2508,6 +2526,8 @@ html[data-theme="dark"] .ef-code-tabs {
 
 .ef-contact-form {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 18px;
   padding: 28px;
   border-radius: var(--radius-lg);
@@ -2518,7 +2538,13 @@ html[data-theme="dark"] .ef-code-tabs {
 
 .ef-field {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 6px;
+}
+
+.ef-contact-form > * {
+  min-width: 0;
 }
 
 .ef-field label {
@@ -2647,7 +2673,7 @@ html[data-theme="dark"] .ef-code-tabs {
 
 @media (max-width: 767px) {
   body:has(.ef-mobile-sticky-cta.is-visible) {
-    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
   }
 
   .ef-mobile-sticky-cta {
@@ -3679,7 +3705,12 @@ html[data-motion="paused"] .ef-timeline-step {
 /* Use Cases Blueprints */
 .ef-uc-stack {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-5);
+}
+
+.ef-uc-stack > * {
+  min-width: 0;
 }
 
 .ef-uc-card {
@@ -3716,9 +3747,13 @@ html[data-motion="paused"] .ef-timeline-step {
 
 .ef-uc-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   align-items: start;
+}
+
+.ef-uc-grid > * {
+  min-width: 0;
 }
 
 @media (min-width: 900px) {
@@ -3921,9 +3956,13 @@ html[data-motion="paused"] .ef-timeline-step {
 
 .ef-demo-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-5);
   align-items: start;
+}
+
+.ef-demo-grid > * {
+  min-width: 0;
 }
 
 @media (min-width: 960px) {
@@ -4689,4 +4728,33 @@ html[dir="rtl"] .ef-legal-progress span {
   }
 }
 
+
+@media (max-width: 480px) {
+  .ef-badge {
+    max-width: 100%;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 380px) {
+  .ef-header-inner {
+    gap: 8px;
+  }
+
+  .ef-header-actions {
+    flex-shrink: 1;
+    min-width: 0;
+    gap: 4px;
+  }
+
+  .ef-lang-trigger {
+    padding-inline: 4px;
+  }
+
+  .ef-lang-trigger > span:first-of-type {
+    display: none;
+  }
+}
 `;

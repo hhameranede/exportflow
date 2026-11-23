@@ -840,16 +840,24 @@ function getSignedOAuthQuery(searchParams) {
   return signed.toString();
 }
 
-function oauthBrowserError(status, title, message) {
-  const html = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>" +
-    htmlEscape(title) + " — ExportFlow</title></head><body><main style=\"font-family:system-ui;max-width:640px;margin:10vh auto;padding:24px\"><h1>" +
-    htmlEscape(title) + "</h1><p>" + htmlEscape(message) + "</p><a href=\"/signin\">Return to sign in</a></main></body></html>";
+function oauthBrowserError(status, title, message, locale = "en") {
+  const safeLocale = ["en", "ar", "fr", "es", "de", "pt", "zh", "ja"].includes(locale) ? locale : "en";
+  const direction = safeLocale === "ar" ? " dir=\"rtl\"" : "";
+  const html = "<!doctype html><html lang=\"" + safeLocale + "\"" + direction + "><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><link rel=\"stylesheet\" href=\"/assets/marketing.css?v=9\"><title>" +
+    htmlEscape(title) + " — ExportFlow</title></head><body><main class=\"ef-main ef-container\"><section class=\"ef-section\"><div class=\"ef-auth-page-head\"><h1 class=\"ef-auth-title\">" +
+    htmlEscape(title) + "</h1><p class=\"ef-auth-lead\">" + htmlEscape(message) + "</p><a class=\"ef-btn ef-btn-primary\" href=\"/signin\">Return to sign in</a></div></section></main></body></html>";
   return new Response(html, { status, headers: OAUTH_BROWSER_HEADERS });
 }
 
 export async function handleOAuthBrowserPage(request, env = {}) {
   const url = new URL(request.url);
-  if (!OAUTH_BROWSER_PATHS.has(url.pathname)) return null;
+  const pathSegments = url.pathname.split("/");
+  const hasLocalePrefix = ["en", "ar", "fr", "es", "de", "pt", "zh", "ja"].includes(pathSegments[1]) &&
+    pathSegments[2] === "oauth";
+  const locale = hasLocalePrefix ? pathSegments[1] : "en";
+  const routePath = hasLocalePrefix ? "/" + pathSegments.slice(2).join("/") : url.pathname;
+  if (!OAUTH_BROWSER_PATHS.has(routePath)) return null;
+  const fail = (status, title, message) => oauthBrowserError(status, title, message, locale);
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response(null, { status: 405, headers: { ...OAUTH_BROWSER_HEADERS, allow: "GET, HEAD" } });
   }
@@ -859,28 +867,28 @@ export async function handleOAuthBrowserPage(request, env = {}) {
   try {
     oauthEndpoints = getOAuthRuntimeConfig(env);
   } catch {
-    return oauthBrowserError(503, "Authorization unavailable", "The configured OAuth endpoints are invalid.");
+    return fail(503, "Authorization unavailable", "The configured OAuth endpoints are invalid.");
   }
   if (!status.authConfigured || !status.tenantOAuthConfigured ||
       !(await isAuthSchemaReady(env.AUTH_DB)) ||
       !(await isOAuthAuthSchemaReady(env.AUTH_DB)) ||
       !(await isTenantOAuthSchemaReady(env.EXPORTFLOW_AUTH_DB))) {
-    return oauthBrowserError(503, "Authorization unavailable", "ExportFlow account authorization is not initialized yet.");
+    return fail(503, "Authorization unavailable", "ExportFlow account authorization is not initialized yet.");
   }
 
   const auth = getAuthInstance(env);
-  if (!auth) return oauthBrowserError(503, "Authorization unavailable", "ExportFlow account authorization is not configured.");
+  if (!auth) return fail(503, "Authorization unavailable", "ExportFlow account authorization is not configured.");
 
   const oauthQuery = getSignedOAuthQuery(url.searchParams);
-  if (!oauthQuery) return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request is missing.");
+  if (!oauthQuery) return fail(400, "Invalid authorization request", "The signed authorization request is missing.");
   let context;
   try {
     context = await auth.$context;
     if (!(await verifyOAuthQueryParams(oauthQuery, context.secret))) {
-      return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request is invalid or has expired.");
+      return fail(400, "Invalid authorization request", "The signed authorization request is invalid or has expired.");
     }
   } catch {
-    return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request could not be verified.");
+    return fail(400, "Invalid authorization request", "The signed authorization request could not be verified.");
   }
 
   const signedParams = new URLSearchParams(oauthQuery);
@@ -889,14 +897,14 @@ export async function handleOAuthBrowserPage(request, env = {}) {
       signedParams.get("code_challenge_method") !== "S256" ||
       signedParams.getAll("resource").length !== 1 ||
       signedParams.get("resource") !== oauthEndpoints.resource) {
-    return oauthBrowserError(400, "Unsupported authorization request", "This request does not match the ExportFlow OAuth authorization profile.");
+    return fail(400, "Unsupported authorization request", "This request does not match the ExportFlow OAuth authorization profile.");
   }
 
   let session;
   try {
     session = await auth.api.getSession({ headers: request.headers, query: { disableCookieCache: true } });
   } catch {
-    return oauthBrowserError(503, "Session unavailable", "Your ExportFlow session could not be checked. Try again.");
+    return fail(503, "Session unavailable", "Your ExportFlow session could not be checked. Try again.");
   }
   if (!session?.user?.id || !session?.session?.id) {
     const next = new URL("/signin", url.origin);
@@ -904,31 +912,31 @@ export async function handleOAuthBrowserPage(request, env = {}) {
     return Response.redirect(next.toString(), 302);
   }
   if (session.user.emailVerified !== true) {
-    return oauthBrowserError(403, "Verify your email first", "A verified ExportFlow email address is required before authorizing an application.");
+    return fail(403, "Verify your email first", "A verified ExportFlow email address is required before authorizing an application.");
   }
 
   let details = {};
-  if (url.pathname === "/oauth/consent") {
+  if (routePath === "/oauth/consent") {
     const clientId = signedParams.get("client_id");
     const scopes = (signedParams.get("scope") || "").split(/\s+/).filter(Boolean);
     const allowedScopes = new Set(MCP_SCOPES);
     if (!clientId || !scopes.length || scopes.some((scope) => !allowedScopes.has(scope)) ||
         scopes.every((scope) => !["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract"].includes(scope))) {
-      return oauthBrowserError(400, "Invalid permission request", "The requested application permissions are invalid.");
+      return fail(400, "Invalid permission request", "The requested application permissions are invalid.");
     }
     details = { clientId, scopes };
   } else {
     try {
       const memberships = await listActiveTenantMemberships(env.EXPORTFLOW_AUTH_DB, session.user.id);
       if (memberships.length === 0) {
-        return oauthBrowserError(403, "No workspace access", "Your account is not a member of an active ExportFlow workspace.");
+        return fail(403, "No workspace access", "Your account is not a member of an active ExportFlow workspace.");
       }
     } catch {
-      return oauthBrowserError(503, "Workspace lookup unavailable", "Your workspace membership could not be checked.");
+      return fail(503, "Workspace lookup unavailable", "Your workspace membership could not be checked.");
     }
   }
 
-  const html = renderMarketingPage(request.url, url.pathname, "en", details);
+  const html = renderMarketingPage(request.url, routePath, locale, details);
   return new Response(request.method === "HEAD" ? null : html, {
     status: 200,
     headers: OAUTH_BROWSER_HEADERS,

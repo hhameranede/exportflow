@@ -105,8 +105,15 @@ export function createNodeHandler({
       if (res.destroyed || controller.signal.aborted) return;
 
       res.statusCode = webResponse.status;
+      const responseSetCookies = typeof webResponse.headers.getSetCookie === "function"
+        ? webResponse.headers.getSetCookie()
+        : null;
       for (const [key, value] of webResponse.headers.entries()) {
+        if (key.toLowerCase() === "set-cookie" && responseSetCookies) continue;
         res.setHeader(key, value);
+      }
+      if (Array.isArray(responseSetCookies) && responseSetCookies.length > 0) {
+        res.setHeader("set-cookie", responseSetCookies);
       }
 
       if (req.method === "HEAD" || !webResponse.body) {
