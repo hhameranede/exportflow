@@ -520,33 +520,6 @@ html[dir="rtl"] .ef-text-link:hover svg {
   display: block;
 }
 
-.ef-hero-emblem {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 18px;
-  padding: 9px;
-  border-radius: 16px;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-  color: var(--text);
-  display: grid;
-  place-items: center;
-}
-
-.ef-auth-brand-badge {
-  width: 44px;
-  height: 44px;
-  margin-bottom: 16px;
-  padding: 7px;
-  border-radius: 13px;
-  background: var(--bg-tinted);
-  border: 1px solid var(--border);
-  color: var(--text);
-  display: grid;
-  place-items: center;
-}
-
 .ef-nav {
   display: none;
   align-items: center;
@@ -832,24 +805,6 @@ html[dir="rtl"] .ef-mobile-drawer {
   max-width: 780px;
 }
 
-.ef-kicker {
-  margin: 0 0 12px;
-  font-family: var(--font-sans);
-  font-size: clamp(0.95rem, 1.3vw, 1.125rem);
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  color: var(--text-muted);
-}
-
-.ef-eyebrow {
-  margin: 0 0 12px;
-  font-family: var(--font-sans);
-  font-size: 0.875rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--accent);
-}
-
 .ef-hero-title {
   margin: 0 auto 18px;
   font-size: var(--text-hero);
@@ -976,16 +931,13 @@ html[dir="rtl"] .ef-hero-title {
   color: #F5F5F7;
 }
 
-.ef-graph-kicker {
-  font-size: 0.9375rem;
+.ef-graph-title {
+  margin: 0;
+  font-size: 1.125rem;
   font-weight: 600;
-  letter-spacing: -0.015em;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
   color: #F5F5F7;
-}
-
-.ef-graph-id {
-  font-size: 0.8125rem;
-  color: #98989D;
 }
 
 .ef-graph-scenarios {
@@ -1406,39 +1358,13 @@ html[dir="rtl"] .ef-hero-title {
 }
 
 .ef-section-title-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
+  display: block;
   margin: 0 0 14px;
 }
 
 .ef-section-title-row .ef-section-title,
 .ef-section-title-row h1 {
   margin: 0;
-}
-
-.ef-section-glyph {
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  border-radius: 11px;
-  border: 1px solid var(--border);
-  background: var(--surface-1);
-  color: var(--text);
-  box-shadow: var(--shadow-sm);
-  display: grid;
-  place-items: center;
-}
-
-.ef-section-glyph svg {
-  width: 22px;
-  height: 22px;
-}
-
-.ef-section-obsidian .ef-section-glyph {
-  background: #1C1C1E;
-  border-color: rgba(255, 255, 255, 0.16);
-  color: #F5F5F7;
 }
 
 .ef-feature-icon {
@@ -1589,7 +1515,7 @@ html[data-theme="dark"] .ef-cap-filter-bar {
   margin-bottom: 16px;
 }
 
-.ef-cap-kicker-row {
+.ef-cap-status-row {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1598,6 +1524,15 @@ html[data-theme="dark"] .ef-cap-filter-bar {
   font-weight: 600;
   color: var(--text-dim);
 }
+
+.ef-adapter-id {
+  display: inline-block;
+  margin-bottom: 8px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
 
 .ef-cap-featured-copy h3 {
   margin: 0 0 10px;
@@ -1711,11 +1646,6 @@ html[dir="rtl"] .ef-spec-value {
 
 .ef-cap-card-planned:hover {
   opacity: 1;
-}
-
-.ef-cap-num {
-  font-variant-numeric: tabular-nums;
-  color: var(--text-dim);
 }
 
 .ef-cap-grid .ef-cap-card h3 {
@@ -2259,10 +2189,6 @@ html[data-theme="dark"] .ef-code-tabs {
 
 .ef-pillar-head {
   margin-bottom: 10px;
-}
-
-.ef-pillar-head .ef-kicker {
-  margin-bottom: 4px;
 }
 
 .ef-pillar-head h3,
@@ -3631,6 +3557,19 @@ html[data-motion="paused"] .ef-timeline-step {
   font-size: 1.4rem;
   font-weight: 600;
   letter-spacing: -0.025em;
+}
+
+.ef-layer-panel-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+}
+
+.ef-layer-step {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .ef-layer-dl {
