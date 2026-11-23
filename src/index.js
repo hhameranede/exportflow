@@ -5,7 +5,7 @@ import { readBoundedJsonBody, TaskContractError, validateTaskRequest } from "./c
 import { executeWebTask } from "./core/tasks.js";
 import { handleWebsiteRequest } from "./site/router.js";
 import { renderMarketingNotFoundPage } from "./site/marketing.js";
-import { handleAuthRequest } from "./core/auth-app.js";
+import { handleAuthRequest, handleOAuthBrowserPage } from "./core/auth-app.js";
 
 // Shared namespace owner: the separate MCP Worker binds to this exported class.
 export { TenantBurstRateLimiter } from "./core/durable-tenant-burst-limiter.js";
@@ -86,6 +86,9 @@ export function createWorker(options = {}) {
 
         const authResponse = await handleAuthRequest(request, env);
         if (authResponse) return authResponse;
+
+        const oauthPageResponse = await handleOAuthBrowserPage(request, env);
+        if (oauthPageResponse) return oauthPageResponse;
 
         const adminResponse = await tenantAdminHandler(request, env);
         if (adminResponse) return adminResponse;

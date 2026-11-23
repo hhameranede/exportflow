@@ -1,6 +1,17 @@
 import { betterAuth } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
 import { authorizePlatformOwnerRequest, parsePlatformOwnerIds } from "./platform-admin-auth.js";
+import { jwt } from "better-auth/plugins";
+import { mcp } from "@better-auth/mcp";
+import { verifyOAuthQueryParams } from "@better-auth/oauth-provider";
+import { renderMarketingPage } from "../site/marketing.js";
+import { readBoundedJsonBody, TaskContractError } from "./task-contract.js";
+import {
+  createTenantOAuthAccessTokenClaims,
+  getSelectedOAuthTenant,
+  listActiveTenantMemberships,
+  storeOAuthTenantSelection,
+} from "./tenant-membership.js";
 
 const authInstances = new WeakMap();
 
@@ -38,6 +49,50 @@ function htmlEscape(value) {
 }
 
 const REQUIRED_AUTH_TABLES = Object.freeze(["user", "session", "account", "verification"]);
+const REQUIRED_OAUTH_AUTH_TABLES = Object.freeze([
+  "jwks", "oauthClient", "oauthResource", "oauthClientResource",
+  "oauthRefreshToken", "oauthAccessToken", "oauthConsent", "oauthClientAssertion",
+]);
+const REQUIRED_TENANT_OAUTH_TABLES = Object.freeze([
+  "tenants", "plan_policies", "tenant_request_usage",
+  "tenant_memberships", "tenant_oauth_selections",
+]);
+const REQUIRED_TENANT_OAUTH_TRIGGERS = Object.freeze([
+  "guard_tenant_membership_last_owner",
+  "prevent_tenant_membership_identity_update",
+  "prevent_tenant_membership_delete",
+  "bump_tenant_membership_version_on_tenant_state_change",
+]);
+const AUTH_ISSUER = "https://exportflow.me/api/auth";
+const MCP_RESOURCE = "https://mcp.exportflow.me/mcp";
+const MCP_SCOPES = Object.freeze([
+  "openid", "profile", "email", "offline_access",
+  "tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract",
+]);
+
+async function hasSqliteObjects(binding, type, names) {
+  if (!isD1Binding(binding)) return false;
+  try {
+    const placeholders = names.map(() => "?").join(", ");
+    const result = await binding.prepare(
+      "SELECT name FROM sqlite_master WHERE type = ? AND name IN (" + placeholders + ")"
+    ).bind(type, ...names).all();
+    const existing = new Set((result?.results || []).map((row) => row.name));
+    return names.every((name) => existing.has(name));
+  } catch {
+    return false;
+  }
+}
+
+async function isOAuthAuthSchemaReady(binding) {
+  return await hasSqliteObjects(binding, "table", REQUIRED_OAUTH_AUTH_TABLES);
+}
+
+async function isTenantOAuthSchemaReady(binding) {
+  return await hasSqliteObjects(binding, "table", REQUIRED_TENANT_OAUTH_TABLES) &&
+    await hasSqliteObjects(binding, "trigger", REQUIRED_TENANT_OAUTH_TRIGGERS);
+}
+
 
 async function isAuthSchemaReady(binding) {
   try {
@@ -55,9 +110,13 @@ async function isAuthSchemaReady(binding) {
 
 async function getPublicAuthFeatureStatus(env, configuredStatus) {
   const authReady = configuredStatus.authConfigured && await isAuthSchemaReady(env.AUTH_DB);
+  const tenantOAuthReady = configuredStatus.tenantOAuthConfigured &&
+    await isOAuthAuthSchemaReady(env.AUTH_DB) &&
+    await isTenantOAuthSchemaReady(env.EXPORTFLOW_AUTH_DB);
   return Object.freeze({
     ...configuredStatus,
     authReady,
+    oauthReady: Boolean(tenantOAuthReady),
     googleEnabled: configuredStatus.googleEnabled && authReady,
     emailPasswordEnabled: configuredStatus.emailPasswordEnabled && authReady,
   });
@@ -93,6 +152,7 @@ export function getAuthFeatureStatus(env = {}) {
     isNonEmptyString(env.AUTH_EMAIL_FROM);
   return Object.freeze({
     authConfigured,
+    tenantOAuthConfigured: authConfigured && isD1Binding(env.EXPORTFLOW_AUTH_DB),
     googleEnabled: authConfigured && googleCredentialsPresent,
     emailPasswordEnabled: authConfigured && Boolean(emailServiceReady),
   });
@@ -142,6 +202,9 @@ function buildAuthOptions(env, status) {
     appName: "ExportFlow",
     baseURL: baseUrl,
     basePath: "/api/auth",
+    // The OAuth Provider owns the MCP authorization server. Disable the JWT
+    // plugin's parallel session-token endpoint to prevent token-type confusion.
+    disabledPaths: ["/token"],
     secret: env.BETTER_AUTH_SECRET,
     trustedOrigins: [baseUrl],
     database: binding,
@@ -180,6 +243,75 @@ function buildAuthOptions(env, status) {
       },
     },
   };
+
+  if (status.tenantOAuthConfigured) {
+    options.plugins = [
+      jwt({ jwt: { issuer: AUTH_ISSUER }, disableSettingJwtHeader: true }),
+      mcp({
+        resource: MCP_RESOURCE,
+        scopes: [...MCP_SCOPES],
+        requireOpenId: true,
+        loginPage: "/signin",
+        consentPage: "/oauth/consent",
+        accessTokenExpiresIn: 10 * 60,
+        refreshTokenExpiresIn: 30 * 24 * 60 * 60,
+        refreshTokenReuseInterval: 30,
+        subjectType: "public",
+        // ChatGPT supports OAuth DCR. Public registration is rate-limited by Better Auth,
+        // clients are restricted to authorization-code + PKCE and the single MCP resource.
+        allowDynamicClientRegistration: true,
+        allowUnauthenticatedClientRegistration: true,
+        clientRegistrationRequirePKCE: true,
+        clientRegistrationDefaultApplicationType: "web",
+        clientRegistrationDefaultScopes: [...MCP_SCOPES],
+        clientRegistrationAllowedScopes: [...MCP_SCOPES],
+        clientRegistrationDefaultResources: [MCP_RESOURCE],
+        clientRegistrationAllowedResources: [MCP_RESOURCE],
+        grantTypes: ["authorization_code", "refresh_token"],
+        postLogin: {
+          page: "/oauth/select-tenant",
+          consentReferenceId: async ({ user, session }) => {
+            if (!user?.emailVerified || !session?.id) {
+              throw new Error("A verified user session is required before issuing tenant-scoped OAuth consent.");
+            }
+            const selected = await getSelectedOAuthTenant(env.EXPORTFLOW_AUTH_DB, {
+              sessionId: session.id,
+              userId: user.id,
+            });
+            if (!selected) throw new Error("An active tenant selection is required before OAuth consent.");
+            return selected.tenantId;
+          },
+          shouldRedirect: async ({ user, session, isContinuation }) => {
+            if (!user?.emailVerified || !user?.id || !session?.id) return true;
+            const selected = await getSelectedOAuthTenant(env.EXPORTFLOW_AUTH_DB, {
+              sessionId: session.id,
+              userId: user.id,
+            });
+            if (selected) return false;
+            if (!isContinuation) {
+              const memberships = await listActiveTenantMemberships(env.EXPORTFLOW_AUTH_DB, user.id);
+              if (memberships.length === 1) {
+                const stored = await storeOAuthTenantSelection(env.EXPORTFLOW_AUTH_DB, {
+                  sessionId: session.id,
+                  userId: user.id,
+                  tenantId: memberships[0].tenantId,
+                  sessionExpiresAt: session.expiresAt,
+                });
+                return !stored;
+              }
+            }
+            return true;
+          },
+        },
+        customAccessTokenClaims: async ({ user, referenceId }) => (
+          await createTenantOAuthAccessTokenClaims(env.EXPORTFLOW_AUTH_DB, { user, referenceId })
+        ),
+        advertisedMetadata: {
+          token_endpoint_auth_methods_supported: ["none"],
+        },
+      }),
+    ];
+  }
 
   if (status.emailPasswordEnabled) {
     options.emailAndPassword = {
@@ -229,11 +361,17 @@ export function getAuthInstance(env = {}) {
   if (!status.authConfigured) return null;
 
   const binding = env.AUTH_DB;
-  const cached = authInstances.get(binding);
+  let instancesByTenantDb = authInstances.get(binding);
+  if (!instancesByTenantDb) {
+    instancesByTenantDb = new Map();
+    authInstances.set(binding, instancesByTenantDb);
+  }
+  const tenantBinding = isD1Binding(env.EXPORTFLOW_AUTH_DB) ? env.EXPORTFLOW_AUTH_DB : null;
+  const cached = instancesByTenantDb.get(tenantBinding);
   if (cached) return cached;
 
   const instance = betterAuth(buildAuthOptions(env, status));
-  authInstances.set(binding, instance);
+  instancesByTenantDb.set(tenantBinding, instance);
   return instance;
 }
 
@@ -251,6 +389,90 @@ async function safeTokenMatch(provided, expected) {
     difference |= aa[index] ^ bb[index];
   }
   return difference === 0;
+}
+
+
+function isSameOriginAuthRequest(request, env = {}) {
+  const expectedOrigin = new URL(isNonEmptyString(env.BETTER_AUTH_URL) ? env.BETTER_AUTH_URL.trim() : "https://exportflow.me").origin;
+  const origin = request.headers.get("origin");
+  const fetchSite = request.headers.get("sec-fetch-site");
+  return origin === expectedOrigin && (!fetchSite || fetchSite === "same-origin");
+}
+
+async function handleTenantOAuthApi(request, env, auth) {
+  const url = new URL(request.url);
+  if (url.pathname !== "/api/auth/tenant/list" && url.pathname !== "/api/auth/tenant/select") return null;
+  if (!isD1Binding(env.EXPORTFLOW_AUTH_DB) || !(await isTenantOAuthSchemaReady(env.EXPORTFLOW_AUTH_DB))) {
+    return textResponse({ error: "TENANT_OAUTH_NOT_READY", message: "Tenant membership services are not initialized." }, 503);
+  }
+
+  if (url.pathname === "/api/auth/tenant/list" && request.method !== "GET") {
+    return textResponse({ error: "method_not_allowed" }, 405);
+  }
+  if (url.pathname === "/api/auth/tenant/select") {
+    if (request.method !== "POST") return textResponse({ error: "method_not_allowed" }, 405);
+    if (!isSameOriginAuthRequest(request, env)) return textResponse({ error: "origin_not_allowed" }, 403);
+  }
+
+  let session;
+  try {
+    session = await auth.api.getSession({ headers: request.headers, query: { disableCookieCache: true } });
+  } catch {
+    return textResponse({ error: "AUTH_SESSION_UNAVAILABLE" }, 503);
+  }
+  if (!session?.user?.id || !session?.session?.id) {
+    return textResponse({ error: "UNAUTHORIZED" }, 401);
+  }
+  if (session.user.emailVerified !== true) {
+    return textResponse({ error: "EMAIL_VERIFICATION_REQUIRED" }, 403);
+  }
+
+  if (url.pathname === "/api/auth/tenant/list") {
+    try {
+      const memberships = await listActiveTenantMemberships(env.EXPORTFLOW_AUTH_DB, session.user.id);
+      return textResponse({
+        tenants: memberships.map((member) => ({
+          tenantId: member.tenantId,
+          role: member.role,
+          planCode: member.planCode,
+        })),
+      });
+    } catch {
+      return textResponse({ error: "TENANT_MEMBERSHIP_UNAVAILABLE" }, 503);
+    }
+  }
+
+  let payload;
+  try {
+    payload = await readBoundedJsonBody(request, 2048);
+  } catch (error) {
+    if (error instanceof TaskContractError) {
+      return textResponse({ error: error.code, message: error.message }, error.httpStatus);
+    }
+    return textResponse({ error: "INVALID_BODY" }, 400);
+  }
+  if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
+      Object.keys(payload).some((key) => key !== "tenantId") ||
+      typeof payload.tenantId !== "string") {
+    return textResponse({ error: "INVALID_TENANT_SELECTION" }, 400);
+  }
+
+  try {
+    const selection = await storeOAuthTenantSelection(env.EXPORTFLOW_AUTH_DB, {
+      sessionId: session.session.id,
+      userId: session.user.id,
+      tenantId: payload.tenantId,
+      sessionExpiresAt: session.session.expiresAt,
+    });
+    if (!selection) return textResponse({ error: "TENANT_MEMBERSHIP_REQUIRED" }, 403);
+    return textResponse({
+      selected: true,
+      tenant: { tenantId: selection.tenantId, role: selection.role, planCode: selection.planCode },
+      expiresAt: selection.expiresAt,
+    });
+  } catch {
+    return textResponse({ error: "TENANT_SELECTION_FAILED" }, 503);
+  }
 }
 
 export async function handleAuthRequest(request, env = {}) {
@@ -311,6 +533,9 @@ export async function handleAuthRequest(request, env = {}) {
     }, 503);
   }
 
+  const tenantOAuthResponse = await handleTenantOAuthApi(request, env, auth);
+  if (tenantOAuthResponse) return tenantOAuthResponse;
+
   try {
     return await auth.handler(request);
   } catch {
@@ -318,6 +543,118 @@ export async function handleAuthRequest(request, env = {}) {
   }
 }
 
+
+const OAUTH_BROWSER_PATHS = new Set(["/oauth/consent", "/oauth/select-tenant"]);
+const OAUTH_BROWSER_HEADERS = Object.freeze({
+  "content-type": "text/html; charset=utf-8",
+  "cache-control": "no-store",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+  "referrer-policy": "no-referrer",
+  "strict-transport-security": "max-age=63072000",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+  "content-security-policy": "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+});
+
+function getSignedOAuthQuery(searchParams) {
+  const signedNames = searchParams.getAll("ba_param");
+  if (!searchParams.has("sig") || !signedNames.length) return null;
+  const allowed = new Set(["sig", "ba_param", ...signedNames]);
+  const signed = new URLSearchParams();
+  for (const [key, value] of searchParams.entries()) {
+    if (allowed.has(key)) signed.append(key, value);
+  }
+  return signed.toString();
+}
+
+function oauthBrowserError(status, title, message) {
+  const html = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>" +
+    htmlEscape(title) + " — ExportFlow</title></head><body><main style=\"font-family:system-ui;max-width:640px;margin:10vh auto;padding:24px\"><h1>" +
+    htmlEscape(title) + "</h1><p>" + htmlEscape(message) + "</p><a href=\"/signin\">Return to sign in</a></main></body></html>";
+  return new Response(html, { status, headers: OAUTH_BROWSER_HEADERS });
+}
+
+export async function handleOAuthBrowserPage(request, env = {}) {
+  const url = new URL(request.url);
+  if (!OAUTH_BROWSER_PATHS.has(url.pathname)) return null;
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new Response(null, { status: 405, headers: { ...OAUTH_BROWSER_HEADERS, allow: "GET, HEAD" } });
+  }
+
+  const status = getAuthFeatureStatus(env);
+  if (!status.authConfigured || !status.tenantOAuthConfigured ||
+      !(await isAuthSchemaReady(env.AUTH_DB)) ||
+      !(await isOAuthAuthSchemaReady(env.AUTH_DB)) ||
+      !(await isTenantOAuthSchemaReady(env.EXPORTFLOW_AUTH_DB))) {
+    return oauthBrowserError(503, "Authorization unavailable", "ExportFlow account authorization is not initialized yet.");
+  }
+
+  const auth = getAuthInstance(env);
+  if (!auth) return oauthBrowserError(503, "Authorization unavailable", "ExportFlow account authorization is not configured.");
+
+  const oauthQuery = getSignedOAuthQuery(url.searchParams);
+  if (!oauthQuery) return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request is missing.");
+  let context;
+  try {
+    context = await auth.$context;
+    if (!(await verifyOAuthQueryParams(oauthQuery, context.secret))) {
+      return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request is invalid or has expired.");
+    }
+  } catch {
+    return oauthBrowserError(400, "Invalid authorization request", "The signed authorization request could not be verified.");
+  }
+
+  const signedParams = new URLSearchParams(oauthQuery);
+  if (signedParams.getAll("sig").length !== 1 ||
+      signedParams.get("response_type") !== "code" ||
+      signedParams.get("code_challenge_method") !== "S256" ||
+      signedParams.getAll("resource").length !== 1 ||
+      signedParams.get("resource") !== MCP_RESOURCE) {
+    return oauthBrowserError(400, "Unsupported authorization request", "This request does not match the ExportFlow OAuth authorization profile.");
+  }
+
+  let session;
+  try {
+    session = await auth.api.getSession({ headers: request.headers, query: { disableCookieCache: true } });
+  } catch {
+    return oauthBrowserError(503, "Session unavailable", "Your ExportFlow session could not be checked. Try again.");
+  }
+  if (!session?.user?.id || !session?.session?.id) {
+    const next = new URL("/signin", url.origin);
+    next.search = oauthQuery;
+    return Response.redirect(next.toString(), 302);
+  }
+  if (session.user.emailVerified !== true) {
+    return oauthBrowserError(403, "Verify your email first", "A verified ExportFlow email address is required before authorizing an application.");
+  }
+
+  let details = {};
+  if (url.pathname === "/oauth/consent") {
+    const clientId = signedParams.get("client_id");
+    const scopes = (signedParams.get("scope") || "").split(/\s+/).filter(Boolean);
+    const allowedScopes = new Set(MCP_SCOPES);
+    if (!clientId || !scopes.length || scopes.some((scope) => !allowedScopes.has(scope)) ||
+        scopes.every((scope) => !["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract"].includes(scope))) {
+      return oauthBrowserError(400, "Invalid permission request", "The requested application permissions are invalid.");
+    }
+    details = { clientId, scopes };
+  } else {
+    try {
+      const memberships = await listActiveTenantMemberships(env.EXPORTFLOW_AUTH_DB, session.user.id);
+      if (memberships.length === 0) {
+        return oauthBrowserError(403, "No workspace access", "Your account is not a member of an active ExportFlow workspace.");
+      }
+    } catch {
+      return oauthBrowserError(503, "Workspace lookup unavailable", "Your workspace membership could not be checked.");
+    }
+  }
+
+  const html = renderMarketingPage(request.url, url.pathname, "en", details);
+  return new Response(request.method === "HEAD" ? null : html, {
+    status: 200,
+    headers: OAUTH_BROWSER_HEADERS,
+  });
+}
 
 /**
  * Resolves the current request to a deployment-allowlisted platform owner.
