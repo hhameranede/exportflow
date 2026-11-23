@@ -111,7 +111,7 @@ test("REST rejects an unauthenticated task before reading or parsing its body", 
       controller.enqueue(new TextEncoder().encode(JSON.stringify({ goal: "Fetch", url: "https://example.com" })));
       controller.close();
     },
-  });
+  }, { highWaterMark: 0 });
   const request = new Request("https://api.exportflow.local/api/v1/tasks", {
     method: "POST",
     headers: { "content-type": "application/json" },
