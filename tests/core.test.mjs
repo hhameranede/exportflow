@@ -304,6 +304,37 @@ test("map revalidates robots.txt while sitemap and pages use origin-governed cac
   ]);
 });
 
+test("structured extraction propagates cache policy and returns cache evidence", async () => {
+  let observedOptions;
+  const result = await extractStructuredData({
+    url: "https://example.com/product",
+    cacheMode: "bypass",
+    schema: {
+      type: "object",
+      properties: { title: { type: "string", "x-source": "page:title" } },
+      required: ["title"],
+    },
+  }, {
+    fetchResource: async (_url, options) => {
+      observedOptions = options;
+      return {
+        status: 200,
+        contentType: "text/html; charset=utf-8",
+        body: "<html><head><title>Cached title</title></head><body></body></html>",
+        bytes: 68,
+        finalUrl: "https://example.com/product",
+        retrievedAt: "2026-11-24T00:00:00.000Z",
+        cacheStatus: "BYPASS",
+      };
+    },
+  });
+
+  assert.equal(observedOptions.cacheMode, "bypass");
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.data.cacheStatus, "BYPASS");
+  assert.equal(result.sources[0].evidence[0].cacheStatus, "BYPASS");
+});
+
 test("fetch rejects an already-cancelled caller signal before starting outbound work", async () => {
   const controller = new AbortController();
   controller.abort();
