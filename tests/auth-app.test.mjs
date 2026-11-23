@@ -209,9 +209,9 @@ test("Worker routes /api/auth before its generic GET-only fallback", async () =>
     headers: { origin: "https://exportflow.me", "content-type": "application/json" },
     body: JSON.stringify({ planCode: "free" }),
   }));
-  assert.equal(admin.status, 403);
+  assert.equal(admin.status, 503);
   const adminBody = await admin.json();
-  assert.equal(adminBody.error.code, "ADMIN_FORBIDDEN");
+  assert.equal(adminBody.error.code, "ADMIN_RATE_LIMIT_UNAVAILABLE");
 });
 
 test("account API requests return 503 until the Better Auth schema is migrated", async () => {
