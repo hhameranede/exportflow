@@ -112,6 +112,7 @@ function auditStatement(db, cryptoImpl, {
  */
 export function createTenantAdminService({
   db,
+  authDb,
   authorizeAdmin,
   now = () => new Date().toISOString(),
   cryptoImpl = globalThis.crypto,
@@ -146,6 +147,37 @@ export function createTenantAdminService({
       return await db.batch(statements);
     } catch {
       throw new TenantAdminError("TENANT_ADMIN_STORAGE_UNAVAILABLE", "Tenant administration storage is temporarily unavailable.", 503);
+    }
+  }
+
+  async function requireVerifiedAuthUser(userId) {
+    if (!authDb || typeof authDb.prepare !== "function") {
+      throw new TenantAdminError(
+        "AUTH_USER_DIRECTORY_UNAVAILABLE",
+        "The verified account directory is not configured.",
+        503,
+      );
+    }
+
+    let user;
+    try {
+      user = await authDb.prepare(
+        "SELECT id FROM user WHERE id = ?1 AND emailVerified = 1 LIMIT 1",
+      ).bind(userId).first();
+    } catch {
+      throw new TenantAdminError(
+        "AUTH_USER_DIRECTORY_UNAVAILABLE",
+        "The verified account directory is temporarily unavailable.",
+        503,
+      );
+    }
+
+    if (!user || user.id !== userId) {
+      throw new TenantAdminError(
+        "VERIFIED_USER_NOT_FOUND",
+        "An existing email-verified ExportFlow account is required before assigning a tenant membership.",
+        404,
+      );
     }
   }
 
@@ -364,6 +396,7 @@ export function createTenantAdminService({
         throw new TenantAdminError("INVALID_TENANT_MEMBERSHIP", "Tenant membership reference or role is invalid.");
       }
       const actorId = await requireAdmin("tenant_memberships:assign", "tenant_membership", tenantId + "/" + userId);
+      await requireVerifiedAuthUser(userId);
       const updatedAt = timestampFrom(now);
       const membershipId = cryptoImpl.randomUUID();
       const results = await commit([
