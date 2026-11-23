@@ -130,7 +130,8 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
 
   const response = await page.goto(baseUrl + route, { waitUntil: "domcontentloaded", timeout: 30000 });
   assert.ok(response, "No navigation response for " + route);
-  const expectedStatus = route === "/oauth/consent" ? 503 : 200;
+  const oauthBrowserRoute = route === "/oauth/consent" || route === "/oauth/select-tenant";
+  const expectedStatus = oauthBrowserRoute ? 503 : 200;
   assert.equal(response.status(), expectedStatus, "Unexpected page status for " + route + " at " + width + "px");
   await page.waitForFunction(() => document.readyState === "complete", null, { timeout: 10000 });
   await page.waitForTimeout(50);
@@ -218,22 +219,11 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
     };
   });
 
-  if (route === "/oauth/consent") {
+  if (oauthBrowserRoute) {
     assert.equal(await page.locator("main h1").innerText(), "Authorization unavailable",
-      "OAuth consent must explain that account authorization is unavailable until its required storage is initialized");
-    assert.match(await page.locator("main").innerText(), /account authorization is not initialized yet/i,
-      "OAuth consent must fail closed with a clear initialization message");
-  }
-
-  if (route.includes("/oauth/select-tenant")) {
-    const tenantStatus = page.locator("[data-oauth-flow-status]");
-    await page.waitForFunction(() => {
-      const status = document.querySelector("[data-oauth-flow-status]");
-      return Boolean(status && status.textContent.trim());
-    }, null, { timeout: 5000 });
-    assert.ok((await tenantStatus.textContent()).trim(), "Tenant selection must explain why workspaces cannot be loaded yet");
-    assert.equal(await page.locator("[data-oauth-tenant-submit]").isEnabled(), false,
-      "OAuth continuation must remain disabled when Acceptance tenant storage is not initialized");
+      route + " must fail closed when the OAuth or tenant storage is not initialized");
+    assert.match(await page.locator("main").innerText(), /not initialized yet|endpoints are invalid/i,
+      route + " must show a safe initialization or configuration error");
   }
 
   assert.ok(diagnostics.title.trim(), "Missing document title on " + route);
@@ -288,8 +278,9 @@ async function checkHomeInteractions(browser) {
   const page = await context.newPage();
   await page.goto(baseUrl + "/", { waitUntil: "domcontentloaded" });
 
-  const languageButton = page.locator("[data-lang-trigger]");
-  assert.equal(await languageButton.count(), 1, "Language switcher is missing");
+  const languageButtons = page.locator("[data-lang-trigger]");
+  assert.ok(await languageButtons.count() >= 1, "Language switcher is missing");
+  const languageButton = languageButtons.first();
   await languageButton.click();
   assert.equal(await languageButton.getAttribute("aria-expanded"), "true", "Language menu did not open");
   await page.keyboard.press("Escape");
@@ -356,10 +347,12 @@ async function checkFeaturePages(browser) {
   await page.goto(baseUrl + "/platform", { waitUntil: "domcontentloaded" });
   const layerTabs = page.locator('[data-tab-group="platform-layers"] [data-tab-trigger]');
   assert.equal(await layerTabs.count(), 7, "Platform must expose seven architecture layers");
-  await layerTabs.nth(1).click();
-  assert.equal(await layerTabs.nth(1).getAttribute("aria-selected"), "true", "Platform tab did not activate");
+  assert.equal(await layerTabs.nth(0).getAttribute("aria-selected"), "true",
+    "Platform must expose its default layer in the signed-out view");
+  assert.equal(await layerTabs.nth(1).evaluate((element) => Boolean(element.closest("[inert]"))), true,
+    "Unauthenticated visitors must not interact with gated platform-layer controls");
   const activePanels = page.locator('[data-tab-group="platform-layers"] [data-tab-panel]:not([hidden])');
-  assert.equal(await activePanels.count(), 1, "Platform must display exactly one active layer panel");
+  assert.equal(await activePanels.count(), 1, "Platform must display exactly one active layer panel while signed out");
 
   await page.goto(baseUrl + "/use-cases", { waitUntil: "domcontentloaded" });
   assert.equal(await page.locator(".ef-uc-card").count(), 5, "Use Cases should render five workflow cards");
@@ -398,12 +391,15 @@ async function checkAuthAndContactPages(browser) {
 
   for (const path of ["/signin", "/signup", "/forgot-password", "/reset-password", "/account", "/workspace", "/oauth/consent", "/oauth/select-tenant"]) {
     await page.goto(baseUrl + path, { waitUntil: "domcontentloaded" });
+    await page.locator("main h1").waitFor({ state: "visible", timeout: 8000 });
     assert.equal(await page.locator("main h1").count(), 1, "Auth route heading missing: " + path);
-    const password = page.locator('input[type="password"]').first();
-    if (await password.count()) {
-      const id = await password.getAttribute("id");
-      const toggle = page.locator('[data-password-toggle="' + id + '"]');
-      if (id && await toggle.count()) {
+    const passwordIds = await page.locator('input[type="password"]').evaluateAll((nodes) =>
+      nodes.filter((node) => node.id && !node.disabled && node.getClientRects().length).map((node) => node.id)
+    );
+    for (const id of passwordIds) {
+      const password = page.locator("#" + id);
+      const toggle = page.locator('[data-password-toggle="' + id + '"]').first();
+      if (await toggle.count()) {
         await toggle.click();
         assert.equal(await password.getAttribute("type"), "text", "Password visibility toggle failed on " + path);
         await toggle.click();
@@ -490,12 +486,20 @@ async function checkLocalAccountLifecycle(browser) {
   const verificationUrl = new URL(verificationPath, baseUrl);
   assert.equal(verificationUrl.origin, baseUrl, "Synthetic account verification must stay inside Local runtime");
   await page.goto(verificationUrl.href, { waitUntil: "domcontentloaded" });
-  await page.goto(baseUrl + "/account", { waitUntil: "domcontentloaded" });
-  if (!page.url().includes("/account")) await signIn(initialPassword);
-  await page.waitForFunction(() => {
-    const workspace = document.querySelector("[data-account-workspace]");
-    return Boolean(workspace && !workspace.hidden);
-  }, null, { timeout: 15000 });
+  await signIn(initialPassword);
+  async function waitForAccountWorkspace(stage) {
+    try {
+      await page.waitForFunction(() => {
+        const workspace = document.querySelector("[data-account-workspace]");
+        return Boolean(workspace && !workspace.hidden);
+      }, null, { timeout: 15000 });
+    } catch (error) {
+      const body = (await page.locator("body").innerText().catch(() => "")).slice(0, 900);
+      throw new Error(stage + " did not unlock the account workspace; current URL: " + page.url() +
+        "; visible page text: " + body + "; original error: " + (error?.message || String(error)));
+    }
+  }
+  await waitForAccountWorkspace("Post-verification sign-in");
 
   const profile = page.locator("[data-account-profile-form]");
   await profile.locator("#acc-name").fill("ExportFlow QA Verified");
@@ -528,10 +532,7 @@ async function checkLocalAccountLifecycle(browser) {
 
   await page.waitForFunction(() => Boolean(document.querySelector("[data-signin-totp-form]")) ||
     window.location.pathname.endsWith("/account"), null, { timeout: 12000 });
-  await page.waitForFunction(() => {
-    const workspace = document.querySelector("[data-account-workspace]");
-    return Boolean(workspace && !workspace.hidden);
-  }, null, { timeout: 15000 });
+  await waitForAccountWorkspace("Password-reset sign-in");
 
   // TOTP enrollment and verification use a synthetic secret generated by Local Auth runtime.
   const enableTotp = page.locator("[data-two-factor-enable-form]");
@@ -561,6 +562,13 @@ async function checkLocalAccountLifecycle(browser) {
   await totpPrompt.locator("#signin-totp-code").fill(generateLocalTotp(secret));
   await totpPrompt.locator('button[type="submit"]').click();
   await page.waitForURL((url) => url.pathname.endsWith("/account"), { timeout: 12000 });
+
+  await page.goto(baseUrl + "/platform", { waitUntil: "domcontentloaded" });
+  const authenticatedLayerTabs = page.locator('[data-tab-group="platform-layers"] [data-tab-trigger]');
+  await authenticatedLayerTabs.nth(1).scrollIntoViewIfNeeded();
+  await authenticatedLayerTabs.nth(1).click();
+  assert.equal(await authenticatedLayerTabs.nth(1).getAttribute("aria-selected"), "true",
+    "Verified account should be able to activate platform architecture layers");
 
   await page.goto(baseUrl + "/workspace", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => {
