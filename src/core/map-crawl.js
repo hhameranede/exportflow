@@ -306,6 +306,7 @@ function makeSource(url, response, evidenceType) {
       status: response.status,
       contentType: response.contentType,
       bytes: response.bytes,
+      cacheStatus: response.cacheStatus ?? null,
     }],
   };
 }
@@ -437,6 +438,7 @@ export async function mapWebsite(input, options = {}) {
       status: context.homepage.status,
       bytes: context.homepage.bytes,
       contentType: context.homepage.contentType,
+      cacheStatus: context.homepage.cacheStatus ?? null,
     },
     sitemaps: context.sitemap.fetched,
     urls,
@@ -529,6 +531,7 @@ export async function crawlWebsite(input, options = {}) {
       status: response.status,
       contentType: response.contentType,
       bytes: response.bytes,
+      cacheStatus: response.cacheStatus ?? null,
       depth: item.depth,
       discoveredFrom: item.discoveredFrom,
       body: response.body,
