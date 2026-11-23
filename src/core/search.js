@@ -62,6 +62,38 @@ function normalizeResults(source, payload) {
   }).filter((r) => r.title && typeof r.url === "string");
 }
 
+let crossrefQueue = Promise.resolve();
+let crossrefLastStartedAt = 0;
+
+async function waitForCrossrefSlot(run, signal) {
+  let release;
+  const previous = crossrefQueue;
+  crossrefQueue = new Promise((resolve) => { release = resolve; });
+  await previous;
+  try {
+    if (signal?.aborted) throw new SearchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
+    const remainingMs = 1_000 - (Date.now() - crossrefLastStartedAt);
+    if (remainingMs > 0) {
+      await new Promise((resolve, reject) => {
+        const onAbort = () => {
+          clearTimeout(timer);
+          reject(new SearchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499));
+        };
+        const timer = setTimeout(() => {
+          signal?.removeEventListener("abort", onAbort);
+          resolve();
+        }, remainingMs);
+        signal?.addEventListener("abort", onAbort, { once: true });
+      });
+    }
+    if (signal?.aborted) throw new SearchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
+    crossrefLastStartedAt = Date.now();
+    return await run();
+  } finally {
+    release();
+  }
+}
+
 export function createSearchAdapter({ fetchResource = fetchPublicResource, now = () => new Date().toISOString() } = {}) {
   return Object.freeze({
     id: "web.search.v1", family: "web",
@@ -79,12 +111,15 @@ export function createSearchAdapter({ fetchResource = fetchPublicResource, now =
       if (!Number.isInteger(limit) || limit < 1 || limit > 10) throw new SearchAdapterError("INVALID_LIMIT", "Search result limit must be between 1 and 10.", 400);
       const endpoint = endpointFor(source, query, limit);
       validatePublicHttpUrl(endpoint.href);
-      const response = await fetchResource(endpoint.href, {
+      const performFetch = () => fetchResource(endpoint.href, {
         maxBytes: SEARCH_LIMITS.maxResponseBytes, timeoutMs: 8_000, maxRedirects: 1,
         cacheMode: input.cacheMode === "bypass" ? "bypass" : "default",
-        userAgent: "ExportFlow/0.6 (+https://exportflow.me)", signal,
+        userAgent: "ExportFlow/0.6 (https://exportflow.me; mailto:hhameranede@gmail.com)", signal,
         ...(typeof options.fetchImpl === "function" ? { fetchImpl: options.fetchImpl } : {}),
       });
+      const response = source === "crossref"
+        ? await waitForCrossrefSlot(performFetch, signal)
+        : await performFetch();
       if (response.status === 429) throw new SearchAdapterError("SEARCH_RATE_LIMITED", "The selected public search source rate-limited this request. Retry later.", 429);
       if (!response.ok) throw new SearchAdapterError("SEARCH_UPSTREAM_FAILED", "The selected public search source returned HTTP " + response.status + ".", 502);
       let payload;
