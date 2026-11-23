@@ -9,7 +9,7 @@
 
 Treat caching as a first-class resource optimization, but do not confuse three different caches:
 
-1. **Origin/edge cache for outbound Fetch subrequests** — this first implementation enables Cloudflare's cache eligibility for eligible public GET responses through `fetch(..., { cf: { cacheEverything: true } })`, without imposing a TTL. Cloudflare should continue to honor origin freshness and cacheability instructions.
+1. **Origin/edge cache for outbound Fetch subrequests** — this first implementation uses Cloudflare's normal Fetch cache behavior and honors explicit origin freshness/cacheability. It does not force `cacheEverything`, because arbitrary HTML/API responses without explicit public freshness metadata may be dynamic or personalized.
 2. **Workers Cache in front of ExportFlow itself** — a separate product that can serve eligible GET/HEAD responses without invoking the Worker. It is not enabled yet because the platform exposes authenticated/account/session GET routes that must be audited and explicitly marked `private` or `no-store` first. A cache HIT still consumes one Worker Request; it saves Worker CPU, not the incoming request count.
 3. **Persistent cross-request content cache (future R2 adapter)** — intended to reuse eligible public content even when the external origin is not cacheable through Cloudflare's edge. R2 is not enabled on the current account, so this is an architecture proposal only. No R2 bucket or binding was created.
 
@@ -50,7 +50,7 @@ flowchart TD
 ### Public Fetch primitive
 
 - Adds an internal `cacheMode` with exactly two values:
-  - `default` (default): uses `cache: "default"` and `cf: { cacheEverything: true }` so HTML/text can become cache-eligible.
+  - `default` (default): uses `cache: "default"` and leaves cache eligibility to Cloudflare's normal rules and the origin response.
   - `bypass`: uses `cache: "no-store"` and does not set a `cf` cache override.
 - Does **not** set `cacheTtl` or `cacheTtlByStatus`. This is deliberate: forcing a TTL could override a website's freshness intent.
 - Reads the upstream `cf-cache-status` response header, normalizes it, and attaches the value to the response and usage receipt where available.
@@ -100,12 +100,14 @@ flowchart TD
 
 ### 1) Outbound origin cache — first implementation
 
-Use Worker `fetch()` with `cf.cacheEverything` only to make supported content types cache-eligible. Let Cloudflare's origin cache-control behavior decide whether and how long a response is reusable.
+Use Worker `fetch()` with its normal cache behavior. Cloudflare caches standard static file extensions by default and also caches responses that explicitly opt in through origin headers such as `Cache-Control: public, max-age=...` or a future `Expires` date. HTML and JSON are not in the default cached extension list, so do not force them into a shared cache merely to improve hit rate.
 
+- Do not set `cf.cacheEverything` for arbitrary public pages by default: with no origin freshness headers, Cloudflare's status-based default TTL may otherwise cache HTML/API responses that are dynamic or vary by geography.
+- Responses with `private`, `no-store`, `Set-Cookie`, or `Vary: *` remain non-cacheable under the normal Free-plan origin-cache-control behavior.
 - Does not remove the inbound Worker Request.
 - Does not remove the Worker invocation.
 - Does not remove the outbound Fetch subrequest from per-invocation subrequest accounting.
-- Does not guarantee a HIT for arbitrary Internet origins; some origins/routes will remain `DYNAMIC` or `BYPASS`.
+- Does not guarantee a HIT for arbitrary Internet origins; HTML/JSON without explicit public freshness headers and origins that do not expose cacheable assets will remain `DYNAMIC` or `BYPASS`.
 - Can reduce requests that reach the origin, repeated download work on the origin side, and upstream latency when Cloudflare can cache that origin response.
 
 ### 2) Workers Cache in front of the ExportFlow Worker — future safe enablement
