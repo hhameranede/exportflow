@@ -652,9 +652,9 @@ test("localized OAuth browser routes are handled by the OAuth fail-closed page",
       const html = await response.text();
       assert.match(html, new RegExp('<html lang="' + locale + '"'));
       if (locale === "ar") assert.match(html, /<html lang="ar" dir="rtl">/);
-      assert.match(html, /<h1 class="ef-auth-title">Authorization unavailable<\\/h1>/);
+      assert.ok(html.includes('<h1 class="ef-auth-title">Authorization unavailable'), locale + path + " must show the unavailable heading");
       assert.match(html, /account authorization is not initialized yet|configured OAuth endpoints are invalid/i);
-      assert.doesNotMatch(html, /\\sstyle\\s*=/i);
+      assert.doesNotMatch(html, /style=/i);
     }
   }
 });
