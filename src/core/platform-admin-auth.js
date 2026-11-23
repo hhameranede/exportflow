@@ -107,10 +107,12 @@ export async function authorizePlatformOwnerRequest(request, {
 
   const createdAt = asTimestamp(session.session?.createdAt);
   const expiresAt = asTimestamp(session.session?.expiresAt);
-  if (createdAt === null || expiresAt === null || expiresAt <= currentTime) return deny;
+  const sessionId = session.session?.id;
+  if (createdAt === null || expiresAt === null || expiresAt <= currentTime ||
+      typeof sessionId !== "string" || sessionId.length < 1 || sessionId.length > 128) return deny;
 
   const age = currentTime - createdAt;
   if (age < -CLOCK_SKEW_TOLERANCE_MS || age > maxSessionAgeMs) return deny;
 
-  return Object.freeze({ allowed: true, actorId: userId });
+  return Object.freeze({ allowed: true, actorId: userId, sessionId });
 }

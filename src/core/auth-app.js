@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
 import { authorizePlatformOwnerRequest, parsePlatformOwnerIds } from "./platform-admin-auth.js";
-import { jwt } from "better-auth/plugins";
+import { jwt, twoFactor } from "better-auth/plugins";
 import { mcp } from "@better-auth/mcp";
 import { verifyOAuthQueryParams } from "@better-auth/oauth-provider";
 import { getOAuthRuntimeConfig } from "./oauth-config.js";
@@ -66,7 +66,7 @@ function htmlEscape(value) {
     .replaceAll("'", "&#39;");
 }
 
-const REQUIRED_AUTH_TABLES = Object.freeze(["user", "session", "account", "verification"]);
+const REQUIRED_AUTH_TABLES = Object.freeze(["user", "session", "account", "verification", "twoFactor"]);
 const REQUIRED_OAUTH_AUTH_TABLES = Object.freeze([
   "jwks", "oauthClient", "oauthResource", "oauthClientResource",
   "oauthRefreshToken", "oauthAccessToken", "oauthConsent", "oauthClientAssertion",
@@ -269,9 +269,17 @@ function buildAuthOptions(env, status) {
     },
   };
 
+  options.plugins = [twoFactor({
+    issuer: "ExportFlow",
+    allowPasswordless: true,
+    skipVerificationOnEnable: false,
+    accountLockout: { enabled: true, maxFailedAttempts: 5, durationSeconds: 15 * 60 },
+    backupCodeOptions: { storeBackupCodes: "encrypted" },
+  })];
+
   if (status.tenantOAuthConfigured) {
     const oauthEndpoints = getOAuthRuntimeConfig(env);
-    options.plugins = [
+    options.plugins.push(
       jwt({ jwt: { issuer: oauthEndpoints.issuer }, disableSettingJwtHeader: true }),
       mcp({
         resource: oauthEndpoints.resource,
@@ -336,7 +344,7 @@ function buildAuthOptions(env, status) {
           token_endpoint_auth_methods_supported: ["none"],
         },
       }),
-    ];
+    );
   }
 
   if (isAcceptanceRuntime(env)) {
@@ -531,6 +539,110 @@ async function handleTenantOAuthApi(request, env, auth) {
   }
 }
 
+const OWNER_TWO_FACTOR_MANAGEMENT_PATHS = new Set([
+  "/api/auth/two-factor/enable",
+  "/api/auth/two-factor/disable",
+  "/api/auth/two-factor/get-totp-uri",
+  "/api/auth/two-factor/generate-backup-codes",
+  "/api/auth/two-factor/verify-totp",
+  "/api/auth/two-factor/verify-backup-code",
+  "/api/auth/two-factor/verify-otp",
+  "/api/auth/two-factor/send-otp",
+]);
+
+/**
+ * Once an account is allowlisted as a platform owner, an existing authenticated
+ * session must not be able to bypass the ExportFlow step-up budget or recover
+ * its TOTP seed through Better Auth's account-management APIs. These paths are
+ * left untouched during sessionless sign-in, so the ordinary 2FA login flow
+ * continues to work.
+ */
+export async function guardOwnerTwoFactorEndpoint(request, {
+  ownerUserIds,
+  authDb,
+  getSession,
+} = {}) {
+  let pathname;
+  try { pathname = new URL(request.url).pathname; }
+  catch { return textResponse({ error: "INVALID_REQUEST" }, 400); }
+
+  if (request.method !== "POST" || !OWNER_TWO_FACTOR_MANAGEMENT_PATHS.has(pathname)) return null;
+  if (!(ownerUserIds instanceof Set) || ownerUserIds.size === 0) return null;
+  if (!authDb || typeof authDb.prepare !== "function" || typeof getSession !== "function") {
+    return textResponse({ error: "OWNER_TWO_FACTOR_GUARD_UNAVAILABLE" }, 503);
+  }
+
+  let session;
+  try {
+    session = await getSession({
+      headers: request.headers,
+      query: { disableCookieCache: true },
+    });
+  } catch {
+    return textResponse({ error: "OWNER_TWO_FACTOR_GUARD_UNAVAILABLE" }, 503);
+  }
+
+  const userId = session?.user?.id;
+  // Sessionless TOTP/backup-code challenges are Better Auth's normal login
+  // flow. The guard only applies to an already authenticated owner session.
+  if (typeof userId !== "string" || !ownerUserIds.has(userId)) return null;
+
+  let factor;
+  try {
+    factor = await authDb.prepare(
+      "SELECT u.twoFactorEnabled AS twoFactorEnabled, tf.verified AS factorVerified " +
+      "FROM user AS u LEFT JOIN twoFactor AS tf ON tf.userId = u.id " +
+      "WHERE u.id = ?1 AND u.emailVerified = 1 LIMIT 1",
+    ).bind(userId).first();
+  } catch {
+    return textResponse({ error: "OWNER_TWO_FACTOR_GUARD_UNAVAILABLE" }, 503);
+  }
+
+  if (!factor || Number(factor.twoFactorEnabled) !== 1 || Number(factor.factorVerified) !== 1) {
+    return textResponse({
+      error: "OWNER_TWO_FACTOR_BOOTSTRAP_REQUIRED",
+      message: "A platform owner must enroll and verify TOTP before being added to the owner allowlist.",
+    }, 403);
+  }
+
+  return textResponse({
+    error: "OWNER_TWO_FACTOR_MANAGEMENT_BLOCKED",
+    message: "Platform owner authenticator management and re-verification must use the approved owner recovery process and step-up flow.",
+  }, 403);
+}
+
+async function handleAccountTwoFactorStatus(request, env, auth) {
+  const url = new URL(request.url);
+  if (url.pathname !== "/api/auth/two-factor/status") return null;
+  if (request.method !== "GET") return textResponse({ error: "method_not_allowed" }, 405);
+
+  let session;
+  try {
+    session = await auth.api.getSession({
+      headers: request.headers,
+      query: { disableCookieCache: true },
+    });
+  } catch {
+    return textResponse({ error: "AUTH_SESSION_UNAVAILABLE" }, 503);
+  }
+  if (!session?.user?.id) return textResponse({ error: "UNAUTHORIZED" }, 401);
+  if (session.user.emailVerified !== true) return textResponse({ error: "EMAIL_VERIFICATION_REQUIRED" }, 403);
+
+  try {
+    const factor = await env.AUTH_DB.prepare(
+      "SELECT u.twoFactorEnabled AS twoFactorEnabled, tf.verified AS factorVerified " +
+      "FROM user AS u LEFT JOIN twoFactor AS tf ON tf.userId = u.id " +
+      "WHERE u.id = ?1 LIMIT 1",
+    ).bind(session.user.id).first();
+    return textResponse({
+      twoFactorEnabled: Number(factor?.twoFactorEnabled) === 1,
+      twoFactorVerified: Number(factor?.factorVerified) === 1,
+    });
+  } catch {
+    return textResponse({ error: "TWO_FACTOR_STATUS_UNAVAILABLE" }, 503);
+  }
+}
+
 export async function handleAuthRequest(request, env = {}) {
   const url = new URL(request.url);
   const status = getAuthFeatureStatus(env);
@@ -600,6 +712,16 @@ export async function handleAuthRequest(request, env = {}) {
       message: "Account services are not configured yet.",
     }, 503);
   }
+
+  const ownerTwoFactorGuardResponse = await guardOwnerTwoFactorEndpoint(request, {
+    ownerUserIds: parsePlatformOwnerIds(env.EXPORTFLOW_OWNER_USER_IDS),
+    authDb: env.AUTH_DB,
+    getSession: ({ headers, query }) => auth.api.getSession({ headers, query }),
+  });
+  if (ownerTwoFactorGuardResponse) return ownerTwoFactorGuardResponse;
+
+  const twoFactorStatusResponse = await handleAccountTwoFactorStatus(request, env, auth);
+  if (twoFactorStatusResponse) return twoFactorStatusResponse;
 
   const tenantOAuthResponse = await handleTenantOAuthApi(request, env, auth);
   if (tenantOAuthResponse) return tenantOAuthResponse;
