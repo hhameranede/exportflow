@@ -559,7 +559,7 @@ test("email/password is enabled without email delivery only on the isolated acce
 });
 
 
-test("Google OAuth and email/password can be enabled together with real Cloudflare Email delivery", async () => {
+test("Google OAuth and email/password can be enabled together and dispatch auth messages through the Email binding", async () => {
   const sent = [];
   const env = {
     AUTH_DB: createD1BindingStub(),
