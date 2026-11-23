@@ -19,6 +19,7 @@ const REQUIRED_TRIGGERS = [
   "prevent_tenant_admin_audit_update",
   "prevent_tenant_admin_audit_delete",
   "guard_tenant_membership_last_owner",
+  "bump_tenant_membership_version_on_tenant_state_change",
   "prevent_tenant_membership_identity_update",
   "prevent_tenant_membership_delete",
 ];
@@ -76,13 +77,20 @@ function setup({ owner = { allowed: true, actorId: "owner_123" }, tables = TABLE
         ["issueApiKey", async (input) => { calls.actions.push(["issueApiKey", input, await options.authorizeAdmin({ action: "api_keys:issue" })]); return { tenantId: input.tenantId, keyId: "0123456789abcdef", token: "one-time-test-token", revealOnce: true }; }],
         ["revokeApiKey", async (input) => { calls.actions.push(["revokeApiKey", input, await options.authorizeAdmin({ action: "api_keys:revoke" })]); return { keyId: input.keyId, status: "revoked" }; }],
         ["rotateApiKey", async (input) => { calls.actions.push(["rotateApiKey", input, await options.authorizeAdmin({ action: "api_keys:rotate" })]); return { keyId: "fedcba9876543210", revealOnce: true }; }],
+        ["assignTenantMembership", async (input) => { calls.actions.push(["assignTenantMembership", input, await options.authorizeAdmin({ action: "tenant_memberships:assign" })]); return { tenantId: input.tenantId, userId: input.userId, role: input.role || "member", status: "active" }; }],
+        ["revokeTenantMembership", async (input) => { calls.actions.push(["revokeTenantMembership", input, await options.authorizeAdmin({ action: "tenant_memberships:revoke" })]); return { tenantId: input.tenantId, userId: input.userId, status: "revoked" }; }],
       ]);
     },
   });
-  return { handler, calls, env: {
-    EXPORTFLOW_AUTH_DB: makeD1(tables, triggers),
-    TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace(),
-  } };
+  return {
+    handler,
+    calls,
+    env: {
+      EXPORTFLOW_AUTH_DB: makeD1(tables, triggers),
+      AUTH_DB: { testBinding: "better-auth-d1" },
+      TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace(),
+    },
+  };
 }
 
 test("tenant admin handler ignores paths outside its namespace", async () => {
@@ -148,6 +156,7 @@ test("admin storage binding and migration readiness fail closed", async () => {
     "guard_tenant_request_usage_limit_update",
     "prevent_mid_month_plan_quota_period_change",
     "prevent_mid_month_tenant_plan_period_change",
+    "bump_tenant_membership_version_on_tenant_state_change",
   ]) {
     const missingProtection = await handler(
       jsonRequest("/api/v1/admin/tenants", { planCode: "free" }),
@@ -232,7 +241,7 @@ test("each request gets a new service bound to that request's verified owner ide
       } };
     },
   });
-  const env = { EXPORTFLOW_AUTH_DB: makeD1(), TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace() };
+  const env = { EXPORTFLOW_AUTH_DB: makeD1() };
   const first = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), env);
   nextActor = "owner_B";
   const second = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), env);
@@ -364,4 +373,36 @@ test("admin rate limit fails closed when the Durable Object backend returns an e
   });
   assert.equal(response.status, 503);
   assert.equal((await response.json()).error.code, "ADMIN_RATE_LIMIT_UNAVAILABLE");
+});
+
+
+test("membership administration routes pass tenant/user identities and the Better Auth D1 binding", async () => {
+  const { handler, calls, env } = setup();
+
+  const assign = await handler(jsonRequest(
+    "/api/v1/admin/tenants/tenant_alpha/memberships",
+    { userId: "user_123", role: "member" },
+  ), env);
+  assert.equal(assign.status, 201);
+  assert.deepEqual(calls.actions[0][0], "assignTenantMembership");
+  assert.deepEqual(calls.actions[0][1], {
+    tenantId: "tenant_alpha",
+    userId: "user_123",
+    role: "member",
+  });
+  assert.deepEqual(calls.actions[0][2], { allowed: true, actorId: "owner_123" });
+  assert.equal(calls.service[0].authDb, env.AUTH_DB);
+
+  const revoke = await handler(jsonRequest(
+    "/api/v1/admin/tenants/tenant_alpha/memberships/user_123/revoke",
+    {},
+  ), env);
+  assert.equal(revoke.status, 200);
+  assert.deepEqual(calls.actions[1][0], "revokeTenantMembership");
+  assert.deepEqual(calls.actions[1][1], {
+    tenantId: "tenant_alpha",
+    userId: "user_123",
+  });
+  assert.deepEqual(calls.actions[1][2], { allowed: true, actorId: "owner_123" });
+  assert.equal(calls.service[1].authDb, env.AUTH_DB);
 });

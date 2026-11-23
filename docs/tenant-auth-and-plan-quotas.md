@@ -78,9 +78,15 @@ The API supports:
 - `POST /api/v1/admin/tenants`
 - `POST /api/v1/admin/tenants/:tenantId/status`
 - `POST /api/v1/admin/tenants/:tenantId/plan`
+- `POST /api/v1/admin/tenants/:tenantId/memberships`
+- `POST /api/v1/admin/tenants/:tenantId/memberships/:userId/revoke`
 - `POST /api/v1/admin/tenants/:tenantId/api-keys`
 - `POST /api/v1/admin/tenants/:tenantId/api-keys/:keyId/rotate`
 - `POST /api/v1/admin/tenants/:tenantId/api-keys/:keyId/revoke`
+
+Tenant membership assignment is owner-only. Before writing to tenant D1, the service looks up the supplied Better Auth user ID in the separate `AUTH_DB` and requires `emailVerified = 1`. Unknown/unverified IDs return 404; a missing or unavailable Better Auth directory returns 503. Assignment and its audit event are committed together in `EXPORTFLOW_AUTH_DB`; revocation protects the last active owner and is also audited. Because Better Auth and tenant records live in separate D1 databases, the identity lookup and membership batch are not one cross-database transaction; a later account deletion remains possible and OAuth access must continue re-checking active membership at token/resource use.
+
+The admin schema readiness check also requires `bump_tenant_membership_version_on_tenant_state_change`; plan/status changes must invalidate earlier tenant-scoped OAuth claims.
 
 Admin request bodies are bounded to 16 KiB, JSON-only, and reject unknown fields. Responses use `Cache-Control: no-store`, no CORS allow-origin header, and never return stored API-key digests. A newly issued/rotated plaintext API key is included once in that single response.
 
@@ -126,7 +132,7 @@ Migration `0003_tenant_admin_audit_log.sql` adds an append-only audit table with
 ## Important exclusions
 
 This implementation does not include:
-- General public admin interface/dashboard, role promotion API, and multi-operator/RBAC management. The only route surface is the owner-allowlisted same-origin API documented above.
+- General public admin interface/dashboard and multi-operator/RBAC management. The owner-only API can assign/revoke tenant membership roles, but it does not change Better Auth global roles or the deployment-only platform-owner allowlist.
 - Durable task records or a durable usage-receipt ledger.
 - Cost Router reservation/settlement, EF Credit weights, monetary billing, invoices, checkout, subscriptions, webhooks, top-ups or refunds.
 - Search, Research or Browser runtime enablement.
@@ -139,8 +145,9 @@ This implementation does not include:
 3. Run the actual JavaScript `D1Database` Binding path in an approved Worker Preview/test target, including auth lookup, revocation, expiry, scopes, concurrency, quota exhaustion, policy snapshots, tenant isolation, and fail-closed storage errors.
 4. Verify the same API key and quota policy across both REST and MCP.
 5. Exercise migration 0003 and the owner-only HTTP API against a dedicated test Worker and D1 Binding; verify origin/session/allowlist denial, audit immutability, cross-tenant isolation and atomic rollback when audit writes fail.
-6. Confirm the Production and MCP Workers have the intended separate `EXPORTFLOW_AUTH_DB` binding, without reusing the human account `AUTH_DB`.
-7. Obtain separate owner approval before changing bindings, deploying or enabling live customer keys.
+6. Verify tenant membership assignment accepts only an existing `AUTH_DB` user with `emailVerified = 1`; missing/unverified users and directory failures must fail closed without tenant D1 writes. Verify last-owner revocation denial and tenant-state membership-version invalidation.
+7. Confirm the Production and MCP Workers have the intended separate `EXPORTFLOW_AUTH_DB` binding, without reusing the human account `AUTH_DB`.
+8. Obtain separate owner approval before changing bindings, deploying or enabling live customer keys.
 
 Node fixtures and Wrangler dry-run builds are supporting checks only; neither proves Cloudflare D1 Binding runtime acceptance.
 
