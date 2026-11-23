@@ -1,8 +1,0 @@
-One-shot user approval recorded 2026-11-22: run PR #107 owner MFA Acceptance only against the pinned Auth/Tenant Acceptance Workers and D1 databases. Preserve existing Acceptance secrets, JWKS, users and sessions. Do not modify Production, merge PRs, DNS, permissions or unrelated resources.
-Approval reaffirmed after validation fix: run once on 2026-11-22; Acceptance-only, preserve secrets and JWKS, no Production action.
-Approval re-trigger after correcting the workflow's Tenant D1 guard to the verified Cloudflare ID (219e).
-Acceptance retry: YAML-quote the PR #107 deploy messages; no secrets, JWKS, or Production resources may be altered.
-Retry after correcting Better Auth 1.7.27 enableTwoFactor payload to include the synthetic credential password. Existing Acceptance secrets/JWKS preserved; Acceptance only.
-Re-run approved Acceptance test after fixing the temporary-owner cleanup step to use a bash block without YAML comment parsing. Remove synthetic account and restore no owner allowlist.
-Acceptance execution reaffirmed 2026-11-22: PR #106 real dual-D1 membership assignment through PR #107 owner/TOTP gate; use synthetic owner and member identities, remove the temporary Acceptance owner allowlist, preserve current Acceptance secrets and JWKS, close/revoke test fixtures with append-only audit retention, no Production changes.
-Acceptance retry approved after Worker CI #956 validated the tenant-trigger row-count fix: rerun the same PR #106 dual-D1 membership cases once on pinned Acceptance only; temporary synthetic owner allowlist must be removed and all synthetic auth accounts cleaned; keep the Tenant test tenant closed and synthetic membership revoked for append-only audit; preserve existing secrets/JWKS; no Production changes.
