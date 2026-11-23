@@ -160,6 +160,7 @@ function jsonResponse(body, status = 200, extraHeaders = {}) {
       "cache-control": "no-store",
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
+      "strict-transport-security": "max-age=63072000",
       ...extraHeaders,
     },
   });
@@ -167,11 +168,19 @@ function jsonResponse(body, status = 200, extraHeaders = {}) {
 
 function withCors(response, request) {
   const origin = request.headers.get("origin");
-  if (!origin) return response;
   const headers = new Headers(response.headers);
-  headers.set("access-control-allow-origin", origin);
-  headers.set("access-control-expose-headers", "MCP-Protocol-Version, Mcp-Method, Mcp-Name");
-  headers.append("vary", "Origin");
+  headers.set("strict-transport-security", "max-age=63072000");
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("referrer-policy", "no-referrer");
+  if (origin) {
+    headers.set("access-control-allow-origin", origin);
+    headers.set("access-control-expose-headers", "MCP-Protocol-Version, Mcp-Method, Mcp-Name");
+    const vary = headers.get("vary");
+    if (!vary) headers.set("vary", "Origin");
+    else if (!vary.split(",").some((value) => value.trim().toLowerCase() === "origin")) {
+      headers.set("vary", vary + ", Origin");
+    }
+  }
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
