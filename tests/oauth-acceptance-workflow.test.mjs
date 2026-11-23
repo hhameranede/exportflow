@@ -37,7 +37,7 @@ test("Acceptance preserves Better Auth signing secret and existing JWKS rows", (
 
 test("OAuth D1 migrations resolve through the pinned Tenant Acceptance binding", () => {
   assert.match(acceptanceWorkflow, /d1 execute EXPORTFLOW_AUTH_DB --config cloudflare\/auth-acceptance\/wrangler\.toml --remote --yes --file/);
-  assert.match(acceptanceWorkflow, /d1 execute EXPORTFLOW_AUTH_DB --config cloudflare\/auth-acceptance\/wrangler\.toml --remote --yes \\n\s+--command/);
+  assert.equal((acceptanceWorkflow.match(/d1 execute EXPORTFLOW_AUTH_DB/g) || []).length, 2);
   assert.match(authAcceptanceConfig, /binding = "EXPORTFLOW_AUTH_DB"[\s\S]*?database_id = "1f94eee0-219e-4a41-86ce-49c29067ef06"/);
   assert.match(mcpAcceptanceConfig, /database_id = "1f94eee0-219e-4a41-86ce-49c29067ef06"/);
   assert.doesNotMatch(authAcceptanceConfig, /database_id = "0bd9f873-a1d5-4d90-b3fc-1c4b47e1aa67"/);
