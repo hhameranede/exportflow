@@ -88,7 +88,11 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
   const failedAssets = [];
   page.on("pageerror", (error) => pageErrors.push(error.message || String(error)));
   page.on("console", (message) => {
-    if (message.type() === "error") consoleErrors.push(message.text());
+    if (message.type() !== "error") return;
+    const text = message.text();
+    const expectedTenantNotReady = /oauth\\/select-tenant/.test(route) &&
+      /status of 503 \\(Service Unavailable\\)/.test(text);
+    if (!expectedTenantNotReady) consoleErrors.push(text);
   });
   page.on("response", (response) => {
     try {
