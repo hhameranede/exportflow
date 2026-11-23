@@ -3,7 +3,7 @@ import { SITE_META } from "./data.js";
 import { renderExecutionGraph } from "./execution-graph.js";
 import { AUTH_ROUTES, renderAuthPage, getAuthCopy } from "./auth-pages.js";
 import { renderUnifiedRichRoute } from "./marketing-pages.js";
-import { renderBrandCatSvg, renderFeatureIcon, renderSectionGlyph } from "./icons.js";
+import { renderBrandCatSvg, renderFeatureIcon } from "./icons.js";
 import { getLocaleData } from "./i18n.js";
 
 const LANGUAGES = ["en", "ar", "fr", "es", "de", "pt", "zh", "ja"];
@@ -294,10 +294,6 @@ function homeBody(t, locale) {
   <!-- HERO: Cupertino Centered Keynote Framing + Hardware Execution Stage -->
   <section class="ef-hero" data-hero-section>
     <div class="ef-container ef-hero-editorial">
-      <p class="ef-kicker ef-hero-kicker-row ef-hero-stagger ef-stagger-1">
-        <span class="ef-hero-emblem" aria-hidden="true">${renderBrandCatSvg("ef-hero-cat-svg", 16)}</span>
-        <span>${escapeHtml(locale === "en" ? SITE_META.positioning : t.eyebrow)}</span>
-      </p>
       <h1 class="ef-hero-title ef-hero-stagger ef-stagger-2">${escapeHtml(t.hero)}</h1>
       <p class="ef-hero-lead ef-hero-stagger ef-stagger-3">${escapeHtml(t.lead)}</p>
 
@@ -335,9 +331,8 @@ function homeBody(t, locale) {
     <div class="ef-container">
       <div class="ef-section-head-split ef-reveal" data-reveal>
         <div class="ef-section-head">
-          <p class="ef-kicker">${escapeHtml(t.platform)}</p>
           <div class="ef-section-title-row">
-            ${renderSectionGlyph("capabilities")}
+            
             <h2 id="cap-heading" class="ef-section-title">${escapeHtml(t.capabilities)}</h2>
           </div>
           <p class="ef-section-lead">${escapeHtml(t.capabilitiesLead)}</p>
@@ -354,9 +349,7 @@ function homeBody(t, locale) {
       <div class="ef-cap-showcase" data-cap-grid>
         <a class="ef-cap-card ef-cap-card-featured ef-reveal" href="${hrefFor(featuredCard[4], locale)}" data-cap-card data-cap-state="${featuredCard[3]}" data-reveal data-glow-card>
           <div class="ef-cap-featured-copy">
-            <div class="ef-cap-kicker-row">
-              <span class="ef-cap-num">${featuredCard[0]}</span>
-              <span aria-hidden="true">·</span>
+            <div class="ef-cap-status-row">
               ${statusBadgeHtml(featuredCard[3], t)}
             </div>
             <div class="ef-title-icon-row">
@@ -375,13 +368,11 @@ function homeBody(t, locale) {
         </a>
 
         <div class="ef-cap-grid">
-          ${secondaryCards.map(([num, title, desc, state, href, meta, iconName], i) => {
+          ${secondaryCards.map(([_num, title, desc, state, href, meta, iconName], i) => {
             const isPlanned = state === "planned";
             const cardClasses = ["ef-cap-card", "ef-reveal", isPlanned ? "ef-cap-card-planned" : ""].filter(Boolean).join(" ");
             return `<a class="${cardClasses}" href="${hrefFor(href, locale)}" data-cap-card data-cap-state="${state}" data-reveal data-reveal-delay="${i * 50}" data-glow-card>
-              <div class="ef-cap-kicker-row">
-                <span class="ef-cap-num">${num}</span>
-                <span aria-hidden="true">·</span>
+              <div class="ef-cap-status-row">
                 ${statusBadgeHtml(state, t)}
               </div>
               <div class="ef-title-icon-row">
@@ -414,9 +405,8 @@ function homeBody(t, locale) {
   <section class="ef-section ef-section-obsidian" aria-labelledby="exec-heading">
     <div class="ef-container">
       <div class="ef-section-head ef-reveal" data-reveal>
-        <p class="ef-kicker">${escapeHtml(ld.architectureKicker)}</p>
         <div class="ef-section-title-row">
-          ${renderSectionGlyph("architecture")}
+          
           <h2 id="exec-heading" class="ef-section-title">${escapeHtml(t.how)}</h2>
         </div>
       </div>
@@ -473,9 +463,8 @@ function homeBody(t, locale) {
   <section class="ef-section" aria-labelledby="dev-heading">
     <div class="ef-container ef-dev-grid">
       <div class="ef-reveal" data-reveal>
-        <p class="ef-kicker">${escapeHtml(t.developers)}</p>
         <div class="ef-section-title-row">
-          ${renderSectionGlyph("developers")}
+          
           <h2 id="dev-heading" class="ef-section-title">${escapeHtml(t.developersTitle)}</h2>
         </div>
         <p class="ef-section-lead">${escapeHtml(t.developersLead)}</p>
@@ -532,9 +521,8 @@ function homeBody(t, locale) {
   <section class="ef-section ef-section-tinted" aria-labelledby="trust-heading">
     <div class="ef-container">
       <div class="ef-section-head ef-reveal" data-reveal>
-        <p class="ef-kicker">${escapeHtml(ld.guaranteesKicker)}</p>
         <div class="ef-section-title-row">
-          ${renderSectionGlyph("guarantees")}
+          
           <h2 id="trust-heading" class="ef-section-title">${escapeHtml(t.trust)}</h2>
         </div>
         <p class="ef-section-lead">${escapeHtml(t.trustLead)}</p>
@@ -555,7 +543,6 @@ function homeBody(t, locale) {
   <!-- FINAL CTA -->
   <section class="ef-final-cta" aria-labelledby="final-cta-heading">
     <div class="ef-container ef-reveal" data-reveal>
-      <p class="ef-kicker">ExportFlow</p>
       <h2 id="final-cta-heading">${escapeHtml(t.finalTitle)}</h2>
       <div class="ef-hero-actions">
         <a class="ef-btn ef-btn-primary" href="${hrefFor("/developers", locale)}">
@@ -615,9 +602,8 @@ function genericBody(route, path, t, locale, oauthDetails = {}) {
         ];
     return `<section class="ef-page-hero">
       <div class="ef-container">
-        <p class="ef-kicker">${escapeHtml(faqKicker)}</p>
         <div class="ef-section-title-row">
-          ${renderSectionGlyph("guarantees")}
+          
           <h1>${escapeHtml(faqTitle)}</h1>
         </div>
         <p class="ef-page-lead">${escapeHtml(faqLead)}</p>
@@ -651,9 +637,8 @@ function genericBody(route, path, t, locale, oauthDetails = {}) {
         ];
     return `<section class="ef-page-hero">
       <div class="ef-container">
-        <p class="ef-kicker">${escapeHtml(t.contact)}</p>
         <div class="ef-section-title-row">
-          ${renderSectionGlyph("developers")}
+          
           <h1>${escapeHtml(isAr ? t.contact : title)}</h1>
         </div>
         <p class="ef-page-lead">${escapeHtml(t.contactIntro)}</p>
@@ -784,9 +769,8 @@ function genericBody(route, path, t, locale, oauthDetails = {}) {
 
   return `<section class="ef-page-hero">
     <div class="ef-container">
-      <p class="ef-kicker">${isLegal ? escapeHtml(t.footerLegal) : escapeHtml(displayTitle)}</p>
       <div class="ef-section-title-row">
-        ${renderSectionGlyph(isLegal ? "guarantees" : "capabilities")}
+        
         <h1>${escapeHtml(displayTitle)}</h1>
       </div>
       ${isLegal && isAr ? "" : `<p class="ef-page-lead">${escapeHtml(description)}</p>`}
@@ -855,9 +839,8 @@ export function renderMarketingNotFoundPage(requestUrl, locale = "en") {
   const body = `${header("/404", selectedLocale, t)}
     <section class="ef-page-hero">
       <div class="ef-container">
-        <p class="ef-kicker">${escapeHtml(ld.notFoundKicker)}</p>
         <div class="ef-section-title-row">
-          ${renderSectionGlyph("architecture")}
+          
           <h1>${escapeHtml(t.notFoundTitle)}</h1>
         </div>
         <p class="ef-page-lead">${escapeHtml(t.notFoundDesc)}</p>
