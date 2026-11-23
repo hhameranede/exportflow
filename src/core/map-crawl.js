@@ -214,6 +214,8 @@ async function getRobotsPolicy(origin, fetchResource) {
       maxRedirects: MAP_CRAWL_LIMITS.maxRedirects,
       userAgent: EXPORTFLOW_CRAWLER_USER_AGENT,
       allowedOrigin: origin,
+      // Robots policy is rechecked per task instead of trusting a stale edge entry.
+      cacheMode: "bypass",
     });
     if ([401, 403, 429].includes(response.status) || response.status >= 500) {
       throw new MapCrawlError("ROBOTS_UNREACHABLE", "robots.txt denied access or returned a server error; crawling was stopped.", 503);
@@ -345,6 +347,7 @@ async function createSiteContext(input, options) {
     }
     try {
       return await baseFetchResource(url, {
+        cacheMode: options.cacheMode ?? "default",
         ...fetchOptions,
         ...(signal ? { signal } : {}),
       });
