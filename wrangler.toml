@@ -19,6 +19,11 @@ binding = "EXPORTFLOW_AUTH_DB"
 database_name = "exportflow-tenant-production"
 database_id = "535fce81-b961-4097-b83f-c87e56c390bb"
 
+# Cloudflare Email Service binding for verification and password-reset messages.
+# AUTH_EMAIL_FROM remains a separate runtime variable and must use an onboarded sender domain.
+[[send_email]]
+name = "EMAIL"
+
 [secrets]
 required = ["BETTER_AUTH_SECRET", "AUTH_MIGRATION_TOKEN"]
 
