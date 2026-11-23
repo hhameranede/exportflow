@@ -690,6 +690,20 @@ test("REST Search works with its own tenant scope and public OpenAlex source", a
   assert.equal(task.result.data.results[0].title, "A public research result");
 });
 
+test("REST Search preserves an upstream 429 response as HTTP 429", async () => {
+  const worker = createWorker({ fetchImpl: async (url) => {
+    assert.equal(new URL(url).hostname, "api.openalex.org");
+    return new Response("rate limited", { status: 429, headers: { "content-type": "text/plain" } });
+  }});
+  const response = await worker.fetch(makeTaskRequest({
+    goal: "Search a public research dataset", operation: "search", query: "public data", source: "openalex",
+  }), makeTestEnv({ scopes: ["tasks:search"] }));
+  const task = await response.json();
+  assert.equal(response.status, 429);
+  assert.equal(task.state, "failed");
+  assert.equal(task.result.data.errorCode, "SEARCH_RATE_LIMITED");
+});
+
 test("REST Map is enabled only with tasks:map and uses the bounded static mapper", async () => {
   const calls = [];
   const worker = createWorker({ fetchImpl: async (url) => {
