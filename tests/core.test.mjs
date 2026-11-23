@@ -213,13 +213,23 @@ test("egress guard normalizes trailing dots and strips URL fragments", () => {
   assert.equal(url.href, "https://example.com/path?q=1");
 });
 
-test("fetch returns bounded text and source metadata", async () => {
+test("fetch returns bounded text and enables origin-governed edge caching by default", async () => {
+  const receipts = [];
   const result = await fetchPublicResource("https://example.com/page", {
+    onUsageReceipt: (receipt) => receipts.push(receipt),
     fetchImpl: async (_url, init) => {
       assert.equal(init.method, "GET");
       assert.equal(init.redirect, "manual");
+      assert.equal(init.cache, "default");
+      assert.deepEqual(init.cf, { cacheEverything: true });
       assert.equal(init.headers.accept.includes("text/html"), true);
-      return response("<h1>Hello</h1>", { headers: { "content-type": "text/html" } });
+      return response("<h1>Hello</h1>", {
+        headers: {
+          "content-type": "text/html",
+          "cf-cache-status": "HIT",
+          "cache-control": "public, max-age=300",
+        },
+      });
     },
   });
   assert.equal(result.ok, true);
@@ -227,6 +237,71 @@ test("fetch returns bounded text and source metadata", async () => {
   assert.equal(result.body, "<h1>Hello</h1>");
   assert.equal(result.bytes, 14);
   assert.equal(result.finalUrl, "https://example.com/page");
+  assert.equal(result.cacheStatus, "HIT");
+  assert.equal(receipts[0].cacheStatus, "HIT");
+});
+
+test("fetch cache mode can explicitly bypass edge cache without changing outbound safety", async () => {
+  let initSeen;
+  const result = await fetchPublicResource("https://example.com/fresh", {
+    cacheMode: "bypass",
+    fetchImpl: async (_url, init) => {
+      initSeen = init;
+      return response("fresh", {
+        headers: { "content-type": "text/plain", "cf-cache-status": "BYPASS" },
+      });
+    },
+  });
+  assert.equal(initSeen.method, "GET");
+  assert.equal(initSeen.cache, "no-store");
+  assert.equal(Object.hasOwn(initSeen, "cf"), false);
+  assert.equal(result.cacheStatus, "BYPASS");
+});
+
+test("fetch rejects unsupported cache modes", async () => {
+  await assert.rejects(
+    fetchPublicResource("https://example.com/page", {
+      cacheMode: "force",
+      fetchImpl: async () => response("unexpected"),
+    }),
+    (error) => error instanceof FetchAdapterError && error.code === "INVALID_LIMIT",
+  );
+});
+
+test("map revalidates robots.txt while sitemap and pages use origin-governed caching", async () => {
+  const observed = [];
+  await mapWebsite({ url: "https://example.com/start" }, {
+    maxUrls: 5,
+    parseHtmlLinks: async () => [],
+    fetchResource: async (url, options = {}) => {
+      const pathname = new URL(url).pathname;
+      observed.push({ pathname, cacheMode: options.cacheMode });
+      if (pathname === "/robots.txt") {
+        return {
+          status: 200, body: "User-agent: *", bytes: 14,
+          contentType: "text/plain", finalUrl: url, retrievedAt: "2026-11-24T00:00:00.000Z",
+        };
+      }
+      if (pathname === "/sitemap.xml") {
+        return {
+          status: 404, body: "", bytes: 0,
+          contentType: "text/plain", finalUrl: url, retrievedAt: "2026-11-24T00:00:00.000Z",
+        };
+      }
+      if (pathname === "/start") {
+        return {
+          status: 200, body: "<html></html>", bytes: 13,
+          contentType: "text/html", finalUrl: url, retrievedAt: "2026-11-24T00:00:00.000Z",
+        };
+      }
+      throw new Error("Unexpected test URL: " + url);
+    },
+  });
+  assert.deepEqual(observed, [
+    { pathname: "/robots.txt", cacheMode: "bypass" },
+    { pathname: "/sitemap.xml", cacheMode: "default" },
+    { pathname: "/start", cacheMode: "default" },
+  ]);
 });
 
 test("fetch rejects an already-cancelled caller signal before starting outbound work", async () => {
