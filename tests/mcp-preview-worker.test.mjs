@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createExportFlowPreviewWorker } from "../src/mcp/preview-worker.js";
+import { createAuthServiceJwksFetcher, createExportFlowPreviewWorker } from "../src/mcp/preview-worker.js";
 import { hashApiKey } from "../src/core/tenant-auth.js";
 import { createDurableTenantBurstTestNamespace } from "./helpers/durable-tenant-burst-test-namespace.js";
 
@@ -80,6 +80,46 @@ function makeWorker(options = {}) {
   };
   return { worker, env, calls };
 }
+
+test("Auth Service Binding supplies JWKS directly to the MCP verifier", async () => {
+  const target = "https://auth-acceptance.hhameranede.workers.dev/api/auth/jwks";
+  let requestSeen;
+  const fetcher = createAuthServiceJwksFetcher({
+    AUTH_SERVICE: {
+      async fetch(request) {
+        requestSeen = request;
+        return new Response(JSON.stringify({ keys: [{ kid: "acceptance-key-1", kty: "OKP" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    },
+  }, target);
+
+  assert.equal(typeof fetcher, "function");
+  const jwks = await fetcher();
+  assert.equal(requestSeen.url, target);
+  assert.equal(requestSeen.method, "GET");
+  assert.deepEqual(jwks.keys, [{ kid: "acceptance-key-1", kty: "OKP" }]);
+});
+
+test("Auth Service Binding JWKS fetch fails closed on upstream errors or malformed documents", async () => {
+  const target = "https://auth-acceptance.hhameranede.workers.dev/api/auth/jwks";
+  const unavailable = createAuthServiceJwksFetcher({
+    AUTH_SERVICE: { async fetch() { return new Response("not found", { status: 404 }); } },
+  }, target);
+  await assert.rejects(unavailable(), /HTTP 404/);
+
+  const malformed = createAuthServiceJwksFetcher({
+    AUTH_SERVICE: { async fetch() { return Response.json({ keys: "not-an-array" }); } },
+  }, target);
+  await assert.rejects(malformed(), /invalid or empty JWKS document/);
+
+  const empty = createAuthServiceJwksFetcher({
+    AUTH_SERVICE: { async fetch() { return Response.json({ keys: [] }); } },
+  }, target);
+  await assert.rejects(empty(), /invalid or empty JWKS document/);
+});
 
 test("health route describes the read-only MCP preview", async () => {
   const { worker, env, calls } = makeWorker();
@@ -490,18 +530,28 @@ test("MCP real tenant gateway enforces D1-derived operation scope before quota r
 });
 
 
-test("MCP protected-resource metadata advertises the canonical resource and issuer", async () => {
-  const { worker, env } = makeWorker();
+test("MCP protected-resource metadata uses configured Auth and MCP origins", async () => {
+  const env = {
+    AUTH_ISSUER_URL: "https://auth-acceptance.hhameranede.workers.dev/api/auth",
+    MCP_RESOURCE_URL: "https://mcp-acceptance.hhameranede.workers.dev/mcp",
+    MCP_RATE_LIMITER: { async limit() { return { success: true }; } },
+  };
+  const { worker } = makeWorker({ env });
   const response = await worker.fetch(new Request("https://" + HOST + "/.well-known/oauth-protected-resource/mcp"), env);
   const body = await response.json();
   assert.equal(response.status, 200);
-  assert.equal(body.resource, "https://mcp.exportflow.me/mcp");
-  assert.deepEqual(body.authorization_servers, ["https://exportflow.me/api/auth"]);
+  assert.equal(body.resource, "https://mcp-acceptance.hhameranede.workers.dev/mcp");
+  assert.deepEqual(body.authorization_servers, ["https://auth-acceptance.hhameranede.workers.dev/api/auth"]);
   assert.deepEqual(body.scopes_supported, ["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract"]);
 });
 
-test("protected tool calls return the ChatGPT OAuth challenge when no access token is present", async () => {
-  const { worker, env, calls } = makeWorker();
+test("protected tool calls return an OAuth challenge scoped to the configured MCP resource", async () => {
+  const env = {
+    AUTH_ISSUER_URL: "https://auth-acceptance.hhameranede.workers.dev/api/auth",
+    MCP_RESOURCE_URL: "https://mcp-acceptance.hhameranede.workers.dev/mcp",
+    MCP_RATE_LIMITER: { async limit() { return { success: true }; } },
+  };
+  const { worker, calls } = makeWorker({ env });
   const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
     name: "web_fetch",
     arguments: { url: "https://example.com/" },
@@ -511,7 +561,7 @@ test("protected tool calls return the ChatGPT OAuth challenge when no access tok
   const challenge = result?._meta?.["mcp/www_authenticate"]?.[0] || "";
   assert.equal(response.status, 200);
   assert.equal(result.isError, true);
-  assert.match(challenge, /resource_metadata="https:\/\/mcp\.exportflow\.me\/\.well-known\/oauth-protected-resource\/mcp"/);
+  assert.match(challenge, /resource_metadata="https:\/\/mcp-acceptance\.hhameranede\.workers\.dev\/\.well-known\/oauth-protected-resource\/mcp"/);
   assert.match(challenge, /error="invalid_token"/);
   assert.match(challenge, /error_description="/);
   assert.equal(calls.tasks.length, 0);
