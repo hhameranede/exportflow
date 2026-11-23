@@ -15,6 +15,10 @@ permissions:
 
 jobs:
   mfa-acceptance:
+    if: >-
+      ${{ github.event_name == 'push' &&
+          github.ref == 'refs/heads/feat/owner-step-up-mfa-20261122' &&
+          contains(github.event.head_commit.added, '.github/acceptance/mfa-acceptance.approved') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency:
