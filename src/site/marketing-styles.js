@@ -4720,9 +4720,7 @@ html[dir="rtl"] .ef-legal-progress span {
   }
 }
 
-`;
 
-/* Narrow-phone layout corrections from full-site Chromium QA */
 @media (max-width: 480px) {
   .ef-badge {
     max-width: 100%;
@@ -4751,3 +4749,4 @@ html[dir="rtl"] .ef-legal-progress span {
     display: none;
   }
 }
+`;
