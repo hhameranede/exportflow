@@ -1,5 +1,3 @@
-import { renderBrandCatSvg } from "./icons.js";
-
 export const AUTH_ROUTES = [
   ["/signin", "Sign in", "Sign in to your ExportFlow workspace.", "auth-signin"],
   ["/signup", "Create account", "Create your ExportFlow developer account.", "auth-signup"],
@@ -609,17 +607,13 @@ function field(id, name, label, type, autocomplete, placeholder, escapeHtml, opt
     '<span class="ef-field-error" data-auth-field-error="' + name + '" role="alert"></span></div>';
 }
 
-function authFrame(kicker, title, lead, content, wide = false) {
+function authFrame(_kicker, title, lead, content, wide = false) {
   const containerClass = wide ? "ef-container ef-auth-wide-wrap" : "ef-container ef-auth-single-wrap";
   if (wide) {
     return '<section class="ef-auth-section ef-auth-section-wide" data-auth-page>' +
       '<div class="' + containerClass + '">' +
       '<div class="ef-auth-page-head">' +
-        '<p class="ef-kicker">' + kicker + '</p>' +
-        '<div class="ef-title-icon-row">' +
-          '<span class="ef-auth-brand-badge" aria-hidden="true">' + renderBrandCatSvg("ef-brand-cat-svg", 16) + '</span>' +
-          '<h1 class="ef-auth-title">' + title + '</h1>' +
-        '</div>' +
+        '<h1 class="ef-auth-title">' + title + '</h1>' +
         '<p class="ef-auth-lead">' + lead + '</p>' +
       '</div>' +
       content +
@@ -627,11 +621,7 @@ function authFrame(kicker, title, lead, content, wide = false) {
   }
   return '<section class="ef-auth-section" data-auth-page>' +
     '<div class="' + containerClass + '"><div class="ef-auth-card">' +
-    '<p class="ef-kicker">' + kicker + '</p>' +
-    '<div class="ef-title-icon-row">' +
-      '<span class="ef-auth-brand-badge" aria-hidden="true">' + renderBrandCatSvg("ef-brand-cat-svg", 16) + '</span>' +
-      '<h1 class="ef-auth-card-title">' + title + '</h1>' +
-    '</div>' +
+    '<h1 class="ef-auth-card-title">' + title + '</h1>' +
     '<p class="ef-auth-card-lead">' + lead + '</p>' +
     content +
     '</div></div></section>';
