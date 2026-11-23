@@ -162,8 +162,8 @@ function buildTask({
  *
  * This is an internal Core primitive, not an HTTP/MCP endpoint. It keeps no
  * durable state and accepts no caller-supplied credentials or headers.
- * Browser rendering can run only through an explicitly injected internal adapter;
- * user-directed browser interactions remain unsupported.
+ * All operations use bounded static HTTP; browser rendering and interaction
+ * are not part of the supported execution surface.
  */
 export async function executeWebTask(input, options = {}) {
   const now = options.now || (() => new Date().toISOString());
@@ -198,6 +198,9 @@ export async function executeWebTask(input, options = {}) {
       throw Object.assign(new TypeError("Unsupported task operation."), { code: "UNSUPPORTED_OPERATION" });
     }
     const queryOperation = operation === "search" || operation === "research";
+    if (input.requiresJavascript === true || input.requiresInteraction === true) {
+      throw Object.assign(new TypeError("Dynamic rendering and browser interaction are not supported."), { code: "INVALID_TASK" });
+    }
     const url = queryOperation ? null : validatePublicHttpUrl(input.url);
     requestedUrl = url ? url.href : null;
     if (queryOperation && (typeof input.query !== "string" || !input.query.trim() || input.query.length > 1024)) {
@@ -286,7 +289,7 @@ export async function executeWebTask(input, options = {}) {
         const result = normalizeResult({
           status: "failed",
           data: null,
-          warnings: ["Cloudflare Web Search binding is not configured; no search request was made."],
+          warnings: ["The selected public search source is not configured; no request was made."],
         });
         events.push(event("task.unsupported", completedAt, { reason: "search_adapter_unavailable" }));
         return buildTask({
@@ -319,7 +322,6 @@ export async function executeWebTask(input, options = {}) {
           : "web.extract.v1";
     execution.adapterId = adapterId;
     const adapterInput = { url: url.href };
-    if (input.cacheMode !== undefined) adapterInput.cacheMode = input.cacheMode;
     if (operation === "fetch" && input.limits && typeof input.limits === "object" && !Array.isArray(input.limits)) {
       if (input.limits.timeoutMs !== undefined) adapterInput.timeoutMs = input.limits.timeoutMs;
       if (input.limits.maxBytes !== undefined) adapterInput.maxBytes = input.limits.maxBytes;

@@ -4,7 +4,6 @@ import { chooseExecutionPath } from "../src/core/router.js";
 import { executeWebTask } from "../src/core/tasks.js";
 import { crawlWebsite, extractSitemapLocations, isAllowedByRobots, mapWebsite, parseRobotsTxt } from "../src/core/map-crawl.js";
 import { ExtractionError, extractFromStructuredSources, extractStructuredData, validateExtractionSchema } from "../src/core/extract.js";
-import { BrowserAdapterError, createBrowserAdapter } from "../src/core/browser-render.js";
 import { SearchAdapterError, createSearchAdapter } from "../src/core/search.js";
 import { ResearchPipelineError, createResearchPipeline } from "../src/core/research.js";
 import { EGRESS_POLICY, EgressPolicyError, validateEgressTarget } from "../src/core/egress-guard.js";
@@ -24,11 +23,6 @@ function response(body, { status = 200, headers = { "content-type": "text/plain;
 test("static tasks use direct HTTP", () => {
   assert.equal(chooseExecutionPath({}).path, "http");
   assert.equal(chooseExecutionPath({ requiresJavascript: false }).path, "http");
-});
-
-test("rendering or interaction selects browser", () => {
-  assert.equal(chooseExecutionPath({ requiresJavascript: true }).path, "browser");
-  assert.equal(chooseExecutionPath({ requiresInteraction: true }).path, "browser");
 });
 
 test("normalizes sources and warnings", () => {
@@ -549,29 +543,6 @@ test("internal HTTP task executor runs the direct adapter and returns lifecycle 
   }
 });
 
-test("internal task executor reports Browser work as unsupported without making a request", async () => {
-  const originalFetch = globalThis.fetch;
-  let fetchCalls = 0;
-  globalThis.fetch = async () => {
-    fetchCalls++;
-    return response("should not run");
-  };
-  try {
-    const task = await executeWebTask(
-      { goal: "Render the dynamic page", url: "https://example.com/app", requiresJavascript: true },
-      { idFactory: () => "task-browser-0001" },
-    );
-    assert.equal(task.state, "unsupported");
-    assert.equal(task.execution.path, "browser");
-    assert.equal(task.execution.adapterId, null);
-    assert.equal(task.result.status, "failed");
-    assert.equal(fetchCalls, 0);
-    assert.ok(task.result.warnings[0].includes("Browser Run binding is not configured"));
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
 test("internal task executor fails closed for disallowed URLs before fetching", async () => {
   const originalFetch = globalThis.fetch;
   let fetchCalls = 0;
@@ -611,17 +582,13 @@ test("internal task executor sanitizes upstream failures and does not expose exc
   }
 });
 
-test("internal task executor validates the goal and boolean routing flags", async () => {
-  const missingGoal = await executeWebTask(
-    { url: "https://example.com/" },
-    { idFactory: () => "task-invalid-0001" },
-  );
-  const invalidFlag = await executeWebTask(
-    { goal: "Read page", url: "https://example.com/", requiresJavascript: "true" },
-    { idFactory: () => "task-invalid-0002" },
-  );
-  assert.equal(missingGoal.result.data.errorCode, "INVALID_GOAL");
-  assert.equal(invalidFlag.result.data.errorCode, "INVALID_TASK");
+test("internal task executor fails closed for removed browser requirements", async () => {
+  for (const flags of [{ requiresJavascript: true }, { requiresInteraction: true }]) {
+    const task = await executeWebTask({ goal: "Read page", url: "https://example.com/", ...flags },
+      { idFactory: () => "task-browser-removed" });
+    assert.equal(task.state, "failed");
+    assert.equal(task.errors[0].code, "INVALID_TASK");
+  }
 });
 
 
@@ -964,44 +931,6 @@ test("task executor stops pre-cancelled work before invoking an adapter", async 
   assert.equal(task.errors[0].code, "TASK_CANCELLED");
 });
 
-test("task executor forwards AbortSignal to search, research and browser adapters", async () => {
-  const controller = new AbortController();
-  const received = {};
-  const searchTask = await executeWebTask(
-    { goal: "Search the web", operation: "search", query: "sample query" },
-    {
-      idFactory: () => "task-search-cancel",
-      signal: controller.signal,
-      searchAdapter: { execute: async (input) => { received.search = input.signal; return { status: "succeeded" }; } },
-    },
-  );
-  const researchTask = await executeWebTask(
-    { goal: "Research the topic", operation: "research", query: "sample query" },
-    {
-      idFactory: () => "task-research-cancel",
-      signal: controller.signal,
-      researchAdapter: { execute: async (input) => { received.research = input.signal; return { status: "succeeded" }; } },
-    },
-  );
-  const browserTask = await executeWebTask(
-    { goal: "Render the page", url: "https://example.com/", requiresJavascript: true },
-    {
-      idFactory: () => "task-browser-cancel",
-      signal: controller.signal,
-      browserAdapter: { id: "test.browser", execute: async (input) => { received.browser = input.signal; return { status: "succeeded" }; } },
-    },
-  );
-  assert.equal(searchTask.state, "succeeded");
-  assert.equal(researchTask.state, "succeeded");
-  assert.equal(browserTask.state, "succeeded");
-  assert.ok(received.search instanceof AbortSignal);
-  assert.ok(received.research instanceof AbortSignal);
-  assert.ok(received.browser instanceof AbortSignal);
-  assert.notEqual(received.search, controller.signal);
-  assert.notEqual(received.research, controller.signal);
-  assert.notEqual(received.browser, controller.signal);
-});
-
 test("task executor dispatches map and crawl to internal adapters", async () => {
   const seen = [];
   const runAdapter = async (id, input) => {
@@ -1338,354 +1267,10 @@ test("task executor preserves partial extraction results as a partial task state
 });
 
 
-test("browser adapter requires an explicitly injected Browser Run binding", async () => {
-  const adapter = createBrowserAdapter({
-    fetchResource: async () => ({ status: 200, body: "", finalUrl: "https://example.com/robots.txt" }),
-  });
-  await assert.rejects(
-    adapter.execute({ url: "https://example.com/" }),
-    (error) => error instanceof BrowserAdapterError && error.code === "BROWSER_UNAVAILABLE",
-  );
-});
-
-test("browser adapter rejects robots-disallowed navigation before creating a session", async () => {
-  let launchCalls = 0;
-  const adapter = createBrowserAdapter({
-    browserBinding: {},
-    puppeteer: { launch: async () => { launchCalls++; throw new Error("must not launch"); } },
-    fetchResource: async (url) => ({
-      status: 200, finalUrl: url, body: "User-agent: *\nDisallow: /private",
-      contentType: "text/plain", bytes: 45,
-    }),
-  });
-  await assert.rejects(
-    adapter.execute({ url: "https://example.com/private/page" }),
-    (error) => error instanceof BrowserAdapterError && error.code === "ROBOTS_DISALLOWED_TARGET",
-  );
-  assert.equal(launchCalls, 0);
-});
-
-test("browser adapter applies exact-host guardrails and blocks off-origin, private and robots-disallowed requests", async () => {
-  const binding = { kind: "fake-browser-binding" };
-  let launchOptions;
-  let userAgent;
-  let requestHandler;
-  let closeCalls = 0;
-  const browser = {
-    newPage: async () => ({
-      setUserAgent: async (value) => { userAgent = value; },
-      setRequestInterception: async (enabled) => { assert.equal(enabled, true); },
-      on: (eventName, handler) => {
-        assert.equal(eventName, "request");
-        requestHandler = handler;
-      },
-      goto: async (url, options) => {
-        assert.equal(url, "https://example.com/");
-        assert.equal(options.waitUntil, "domcontentloaded");
-        assert.equal(options.timeout, 15_000);
-        const makeRequest = (value) => {
-          const calls = [];
-          return {
-            url: () => value,
-            continue: async () => { calls.push("continue"); },
-            abort: async () => { calls.push("abort"); },
-            calls,
-          };
-        };
-        const requests = [
-          makeRequest("https://example.com/app.js"),
-          makeRequest("https://cdn.example.net/lib.js"),
-          makeRequest("http://127.0.0.1/admin"),
-          makeRequest("https://example.com/private/secret.css"),
-        ];
-        for (const request of requests) await requestHandler(request);
-        browser.requestResults = requests.map((item) => item.calls[0]);
-        return { status: () => 200 };
-      },
-      url: () => "https://example.com/",
-      content: async () => "<html><title>Rendered page</title><body>JS content</body></html>",
-      title: async () => "Rendered page",
-    }),
-    close: async () => { closeCalls++; },
-  };
-  const adapter = createBrowserAdapter({
-    browserBinding: binding,
-    puppeteer: {
-      launch: async (receivedBinding, options) => {
-        assert.equal(receivedBinding, binding);
-        launchOptions = options;
-        return browser;
-      },
-    },
-    fetchResource: async (url) => ({
-      status: 200, finalUrl: url, body: "User-agent: *\nDisallow: /private",
-      contentType: "text/plain", bytes: 40, retrievedAt: "2026-11-17T00:00:00.000Z",
-    }),
-    now: () => "2026-11-17T00:00:01.000Z",
-  });
-  const result = await adapter.execute({ url: "https://example.com/" });
-  assert.deepEqual(launchOptions.guardrails, { allowedDomains: ["example.com"] });
-  assert.equal(userAgent, "ExportFlowBot/0.1 (+https://exportflow.me)");
-  assert.deepEqual(browser.requestResults, ["continue", "abort", "abort", "abort"]);
-  assert.equal(result.status, "succeeded");
-  assert.equal(result.data.url, "https://example.com/");
-  assert.equal(result.data.title, "Rendered page");
-  assert.equal(result.data.blockedRequests, 3);
-  assert.equal(result.sources[0].evidence[0].type, "browser_rendered_page");
-  assert.equal(closeCalls, 1);
-});
-
-test("browser adapter closes the browser session after navigation failure", async () => {
-  let closeCalls = 0;
-  const adapter = createBrowserAdapter({
-    browserBinding: {},
-    puppeteer: {
-      launch: async () => ({
-        newPage: async () => ({
-          setUserAgent: async () => {},
-          setRequestInterception: async () => {},
-          on: () => {},
-          goto: async () => { throw new Error("private session detail"); },
-        }),
-        close: async () => { closeCalls++; },
-      }),
-    },
-    fetchResource: async (url) => ({
-      status: 200, finalUrl: url, body: "", contentType: "text/plain", bytes: 0,
-    }),
-  });
-  await assert.rejects(
-    adapter.execute({ url: "https://example.com/" }),
-    (error) => error instanceof BrowserAdapterError && error.code === "BROWSER_RENDER_FAILED" &&
-      !error.message.includes("private session detail"),
-  );
-  assert.equal(closeCalls, 1);
-});
-
-test("browser cancellation handles a rejected close promise without losing cancellation", async () => {
-  const controller = new AbortController();
-  let closeCalls = 0;
-  const adapter = createBrowserAdapter({
-    browserBinding: {},
-    puppeteer: {
-      launch: async () => ({
-        newPage: async () => ({
-          setUserAgent: async () => {},
-          setRequestInterception: async () => {},
-          on: () => {},
-          goto: async () => {
-            controller.abort();
-            throw new Error("navigation interrupted by cancellation");
-          },
-        }),
-        close: async () => {
-          closeCalls++;
-          if (closeCalls === 1) throw new Error("synthetic browser close failure");
-        },
-      }),
-    },
-    fetchResource: async (url) => ({
-      status: 200, finalUrl: url, body: "", contentType: "text/plain", bytes: 0,
-    }),
-  });
-  await assert.rejects(
-    adapter.execute({ url: "https://example.com/", signal: controller.signal }),
-    (error) => error.code === "TASK_CANCELLED",
-  );
-  assert.equal(closeCalls, 2);
-});
-
-test("task executor routes JavaScript rendering to an injected Browser adapter", async () => {
-  let received;
-  const task = await executeWebTask(
-    { goal: "Render the dynamic page", url: "https://example.com/app", requiresJavascript: true },
-    {
-      idFactory: () => "task-browser-render-01",
-      browserAdapter: {
-        id: "web.browser.v1",
-        execute: async (input) => {
-          received = input;
-          return { status: "succeeded", data: { title: "Rendered" }, sources: [], warnings: [] };
-        },
-      },
-    },
-  );
-  assert.equal(task.state, "succeeded");
-  assert.equal(task.execution.adapterId, "web.browser.v1");
-  assert.equal(received.url, "https://example.com/app");
-});
-
-test("task executor keeps user-directed browser interactions unsupported", async () => {
-  let called = false;
-  const task = await executeWebTask(
-    { goal: "Click through a multi-step workflow", url: "https://example.com/", requiresInteraction: true },
-    {
-      idFactory: () => "task-browser-action-01",
-      browserAdapter: { execute: async () => { called = true; return { status: "succeeded" }; } },
-    },
-  );
-  assert.equal(task.state, "unsupported");
-  assert.equal(called, false);
-  assert.equal(task.events.at(-1).type, "task.unsupported");
-});
-
-test("task executor reports a missing Browser Run binding as unsupported", async () => {
-  const unavailableAdapter = createBrowserAdapter({});
-  const task = await executeWebTask(
-    { goal: "Render the page", url: "https://example.com/", requiresJavascript: true },
-    {
-      idFactory: () => "task-browser-no-binding",
-      browserAdapter: unavailableAdapter,
-    },
-  );
-  assert.equal(task.state, "unsupported");
-  assert.equal(task.events.at(-1).type, "task.unsupported");
-});
-
-
-test("search adapter calls Cloudflare Web Search with a fixed provider and bounded result limit", async () => {
-  let request;
-  const adapter = createSearchAdapter({
-    webSearch: async (input) => {
-      request = input;
-      return {
-        items: [
-          { url: "https://example.com/one", title: "One", description: "First result" },
-          { url: "https://example.com/two", title: "Two", description: "Second result" },
-        ],
-        metadata: { requestId: "req-123", latencyMs: 42 },
-      };
-    },
-    now: () => "2026-11-17T00:00:00.000Z",
-  });
-  const result = await adapter.execute({ query: "  cloudflare workers  ", limit: 2 });
-  assert.deepEqual(request, {
-    gatewayId: "default",
-    query: "cloudflare workers",
-    provider: "ceramic",
-    limit: 2,
-  });
-  assert.equal(result.status, "succeeded");
-  assert.equal(result.data.resultCount, 2);
-  assert.equal(result.data.requestId, "req-123");
-  assert.equal(result.data.results[0].rank, 1);
-  assert.equal(result.sources[0].evidence[0].query, "cloudflare workers");
-  assert.equal(result.sources[0].url, "https://example.com/one");
-});
-
-test("search adapter does not start a Web Search call for an already-cancelled Task", async () => {
-  const controller = new AbortController();
-  controller.abort();
-  let calls = 0;
-  const adapter = createSearchAdapter({
-    webSearch: async () => {
-      calls += 1;
-      return { items: [] };
-    },
-  });
-
-  await assert.rejects(
-    adapter.execute({ query: "cloudflare workers", signal: controller.signal }),
-    (error) => error instanceof SearchAdapterError && error.code === "TASK_CANCELLED",
-  );
-  assert.equal(calls, 0);
-});
-
-test("search adapter stops waiting for Web Search when its Task is cancelled", async () => {
-  const controller = new AbortController();
-  let finishProvider;
-  let calls = 0;
-  const providerPromise = new Promise((resolve) => { finishProvider = resolve; });
-  const adapter = createSearchAdapter({
-    webSearch: () => {
-      calls += 1;
-      return providerPromise;
-    },
-  });
-
-  const pending = adapter.execute({
-    query: "cloudflare workers",
-    signal: controller.signal,
-  });
-  assert.equal(calls, 1);
-
-  controller.abort();
-  await assert.rejects(
-    pending,
-    (error) => error instanceof SearchAdapterError && error.code === "TASK_CANCELLED",
-  );
-
-  // The Workers AI websearch() binding has no AbortSignal parameter; its
-  // underlying operation may finish later, but the cancelled Task stops waiting.
-  finishProvider({ items: [] });
-  await Promise.resolve();
-});
-
-test("search adapter drops unsafe and duplicate result URLs", async () => {
-  const adapter = createSearchAdapter({
-    webSearch: async () => ({
-      items: [
-        { url: "https://example.com/page", title: "Valid" },
-        { url: "https://example.com/page#fragment", title: "Duplicate after normalization" },
-        { url: "http://127.0.0.1/admin", title: "Local" },
-        { url: "javascript:alert(1)", title: "Unsafe" },
-      ],
-    }),
-  });
-  const result = await adapter.execute({ query: "sample query" });
-  assert.equal(result.data.resultCount, 1);
-  assert.equal(result.data.results[0].title, "Valid");
-  assert.ok(result.warnings.some((warning) => warning.includes("invalid, unsafe, or duplicate")));
-});
-
-test("search adapter accepts zero results as a successful search operation", async () => {
-  const adapter = createSearchAdapter({ webSearch: async () => ({ items: [], metadata: {} }) });
-  const result = await adapter.execute({ query: "no matching pages" });
-  assert.equal(result.status, "succeeded");
-  assert.equal(result.data.resultCount, 0);
-  assert.ok(result.warnings.some((warning) => warning.includes("no usable")));
-});
-
-test("search adapter validates queries, limits, and configured providers", async () => {
-  const adapter = createSearchAdapter({ webSearch: async () => ({ items: [] }) });
-  await assert.rejects(
-    adapter.execute({ query: "" }),
-    (error) => error instanceof SearchAdapterError && error.code === "INVALID_QUERY",
-  );
-  await assert.rejects(
-    adapter.execute({ query: "valid", limit: 11 }),
-    (error) => error instanceof SearchAdapterError && error.code === "INVALID_LIMIT",
-  );
-  assert.throws(
-    () => createSearchAdapter({ provider: "unknown", webSearch: async () => ({ items: [] }) }),
-    (error) => error instanceof SearchAdapterError && error.code === "INVALID_PROVIDER",
-  );
-});
-
-test("search adapter returns a clear unavailable error without a Worker AI binding", async () => {
-  const adapter = createSearchAdapter({});
-  await assert.rejects(
-    adapter.execute({ query: "cloudflare workers" }),
-    (error) => error instanceof SearchAdapterError && error.code === "SEARCH_UNAVAILABLE",
-  );
-});
-
-test("search adapter does not leak upstream error details", async () => {
-  const adapter = createSearchAdapter({
-    webSearch: async () => { throw new Error("sensitive provider credential detail"); },
-  });
-  await assert.rejects(
-    adapter.execute({ query: "cloudflare" }),
-    (error) => error instanceof SearchAdapterError &&
-      error.code === "SEARCH_PROVIDER_FAILED" &&
-      !error.message.includes("sensitive provider credential detail"),
-  );
-});
-
 test("task executor dispatches query-only search operations to an injected Search adapter", async () => {
   let received;
   const task = await executeWebTask(
-    { goal: "Find official Cloudflare docs", operation: "search", query: "Cloudflare Workers docs", limit: 4 },
+    { goal: "Find official Cloudflare docs", operation: "search", query: "Cloudflare Workers docs", source: "openalex", limit: 4 },
     {
       idFactory: () => "task-search-0001",
       searchAdapter: {
@@ -1702,185 +1287,6 @@ test("task executor dispatches query-only search operations to an injected Searc
   assert.equal(received.query, "Cloudflare Workers docs");
   assert.equal(received.limit, 4);
   assert.ok(received.signal instanceof AbortSignal);
-});
-
-test("task executor keeps search unsupported when its AI binding is not configured", async () => {
-  const task = await executeWebTask(
-    { goal: "Search for a public website", operation: "search", query: "some topic" },
-    { idFactory: () => "task-search-disabled" },
-  );
-  assert.equal(task.state, "unsupported");
-  assert.equal(task.events.at(-1).type, "task.unsupported");
-});
-
-
-test("research pipeline completes Search to Fetch to Extract through the registered HTTP adapter", async () => {
-  const originalFetch = globalThis.fetch;
-  let outboundCalls = 0;
-  globalThis.fetch = async (url, init) => {
-    outboundCalls++;
-    assert.equal(url, "https://shop.example.com/item/42");
-    assert.equal(init.method, "GET");
-    return new Response(
-      '<html><head><script type="application/ld+json">{"@type":"Product","name":"Fixture Item","offers":{"price":"12.50","priceCurrency":"USD"}}</script></head></html>',
-      { status: 200, headers: { "content-type": "text/html; charset=utf-8" } },
-    );
-  };
-  try {
-    const searchAdapter = createSearchAdapter({
-      webSearch: async () => ({
-        items: [{ url: "https://shop.example.com/item/42", title: "Example product", description: "Untrusted search snippet" }],
-        metadata: { requestId: "search-fixture", latencyMs: 8 },
-      }),
-    });
-    const pipeline = createResearchPipeline({
-      searchAdapter,
-      now: () => "2026-11-17T00:00:01.000Z",
-    });
-    const result = await pipeline.execute({
-      query: "example fixture product",
-      schema: {
-        type: "object",
-        properties: {
-          name: { type: "string", "x-source": "jsonld:name" },
-          price: { type: "number", "x-source": "jsonld:offers.price" },
-          currency: { type: "string", "x-source": "jsonld:offers.priceCurrency" },
-        },
-        required: ["name", "price"],
-      },
-    });
-    assert.equal(result.status, "succeeded");
-    assert.equal(result.data.provider, "ceramic");
-    assert.equal(result.data.searchRequestId, "search-fixture");
-    assert.deepEqual(result.data.fields, { name: "Fixture Item", price: 12.5, currency: "USD" });
-    assert.equal(result.data.attempts.length, 1);
-    assert.equal(outboundCalls, 1);
-    assert.equal(result.sources[0].url, "https://shop.example.com/item/42");
-    assert.ok(result.sources[0].evidence.some((item) => item.type === "search_result"));
-    assert.ok(result.sources[0].evidence.some((item) => item.type === "http_response"));
-    assert.equal(result.sources[0].evidence.filter((item) => item.type === "extracted_field").length, 3);
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
-});
-
-test("research pipeline tries the next bounded search result when the first source cannot be fetched", async () => {
-  const searchAdapter = createSearchAdapter({
-    webSearch: async () => ({
-      items: [
-        { url: "https://first.example.com/item", title: "First" },
-        { url: "https://second.example.com/item", title: "Second" },
-      ],
-    }),
-  });
-  const calls = [];
-  const pipeline = createResearchPipeline({
-    searchAdapter,
-    runAdapter: async (id, input) => {
-      calls.push(input.url);
-      if (input.url === "https://first.example.com/item") throw new Error("private upstream detail");
-      return {
-        status: "succeeded",
-        data: {
-          status: 200,
-          contentType: "application/json",
-          body: '{"id":"second-item"}',
-          finalUrl: input.url,
-        },
-        sources: [],
-        warnings: [],
-      };
-    },
-  });
-  const result = await pipeline.execute({
-    query: "find item",
-    candidateLimit: 2,
-    schema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
-  });
-  assert.deepEqual(calls, ["https://first.example.com/item", "https://second.example.com/item"]);
-  assert.equal(result.status, "succeeded");
-  assert.equal(result.data.selectedUrl, "https://second.example.com/item");
-  assert.equal(result.data.fields.id, "second-item");
-  assert.equal(result.data.attempts[0].reason, "UPSTREAM_FETCH_FAILED");
-});
-
-test("research pipeline escalates to an injected Browser adapter only when required fields are missing", async () => {
-  const searchAdapter = createSearchAdapter({
-    webSearch: async () => ({ items: [{ url: "https://app.example.com/", title: "Dynamic app" }] }),
-  });
-  let browserCalls = 0;
-  const pipeline = createResearchPipeline({
-    searchAdapter,
-    runAdapter: async (_id, input) => ({
-      status: "succeeded",
-      data: { status: 200, contentType: "text/html", body: "<html><body>Loading</body></html>", finalUrl: input.url },
-      sources: [],
-      warnings: [],
-    }),
-    browserAdapter: {
-      execute: async ({ url }) => {
-        browserCalls++;
-        return {
-          status: "succeeded",
-          data: {
-            url,
-            html: '<script type="application/ld+json">{"name":"Rendered item","sku":"SKU-9"}</script>',
-            title: "Rendered",
-          },
-          sources: [{ url, evidence: [{ type: "browser_rendered_page" }] }],
-          warnings: [],
-        };
-      },
-    },
-  });
-  const result = await pipeline.execute({
-    query: "find rendered item",
-    schema: {
-      type: "object",
-      properties: { name: { type: "string" }, sku: { type: "string" } },
-      required: ["name", "sku"],
-    },
-  });
-  assert.equal(browserCalls, 1);
-  assert.equal(result.status, "succeeded");
-  assert.deepEqual(result.data.fields, { name: "Rendered item", sku: "SKU-9" });
-  assert.equal(result.data.browserEscalated, true);
-  assert.ok(result.sources[0].evidence.some((item) => item.type === "browser_rendered_page"));
-});
-
-test("research pipeline does not attempt Browser escalation when no Browser adapter is injected", async () => {
-  const searchAdapter = createSearchAdapter({
-    webSearch: async () => ({ items: [{ url: "https://example.com/", title: "Page" }] }),
-  });
-  const pipeline = createResearchPipeline({
-    searchAdapter,
-    runAdapter: async (_id, input) => ({
-      status: "succeeded",
-      data: { status: 200, contentType: "text/html", body: "<html></html>", finalUrl: input.url },
-      sources: [],
-      warnings: [],
-    }),
-  });
-  const result = await pipeline.execute({
-    query: "find page",
-    schema: { type: "object", properties: { requiredValue: { type: "string" } }, required: ["requiredValue"] },
-  });
-  assert.equal(result.status, "failed");
-  assert.equal(result.data.browserEscalated, false);
-  assert.ok(result.warnings.some((warning) => warning.includes("Browser rendering is not configured")));
-});
-
-test("research pipeline validates schema before calling Search", async () => {
-  let called = false;
-  const pipeline = createResearchPipeline({
-    searchAdapter: { execute: async () => { called = true; return { data: { results: [] } }; } },
-    runAdapter: async () => { throw new Error("must not fetch"); },
-  });
-  await assert.rejects(
-    pipeline.execute({ query: "find", schema: { type: "object", properties: { value: { type: "unknown" } } } }),
-    (error) => error instanceof ResearchPipelineError && error.code === "INVALID_SCHEMA",
-  );
-  assert.equal(called, false);
 });
 
 test("task executor dispatches query-only research tasks to an injected Research pipeline", async () => {
@@ -1907,74 +1313,6 @@ test("task executor dispatches query-only research tasks to an injected Research
   assert.equal(received.candidateLimit, 2);
   assert.ok(received.signal instanceof AbortSignal);
 });
-
-test("task executor keeps research unsupported when no pipeline is configured", async () => {
-  const task = await executeWebTask(
-    { goal: "Research a topic", operation: "research", query: "some topic", schema: { type: "object", properties: { title: { type: "string" } } } },
-    { idFactory: () => "task-research-disabled" },
-  );
-  assert.equal(task.state, "unsupported");
-  assert.equal(task.events.at(-1).type, "task.unsupported");
-});
-
-
-test("research pipeline attempts Browser escalation only once after comparing static candidates", async () => {
-  const searchAdapter = createSearchAdapter({
-    webSearch: async () => ({
-      items: [
-        { url: "https://first.example.com/", title: "First" },
-        { url: "https://second.example.com/", title: "Second" },
-      ],
-    }),
-  });
-  const fetchCalls = [];
-  let browserCalls = 0;
-  const pipeline = createResearchPipeline({
-    searchAdapter,
-    runAdapter: async (_id, input) => {
-      fetchCalls.push(input.url);
-      return {
-        status: "succeeded",
-        data: {
-          status: 200,
-          contentType: "text/html",
-          body: "<html></html>",
-          finalUrl: input.url,
-        },
-        sources: [],
-        warnings: [],
-      };
-    },
-    browserAdapter: {
-      execute: async ({ url }) => {
-        browserCalls++;
-        return {
-          status: "succeeded",
-          data: {
-            url,
-            html: '<script type="application/ld+json">{"name":"Browser value"}</script>',
-          },
-          sources: [],
-          warnings: [],
-        };
-      },
-    },
-  });
-  const result = await pipeline.execute({
-    query: "find a name",
-    candidateLimit: 2,
-    schema: {
-      type: "object",
-      properties: { name: { type: "string" } },
-      required: ["name"],
-    },
-  });
-  assert.equal(fetchCalls.length, 2);
-  assert.equal(browserCalls, 1);
-  assert.equal(result.status, "succeeded");
-  assert.equal(result.data.browserEscalated, true);
-});
-
 
 test("oversized upstream body does not wait for a stalled reader cancellation", { timeout: 1500 }, async () => {
   let cancelCalls = 0;
@@ -2078,4 +1416,98 @@ test("fetch follows a safe redirect without waiting for a stalled redirect-body 
   assert.equal(result.body, "done");
   assert.equal(result.redirects.length, 1);
   assert.equal(cancelCalls, 1);
+});
+
+test("public search adapter calls only the explicitly selected free source", async () => {
+  const calls = [];
+  const fixtures = {
+    wikipedia: { query: { search: [{ pageid: 42, title: "Example result", snippet: "<span>Public</span> result" }] } },
+    openalex: { results: [{ id: "https://openalex.org/W1", title: "Research paper", publication_year: 2024, primary_location: { landing_page_url: "https://papers.example.org/one" }, cited_by_count: 7 }] },
+    crossref: { message: { items: [{ DOI: "10.1000/example", title: ["DOI paper"], URL: "https://doi.org/10.1000/example", type: "journal-article" }] } },
+  };
+  const adapter = createSearchAdapter({ fetchResource: async (url, options) => {
+    calls.push({ url, options });
+    const host = new URL(url).hostname;
+    const source = host === "en.wikipedia.org" ? "wikipedia" : host === "api.openalex.org" ? "openalex" : "crossref";
+    return { ok: true, status: 200, contentType: "application/json", body: JSON.stringify(fixtures[source]),
+      bytes: 256, finalUrl: url, retrievedAt: "2026-11-24T10:00:00.000Z", cacheStatus: "HIT" };
+  }});
+  for (const source of ["wikipedia", "openalex", "crossref"]) {
+    const result = await adapter.execute({ query: "test subject", source, limit: 3 });
+    assert.equal(result.status, "succeeded");
+    assert.equal(result.data.source, source);
+    assert.equal(result.data.resultCount, 1);
+    assert.equal(result.data.cacheStatus, "HIT");
+    assert.equal(result.data.results[0].rank, 1);
+    assert.ok(result.sources[0].url.startsWith("https://"));
+    assert.ok(result.data.coverage.length > 20);
+  }
+  assert.equal(calls.length, 3);
+  assert.ok(calls.some((call) => new URL(call.url).hostname === "en.wikipedia.org"));
+  assert.ok(calls.some((call) => new URL(call.url).hostname === "api.openalex.org"));
+  assert.ok(calls.some((call) => new URL(call.url).hostname === "api.crossref.org"));
+  assert.ok(calls.every((call) => call.options.userAgent.startsWith("ExportFlow/")));
+});
+
+test("public search adapter rejects unknown sources and invalid queries before network access", async () => {
+  let calls = 0;
+  const adapter = createSearchAdapter({ fetchResource: async () => { calls++; throw new Error("must not fetch"); } });
+  await assert.rejects(adapter.execute({ query: "valid", source: "general-web" }), (error) => error instanceof SearchAdapterError && error.code === "INVALID_SEARCH_SOURCE");
+  await assert.rejects(adapter.execute({ query: "", source: "openalex" }), (error) => error instanceof SearchAdapterError && error.code === "INVALID_QUERY");
+  await assert.rejects(adapter.execute({ query: "valid", source: "openalex", limit: 11 }), (error) => error instanceof SearchAdapterError && error.code === "INVALID_LIMIT");
+  assert.equal(calls, 0);
+});
+
+test("public search adapter honours cancellation before the source request", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let calls = 0;
+  const adapter = createSearchAdapter({ fetchResource: async () => { calls++; return {}; } });
+  await assert.rejects(adapter.execute({ query: "valid", source: "openalex", signal: controller.signal }),
+    (error) => error instanceof SearchAdapterError && error.code === "TASK_CANCELLED");
+  assert.equal(calls, 0);
+});
+
+test("task executor uses the registered public search adapter without an injected AI binding", async () => {
+  const task = await executeWebTask(
+    { goal: "Find a scholarly source", operation: "search", query: "edge computing", source: "openalex" },
+    { idFactory: () => "task-free-search-01", fetchImpl: async (url) => {
+      assert.equal(new URL(url).hostname, "api.openalex.org");
+      return new Response(JSON.stringify({ results: [{
+        id: "https://openalex.org/W1", title: "Edge computing paper",
+        primary_location: { landing_page_url: "https://papers.example.org/edge" },
+      }] }), { headers: { "content-type": "application/json" } });
+    }},
+  );
+  assert.equal(task.state, "succeeded");
+  assert.equal(task.execution.adapterId, "web.search.v1");
+  assert.equal(task.result.data.results[0].title, "Edge computing paper");
+});
+
+test("default research pipeline performs search, static fetch and deterministic schema extraction", async () => {
+  const calls = [];
+  const task = await executeWebTask({
+    goal: "Research and extract a public field", operation: "research",
+    query: "test research", source: "openalex",
+    schema: { type: "object", properties: { name: { type: "string", "x-source": "jsonld:name" } }, required: ["name"] },
+    candidateLimit: 1,
+  }, {
+    idFactory: () => "task-free-research",
+    fetchImpl: async (url) => {
+      calls.push(url);
+      if (new URL(url).hostname === "api.openalex.org") {
+        return new Response(JSON.stringify({ results: [{
+          id: "https://openalex.org/W1", title: "Research page",
+          primary_location: { landing_page_url: "https://papers.example.org/one" },
+        }] }), { headers: { "content-type": "application/json" } });
+      }
+      return new Response('<html><head><script type="application/ld+json">{"@type":"Thing","name":"Verified from static JSON-LD"}</script></head></html>',
+        { headers: { "content-type": "text/html; charset=utf-8" } });
+    },
+  });
+  assert.equal(task.state, "succeeded");
+  assert.equal(task.execution.adapterId, "web.research.v1");
+  assert.equal(task.result.data.fields.name, "Verified from static JSON-LD");
+  assert.equal(task.result.data.rendering, "static-http-only");
+  assert.equal(calls.length, 2);
 });

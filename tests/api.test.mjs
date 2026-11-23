@@ -200,53 +200,28 @@ test("POST /api/v1/tasks enforces content-type, empty/invalid UTF-8/malformed JS
   assert.equal((await unknownOp.json()).error.code, "UNSUPPORTED_OPERATION");
 });
 
-test("validateTaskRequest enforces strict numeric limit bounds and disables non-fetch operations", () => {
-  assert.throws(
-    () => validateTaskRequest({ goal: "Crawl", url: "https://example.com", operation: "crawl" }),
-    (err) => err instanceof TaskContractError && err.code === "OPERATION_NOT_ENABLED" && err.httpStatus === 501,
-  );
-
-  for (const badLimits of [
-    null,
-    [],
-    "fast",
-    { timeoutMs: 0 },
-    { timeoutMs: -1 },
-    { timeoutMs: 1.5 },
-    { timeoutMs: "1000" },
-    { timeoutMs: 99_999 },
-    { maxBytes: 0 },
-    { maxBytes: 2_000_000 },
-    { maxRedirects: -1 },
-    { maxRedirects: 4 },
-    { unknownLimit: 10 },
-  ]) {
-    assert.throws(
-      () => validateTaskRequest({ goal: "Fetch", url: "https://example.com", limits: badLimits }),
-      (err) => err instanceof TaskContractError && err.code === "INVALID_LIMIT",
-    );
+test("validateTaskRequest enables bounded static operations and rejects browser requirements", () => {
+  for (const [operation, payload] of [
+    ["map", { url: "https://example.com", maxUrls: 10 }],
+    ["crawl", { url: "https://example.com", maxPages: 3, maxDepth: 1 }],
+    ["extract", { url: "https://example.com", schema: { type: "object", properties: { title: { type: "string" } } } }],
+    ["search", { query: "example", source: "openalex", limit: 5 }],
+    ["research", { query: "example", source: "crossref", schema: { type: "object", properties: { title: { type: "string" } } }, candidateLimit: 2 }],
+  ]) assert.equal(validateTaskRequest({ goal: "Run " + operation, operation, ...payload }).operation, operation);
+  for (const badLimits of [null, [], "fast", { timeoutMs: 0 }, { timeoutMs: -1 }, { timeoutMs: 1.5 }, { timeoutMs: "1000" }, { timeoutMs: 99_999 }, { maxBytes: 0 }, { maxBytes: 2_000_000 }, { maxRedirects: -1 }, { maxRedirects: 4 }, { unknownLimit: 10 }]) {
+    assert.throws(() => validateTaskRequest({ goal: "Fetch", url: "https://example.com", limits: badLimits }),
+      (err) => err instanceof TaskContractError && err.code === "INVALID_LIMIT");
   }
-
-  const valid = validateTaskRequest({
-    goal: "Fetch docs",
-    url: "https://example.com/docs#section",
-    limits: { timeoutMs: 2500, maxBytes: 4096, maxRedirects: 1 },
-  });
+  const valid = validateTaskRequest({ goal: "Fetch docs", url: "https://example.com/docs#section",
+    limits: { timeoutMs: 2500, maxBytes: 4096, maxRedirects: 1 } });
   assert.equal(valid.url, "https://example.com/docs");
-  assert.equal(valid.operation, "fetch");
   assert.equal(valid.cacheMode, "default");
   assert.deepEqual(valid.limits, { timeoutMs: 2500, maxBytes: 4096, maxRedirects: 1 });
-
-  const bypass = validateTaskRequest({
-    goal: "Fetch fresh docs",
-    url: "https://example.com/docs",
-    cacheMode: "bypass",
-  });
-  assert.equal(bypass.cacheMode, "bypass");
-  assert.throws(
-    () => validateTaskRequest({ goal: "Fetch", url: "https://example.com", cacheMode: "force" }),
-    (err) => err instanceof TaskContractError && err.code === "INVALID_CACHE_MODE" && err.httpStatus === 400,
-  );
+  assert.equal(validateTaskRequest({ goal: "Fetch", url: "https://example.com", cacheMode: "bypass" }).cacheMode, "bypass");
+  assert.throws(() => validateTaskRequest({ goal: "Fetch", url: "https://example.com", cacheMode: "force" }),
+    (err) => err instanceof TaskContractError && err.code === "INVALID_CACHE_MODE");
+  assert.throws(() => validateTaskRequest({ goal: "Render", url: "https://example.com", requiresJavascript: true }),
+    (err) => err instanceof TaskContractError && err.code === "INVALID_TASK");
 });
 
 test("POST /api/v1/tasks rejects private, loopback, metadata, and invalid URLs before outbound fetch", async () => {
@@ -459,30 +434,15 @@ test("POST /api/v1/tasks handles upstream 404, 500, and network failures without
   assert.equal(errTask.usage.requestsAttempted, null);
 });
 
-test("POST /api/v1/tasks returns 501 unsupported for browser JS or interaction tasks without outbound calls", async () => {
+test("POST /api/v1/tasks refuses browser rendering and interaction flags", async () => {
   let fetchCalls = 0;
-  const worker = createWorker({
-    idFactory: () => "task-js-0001",
-    fetchImpl: async () => {
-      fetchCalls++;
-      return new Response("unexpected");
-    },
-  });
+  const worker = createWorker({ fetchImpl: async () => { fetchCalls++; return new Response("unused"); } });
   const env = makeTestEnv();
-
-  const jsRes = await worker.fetch(
-    makeTaskRequest({ goal: "Render SPA", url: "https://example.com/app", requiresJavascript: true }),
-    env,
-  );
-  assert.equal(jsRes.status, 501);
-  assert.equal((await jsRes.json()).state, "unsupported");
-
-  const interactRes = await worker.fetch(
-    makeTaskRequest({ goal: "Click button", url: "https://example.com/app", requiresInteraction: true }),
-    env,
-  );
-  assert.equal(interactRes.status, 501);
-  assert.equal((await interactRes.json()).state, "unsupported");
+  for (const flags of [{ requiresJavascript: true }, { requiresInteraction: true }]) {
+    const response = await worker.fetch(makeTaskRequest({ goal: "Dynamic page", url: "https://example.com/app", ...flags }), env);
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).error.code, "INVALID_TASK");
+  }
   assert.equal(fetchCalls, 0);
 });
 
@@ -543,7 +503,7 @@ test("existing Worker routes remain backward compatible and reflect liveCapabili
   assert.equal(platformData.endpoints.tasks, "/api/v1/tasks");
 
   const preview = await worker.fetch(new Request("https://exportflow.local/api/v1/router-preview?javascript=true"), {});
-  assert.equal((await preview.json()).decision.path, "browser");
+  assert.equal((await preview.json()).decision.path, "http");
 
   const badMethod = await worker.fetch(new Request("https://exportflow.local/api/v1/tasks", { method: "GET" }), {});
   assert.equal(badMethod.status, 405);
@@ -710,4 +670,41 @@ test("invalid task contracts do not consume the persistent tenant request quota"
   const valid = await worker.fetch(makeTaskRequest({ goal: "Valid after invalid", url: "https://example.com/valid" }), env);
   assert.equal(valid.status, 200);
   assert.equal(fetchCalls, 1);
+});
+
+test("REST Search works with its own tenant scope and public OpenAlex source", async () => {
+  const worker = createWorker({ fetchImpl: async (url) => {
+    assert.equal(new URL(url).hostname, "api.openalex.org");
+    return new Response(JSON.stringify({ results: [{
+      id: "https://openalex.org/W42", title: "A public research result",
+      primary_location: { landing_page_url: "https://papers.example.org/42" },
+    }] }), { headers: { "content-type": "application/json" } });
+  }});
+  const response = await worker.fetch(makeTaskRequest({
+    goal: "Search a public research dataset", operation: "search", query: "public data", source: "openalex", limit: 3,
+  }), makeTestEnv({ scopes: ["tasks:search"] }));
+  const task = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(task.state, "succeeded");
+  assert.equal(task.execution.adapterId, "web.search.v1");
+  assert.equal(task.result.data.results[0].title, "A public research result");
+});
+
+test("REST Map is enabled only with tasks:map and uses the bounded static mapper", async () => {
+  const calls = [];
+  const worker = createWorker({ fetchImpl: async (url) => {
+    calls.push(url);
+    if (url.endsWith("/robots.txt")) return new Response("", { headers: { "content-type": "text/plain" } });
+    if (url.endsWith("/sitemap.xml")) return new Response("", { status: 404, headers: { "content-type": "text/plain" } });
+    return new Response('<html><title>Map fixture</title><a href="/about">About</a></html>', { headers: { "content-type": "text/html" } });
+  }});
+  const response = await worker.fetch(makeTaskRequest({
+    goal: "Map the site", operation: "map", url: "https://example.com/", maxUrls: 5,
+  }), makeTestEnv({ scopes: ["tasks:map"] }));
+  const task = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(task.state, "succeeded");
+  assert.equal(task.execution.adapterId, "web.map.v1");
+  assert.ok(task.result.data.urls.some((item) => item.url === "https://example.com/about"));
+  assert.ok(calls.some((url) => url.endsWith("/robots.txt")));
 });

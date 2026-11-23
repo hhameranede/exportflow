@@ -244,6 +244,8 @@ async function applyRateLimit(request, env, toolName) {
     web_extract: 2,
     web_map: 4,
     web_crawl: 6,
+    web_search: 2,
+    web_research: 5,
   };
   const decision = await limiter.limit({ key: ip, delta: weights[toolName] || 1 });
   return { ok: decision?.success === true, unprotected: false };
@@ -539,7 +541,7 @@ export function createExportFlowPreviewWorker({
           transport: "Streamable HTTP",
           authentication: "OAuth 2.1 for ChatGPT; direct tenant API keys remain supported",
           tools: TOOL_DEFINITIONS.map((tool) => tool.name),
-          note: "Preview only. Search and Browser tools are not enabled; task execution requires a provisioned tenant and the dedicated EXPORTFLOW_AUTH_DB binding.",
+          note: "Public static HTTP tools are available in this preview. Browser rendering and interaction are removed; execution requires a provisioned tenant and EXPORTFLOW_AUTH_DB binding.",
         });
       }
       if (url.pathname === "/.well-known/oauth-protected-resource" ||

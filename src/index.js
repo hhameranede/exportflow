@@ -201,7 +201,17 @@ export function createWorker(options = {}) {
               routerPreview: "/api/v1/router-preview",
               tasks: "/api/v1/tasks",
             },
-            liveCapabilities: authReady ? [...getAdapterCatalog().map((adapter) => adapter.id), "web.research.v1"] : [],
+            liveCapabilities: authReady ? [
+              ...getAdapterCatalog().filter((adapter) => {
+                const required = {
+                  "http.fetch.v1": "tasks:fetch", "web.map.v1": "tasks:map",
+                  "web.crawl.v1": "tasks:crawl", "web.extract.v1": "tasks:extract",
+                  "web.search.v1": "tasks:search",
+                }[adapter.id];
+                return required && (auth.identity.scopes.includes(required) || auth.identity.scopes.includes("tasks:*") || auth.identity.scopes.includes("*"));
+              }).map((adapter) => adapter.id),
+              ...(auth.identity.scopes.some((scope) => ["tasks:research", "tasks:*", "*"].includes(scope)) ? ["web.research.v1"] : []),
+            ] : [],
           });
         }
 

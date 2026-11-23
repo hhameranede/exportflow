@@ -128,7 +128,7 @@ test("health route describes the read-only MCP preview", async () => {
   assert.equal(response.status, 200);
   assert.equal(body.status, "ok");
   assert.equal(body.endpoint, "/mcp");
-  assert.deepEqual(body.tools, ["exportflow_capabilities", "web_fetch", "web_map", "web_crawl", "web_extract"]);
+  assert.deepEqual(body.tools, ["exportflow_capabilities", "web_fetch", "web_map", "web_crawl", "web_extract", "web_search", "web_research"]);
   assert.equal(calls.tasks.length, 0);
 });
 
@@ -174,6 +174,8 @@ test("tools/list exposes only the currently implemented read-only tools", async 
       web_map: "tasks:map",
       web_crawl: "tasks:crawl",
       web_extract: "tasks:extract",
+      web_search: "tasks:search",
+      web_research: "tasks:research",
     }[tool.name]]);
     assert.deepEqual(tool._meta.securitySchemes, tool.securitySchemes);
   }
@@ -542,7 +544,7 @@ test("MCP protected-resource metadata uses configured Auth and MCP origins", asy
   assert.equal(response.status, 200);
   assert.equal(body.resource, "https://mcp-acceptance.hhameranede.workers.dev/mcp");
   assert.deepEqual(body.authorization_servers, ["https://auth-acceptance.hhameranede.workers.dev/api/auth"]);
-  assert.deepEqual(body.scopes_supported, ["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract"]);
+  assert.deepEqual(body.scopes_supported, ["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract", "tasks:search", "tasks:research"]);
 });
 
 test("MCP responses include baseline security headers on JSON, empty, and preflight paths", async () => {
@@ -607,4 +609,35 @@ test("protected tool calls return an OAuth challenge scoped to the configured MC
   assert.match(challenge, /error="invalid_token"/);
   assert.match(challenge, /error_description="/);
   assert.equal(calls.tasks.length, 0);
+});
+
+test("web_search maps the selected public source to shared task execution with its own scope", async () => {
+  const { worker, env, calls } = makeWorker({ taskResult: { id: "task_search_123", state: "succeeded" } });
+  const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
+    name: "web_search", arguments: { query: "public APIs", source: "openalex", limit: 4 },
+  }), { headers: { "cf-connecting-ip": "203.0.113.47", authorization: "Bearer " + TENANT_TOKEN } }), env);
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.result.isError, undefined);
+  assert.equal(calls.tasks[0].input.operation, "search");
+  assert.equal(calls.tasks[0].input.source, "openalex");
+  assert.equal(calls.tasks[0].input.query, "public APIs");
+  assert.equal(calls.auth[0].requiredScope, "tasks:search");
+  assert.deepEqual(calls.limits, [{ key: "203.0.113.47", delta: 2 }]);
+});
+
+test("web_research requires its own scope and passes source and schema", async () => {
+  const { worker, env, calls } = makeWorker({ taskResult: { id: "task_research_123", state: "succeeded" } });
+  const schema = { type: "object", properties: { title: { type: "string" } } };
+  const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
+    name: "web_research", arguments: { query: "public APIs", source: "crossref", schema, candidateLimit: 2 },
+  }), { headers: { "cf-connecting-ip": "203.0.113.48", authorization: "Bearer " + TENANT_TOKEN } }), env);
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.result.isError, undefined);
+  assert.equal(calls.tasks[0].input.operation, "research");
+  assert.equal(calls.tasks[0].input.source, "crossref");
+  assert.deepEqual(calls.tasks[0].input.schema, schema);
+  assert.equal(calls.auth[0].requiredScope, "tasks:research");
+  assert.deepEqual(calls.limits, [{ key: "203.0.113.48", delta: 5 }]);
 });
