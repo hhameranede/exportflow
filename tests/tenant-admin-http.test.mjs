@@ -48,9 +48,41 @@ function jsonRequest(path, body = {}, method = "POST") {
     headers: {
       origin: "https://exportflow.me",
       "content-type": "application/json",
+      "cf-connecting-ip": "203.0.113.10",
     },
     body: method === "GET" || method === "HEAD" ? undefined : JSON.stringify(body),
   });
+}
+
+function makeDurableLimiterNamespace({ fail = false } = {}) {
+  const buckets = new Map();
+  return {
+    idFromName(name) { return { name }; },
+    get(id) {
+      return {
+        async fetch(request) {
+          if (fail) return new Response("unavailable", { status: 503 });
+          const config = await request.json();
+          const now = Date.now();
+          let bucket = buckets.get(id.name);
+          if (!bucket || bucket.resetAtMs <= now) {
+            bucket = { requests: 0, resetAtMs: now + config.windowMs };
+            buckets.set(id.name, bucket);
+          }
+          if (bucket.requests >= config.limit) {
+            return Response.json({
+              allowed: false, remaining: 0, resetAtMs: bucket.resetAtMs,
+              retryAfterSec: Math.max(1, Math.ceil((bucket.resetAtMs - now) / 1000)),
+            });
+          }
+          bucket.requests += 1;
+          return Response.json({
+            allowed: true, remaining: config.limit - bucket.requests, resetAtMs: bucket.resetAtMs,
+          });
+        },
+      };
+    },
+  };
 }
 
 function setup({ owner = { allowed: true, actorId: "owner_123" }, tables = TABLES, triggers = REQUIRED_TRIGGERS } = {}) {
@@ -73,7 +105,7 @@ function setup({ owner = { allowed: true, actorId: "owner_123" }, tables = TABLE
       ]);
     },
   });
-  return { handler, calls, env: { EXPORTFLOW_AUTH_DB: makeD1(tables, triggers) } };
+  return { handler, calls, env: { EXPORTFLOW_AUTH_DB: makeD1(tables, triggers), TENANT_BURST_LIMITER: makeDurableLimiterNamespace() } };
 }
 
 test("tenant admin handler ignores paths outside its namespace", async () => {
@@ -107,7 +139,15 @@ test("an unverified owner identity is rejected before D1 access", async () => {
 
 test("admin storage binding and migration readiness fail closed", async () => {
   const { handler } = setup();
-  const noBinding = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), {});
+  const noLimiterBinding = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), {
+    EXPORTFLOW_AUTH_DB: makeD1(),
+  });
+  assert.equal(noLimiterBinding.status, 503);
+  assert.equal((await noLimiterBinding.json()).error.code, "ADMIN_RATE_LIMIT_UNAVAILABLE");
+
+  const noBinding = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), {
+    TENANT_BURST_LIMITER: makeDurableLimiterNamespace(),
+  });
   assert.equal(noBinding.status, 503);
   assert.equal((await noBinding.json()).error.code, "ADMIN_STORAGE_NOT_CONFIGURED");
 
@@ -221,7 +261,7 @@ test("each request gets a new service bound to that request's verified owner ide
       } };
     },
   });
-  const env = { EXPORTFLOW_AUTH_DB: makeD1() };
+  const env = { EXPORTFLOW_AUTH_DB: makeD1(), TENANT_BURST_LIMITER: makeDurableLimiterNamespace() };
   const first = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), env);
   nextActor = "owner_B";
   const second = await handler(jsonRequest("/api/v1/admin/tenants", { planCode: "free" }), env);
