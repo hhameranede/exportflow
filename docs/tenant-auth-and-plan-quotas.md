@@ -2,7 +2,7 @@
 
 ## Scope and release status
 
-This implementation adds tenant-scoped developer API keys and persistent daily/monthly request-count quotas to both the REST Task endpoint and MCP execution tools. It is source code in a Draft PR only. It is not active in the deployed Production Worker or the currently deployed MCP Worker until a separately approved release and D1 binding are configured.
+This implementation in the current `main` branch provides tenant-scoped developer API keys and persistent daily/monthly request-count quotas for the REST Task endpoint and MCP execution tools. The source is merged, but tenant execution is **not enabled in Production**: the Production Platform and MCP Workers do not have the dedicated `EXPORTFLOW_AUTH_DB` binding. Keep this distinction clear: merged source and successful basic deployment smoke tests do not establish customer-ready authenticated execution.
 
 Human account sessions (Better Auth) and developer API credentials are separate identity systems:
 
@@ -48,16 +48,19 @@ The Worker expects a separate D1 binding named `EXPORTFLOW_AUTH_DB`. Apply migra
 1. `migrations/0001_tenant_auth_quota.sql`
 2. `migrations/0002_guard_quota_period_transitions.sql`
 3. `migrations/0003_tenant_admin_audit_log.sql`
+4. `migrations/0004_tenant_oauth_memberships.sql`
 
 Tables:
 - `plan_policies`: owner-managed daily/monthly request allowance and policy version.
 - `tenants`: active/suspended/closed tenant records and assigned plan.
 - `api_keys`: key ID, digest, scopes, status and expiry.
 - `tenant_request_usage`: per-tenant UTC window snapshots, consumed request count and limit.
+- `tenant_memberships`: tenant/user membership roles and status used for OAuth tenant authorization.
+- `tenant_oauth_selections`: persisted tenant selection for OAuth authorization flows.
 
 The migrations intentionally seed no plan, tenant or API key. Do not invent Free/Developer/Pro allowances. Decide limits and approve the trusted provisioning/revocation workflow before onboarding customers.
 
-The existing dedicated integration-test D1 database has previously received these schema migrations. This PR does not re-apply migrations or change any D1 database. Production currently has no `EXPORTFLOW_AUTH_DB` binding configured.
+An isolated Tenant Acceptance D1 has been verified to contain the tenant tables and quota, audit, membership and membership-version triggers. This documentation update does not apply migrations or change any D1 database. Production currently has no `EXPORTFLOW_AUTH_DB` binding configured.
 
 ## Platform Owner Authentication and Tenant Administration API
 
@@ -71,7 +74,7 @@ Each mutating request must:
 - Use the configured `BETTER_AUTH_URL` origin and matching request URL origin; a missing or mismatched `Origin` is denied.
 - Use a Better Auth session loaded server-side from `AUTH_DB` with cookie-cache bypass (`disableCookieCache: true`).
 - Belong to an allowlisted user with a verified email and a session created within the previous 10 minutes, not expired and not impersonated.
-- Use the dedicated `EXPORTFLOW_AUTH_DB` binding and have migrations 0001–0003 plus both append-only audit triggers from migration 0003 present. The Worker fails closed if either trigger is missing. Better Auth `AUTH_DB` is never reused as tenant/admin storage.
+- Use the dedicated `EXPORTFLOW_AUTH_DB` binding and have migrations 0001–0004, both append-only audit triggers from migration 0003, and the membership-version trigger from migration 0004 present. The Worker fails closed if either trigger is missing. Better Auth `AUTH_DB` is never reused as tenant/admin storage.
 
 The API supports:
 - `POST /api/v1/admin/plan-policies`
@@ -92,11 +95,11 @@ Admin request bodies are bounded to 16 KiB, JSON-only, and reject unknown fields
 
 No Better Auth Admin plugin was added. That plugin brings broad user-management endpoints (including role changes and impersonation) and additional schema fields; this project uses a narrow owner allowlist instead. This avoids introducing a client-accessible self-promotion path and avoids expanding the Better Auth schema at this stage. There is no endpoint to modify the owner allowlist.
 
-**Release/configuration state:** `EXPORTFLOW_OWNER_USER_IDS` is not set in Production and `EXPORTFLOW_AUTH_DB` is not bound to the Production Worker. Migration 0003 was applied only to temporary isolated D1 databases for the runtime acceptance described below; those databases were deleted and verified absent. Therefore the admin API remains fail-closed/source-only in the current deployed environment. Do not set the owner allowlist, apply migrations, bind the database or deploy this code without separate owner approval.
+**Release/configuration state:** `EXPORTFLOW_OWNER_USER_IDS` is not set in Production and `EXPORTFLOW_AUTH_DB` is not bound to either Production Worker. The temporary D1/Worker used for the historical 19/19 tenant-admin acceptance was deleted and verified absent; this is distinct from the currently inventoried Tenant Acceptance D1 used for later quota/OAuth acceptance. Therefore the admin API remains fail-closed in Production. Do not set the owner allowlist, apply migrations, bind the database or deploy this code without separate owner approval.
 
 ## Privileged Tenant Lifecycle Service — isolated implementation
 
-The Draft implementation adds `src/core/tenant-admin.js` as a D1-backed service and `src/core/tenant-admin-http.js` as a narrowly scoped owner-only HTTP adapter. It does not add a general public admin interface, role-promotion endpoint, dashboard or production binding.
+The implementation in `main` includes `src/core/tenant-admin.js` as a D1-backed service and `src/core/tenant-admin-http.js` as a narrowly scoped owner-only HTTP adapter. It does not add a general public admin interface, role-promotion endpoint, dashboard or production binding.
 
 Supported operations:
 - Create/update owner-managed plan policies with validated periods, positive integer request limits and explicit policy versions.
@@ -108,7 +111,7 @@ Supported operations:
 
 Every mutating service operation requires an injected `authorizeAdmin` function. The HTTP adapter constructs the service separately for each request and binds the already-verified allowlisted owner identity only for that request. Request-body fields, query parameters and caller-supplied headers never establish authority. No Better Auth role mapping, user-role promotion endpoint or impersonation route is wired in this PR.
 
-Migration `0003_tenant_admin_audit_log.sql` adds an append-only audit table with update/delete guards. Each D1 mutation and its audit event are submitted in the same `D1Database.batch()`; if the batch fails, the operation returns a sanitized 503. Migration 0003 was applied to a temporary isolated D1 database for the combined tenant-admin HTTP + D1 Binding acceptance (19/19 checks), then that test database and Worker were deleted and independently verified absent. That test used an injected synthetic owner at the HTTP boundary; it did not prove Better Auth browser-cookie authorization. The service remains Draft-only pending the remaining authentication, step-up/MFA, rate-limit, recovery/lockout and owner-identity reviews, plus separate release approvals.
+Migration `0003_tenant_admin_audit_log.sql` adds an append-only audit table with update/delete guards. Each D1 mutation and its audit event are submitted in the same `D1Database.batch()`; if the batch fails, the operation returns a sanitized 503. Migration 0003 was applied to a temporary isolated D1 database for the combined tenant-admin HTTP + D1 Binding acceptance (19/19 checks), then that test database and Worker were deleted and independently verified absent. That test used an injected synthetic owner at the HTTP boundary; it did not prove Better Auth browser-cookie authorization. The implementation is merged into `main`, but Production remains fail-closed pending the remaining authentication, step-up/MFA, rate-limit, recovery/lockout and owner-identity reviews, plus separate release approvals.
 
 ## Quota semantics
 
@@ -150,6 +153,17 @@ This implementation does not include:
 8. Obtain separate owner approval before changing bindings, deploying or enabling live customer keys.
 
 Node fixtures and Wrangler dry-run builds are supporting checks only; neither proves Cloudflare D1 Binding runtime acceptance.
+
+
+
+## Current isolated Acceptance evidence and Production boundary — 23 November 2026
+
+- The current Tenant Acceptance D1 `exportflow-tenant-acceptance-20261122` was verified read-only to contain the tenant API-key, quota, admin-audit, membership and OAuth-selection tables, plus the quota, append-only audit, membership and membership-version triggers. This is separate from the historical temporary D1 used for the 19/19 tenant-admin HTTP acceptance, which was deleted after that test.
+- The separate Auth Acceptance D1 contains Better Auth account/session/OAuth/JWKS/two-factor schema. Production Better Auth D1 contains human-account schema only; it does not contain tenant API-key, plan/quota, membership or OAuth-selection tables.
+- Production Platform Worker and MCP Worker currently have no `EXPORTFLOW_AUTH_DB` binding. Do not point that binding at Better Auth `AUTH_DB`.
+- Historical OAuth/MCP acceptance passed synthetic account linking, tenant selection/consent, DCR, authorization-code + PKCE token exchange, OAuth-authenticated MCP `web_fetch`, scope enforcement, quota reservation and membership-version invalidation. It does not prove an actual ChatGPT linking session, OAuth refresh/revocation, API-key MCP execution, REST authenticated execution or a successful end-to-end upstream Fetch.
+- Historical owner/MFA acceptance covers isolated synthetic flows and helper/unit paths, but real Better Auth browser-cookie + authenticator runtime acceptance, stale/expired-cookie denials, owner recovery and full privileged-operation review remain release gates.
+- The release workflow's Production smoke checks validate health, MCP initialize, tools/list and capabilities discovery. They do not execute authenticated customer tasks.
 
 
 ## Owner session authorization runtime evidence and remaining gates
