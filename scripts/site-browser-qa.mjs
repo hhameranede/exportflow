@@ -33,7 +33,9 @@ function buildRouteInventory() {
   }
   for (const path of specialRoutes) {
     routes.add(path);
-    for (const locale of locales.filter((value) => value !== "en")) routes.add("/" + locale + path);
+    if (path !== "/index.html") {
+      for (const locale of locales.filter((value) => value !== "en")) routes.add("/" + locale + path);
+    }
   }
   return [...routes].sort((a, b) => a.localeCompare(b));
 }
