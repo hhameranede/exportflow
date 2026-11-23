@@ -34,7 +34,7 @@ let primaryError=null;
 try{
  const policies=await d1("SELECT plan_code,status,quota_period,request_limit FROM plan_policies WHERE plan_code='qa_daily' LIMIT 1");
  if(policies.length!==1||policies[0].status!=="active"||Number(policies[0].request_limit)<1)throw new Error("Existing QA-only daily plan policy is not active; no policy was changed.");
- const healthUrls=[platformUrl+"/api/v1/health",mcpUrl.replace(/\\/mcp$/,"")+"/health"];
+ const healthUrls=[platformUrl+"/api/v1/health",mcpUrl.replace(/\/mcp$/,"")+"/health"];
  let health=[];
  for(let attempt=0;attempt<10;attempt++){
   health=await Promise.all(healthUrls.map(async url=>{
