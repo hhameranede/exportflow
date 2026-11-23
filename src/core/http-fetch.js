@@ -30,7 +30,7 @@ function monotonicNow() {
 
 function normalizeReceiptContentType(contentType) {
   const mime = String(contentType || "").split(";")[0].trim().toLowerCase();
-  return /^[a-z0-9!#$&^_.+-]+\\/[a-z0-9!#$&^_.+-]+$/.test(mime) ? mime : null;
+  return /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(mime) ? mime : null;
 }
 
 function normalizeCacheStatus(value) {
