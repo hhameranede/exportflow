@@ -122,7 +122,10 @@ registerAdapter({
     "no-authenticated-pages",
   ],
   async execute(input = {}, options = {}) {
-    const mapped = await mapWebsite(input, { signal: options.signal });
+    const mapped = await mapWebsite(input, {
+      maxUrls: input.maxUrls,
+      signal: options.signal,
+    });
     return normalizeResult({
       status: mapped.homepage.status >= 200 && mapped.homepage.status < 300 ? "succeeded" : "failed",
       data: {
@@ -158,7 +161,11 @@ registerAdapter({
     "no-authenticated-pages",
   ],
   async execute(input = {}, options = {}) {
-    const crawled = await crawlWebsite(input, { signal: options.signal });
+    const crawled = await crawlWebsite(input, {
+      maxPages: input.maxPages,
+      maxDepth: input.maxDepth,
+      signal: options.signal,
+    });
     return normalizeResult({
       status: crawled.pages.length ? "succeeded" : "failed",
       data: {
