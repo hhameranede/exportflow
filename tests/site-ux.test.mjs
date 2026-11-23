@@ -143,3 +143,52 @@ test("account settings navigation points only to existing profile, identity, sec
   assert.match(MARKETING_JS, /data-legal-toc-link/u);
 });
 
+test("mobile capability cards keep icons beside titles and preserve filter and metric rows", async () => {
+  const homeHtml = await fetchHtml("/");
+  const titleRows = homeHtml.match(/class="ef-title-icon-row"/gu) ?? [];
+  assert.ok(titleRows.length >= 2, "featured and secondary capability cards should share the horizontal title row");
+  assert.match(
+    homeHtml,
+    /class="ef-title-icon-row">\\s*<span class="ef-feature-icon"[^>]*>[\\s\\S]*?<\\/span>\\s*<h3>/u,
+    "each capability icon should immediately precede its heading",
+  );
+
+  const titleRowCss = /\\.ef-title-icon-row\\s*\\{([^}]*)\\}/u.exec(MARKETING_CSS)?.[1] ?? "";
+  assert.match(titleRowCss, /display:\\s*flex/u);
+  assert.match(titleRowCss, /flex-direction:\\s*row/u);
+  assert.match(titleRowCss, /align-items:\\s*center/u);
+  assert.match(titleRowCss, /align-self:\\s*stretch/u);
+  assert.match(titleRowCss, /width:\\s*100%/u);
+
+  const titleCss = /\\.ef-title-icon-row h3\\s*\\{([^}]*)\\}/u.exec(MARKETING_CSS)?.[1] ?? "";
+  assert.match(titleCss, /flex:\\s*1 1 auto/u);
+  assert.match(titleCss, /min-width:\\s*0/u);
+  assert.match(titleCss, /margin:\\s*0/u);
+
+  const iconCss = /\\.ef-title-icon-row \\.ef-feature-icon\\s*\\{([^}]*)\\}/u.exec(MARKETING_CSS)?.[1] ?? "";
+  assert.match(iconCss, /flex:\\s*0 0 38px/u);
+
+  const filterCss = /\\.ef-cap-filter-bar\\s*\\{([^}]*)\\}/u.exec(MARKETING_CSS)?.[1] ?? "";
+  assert.match(filterCss, /flex-wrap:\\s*nowrap/u);
+  assert.match(filterCss, /min-width:\\s*0/u);
+  assert.match(filterCss, /overflow-x:\\s*auto/u);
+  assert.match(filterCss, /overflow-y:\\s*hidden/u);
+
+  const filterPillCss = /\\.ef-filter-pill\\s*\\{([^}]*)\\}/u.exec(MARKETING_CSS)?.[1] ?? "";
+  assert.match(filterPillCss, /flex:\\s*0 0 auto/u);
+  assert.match(filterPillCss, /white-space:\\s*nowrap/u);
+  assert.equal((homeHtml.match(/class="ef-filter-pill"/gu) ?? []).length, 4);
+
+  const metricGridCss = /\\.ef-spec-strip\\s*\\{([^}]*)\\}/u.exec(MARKETING_CSS)?.[1] ?? "";
+  assert.match(metricGridCss, /grid-template-columns:\\s*repeat\\(2,\\s*minmax\\(0,\\s*1fr\\)\\)/u);
+
+  const metricValueCss = /\\.ef-spec-strip dd,\\s*\\.ef-spec-value\\s*\\{([^}]*)\\}/u.exec(MARKETING_CSS)?.[1] ?? "";
+  assert.match(metricValueCss, /display:\\s*inline-flex/u);
+  assert.match(metricValueCss, /white-space:\\s*nowrap/u);
+  assert.match(
+    homeHtml,
+    /<dd class="ef-spec-value"><span class="ef-spec-num">[^<]+<\\/span><span class="ef-spec-unit">[^<]+<\\/span><\\/dd>/u,
+    "each metric number and unit should remain adjacent in one value element",
+  );
+});
+
