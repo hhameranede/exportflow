@@ -24,6 +24,7 @@ const REQUIRED_ADMIN_TRIGGERS = Object.freeze([
   "prevent_tenant_admin_audit_update",
   "prevent_tenant_admin_audit_delete",
   "guard_tenant_membership_last_owner",
+  "bump_tenant_membership_version_on_tenant_state_change",
   "prevent_tenant_membership_identity_update",
   "prevent_tenant_membership_delete",
 ]);
@@ -222,6 +223,7 @@ export function createTenantAdminHttpHandler({
       // this service instance across requests or users.
       service = serviceFactory({
         db,
+        authDb: env.AUTH_DB,
         authorizeAdmin: async () => ({ allowed: true, actorId: owner.actorId }),
       });
       const input = route.input ? route.input(payload) : payload;
