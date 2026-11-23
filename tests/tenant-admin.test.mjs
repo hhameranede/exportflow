@@ -27,11 +27,33 @@ function makeD1({ changes = [1, 1, 1, 1], changesByBatch = null, fail = false } 
   };
 }
 
+function makeVerifiedAuthDb({ userId = "user_123", emailVerified = true, fail = false } = {}) {
+  const calls = [];
+  return {
+    calls,
+    prepare(sql) {
+      let params = [];
+      return {
+        bind(...values) { params = values; return this; },
+        async first() {
+          calls.push({ sql, params });
+          if (fail) throw new Error("synthetic Better Auth D1 failure");
+          if (!sql.includes("FROM user") || !sql.includes("emailVerified = 1")) {
+            throw new Error("Unexpected Better Auth D1 query.");
+          }
+          return emailVerified && params[0] === userId ? { id: userId } : null;
+        },
+      };
+    },
+  };
+}
+
 function makeService(options = {}) {
   const db = options.db || makeD1();
   const authorizations = [];
   const service = createTenantAdminService({
     db,
+    authDb: options.authDb,
     now: () => "2026-11-20T12:00:00.000Z",
     authorizeAdmin: options.authorizeAdmin || (async (request) => {
       authorizations.push(request);
@@ -247,4 +269,79 @@ test("authorizer infrastructure failures fail closed without writing to D1", asy
     { code: "ADMIN_FORBIDDEN", httpStatus: 403 },
   );
   assert.equal(db.calls.length, 0);
+});
+
+
+test("tenant membership assignment requires an existing email-verified Better Auth user", async () => {
+  const authDb = makeVerifiedAuthDb({ userId: "user_123", emailVerified: true });
+  const { service, db, authorizations } = makeService({ authDb });
+  const result = await service.assignTenantMembership({
+    tenantId: "tenant_alpha",
+    userId: "user_123",
+    role: "member",
+  });
+
+  assert.deepEqual(result, {
+    tenantId: "tenant_alpha",
+    userId: "user_123",
+    role: "member",
+    status: "active",
+    updatedAt: "2026-11-20T12:00:00.000Z",
+  });
+  assert.equal(authDb.calls.length, 1);
+  assert.match(authDb.calls[0].sql, /SELECT id FROM user WHERE id = \?1 AND emailVerified = 1 LIMIT 1/);
+  assert.deepEqual(authDb.calls[0].params, ["user_123"]);
+  assert.equal(db.calls.length, 1);
+  assert.equal(db.calls[0].length, 2);
+  assert.match(db.calls[0][0].sql, /INSERT INTO tenant_memberships/);
+  assert.match(db.calls[0][0].sql, /membership_version = tenant_memberships\.membership_version \+ 1/);
+  assert.match(db.calls[0][1].sql, /tenant_memberships:assign/);
+  assert.equal(db.calls[0][1].params[1], "operator_123");
+  assert.deepEqual(authorizations[0], {
+    action: "tenant_memberships:assign",
+    resourceType: "tenant_membership",
+    resourceId: "tenant_alpha/user_123",
+  });
+});
+
+test("tenant membership assignment rejects unverified or unknown users before tenant D1 writes", async () => {
+  for (const authDb of [
+    makeVerifiedAuthDb({ userId: "user_123", emailVerified: false }),
+    makeVerifiedAuthDb({ userId: "another_user", emailVerified: true }),
+  ]) {
+    const { service, db } = makeService({ authDb });
+    await assert.rejects(
+      () => service.assignTenantMembership({
+        tenantId: "tenant_alpha",
+        userId: "user_123",
+        role: "member",
+      }),
+      { code: "VERIFIED_USER_NOT_FOUND", httpStatus: 404 },
+    );
+    assert.equal(authDb.calls.length, 1);
+    assert.equal(db.calls.length, 0);
+  }
+});
+
+test("tenant membership assignment fails closed when the Better Auth directory is missing or unavailable", async () => {
+  const missing = makeService();
+  await assert.rejects(
+    () => missing.service.assignTenantMembership({
+      tenantId: "tenant_alpha",
+      userId: "user_123",
+    }),
+    { code: "AUTH_USER_DIRECTORY_UNAVAILABLE", httpStatus: 503 },
+  );
+  assert.equal(missing.db.calls.length, 0);
+
+  const authDb = makeVerifiedAuthDb({ fail: true });
+  const unavailable = makeService({ authDb });
+  await assert.rejects(
+    () => unavailable.service.assignTenantMembership({
+      tenantId: "tenant_alpha",
+      userId: "user_123",
+    }),
+    { code: "AUTH_USER_DIRECTORY_UNAVAILABLE", httpStatus: 503 },
+  );
+  assert.equal(unavailable.db.calls.length, 0);
 });
