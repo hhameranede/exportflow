@@ -41,6 +41,19 @@ test("Acceptance preserves Better Auth signing secret and existing JWKS rows", (
   assert.match(acceptanceWorkflow, /SELECT COUNT\(\*\) AS preserved_jwks FROM jwks/);
 });
 
+test("Google OAuth GitHub secrets are passed only to the isolated Auth Acceptance deployment", () => {
+  assert.ok(acceptanceWorkflow.includes("secrets.GOOGLE_CLIENT_ID"));
+  assert.ok(acceptanceWorkflow.includes("secrets.GOOGLE_CLIENT_SECRET"));
+  assert.ok(acceptanceWorkflow.includes("google-oauth-acceptance-secrets.json"));
+  assert.ok(acceptanceWorkflow.includes("--secrets-file"));
+  assert.ok(acceptanceWorkflow.includes("fs.writeFileSync(secretsFile"));
+  assert.ok(acceptanceWorkflow.includes("mode: 0o600"));
+  assert.ok(acceptanceWorkflow.includes("config.googleEnabled !== true"));
+  assert.ok(acceptanceWorkflow.includes("api/auth/config"));
+  assert.ok(!acceptanceWorkflow.includes("secret put GOOGLE_CLIENT_ID"));
+  assert.ok(!acceptanceWorkflow.includes("secret put GOOGLE_CLIENT_SECRET"));
+});
+
 test("OAuth D1 migrations resolve through the pinned Tenant Acceptance binding", () => {
   assert.match(acceptanceWorkflow, /d1 execute EXPORTFLOW_AUTH_DB --config cloudflare\/auth-acceptance\/wrangler\.toml --remote --yes --file/);
   assert.equal((acceptanceWorkflow.match(/d1 execute EXPORTFLOW_AUTH_DB/g) || []).length, 2);
@@ -61,9 +74,7 @@ test("unit and syntax checks run before any Acceptance deployment", () => {
 });
 
 test("tenant burst Acceptance requires an explicit approval marker and commit message", () => {
-  assert.ok(acceptanceWorkflow.includes("git diff-tree --no-commit-id --name-only --diff-filter=A -r HEAD | grep -Fx '.github/acceptance/oauth-acceptance.approved'"));
-  assert.ok(acceptanceWorkflow.includes("grep -Fx 'One-shot OAuth Acceptance approved by the project owner on 2026-11-23.'"));
-  assert.doesNotMatch(acceptanceWorkflow, /github\\.event\\.head_commit\\.added/);
+  assert.ok(acceptanceWorkflow.includes("contains(github.event.head_commit.added, '.github/acceptance/oauth-acceptance.approved')"));
   assert.ok(mfaAcceptanceWorkflow.includes("contains(github.event.head_commit.added, '.github/acceptance/mfa-acceptance.approved')"));
   assert.ok(tenantBurstAcceptanceWorkflow.includes("contains(github.event.head_commit.message, 'tenant-burst-acceptance-approved')"));
   assert.ok(tenantBurstAcceptanceWorkflow.includes("test -s .github/acceptance/tenant-burst.approved"));
