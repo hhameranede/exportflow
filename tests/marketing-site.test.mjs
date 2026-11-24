@@ -202,6 +202,21 @@ test("system-aware design system and interactive UX components are served cleanl
   assert.doesNotMatch(js, /ef_auth_preview|window[.]ExportFlowAuth/);
 });
 
+test("developer documentation matches the six-operation release and labels durable task features as Draft", async () => {
+  const response = getWebsiteResponse("/developers");
+  assert.ok(response);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /six bounded static-web operations/);
+  assert.match(html, /tasks:research/);
+  assert.match(html, /tasks:read/);
+  assert.match(html, /Idempotency-Key/);
+  assert.match(html, /24 hours/);
+  assert.match(html, /Draft PR #134/);
+  assert.doesNotMatch(html, /currently supports <code>operation: "fetch"<\/code> only/);
+  assert.doesNotMatch(html, /http\.fetch\.v1<\/code> is the sole active adapter/);
+});
+
 test("account routes render real-auth UI, stay noindex, and are excluded from the sitemap", async () => {
   for (const [path, expectedNeedle] of [
     ["/signin", /data-auth-google/],
