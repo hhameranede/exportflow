@@ -197,12 +197,22 @@ async function smoke() {
   assert.equal(replayTask.id, firstTask.id);
   assert.equal(replay.response.headers.get("idempotency-replayed"), "true", "REST replay response must identify replay.");
 
+  const conflict = await restPost(alpha, concurrentKey, "https://www.iana.org/");
+  assert.equal(conflict.response.status, 409, "A reused key with a different request must return HTTP 409.");
+  assert.equal(conflict.body.error?.code, "IDEMPOTENCY_KEY_REUSED");
+
   const status = await restGet(alpha, firstTask.id);
   assert.equal(status.response.status, 200, "Tenant-owned Task status must be readable.");
   assert.equal(status.body.id, firstTask.id);
   assert.equal("goal" in status.body, false, "Display-only goal must not be retained in D1.");
   assert.ok(Array.isArray(status.body.events) && status.body.events.some((event) => event.type === "task.accepted"));
   assert.ok(status.body.events.some((event) => event.type.startsWith("task.") && event.type !== "task.accepted"));
+  assert.equal(status.body.persistence?.retentionHours, 24, "Task status must expose the 24-hour retention policy.");
+  assert.equal(
+    Date.parse(status.body.persistence.expiresAt) - Date.parse(status.body.timestamps.createdAt),
+    24 * 60 * 60 * 1000,
+    "Retained Task expiry must be exactly 24 hours after acceptance.",
+  );
 
   const foreignStatus = await restGet(beta, firstTask.id);
   assert.equal(foreignStatus.response.status, 404, "A different tenant must not discover the Task.");
@@ -219,7 +229,11 @@ async function smoke() {
   });
   assert.equal(mcpReplay.response.status, 200);
   const mcpReplayTask = mcpReplay.body.result?.structuredContent;
-  assert.equal(mcpReplay.body.result?.isError || false, false, "MCP cross-transport replay must not be a tool error.");
+  assert.equal(
+    mcpReplay.body.result?.isError || false,
+    firstTask.state === "failed" || firstTask.state === "unsupported",
+    "MCP replay error state must match the persisted Task outcome.",
+  );
   assert.equal(mcpReplayTask?.id, firstTask.id, "MCP must replay the REST-created Task.");
 
   const secondMcpKey = "mcp-second-" + RUN_ID.slice(-24);
@@ -229,7 +243,11 @@ async function smoke() {
   });
   assert.equal(mcpCreated.response.status, 200);
   const secondTask = mcpCreated.body.result?.structuredContent;
-  assert.equal(mcpCreated.body.result?.isError || false, false, "MCP new Task must not be a tool error.");
+  assert.equal(
+    mcpCreated.body.result?.isError || false,
+    secondTask?.state === "failed" || secondTask?.state === "unsupported",
+    "MCP result error state must match the persisted Task outcome.",
+  );
   assert.ok(typeof secondTask?.id === "string", "MCP must create a second durable Task.");
   assert.equal(Number(secondTask.quota?.used), 2, "A distinct Task must reserve exactly one additional quota unit.");
 
@@ -252,7 +270,7 @@ async function smoke() {
   assert.ok([200, 202, 502].includes(replayAtLimit.response.status), "An idempotency replay at the quota ceiling must remain available.");
   assert.equal(taskFromApi(replayAtLimit, "quota-ceiling replay").id, firstTask.id);
 
-  console.log("Acceptance passed: concurrent idempotency, one-time quota reservation, 409 request identity, 24-hour retained status, tenant isolation, tasks:read, REST/MCP parity and quota exhaustion.");
+  console.log("Acceptance passed: concurrent idempotency, one-time quota reservation, 409 request identity, 24-hour expiry metadata, tenant isolation, tasks:read, REST/MCP parity and quota exhaustion.");
 }
 
 async function cleanup() {
