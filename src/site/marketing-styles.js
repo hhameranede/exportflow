@@ -3424,6 +3424,9 @@ html[data-motion="paused"] .ef-timeline-step {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .ef-main {
+    animation: none;
+  }
   html {
     scroll-behavior: auto;
   }

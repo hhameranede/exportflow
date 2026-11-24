@@ -2796,6 +2796,7 @@ export const MARKETING_JS = `(function () {
     var closeBtn = backdrop.querySelector("[data-cmd-close]");
     var items = Array.prototype.slice.call(backdrop.querySelectorAll("[data-cmd-item]"));
     var activeIdx = 0;
+    var returnFocusTarget = null;
 
     function visibleItems() {
       return items.filter(function (el) {
@@ -2813,18 +2814,26 @@ export const MARKETING_JS = `(function () {
     }
 
     function openPalette() {
+      if (!backdrop.hidden) return;
+      returnFocusTarget = document.activeElement;
       backdrop.hidden = false;
       if (input) {
         input.value = "";
         items.forEach(function (el) { el.parentElement.hidden = false; });
         activeIdx = 0;
         syncSelected();
-        setTimeout(function () { input.focus(); }, 10);
+        setTimeout(function () {
+          if (!backdrop.hidden) input.focus();
+        }, 10);
       }
     }
 
-    function closePalette() {
+    function closePalette(restoreFocus) {
       backdrop.hidden = true;
+      if (restoreFocus !== false && returnFocusTarget && returnFocusTarget.isConnected && typeof returnFocusTarget.focus === "function") {
+        returnFocusTarget.focus();
+      }
+      returnFocusTarget = null;
     }
 
     document.querySelectorAll("[data-cmd-open]").forEach(function (btn) {
@@ -2834,6 +2843,25 @@ export const MARKETING_JS = `(function () {
     backdrop.addEventListener("click", function (e) {
       if (e.target === backdrop) closePalette();
     });
+    function trapPaletteFocus(e) {
+      if (backdrop.hidden || e.key !== "Tab") return;
+      var focusable = [input, closeBtn].concat(visibleItems()).filter(function (el) {
+        return el && !el.disabled && !el.closest("[hidden]");
+      });
+      if (!focusable.length) return;
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+      if (document.activeElement === first && e.shiftKey) {
+        e.preventDefault();
+        last.focus();
+      } else if (document.activeElement === last && !e.shiftKey) {
+        e.preventDefault();
+        first.focus();
+      } else if (!backdrop.contains(document.activeElement)) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
 
     if (input) {
       input.addEventListener("input", function () {
@@ -2866,6 +2894,7 @@ export const MARKETING_JS = `(function () {
     }
 
     document.addEventListener("keydown", function (e) {
+      trapPaletteFocus(e);
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         if (backdrop.hidden) openPalette();
