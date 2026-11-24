@@ -51,8 +51,8 @@ Task reads always filter by both `tenant_id` and `task_id`. A caller from anothe
 - Result JSON retention ceiling: 1.5 MB per task row.
 - Display-only `goal` text is returned from the initial execution but is not retained in the D1 result JSON.
 - If a result exceeds the storage ceiling, the initial response still returns it and marks `persistence.resultAvailable=false`; later status reads return lifecycle metadata but no retained result.
-- An expired status read returns HTTP 410 and clears its retained response body. Expired rows and their event rows are opportunistically deleted on the next task acceptance for that tenant. A scheduled global cleanup job is not part of v1.
-- Execution remains inline. A 3-minute lease marks an abandoned accepted/running task as expired when its lease is next observed; this version does not automatically resume or re-run that task.
+- An expired status read returns HTTP 410 and deletes the expired task row; its lifecycle events are removed by the foreign-key cascade. New task acceptance also opportunistically cleans any other expired rows for that tenant. A scheduled global cleanup job is not part of v1.
+- Execution remains inline. Both the accepted-before-claim phase and the running phase have a 3-minute lease. A status read or idempotent retry that observes an expired lease records the task as `expired`; this version does not automatically resume or re-run that task.
 
 ## Explicit non-goals / remaining gates
 
