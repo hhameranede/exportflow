@@ -120,9 +120,9 @@ function safeErrorMessage(value) {
   if (typeof value !== "string") return null;
   return value
     .replace(/ef_live_[A-Za-z0-9_-]{16}_[A-Za-z0-9_-]{43}/g, "[redacted-api-key]")
-    .replace(/(bearer\\s+)[^\\s,;]+/gi, "$1[redacted]")
-    .replace(/(authorization|cookie|client_secret|access_token|refresh_token|secret)\\s*[:=]\\s*[^\\s,;]+/gi, "$1=[redacted]")
-    .replace(/https?:\\/\\/[^\\s"'<>]+/gi, (value) => {
+    .replace(/(bearer\s+)[^\s,;]+/gi, "$1[redacted]")
+    .replace(/(authorization|cookie|client_secret|access_token|refresh_token|secret)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]")
+    .replace(/https?:\/\/[^\s"'<>]+/gi, (value) => {
       try {
         const url = new URL(value);
         return url.origin + url.pathname;
