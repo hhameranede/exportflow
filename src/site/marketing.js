@@ -265,7 +265,7 @@ function footer(locale, t) {
   <div class="ef-cmd-backdrop" data-cmd-backdrop hidden>
     <div class="ef-cmd-dialog" role="dialog" aria-modal="true" aria-label="${escapeHtml(ld.quickJump)}">
       <div class="ef-cmd-head">
-        <input type="search" class="ef-cmd-input" data-cmd-input placeholder="${escapeHtml(ld.quickJumpPlaceholder)}">
+        <input type="search" class="ef-cmd-input" data-cmd-input placeholder="${escapeHtml(ld.quickJumpPlaceholder)}" aria-label="${escapeHtml(ld.quickJumpPlaceholder)}">
         <button type="button" class="ef-code-btn" data-cmd-close>${escapeHtml(ld.closeLabel)}</button>
       </div>
       <ul class="ef-cmd-list" data-cmd-list role="listbox">

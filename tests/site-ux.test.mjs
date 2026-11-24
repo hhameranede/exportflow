@@ -55,11 +55,19 @@ test("marketing client bundle parses, protects the mobile drawer, and avoids nat
   assert.match(MARKETING_JS, /e\.key === "Enter" \|\| e\.key === " "/);
 });
 
+test("quick jump palette labels its search field and supports modal keyboard focus behavior", async () => {
+  const html = await fetchHtml("/");
+  assert.match(html, /<input type="search"[^>]*data-cmd-input[^>]*aria-label="Jump to a page or workspace tool…"/);
+  assert.match(MARKETING_JS, /var returnFocusTarget = null;/);
+  assert.match(MARKETING_JS, /returnFocusTarget\.isConnected && typeof returnFocusTarget\.focus/);
+  assert.match(MARKETING_JS, /if \(backdrop\.hidden \|\| e\.key !== "Tab"\) return;/);
+});
+
 test("unified design system serves /platform, /use-cases, /developers, /demo, and /index.html with interactive rich content", async () => {
   for (const path of ["/", "/index.html", "/platform", "/use-cases", "/developers", "/demo", "/product", "/pricing", "/integrations", "/solutions", "/about"]) {
     const html = await fetchHtml(path);
     assert.match(html, /<link rel="stylesheet" href="\/assets\/marketing\.css\?v=\d+">/);
-    assert.match(html, /<script src="\/assets\/marketing\.js\?v=3" defer><\/script>/);
+    assert.match(html, /<script src="\/assets\/marketing\.js\?v=6" defer><\/script>/);
     assert.doesNotMatch(html, /\/assets\/site\.(?:css|js)/);
     assert.doesNotMatch(html, /EXPORTFLOW_API_TOKEN/);
   }
@@ -101,6 +109,7 @@ test("execution graph and contact form expose accessible roles, states, and RTL-
   assert.match(MARKETING_CSS, /html\[dir="rtl"\] \.ef-nav a::after\s*\{\s*transform-origin:\s*right;/);
   assert.match(MARKETING_CSS, /\.ef-faq-summary\s*\{[\s\S]*padding-inline-start:\s*22px;[\s\S]*padding-inline-end:\s*52px;/);
   assert.match(MARKETING_CSS, /html\[data-motion="paused"\] \.ef-reveal/);
+  assert.match(MARKETING_CSS, /@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\.ef-main\s*\{\s*animation:\s*none;/);
   assert.match(MARKETING_CSS, /min-height:\s*44px;/);
   assert.match(MARKETING_CSS, /--text: #172338/);
   assert.match(MARKETING_CSS, /--bg: #0B1322/);

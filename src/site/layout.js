@@ -92,7 +92,7 @@ export function renderDocument({
 
   const scriptHtml = marketingDetected
     ? `<div class="ef-toast-region" data-toast-region aria-live="polite" aria-atomic="true"></div>
-  <script src="/assets/marketing.js?v=3" defer></script>`
+  <script src="/assets/marketing.js?v=6" defer></script>`
     : `<script src="/assets/site.js" defer></script>`;
 
   const seoHeadTags = SEOManager.renderHeadTags({
