@@ -48,6 +48,40 @@ async function callTool(worker, env, id, name, args) {
   return { response, body: await response.json() };
 }
 
+test("web_task_status requires tasks:read independently of task execution scopes", async () => {
+  const fixture = createDurableTaskD1();
+  const fetchOnlyGateway = {
+    async authenticate() {
+      return {
+        ok: true,
+        identity: { ...identity, scopes: ["tasks:fetch"] },
+      };
+    },
+    authorizeIdentity: async (_request, value, { requiredScope } = {}) => (
+      requiredScope && !value.scopes.includes(requiredScope)
+        ? { ok: false, httpStatus: 403, code: "INSUFFICIENT_SCOPE", message: "scope denied" }
+        : { ok: true, identity: value }
+    ),
+  };
+  const worker = createExportFlowPreviewWorker({
+    expectedHost: "mcp.exportflow.me",
+    tenantTaskGateway: fetchOnlyGateway,
+    getAdapterCatalog: () => [],
+  });
+  const env = {
+    EXPORTFLOW_AUTH_DB: fixture.db,
+    MCP_RATE_LIMITER: { limit: async () => ({ success: true }) },
+  };
+  try {
+    const denied = await callTool(worker, env, 1, "web_task_status", { taskId: "task_missing_01" });
+    assert.equal(denied.response.status, 200);
+    assert.equal(denied.body.result.isError, true);
+    assert.equal(denied.body.result.structuredContent.error, "INSUFFICIENT_SCOPE");
+  } finally {
+    fixture.close();
+  }
+});
+
 test("MCP task execution and web_task_status share one durable tenant task record", async () => {
   const fixture = createDurableTaskD1();
   let executeCalls = 0;
