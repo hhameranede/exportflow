@@ -242,18 +242,18 @@ async function smoke() {
     idempotencyKey: secondMcpKey,
   });
   assert.equal(mcpCreated.response.status, 200);
-  const secondTask = mcpCreated.body.result?.structuredContent;
+  const mcpSecondTask = mcpCreated.body.result?.structuredContent;
   assert.equal(
     mcpCreated.body.result?.isError || false,
-    secondTask?.state === "failed" || secondTask?.state === "unsupported",
+    mcpSecondTask?.state === "failed" || mcpSecondTask?.state === "unsupported",
     "MCP result error state must match the persisted Task outcome.",
   );
-  assert.ok(typeof secondTask?.id === "string", "MCP must create a second durable Task.");
-  assert.equal(Number(secondTask.quota?.used), 2, "A distinct Task must reserve exactly one additional quota unit.");
+  assert.ok(typeof mcpSecondTask?.id === "string", "MCP must create a second durable Task.");
+  assert.equal(Number(mcpSecondTask.quota?.used), 2, "A distinct Task must reserve exactly one additional quota unit.");
 
-  const secondRestStatus = await restGet(alpha, secondTask.id);
+  const secondRestStatus = await restGet(alpha, mcpSecondTask.id);
   assert.equal(secondRestStatus.response.status, 200, "REST must read the MCP-created Task from the shared D1 store.");
-  assert.equal(secondRestStatus.body.id, secondTask.id);
+  assert.equal(secondRestStatus.body.id, mcpSecondTask.id);
   assert.equal("goal" in secondRestStatus.body, false);
 
   const mcpStatus = await mcpCall(alpha, 3, "web_task_status", { taskId: firstTask.id });
