@@ -209,6 +209,18 @@ test("task reads are tenant-scoped and expose the same retained lifecycle/result
   }
 });
 
+test("migration adds a tenant-expiry index for bounded cleanup", () => {
+  const fixture = createDurableTaskD1();
+  try {
+    const indexes = fixture.sqlite.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_tasks_tenant_expiry'",
+    ).all();
+    assert.equal(indexes.length, 1);
+  } finally {
+    fixture.close();
+  }
+});
+
 test("expired task results become inaccessible and are cleared from D1", async () => {
   const fixture = createDurableTaskD1();
   const executor = makeExecutor();
