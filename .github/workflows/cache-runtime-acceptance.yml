@@ -7,6 +7,7 @@ on:
     paths:
       - .github/acceptance/cache-runtime.approved
       - .github/acceptance/cache-runtime.retry.approved
+      - .github/acceptance/cache-runtime.retry-3.approved
       - .github/workflows/cache-runtime-acceptance.yml
       - scripts/acceptance/cache-runtime-acceptance.mjs
 
