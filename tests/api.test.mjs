@@ -7,67 +7,39 @@ import { TaskContractError, validateTaskRequest } from "../src/core/task-contrac
 import { fetchPublicResource, FetchAdapterError } from "../src/core/http-fetch.js";
 import { startServer } from "../src/server.js";
 import { createDurableTenantBurstTestNamespace } from "./helpers/durable-tenant-burst-test-namespace.js";
+import { createDurableTaskD1 } from "./helpers/durable-task-d1.js";
 
 const TEST_KEY_ID = "0123456789abcdef";
 const TEST_TOKEN = `ef_live_${TEST_KEY_ID}_${"A".repeat(43)}`;
 const TEST_KEY_HASH = await hashApiKey(TEST_TOKEN);
 
 function makeTestEnv({ requestLimit = 10_000, keyStatus = "active", tenantStatus = "active", planStatus = "active", scopes = ["tasks:fetch"], expiresAt = null } = {}) {
-  const usage = new Map();
-  const record = {
-    key_id: TEST_KEY_ID,
-    tenant_id: "tenant_test_001",
-    key_status: keyStatus,
-    expires_at: expiresAt,
-    scopes_json: JSON.stringify(scopes),
-    tenant_status: tenantStatus,
-    plan_code: "test",
-    plan_status: planStatus,
-    quota_period: "daily",
-    request_limit: requestLimit,
-    policy_version: "test-v1",
-  };
-  const db = {
-    prepare(sql) {
-      let params = [];
-      return {
-        bind(...values) { params = values; return this; },
-        async first() {
-          if (sql.includes("FROM api_keys")) {
-            const [keyId, keyHash] = params;
-            return keyId === TEST_KEY_ID && keyHash === TEST_KEY_HASH ? { ...record } : null;
-          }
-          if (sql.includes("tenant_request_usage LIMIT 0")) return null;
-          if (sql.includes("INSERT INTO tenant_request_usage")) {
-            const [tenantId, windowId, planCode, policyVersion, limit, updatedAt] = params;
-            const key = tenantId + ":" + windowId;
-            const current = usage.get(key) || {
-              tenant_id: tenantId,
-              window_id: windowId,
-              plan_code: planCode,
-              policy_version: policyVersion,
-              request_limit: limit,
-              requests_used: 0,
-            };
-            if (current.requests_used >= current.request_limit) return null;
-            current.requests_used += 1;
-            current.updated_at = updatedAt;
-            usage.set(key, current);
-            return { requests_used: current.requests_used, request_limit: current.request_limit };
-          }
-          if (sql.includes("SELECT request_limit, requests_used")) {
-            const [tenantId, windowId] = params;
-            const current = usage.get(tenantId + ":" + windowId);
-            return current ? { request_limit: current.request_limit, requests_used: current.requests_used } : null;
-          }
-          throw new Error("Unexpected SQL in synthetic D1 fixture.");
-        },
-      };
-    },
-  };
+  const fixture = createDurableTaskD1({
+    requestLimit,
+    tenantIds: ["tenant_test_001"],
+    planCode: "test",
+    policyVersion: "test-v1",
+  });
+  fixture.sqlite.prepare("UPDATE tenants SET status = ?1 WHERE tenant_id = ?2")
+    .run(tenantStatus, "tenant_test_001");
+  fixture.sqlite.prepare("UPDATE plan_policies SET status = ?1 WHERE plan_code = ?2")
+    .run(planStatus, "test");
+  fixture.sqlite.prepare(
+    "INSERT INTO api_keys (key_id, tenant_id, key_hash, status, scopes_json, expires_at, created_at) " +
+    "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+  ).run(
+    TEST_KEY_ID,
+    "tenant_test_001",
+    TEST_KEY_HASH,
+    keyStatus,
+    JSON.stringify(scopes),
+    expiresAt,
+    "2026-11-24T10:00:00.000Z",
+  );
   return {
-    EXPORTFLOW_AUTH_DB: db,
+    EXPORTFLOW_AUTH_DB: fixture.db,
     TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace(),
+    __fixture: fixture,
   };
 }
 
