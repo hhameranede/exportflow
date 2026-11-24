@@ -932,7 +932,7 @@ export const MARKETING_JS = `(function () {
         "",
         messageVal
       ].join("\\n");
-      var mailtoUrl = "mailto:hhameranede@gmail.com?subject=" +
+      var mailtoUrl = "mailto:support@exportflow.me?subject=" +
         encodeURIComponent("[ExportFlow] " + subjectVal) +
         "&body=" + encodeURIComponent(mailtoBody);
 
