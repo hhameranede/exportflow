@@ -445,50 +445,23 @@ const TENANT_TOKEN = "ef_live_" + TENANT_KEY_ID + "_" + "T".repeat(43);
 const TENANT_KEY_HASH = await hashApiKey(TENANT_TOKEN);
 
 function makeTenantD1({ requestLimit = 1, scopes = ["tasks:fetch"] } = {}) {
-  const usage = new Map();
-  const record = {
-    key_id: TENANT_KEY_ID,
-    tenant_id: "tenant_mcp_test",
-    key_status: "active",
-    expires_at: null,
-    scopes_json: JSON.stringify(scopes),
-    tenant_status: "active",
-    plan_code: "test",
-    plan_status: "active",
-    quota_period: "daily",
-    request_limit: requestLimit,
-    policy_version: "test-v1",
-  };
-  return {
-    usage,
-    prepare(sql) {
-      let params = [];
-      return {
-        bind(...values) { params = values; return this; },
-        async first() {
-          if (sql.includes("FROM api_keys")) {
-            return params[0] === TENANT_KEY_ID && params[1] === TENANT_KEY_HASH ? { ...record } : null;
-          }
-          if (sql.includes("INSERT INTO tenant_request_usage")) {
-            const [tenantId, windowId, planCode, policyVersion, limit, updatedAt] = params;
-            const id = tenantId + ":" + windowId;
-            const row = usage.get(id) || { tenant_id: tenantId, window_id: windowId, plan_code: planCode, policy_version: policyVersion, request_limit: limit, requests_used: 0 };
-            if (row.requests_used >= row.request_limit) return null;
-            row.requests_used += 1;
-            row.updated_at = updatedAt;
-            usage.set(id, row);
-            return { requests_used: row.requests_used, request_limit: row.request_limit };
-          }
-          if (sql.includes("SELECT request_limit, requests_used")) {
-            const [tenantId, windowId] = params;
-            const row = usage.get(tenantId + ":" + windowId);
-            return row ? { request_limit: row.request_limit, requests_used: row.requests_used } : null;
-          }
-          throw new Error("Unexpected D1 SQL in MCP tenant fixture.");
-        },
-      };
-    },
-  };
+  const fixture = createDurableTaskD1({
+    requestLimit,
+    tenantIds: ["tenant_mcp_test"],
+    planCode: "test",
+  });
+  fixture.sqlite.prepare(
+    "INSERT INTO api_keys (key_id, tenant_id, key_hash, status, scopes_json, expires_at, created_at) " +
+    "VALUES (?1, ?2, ?3, 'active', ?4, NULL, ?5)",
+  ).run(
+    TENANT_KEY_ID,
+    "tenant_mcp_test",
+    TENANT_KEY_HASH,
+    JSON.stringify(scopes),
+    "2026-11-24T10:00:00.000Z",
+  );
+  fixture.db.sqlite = fixture.sqlite;
+  return fixture.db;
 }
 
 test("MCP real tenant gateway authorizes, reserves one D1-shaped quota unit, then blocks exhaustion", async () => {
@@ -514,7 +487,7 @@ test("MCP real tenant gateway authorizes, reserves one D1-shaped quota unit, the
   assert.equal(firstBody.result.structuredContent.quota.limit, 1);
   assert.equal(firstBody.result.structuredContent.quota.remaining, 0);
   assert.equal(calls.tasks.length, 1);
-  assert.equal([...db.usage.values()][0].requests_used, 1);
+  assert.equal(db.sqlite.prepare("SELECT requests_used FROM tenant_request_usage WHERE tenant_id = 'tenant_mcp_test'").get().requests_used, 1);
 
   const second = await worker.fetch(makeCall(), env);
   const secondBody = await second.json();
@@ -537,7 +510,7 @@ test("MCP real tenant gateway enforces D1-derived operation scope before quota r
   assert.equal(body.result.isError, true);
   assert.equal(body.result.structuredContent.error, "INSUFFICIENT_SCOPE");
   assert.equal(calls.tasks.length, 0);
-  assert.equal(db.usage.size, 0);
+  assert.equal(db.sqlite.prepare("SELECT COUNT(*) AS total FROM tenant_request_usage").get().total, 0);
 });
 
 
