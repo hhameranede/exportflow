@@ -258,3 +258,78 @@ test("invalid idempotency keys are rejected before D1 acceptance", async () => {
     fixture.close();
   }
 });
+
+
+test("REST and MCP request shapes share one canonical idempotency fingerprint", async () => {
+  const fixture = createDurableTaskD1();
+  const executor = makeExecutor();
+  const restInput = {
+    goal: "REST display goal",
+    operation: "search",
+    query: "  public web  ",
+    source: "wikipedia",
+    limit: 5,
+    cacheMode: "default",
+  };
+  const mcpInput = {
+    goal: "MCP display goal",
+    operation: "search",
+    query: "public web",
+    source: "wikipedia",
+  };
+  try {
+    const first = await executeDurableTask({
+      db: fixture.db, identity, input: restInput, idempotencyKey: "cross-transport-key-01",
+      executeTask: executor.executeTask, now: () => FIXED_TIME, idFactory: () => "task_cross_transport_1",
+    });
+    const retry = await executeDurableTask({
+      db: fixture.db, identity, input: mcpInput, idempotencyKey: "cross-transport-key-01",
+      executeTask: executor.executeTask, now: () => FIXED_TIME, idFactory: () => "task_cross_transport_2",
+    });
+    assert.equal(first.ok, true);
+    assert.equal(retry.ok, true);
+    assert.equal(retry.replayed, true);
+    assert.equal(retry.task.id, first.task.id);
+    assert.equal(executor.calls, 1);
+    assert.equal(fixture.sqlite.prepare("SELECT requests_used FROM tenant_request_usage").get().requests_used, 1);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("unsupported adapter outcomes are persisted as valid terminal task states", async () => {
+  const fixture = createDurableTaskD1();
+  const executor = makeExecutor({ state: "unsupported" });
+  try {
+    const result = await executeDurableTask(runOptions(fixture, executor));
+    assert.equal(result.ok, true);
+    assert.equal(result.task.state, "unsupported");
+    const stored = fixture.sqlite.prepare("SELECT state FROM tasks WHERE task_id = ?").get(result.task.id);
+    assert.equal(stored.state, "unsupported");
+    const event = fixture.sqlite.prepare("SELECT event_type FROM task_events WHERE task_id = ? ORDER BY revision DESC LIMIT 1").get(result.task.id);
+    assert.equal(event.event_type, "task.unsupported");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("the task snapshots the quota policy already active in the current usage window", async () => {
+  const fixture = createDurableTaskD1({ requestLimit: 10 });
+  const executor = makeExecutor();
+  try {
+    fixture.sqlite.prepare(
+      "INSERT INTO tenant_request_usage (tenant_id, window_id, plan_code, policy_version, request_limit, requests_used, updated_at) " +
+      "VALUES ('tenant_alpha', '2026-11-24', 'developer', 'prior-policy-v0', 1, 0, ?)",
+    ).run(FIXED_TIME);
+    const first = await executeDurableTask(runOptions(fixture, executor));
+    assert.equal(first.ok, true);
+    assert.equal(first.task.quota.limit, 1);
+    assert.equal(first.task.quota.used, 1);
+    assert.equal(first.task.quota.remaining, 0);
+    const stored = fixture.sqlite.prepare("SELECT quota_limit, policy_version FROM tasks WHERE task_id = ?").get(first.task.id);
+    assert.equal(stored.quota_limit, 1);
+    assert.equal(stored.policy_version, "prior-policy-v0");
+  } finally {
+    fixture.close();
+  }
+});
