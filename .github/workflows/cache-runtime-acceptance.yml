@@ -51,6 +51,7 @@ jobs:
           grep -Fx "single retry after fixing GitHub Actions expression interpolation; same Acceptance-only three-call cache test; no Production writes" .github/acceptance/cache-runtime.retry.approved
           test -s .github/acceptance/cache-runtime.retry-3.approved
           grep -Fx "retry-3: fix Workers default cache-mode semantics, sanitize task errors, and run one Acceptance-only three-call test; no Production writes" .github/acceptance/cache-runtime.retry-3.approved
+          grep -Fx "retry-4: use Fastly-served raw.githubusercontent.com CSS as a non-Cloudflare origin; three calls only on existing Acceptance MCP; no Production writes" .github/acceptance/cache-runtime.retry-3.approved
           test -n "$CLOUDFLARE_API_TOKEN"
           node --check scripts/acceptance/cache-runtime-acceptance.mjs
           node --check src/core/http-fetch.js
@@ -67,10 +68,7 @@ jobs:
       - name: Build the patched Acceptance Worker without deploying
         run: npx --yes wrangler@4 deploy --dry-run --outdir dist/mcp-acceptance --config cloudflare/mcp-acceptance/wrangler.toml
 
-      - name: Deploy the cache-mode fix to the existing Acceptance MCP Worker only
-        run: npx --yes wrangler@4 deploy --config cloudflare/mcp-acceptance/wrangler.toml
-
-      - name: Pin the new isolated Acceptance deployment
+      - name: Pin the existing isolated Acceptance deployment without redeploying
         id: acceptance-deployment
         shell: bash
         run: |
@@ -83,19 +81,18 @@ jobs:
             signal: AbortSignal.timeout(20000)
           });
           const payload = await response.json().catch(() => null);
-          if (!response.ok || payload?.success !== true) throw new Error("Could not verify the new Acceptance deployment.");
+          if (!response.ok || payload?.success !== true) throw new Error("Could not verify the existing Acceptance deployment.");
           const active = payload.result?.deployments?.[0];
           const versions = active?.versions || [];
-          if (!active?.id || versions.length !== 1 || versions[0].percentage !== 100 || !versions[0].version_id) {
-            throw new Error("The Acceptance Worker is not on one verified 100% deployment.");
-          }
-          if (active.id === "6ddb1195-dd6c-4024-b77f-bb140504f8cc" ||
-              versions[0].version_id === "e4d41640-762e-4410-b308-d67946a61c12") {
-            throw new Error("The Acceptance deployment did not advance to the patched source.");
+          if (active?.id !== "6f617b59-fb05-4278-816f-9919438ece56" ||
+              versions.length !== 1 ||
+              versions[0].version_id !== "7d9d74aa-2adc-4e93-a14a-6b64c1e02623" ||
+              versions[0].percentage !== 100) {
+            throw new Error("Acceptance MCP no longer matches the previously verified test-only deployment; refusing to invoke.");
           }
           appendFileSync(process.env.GITHUB_OUTPUT,
-            `deployment_id=${active.id}\nversion_id=${versions[0].version_id}\n`);
-          console.log("Verified the patched Acceptance Worker is deployed at 100%.");
+            `deployment_id=${active.id}\\nversion_id=${versions[0].version_id}\\n`);
+          console.log("Verified the existing Acceptance MCP deployment is unchanged at 100%; no deploy was performed.");
           NODE
 
       - name: Run exactly three authenticated real-runtime Fetch calls and retire fixtures
