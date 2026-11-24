@@ -42,6 +42,9 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE INDEX IF NOT EXISTS idx_tasks_tenant_created
   ON tasks (tenant_id, created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_tasks_tenant_expiry
+  ON tasks (tenant_id, expires_at);
+
 CREATE INDEX IF NOT EXISTS idx_tasks_tenant_state_lease
   ON tasks (tenant_id, state, lease_expires_at);
 
