@@ -1,1 +1,2 @@
 retry-3: fix Workers default cache-mode semantics, sanitize task errors, and run one Acceptance-only three-call test; no Production writes
+Approved scope: run repository tests, dry-run and update only exportflow-mcp-acceptance-20261122, then perform exactly three authenticated web_fetch calls using one tasks:fetch key and a three-request quota; revoke key, close tenant, retire plan, and verify Production unchanged.
