@@ -33,10 +33,8 @@ const DEFAULT_PROTOCOL = "2025-11-25";
 const MCP_PATH = "/mcp";
 const MAX_BODY_BYTES = 65_536;
 const TOOL_SCOPES = Object.freeze({
-  web_fetch: "tasks:fetch",
-  web_map: "tasks:map",
-  web_crawl: "tasks:crawl",
-  web_extract: "tasks:extract",
+  web_fetch: "tasks:fetch", web_map: "tasks:map", web_crawl: "tasks:crawl",
+  web_extract: "tasks:extract", web_search: "tasks:search", web_research: "tasks:research",
 });
 const MAX_URL_LENGTH = 2_048;
 
@@ -93,63 +91,32 @@ const READ_ONLY_ANNOTATIONS = Object.freeze({
   openWorldHint: true,
 });
 
+const SEARCH_SOURCE_SCHEMA = { type: "string", enum: ["wikipedia", "openalex", "crossref"] };
+const QUERY_SCHEMA = { type: "string", minLength: 1, maxLength: 1024 };
+const CACHE_MODE_SCHEMA = { type: "string", enum: ["default", "bypass"] };
+const SCHEMA_SCHEMA = { type: "object", additionalProperties: true };
 const TOOL_DEFINITIONS = Object.freeze([
-  {
-    name: "exportflow_capabilities",
-    title: "ExportFlow capabilities",
-    description: "Returns the live adapter catalog and currently available read-only tools. Planned capabilities are not reported as live.",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
-  },
-  {
-    name: "web_fetch",
-    title: "Fetch a public web page",
-    description: "Fetches a bounded public HTTP(S) resource using GET only. Requires OAuth account authorization with tasks:fetch scope; direct ExportFlow API keys remain supported for developer clients. Returns normalized text and source evidence.",
-    inputSchema: {
-      type: "object",
-      properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH } },
-      required: ["url"], additionalProperties: false,
-    },
-  },
-  {
-    name: "web_map",
-    title: "Map a website",
-    description: "Discovers a bounded set of same-origin public URLs while respecting robots.txt and sitemap limits. Requires OAuth account authorization with tasks:map scope; direct ExportFlow API keys remain supported for developer clients.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH },
-        maxUrls: { type: "integer", minimum: 1, maximum: 15 },
-      },
-      required: ["url"], additionalProperties: false,
-    },
-  },
-  {
-    name: "web_crawl",
-    title: "Crawl a public website",
-    description: "Crawls at most three same-origin public pages to depth one, respecting robots.txt, per-page bytes and total byte limits. Requires OAuth account authorization with tasks:crawl scope; direct ExportFlow API keys remain supported for developer clients.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH },
-        maxPages: { type: "integer", minimum: 1, maximum: 3 },
-        maxDepth: { type: "integer", minimum: 0, maximum: 1 },
-      },
-      required: ["url"], additionalProperties: false,
-    },
-  },
-  {
-    name: "web_extract",
-    title: "Extract structured page data",
-    description: "Extracts explicitly requested fields from a public HTML or JSON page. Missing values are reported rather than guessed. Requires OAuth account authorization with tasks:extract scope; direct ExportFlow API keys remain supported for developer clients.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH },
-        schema: { type: "object", additionalProperties: true },
-      },
-      required: ["url", "schema"], additionalProperties: false,
-    },
-  },
+  { name: "exportflow_capabilities", title: "ExportFlow capabilities",
+    description: "Returns the live adapter catalog and currently available read-only tools.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false } },
+  { name: "web_fetch", title: "Fetch a public web page",
+    description: "Fetches bounded public HTTP(S) resources using GET only. Requires tasks:fetch.",
+    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, cacheMode: CACHE_MODE_SCHEMA }, required: ["url"], additionalProperties: false } },
+  { name: "web_map", title: "Map a website",
+    description: "Discovers same-origin public URLs through robots.txt, sitemaps and static links. Requires tasks:map; no browser runtime.",
+    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, maxUrls: { type: "integer", minimum: 1, maximum: 15 }, cacheMode: CACHE_MODE_SCHEMA }, required: ["url"], additionalProperties: false } },
+  { name: "web_crawl", title: "Crawl a public website",
+    description: "Crawls at most three same-origin static pages to depth one, respecting robots.txt and bounded byte limits. Requires tasks:crawl.",
+    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, maxPages: { type: "integer", minimum: 1, maximum: 3 }, maxDepth: { type: "integer", minimum: 0, maximum: 1 }, cacheMode: CACHE_MODE_SCHEMA }, required: ["url"], additionalProperties: false } },
+  { name: "web_extract", title: "Extract structured page data",
+    description: "Extracts explicit fields from public static HTML or JSON through metadata and JSON-LD. Missing fields are not guessed. Requires tasks:extract.",
+    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, schema: SCHEMA_SCHEMA, cacheMode: CACHE_MODE_SCHEMA }, required: ["url", "schema"], additionalProperties: false } },
+  { name: "web_search", title: "Search a selected public dataset",
+    description: "Searches one selected no-key source: Wikipedia (encyclopedic), OpenAlex (scholarly works), or Crossref (DOI metadata). Not a whole-web search engine. Requires tasks:search.",
+    inputSchema: { type: "object", properties: { query: QUERY_SCHEMA, source: SEARCH_SOURCE_SCHEMA, limit: { type: "integer", minimum: 1, maximum: 10 }, cacheMode: CACHE_MODE_SCHEMA }, required: ["query", "source"], additionalProperties: false } },
+  { name: "web_research", title: "Research and extract from public sources",
+    description: "Runs selected-source search, bounded static HTTP fetch, and deterministic schema extraction. JavaScript rendering is not supported. Requires tasks:research.",
+    inputSchema: { type: "object", properties: { query: QUERY_SCHEMA, source: SEARCH_SOURCE_SCHEMA, schema: SCHEMA_SCHEMA, limit: { type: "integer", minimum: 1, maximum: 10 }, candidateLimit: { type: "integer", minimum: 1, maximum: 3 }, cacheMode: CACHE_MODE_SCHEMA }, required: ["query", "source", "schema"], additionalProperties: false } },
 ]);
 
 function jsonResponse(body, status = 200, extraHeaders = {}) {
@@ -223,25 +190,28 @@ function isValidHttpUrl(value) {
 function validateToolArguments(name, args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) return "Tool arguments must be an object.";
   if (name === "exportflow_capabilities") return Object.keys(args).length ? "This tool accepts no arguments." : null;
-  if (!["web_fetch", "web_map", "web_crawl", "web_extract"].includes(name)) return "Unknown tool.";
-  if (!isValidHttpUrl(args.url)) return "url must be a valid credential-free HTTP(S) URL.";
   const allowed = {
-    web_fetch: ["url"],
-    web_map: ["url", "maxUrls"],
-    web_crawl: ["url", "maxPages", "maxDepth"],
-    web_extract: ["url", "schema"],
+    web_fetch: ["url", "cacheMode"], web_map: ["url", "maxUrls", "cacheMode"],
+    web_crawl: ["url", "maxPages", "maxDepth", "cacheMode"],
+    web_extract: ["url", "schema", "cacheMode"], web_search: ["query", "source", "limit", "cacheMode"],
+    web_research: ["query", "source", "schema", "limit", "candidateLimit", "cacheMode"],
   }[name];
+  if (!allowed) return "Unknown tool.";
   if (Object.keys(args).some((key) => !allowed.includes(key))) return "Unknown tool argument.";
+  if (["web_fetch", "web_map", "web_crawl", "web_extract"].includes(name) && !isValidHttpUrl(args.url)) return "url must be a valid credential-free HTTP(S) URL.";
+  if (args.cacheMode !== undefined && !["default", "bypass"].includes(args.cacheMode)) return "cacheMode must be default or bypass.";
+  if (["web_search", "web_research"].includes(name)) {
+    if (typeof args.query !== "string" || !args.query.trim() || args.query.length > 1024) return "query must contain 1 to 1024 characters.";
+    if (!["wikipedia", "openalex", "crossref"].includes(args.source)) return "source must be wikipedia, openalex, or crossref.";
+    if (args.limit !== undefined && (!Number.isInteger(args.limit) || args.limit < 1 || args.limit > 10)) return "limit must be an integer from 1 to 10.";
+  }
   if (name === "web_map" && args.maxUrls !== undefined && (!Number.isInteger(args.maxUrls) || args.maxUrls < 1 || args.maxUrls > 15)) return "maxUrls must be an integer from 1 to 15.";
   if (name === "web_crawl" && args.maxPages !== undefined && (!Number.isInteger(args.maxPages) || args.maxPages < 1 || args.maxPages > 3)) return "maxPages must be an integer from 1 to 3.";
   if (name === "web_crawl" && args.maxDepth !== undefined && (!Number.isInteger(args.maxDepth) || args.maxDepth < 0 || args.maxDepth > 1)) return "maxDepth must be 0 or 1.";
-  if (name === "web_extract") {
+  if (name === "web_research" && args.candidateLimit !== undefined && (!Number.isInteger(args.candidateLimit) || args.candidateLimit < 1 || args.candidateLimit > 3)) return "candidateLimit must be an integer from 1 to 3.";
+  if (name === "web_extract" || name === "web_research") {
     if (!args.schema || typeof args.schema !== "object" || Array.isArray(args.schema)) return "schema must be a JSON object schema.";
-    try {
-      validateExtractionSchema(args.schema);
-    } catch {
-      return "schema does not match the supported bounded extraction contract.";
-    }
+    try { validateExtractionSchema(args.schema); } catch { return "schema does not match the supported bounded extraction contract."; }
   }
   return null;
 }
@@ -277,6 +247,8 @@ async function applyRateLimit(request, env, toolName) {
     web_extract: 2,
     web_map: 4,
     web_crawl: 6,
+    web_search: 2,
+    web_research: 5,
   };
   const decision = await limiter.limit({ key: ip, delta: weights[toolName] || 1 });
   return { ok: decision?.success === true, unprotected: false };
@@ -319,18 +291,14 @@ export function createExportFlowPreviewWorker({
         executionModel: "The connected model reasons; ExportFlow executes web tools and returns evidence.",
         adapterCatalog: getAdapterCatalog(),
         availableTools: TOOL_DEFINITIONS.map((tool) => tool.name),
-        unavailable: ["web_search", "web_research", "browser_*"],
-        limits: { maxResponseBytes: 1_048_576, timeoutMs: 8_000, maxCrawlPages: 3, maxCrawlDepth: 1, maxMapUrls: 15 },
+        unavailable: [],
+        removedCapabilities: ["browser_rendering", "browser_interaction"],
+        limits: { maxResponseBytes: 1_048_576, timeoutMs: 8_000, maxCrawlPages: 3, maxCrawlDepth: 1, maxMapUrls: 15, maxSearchResults: 10, maxResearchCandidates: 3 },
       });
     }
 
-    const operation = ({ web_fetch: "fetch", web_map: "map", web_crawl: "crawl", web_extract: "extract" })[name];
-    const requiredScope = ({
-      web_fetch: "tasks:fetch",
-      web_map: "tasks:map",
-      web_crawl: "tasks:crawl",
-      web_extract: "tasks:extract",
-    })[name];
+    const operation = ({ web_fetch: "fetch", web_map: "map", web_crawl: "crawl", web_extract: "extract", web_search: "search", web_research: "research" })[name];
+    const requiredScope = TOOL_SCOPES[name];
 
     let auth;
     if (options.identity) {
@@ -360,14 +328,23 @@ export function createExportFlowPreviewWorker({
       web_map: `Map public pages on ${args.url}`,
       web_crawl: `Crawl bounded public pages starting at ${args.url}`,
       web_extract: `Extract structured fields from ${args.url}`,
+      web_search: `Search the ${args.source} public dataset for ${args.query}`,
+      web_research: `Research ${args.query} in ${args.source} and extract structured evidence`,
     })[name];
-    const input = { goal, operation, url: args.url };
+    const input = { goal, operation };
+    if (args.url) input.url = args.url;
     if (name === "web_map" && args.maxUrls !== undefined) input.maxUrls = args.maxUrls;
     if (name === "web_crawl") {
       if (args.maxPages !== undefined) input.maxPages = args.maxPages;
       if (args.maxDepth !== undefined) input.maxDepth = args.maxDepth;
     }
-    if (name === "web_extract") input.schema = args.schema;
+    if (name === "web_extract" || name === "web_research") input.schema = args.schema;
+    if (name === "web_search" || name === "web_research") {
+      input.query = args.query; input.source = args.source;
+      if (args.limit !== undefined) input.limit = args.limit;
+    }
+    if (name === "web_research" && args.candidateLimit !== undefined) input.candidateLimit = args.candidateLimit;
+    if (args.cacheMode !== undefined) input.cacheMode = args.cacheMode;
 
     const task = await executeWebTask(input, { signal: request.signal });
     const result = {
@@ -568,7 +545,7 @@ export function createExportFlowPreviewWorker({
           transport: "Streamable HTTP",
           authentication: "OAuth 2.1 for ChatGPT; direct tenant API keys remain supported",
           tools: TOOL_DEFINITIONS.map((tool) => tool.name),
-          note: "Preview only. Search and Browser tools are not enabled; task execution requires a provisioned tenant and the dedicated EXPORTFLOW_AUTH_DB binding.",
+          note: "Public static HTTP tools are available in this preview. Browser rendering and interaction are removed; execution requires a provisioned tenant and EXPORTFLOW_AUTH_DB binding.",
         });
       }
       if (url.pathname === "/.well-known/oauth-protected-resource" ||

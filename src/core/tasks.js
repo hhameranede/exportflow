@@ -2,6 +2,7 @@ import { chooseExecutionPath } from "./router.js";
 import { executeAdapter } from "./adapters.js";
 import { normalizeResult } from "./result.js";
 import { validatePublicHttpUrl } from "./http-fetch.js";
+import { createResearchPipeline } from "./research.js";
 
 const TASK_ID_PATTERN = /^[a-zA-Z0-9_-]{8,64}$/;
 const MAX_GOAL_LENGTH = 2_000;
@@ -35,10 +36,11 @@ const SAFE_ERROR_MESSAGES = Object.freeze({
   UPSTREAM_HTTP_ERROR: "Upstream returned a non-2xx HTTP status.",
   TASK_CANCELLED: "Task was cancelled before completion.",
   TASK_TIMEOUT: "Task exceeded its maximum execution time.",
-  BROWSER_INTERACTION_UNAVAILABLE: "User-directed browser interactions are not connected.",
-  BROWSER_UNAVAILABLE: "Browser Run binding is not configured.",
-  SEARCH_UNAVAILABLE: "Cloudflare Web Search binding is not configured.",
-  RESEARCH_UNAVAILABLE: "Research pipeline is not configured.",
+  SEARCH_UNAVAILABLE: "The selected public search source is not configured.",
+  SEARCH_RATE_LIMITED: "The selected public search source rate-limited this request. Retry later.",
+  SEARCH_UPSTREAM_FAILED: "The selected public search source could not complete the query.",
+  SEARCH_UPSTREAM_INVALID_RESPONSE: "The selected public search source returned invalid data.",
+  RESEARCH_UNAVAILABLE: "The static research pipeline is not configured.",
   TASK_EXECUTION_FAILED: "Task execution failed.",
 });
 
@@ -160,8 +162,8 @@ function buildTask({
  *
  * This is an internal Core primitive, not an HTTP/MCP endpoint. It keeps no
  * durable state and accepts no caller-supplied credentials or headers.
- * Browser rendering can run only through an explicitly injected internal adapter;
- * user-directed browser interactions remain unsupported.
+ * All operations use bounded static HTTP; browser rendering and interaction
+ * are not part of the supported execution surface.
  */
 export async function executeWebTask(input, options = {}) {
   const now = options.now || (() => new Date().toISOString());
@@ -189,40 +191,44 @@ export async function executeWebTask(input, options = {}) {
     }
     goal = input.goal.trim();
 
-    if (input.requiresJavascript !== undefined && typeof input.requiresJavascript !== "boolean") {
-      throw Object.assign(new TypeError("requiresJavascript must be a boolean."), { code: "INVALID_TASK" });
-    }
-    if (input.requiresInteraction !== undefined && typeof input.requiresInteraction !== "boolean") {
-      throw Object.assign(new TypeError("requiresInteraction must be a boolean."), { code: "INVALID_TASK" });
-    }
-
     if (options.signal?.aborted) throw Object.assign(new Error("Task was cancelled."), { code: "TASK_CANCELLED" });
 
     const operation = input.operation === undefined ? "fetch" : input.operation;
     if (!["fetch", "map", "crawl", "extract", "search", "research"].includes(operation)) {
       throw Object.assign(new TypeError("Unsupported task operation."), { code: "UNSUPPORTED_OPERATION" });
     }
-    const url = ["search", "research"].includes(operation) ? null : validatePublicHttpUrl(input.url);
+    const queryOperation = operation === "search" || operation === "research";
+    if (input.requiresJavascript === true || input.requiresInteraction === true) {
+      throw Object.assign(new TypeError("Dynamic rendering and browser interaction are not supported."), { code: "INVALID_TASK" });
+    }
+    const url = queryOperation ? null : validatePublicHttpUrl(input.url);
     requestedUrl = url ? url.href : null;
-    if (["search", "research"].includes(operation) && (typeof input.query !== "string" || !input.query.trim() || input.query.length > 1024)) {
+    if (queryOperation && (typeof input.query !== "string" || !input.query.trim() || input.query.length > 1024)) {
       throw Object.assign(new TypeError("Search query must contain 1 to 1024 characters."), { code: "INVALID_QUERY" });
     }
-    if (["search", "research"].includes(operation) && (input.requiresJavascript === true || input.requiresInteraction === true)) {
-      throw Object.assign(new TypeError("Search operations cannot require browser execution."), { code: "INVALID_TASK" });
-    }
-    const route = ["search", "research"].includes(operation)
-      ? { path: "http", reason: "Discovery tasks return public URLs for bounded retrieval.", escalationAllowed: false }
-      : chooseExecutionPath({
-          requiresJavascript: input.requiresJavascript === true,
-          requiresInteraction: input.requiresInteraction === true,
-        });
+    const route = chooseExecutionPath();
     execution = { path: route.path, operation, adapterId: null, reason: route.reason };
 
     startedAt = now();
     events.push(event("task.started", startedAt, { executionPath: route.path }));
 
+    const searchAdapter = options.searchAdapter || {
+      id: "web.search.v1",
+      execute: (searchInput) => runAdapter("web.search.v1", searchInput, {
+        ...(searchInput.signal ? { signal: searchInput.signal } : {}),
+        ...(typeof options.fetchImpl === "function" ? { fetchImpl: options.fetchImpl } : {}),
+      }),
+    };
+    const researchAdapterDefault = createResearchPipeline({
+      searchAdapter,
+      runAdapter: (adapterId, adapterInput, adapterOptions = {}) => runAdapter(adapterId, adapterInput, {
+        ...adapterOptions,
+        ...(typeof options.fetchImpl === "function" ? { fetchImpl: options.fetchImpl } : {}),
+      }),
+    });
+
     if (operation === "research") {
-      const researchAdapter = options.researchAdapter;
+      const researchAdapter = options.researchAdapter || researchAdapterDefault;
       if (!researchAdapter || typeof researchAdapter.execute !== "function") {
         const completedAt = now();
         const result = normalizeResult({
@@ -255,6 +261,8 @@ export async function executeWebTask(input, options = {}) {
       const result = await runWithTaskControls(
         (signal) => researchAdapter.execute({
           query: input.query,
+          source: input.source,
+          cacheMode: input.cacheMode,
           schema: input.schema,
           limit: input.limit,
           candidateLimit: input.candidateLimit,
@@ -277,13 +285,12 @@ export async function executeWebTask(input, options = {}) {
     }
 
     if (operation === "search") {
-      const searchAdapter = options.searchAdapter;
       if (!searchAdapter || typeof searchAdapter.execute !== "function") {
         const completedAt = now();
         const result = normalizeResult({
           status: "failed",
           data: null,
-          warnings: ["Cloudflare Web Search binding is not configured; no search request was made."],
+          warnings: ["The selected public search source is not configured; no request was made."],
         });
         events.push(event("task.unsupported", completedAt, { reason: "search_adapter_unavailable" }));
         return buildTask({
@@ -292,7 +299,7 @@ export async function executeWebTask(input, options = {}) {
         });
       }
       execution.adapterId = searchAdapter.id || "web.search.v1";
-      const result = await runWithTaskControls((signal) => searchAdapter.execute({ query: input.query, limit: input.limit, signal }), controls);
+      const result = await runWithTaskControls((signal) => searchAdapter.execute({ query: input.query, source: input.source, limit: input.limit, cacheMode: input.cacheMode, signal }), controls);
       const completedAt = now();
       const state = result.status === "succeeded"
         ? "succeeded"
@@ -307,76 +314,6 @@ export async function executeWebTask(input, options = {}) {
       });
     }
 
-    if (route.path === "browser") {
-      const browserAdapter = options.browserAdapter;
-      if (input.requiresInteraction === true || !browserAdapter || typeof browserAdapter.execute !== "function") {
-        const completedAt = now();
-        const reason = input.requiresInteraction === true
-          ? "browser_interaction_not_implemented"
-          : "browser_adapter_unavailable";
-        const message = input.requiresInteraction === true
-          ? "User-directed browser interactions are not connected; no interaction was performed."
-          : "Browser Run binding is not configured; no browser navigation was performed.";
-        const result = normalizeResult({ status: "failed", data: null, warnings: [message] });
-        events.push(event("task.unsupported", completedAt, { reason }));
-        const errorCode = input.requiresInteraction === true
-          ? "BROWSER_INTERACTION_UNAVAILABLE"
-          : "BROWSER_UNAVAILABLE";
-        return buildTask({
-          id,
-          goal,
-          requestedUrl,
-          state: "unsupported",
-          execution,
-          createdAt,
-          startedAt,
-          completedAt,
-          events,
-          errors: [{ code: errorCode, message: safeErrorMessage(errorCode) }],
-          usage: {
-            durationMs: computeDurationMs(startedAt, completedAt, Date.now() - startMs),
-            requestsAttempted: 0,
-            responseBytes: 0,
-            cost: null,
-          },
-          result,
-        });
-      }
-
-      execution.adapterId = browserAdapter.id || "web.browser.v1";
-      let browserResult;
-      try {
-        browserResult = await runWithTaskControls((signal) => browserAdapter.execute({ url: url.href, goal, requiresInteraction: false, signal }), controls);
-      } catch (error) {
-        if (error?.code === "BROWSER_UNAVAILABLE") {
-          const completedAt = now();
-          const unsupportedResult = normalizeResult({
-            status: "failed",
-            data: null,
-            warnings: ["Browser Run binding is not configured; no browser navigation was performed."],
-          });
-          events.push(event("task.unsupported", completedAt, { reason: "browser_binding_unavailable" }));
-          return buildTask({
-            id, goal, state: "unsupported", execution, createdAt, startedAt,
-            completedAt, events, result: unsupportedResult,
-          });
-        }
-        throw error;
-      }
-      const completedAt = now();
-      const state = browserResult.status === "succeeded"
-        ? "succeeded"
-        : browserResult.status === "partial"
-          ? "partial"
-          : "failed";
-      if (state === "succeeded") events.push(event("task.succeeded", completedAt));
-      else if (state === "partial") events.push(event("task.partial", completedAt, { reason: "partial_browser_result" }));
-      else events.push(event("task.failed", completedAt, { reason: "browser_render_failed" }));
-      return buildTask({
-        id, goal, state, execution, createdAt, startedAt, completedAt, events, result: browserResult,
-      });
-    }
-
     const adapterId = operation === "fetch"
       ? "http.fetch.v1"
       : operation === "map"
@@ -386,7 +323,6 @@ export async function executeWebTask(input, options = {}) {
           : "web.extract.v1";
     execution.adapterId = adapterId;
     const adapterInput = { url: url.href };
-    if (input.cacheMode !== undefined) adapterInput.cacheMode = input.cacheMode;
     if (operation === "fetch" && input.limits && typeof input.limits === "object" && !Array.isArray(input.limits)) {
       if (input.limits.timeoutMs !== undefined) adapterInput.timeoutMs = input.limits.timeoutMs;
       if (input.limits.maxBytes !== undefined) adapterInput.maxBytes = input.limits.maxBytes;
@@ -398,6 +334,7 @@ export async function executeWebTask(input, options = {}) {
       if (input.maxDepth !== undefined) adapterInput.maxDepth = input.maxDepth;
     }
     if (operation === "extract") adapterInput.schema = input.schema;
+    if (input.cacheMode !== undefined) adapterInput.cacheMode = input.cacheMode;
     const adapterOptions = {};
     if (typeof options.fetchImpl === "function") adapterOptions.fetchImpl = options.fetchImpl;
     if (typeof options.onUsageReceipt === "function") adapterOptions.onUsageReceipt = options.onUsageReceipt;

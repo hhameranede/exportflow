@@ -30,6 +30,15 @@ const ERROR_CODE_TO_HTTP_STATUS = Object.freeze({
   REDIRECT_DOWNGRADE: 502,
   INVALID_REDIRECT: 502,
   UPSTREAM_FETCH_FAILED: 502,
+  INVALID_QUERY: 400,
+  INVALID_SCHEMA: 400,
+  INVALID_CACHE_MODE: 400,
+  INVALID_SEARCH_SOURCE: 400,
+  SEARCH_UNAVAILABLE: 503,
+  SEARCH_RATE_LIMITED: 429,
+  SEARCH_UPSTREAM_FAILED: 502,
+  SEARCH_UPSTREAM_INVALID_RESPONSE: 502,
+  RESEARCH_UNAVAILABLE: 503,
 });
 
 function json(data, status = 200, extraHeaders = {}) {
@@ -103,35 +112,29 @@ export function createWorker(options = {}) {
             return json({ error: "method_not_allowed" }, 405, { allow: "POST" });
           }
 
-          const auth = await tenantTaskGateway.authenticate(request, env, {
-            requiredScope: "tasks:fetch",
-          });
+          const auth = await tenantTaskGateway.authenticate(request, env, { requiredScope: null });
           if (!auth.ok) {
-            return json(
-              { error: { code: auth.code, message: auth.message } },
-              auth.httpStatus,
-              {
-                ...(auth.headers || {}),
-                ...(auth.retryAfterSec ? { "retry-after": String(auth.retryAfterSec) } : {}),
-              },
-            );
+            return json({ error: { code: auth.code, message: auth.message } }, auth.httpStatus, {
+              ...(auth.headers || {}), ...(auth.retryAfterSec ? { "retry-after": String(auth.retryAfterSec) } : {}),
+            });
           }
 
           let contract;
           try {
-            const payload = await readBoundedJsonBody(request);
-            contract = validateTaskRequest(payload);
+            contract = validateTaskRequest(await readBoundedJsonBody(request));
           } catch (error) {
-            if (error instanceof TaskContractError) {
-              return json(
-                { error: { code: error.code, message: error.message } },
-                error.httpStatus,
-              );
-            }
-            return json(
-              { error: { code: "INVALID_TASK", message: "Task request validation failed." } },
-              400,
-            );
+            const validationError = error instanceof TaskContractError
+              ? error
+              : new TaskContractError("INVALID_TASK", "Task request validation failed.", 400);
+            return json({ error: { code: validationError.code, message: validationError.message } }, validationError.httpStatus);
+          }
+          const requiredScope = ({
+            fetch: "tasks:fetch", map: "tasks:map", crawl: "tasks:crawl",
+            extract: "tasks:extract", search: "tasks:search", research: "tasks:research",
+          })[contract.operation];
+          const scopeAuth = tenantTaskGateway.authorizeScope(auth.identity, requiredScope);
+          if (!scopeAuth.ok) {
+            return json({ error: { code: scopeAuth.code, message: scopeAuth.message } }, scopeAuth.httpStatus);
           }
 
           const reservation = await tenantTaskGateway.reserve(env, auth.identity);
@@ -176,6 +179,7 @@ export function createWorker(options = {}) {
         if (url.pathname === "/api/v1/platform") {
           const authConfigured = isAuthConfigured(env);
           let authReady = false;
+          let platformScopes = [];
           if (request.headers.has("authorization")) {
             const auth = await tenantTaskGateway.authenticate(request, env, {
               requiredScope: "tasks:fetch",
@@ -190,13 +194,14 @@ export function createWorker(options = {}) {
                 },
               );
             }
+            platformScopes = auth.identity.scopes;
             authReady = await hasQuotaSchema(env);
           }
           return json({
             name: "ExportFlow",
             positioning: "Model-agnostic agentic web infrastructure",
-            lifecycle: ["discover", "retrieve", "escalate", "extract", "return"],
-            executionPaths: ["http", "browser"],
+            lifecycle: ["discover", "retrieve", "extract", "return"],
+            executionPaths: ["http"],
             adapterCatalog: getAdapterCatalog(),
             status: "foundation",
             auth: {
@@ -210,16 +215,23 @@ export function createWorker(options = {}) {
               routerPreview: "/api/v1/router-preview",
               tasks: "/api/v1/tasks",
             },
-            liveCapabilities: authReady ? ["http.fetch.v1"] : [],
+            liveCapabilities: authReady ? [
+              ...getAdapterCatalog().filter((adapter) => {
+                const required = {
+                  "http.fetch.v1": "tasks:fetch", "web.map.v1": "tasks:map",
+                  "web.crawl.v1": "tasks:crawl", "web.extract.v1": "tasks:extract",
+                  "web.search.v1": "tasks:search",
+                }[adapter.id];
+                return required && (platformScopes.includes(required) || platformScopes.includes("tasks:*") || platformScopes.includes("*"));
+              }).map((adapter) => adapter.id),
+              ...(platformScopes.some((scope) => ["tasks:research", "tasks:*", "*"].includes(scope)) ? ["web.research.v1"] : []),
+            ] : [],
           });
         }
 
         if (url.pathname === "/api/v1/router-preview") {
           return json({
-            decision: chooseExecutionPath({
-              requiresInteraction: url.searchParams.get("interaction") === "true",
-              requiresJavascript: url.searchParams.get("javascript") === "true",
-            }),
+            decision: chooseExecutionPath(),
             note: "Planning primitive only; submit tasks via authenticated POST /api/v1/tasks.",
           });
         }

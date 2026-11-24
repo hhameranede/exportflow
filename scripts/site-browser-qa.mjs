@@ -398,7 +398,12 @@ async function checkAuthAndContactPages(browser) {
       const expectedSignedOutWorkspaceRedirect = path === "/workspace" &&
         /ERR_ABORTED/.test(error?.message || String(error));
       if (!expectedSignedOutWorkspaceRedirect) throw error;
-      await page.waitForURL((url) => url.pathname.endsWith("/signin"), { timeout: 8000 });
+      const redirectDeadline = Date.now() + 8000;
+      while (Date.now() < redirectDeadline && !new URL(page.url()).pathname.endsWith("/signin")) {
+        await page.waitForTimeout(100);
+      }
+      assert.ok(new URL(page.url()).pathname.endsWith("/signin"),
+        "Unauthenticated workspace navigation must finish at /signin.");
     }
     await page.locator("main h1").waitFor({ state: "visible", timeout: 8000 });
     assert.equal(await page.locator("main h1").count(), 1, "Auth route heading missing: " + path);
