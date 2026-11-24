@@ -85,11 +85,26 @@ BEGIN
   END;
 
   UPDATE tasks
-  SET quota_used = (
+  SET plan_code = (
+        SELECT plan_code FROM tenant_request_usage
+        WHERE tenant_id = NEW.tenant_id AND window_id = NEW.quota_window_id
+      ),
+      policy_version = (
+        SELECT policy_version FROM tenant_request_usage
+        WHERE tenant_id = NEW.tenant_id AND window_id = NEW.quota_window_id
+      ),
+      quota_limit = (
+        SELECT request_limit FROM tenant_request_usage
+        WHERE tenant_id = NEW.tenant_id AND window_id = NEW.quota_window_id
+      ),
+      quota_used = (
         SELECT requests_used FROM tenant_request_usage
         WHERE tenant_id = NEW.tenant_id AND window_id = NEW.quota_window_id
       ),
-      quota_remaining = MAX(0, NEW.quota_limit - (
+      quota_remaining = MAX(0, (
+        SELECT request_limit FROM tenant_request_usage
+        WHERE tenant_id = NEW.tenant_id AND window_id = NEW.quota_window_id
+      ) - (
         SELECT requests_used FROM tenant_request_usage
         WHERE tenant_id = NEW.tenant_id AND window_id = NEW.quota_window_id
       ))
@@ -109,7 +124,7 @@ BEFORE UPDATE OF state ON tasks
 WHEN OLD.state <> NEW.state
  AND NOT (
    (OLD.state = 'accepted' AND NEW.state IN ('running', 'failed', 'cancelled', 'expired')) OR
-   (OLD.state = 'running' AND NEW.state IN ('partial', 'succeeded', 'failed', 'cancelled', 'expired'))
+   (OLD.state = 'running' AND NEW.state IN ('partial', 'succeeded', 'failed', 'cancelled', 'expired', 'unsupported'))
  )
 BEGIN
   SELECT RAISE(ABORT, 'TASK_INVALID_STATE_TRANSITION');
@@ -141,4 +156,17 @@ BEGIN
     COALESCE(NEW.completed_at, NEW.started_at, NEW.updated_at),
     json_object('state', NEW.state, 'attempt', NEW.attempt_count, 'errorCode', NEW.error_code)
   );
+END;
+
+CREATE TRIGGER IF NOT EXISTS guard_task_identity_immutable
+BEFORE UPDATE OF task_id, tenant_id, idempotency_key_hash, request_hash, operation,
+  quota_period, quota_window_id, created_at, expires_at ON tasks
+BEGIN
+  SELECT RAISE(ABORT, 'TASK_IDENTITY_IMMUTABLE');
+END;
+
+CREATE TRIGGER IF NOT EXISTS guard_task_events_immutable
+BEFORE UPDATE ON task_events
+BEGIN
+  SELECT RAISE(ABORT, 'TASK_EVENTS_APPEND_ONLY');
 END;
