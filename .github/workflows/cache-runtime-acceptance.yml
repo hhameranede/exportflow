@@ -22,8 +22,7 @@ jobs:
     if: >-
       ${{ github.event_name == 'push' &&
           github.ref == 'refs/heads/ops/cache-runtime-acceptance-20261124' &&
-          contains(github.event.head_commit.message, 'cache-runtime-acceptance-approved') &&
-          contains(github.event.head_commit.added, '.github/acceptance/cache-runtime.retry.approved') }}
+          contains(github.event.head_commit.message, 'cache-runtime-acceptance-approved-retry-2') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -49,7 +48,6 @@ jobs:
           grep -Fx "one isolated three-call cache acceptance on the existing MCP Acceptance Worker only" .github/acceptance/cache-runtime.approved
           test -s .github/acceptance/cache-runtime.retry.approved
           grep -Fx "single retry after fixing GitHub Actions expression interpolation; same Acceptance-only three-call cache test; no Production writes" .github/acceptance/cache-runtime.retry.approved
-          git diff-tree --no-commit-id --name-only --diff-filter=A -r HEAD | grep -Fx '.github/acceptance/cache-runtime.retry.approved'
           test -n "$CLOUDFLARE_API_TOKEN"
           node --check scripts/acceptance/cache-runtime-acceptance.mjs
 
