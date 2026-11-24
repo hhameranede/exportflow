@@ -205,7 +205,7 @@ function validateToolArguments(name, args) {
   if (!allowed) return "Unknown tool.";
   if (Object.keys(args).some((key) => !allowed.includes(key))) return "Unknown tool argument.";
   if (name === "web_task_status" && (typeof args.taskId !== "string" || !/^[A-Za-z0-9_-]{8,64}$/.test(args.taskId))) return "taskId must be a valid task identifier.";
-  if (args.idempotencyKey !== undefined && (typeof args.idempotencyKey !== "string" || !/^[\\x21-\\x7E]{8,128}$/.test(args.idempotencyKey))) return "idempotencyKey must contain 8 to 128 visible ASCII characters without spaces.";
+  if (args.idempotencyKey !== undefined && (typeof args.idempotencyKey !== "string" || !/^[\x21-\x7E]{8,128}$/.test(args.idempotencyKey))) return "idempotencyKey must contain 8 to 128 visible ASCII characters without spaces.";
   if (["web_fetch", "web_map", "web_crawl", "web_extract"].includes(name) && !isValidHttpUrl(args.url)) return "url must be a valid credential-free HTTP(S) URL.";
   if (args.cacheMode !== undefined && !["default", "bypass"].includes(args.cacheMode)) return "cacheMode must be default or bypass.";
   if (["web_search", "web_research"].includes(name)) {
