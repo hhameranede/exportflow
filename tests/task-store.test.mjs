@@ -134,8 +134,10 @@ test("quota exhaustion rolls back the task insert and does not leave an accepted
   const fixture = createDurableTaskD1({ requestLimit: 1 });
   const executor = makeExecutor();
   try {
-    const first = await executeDurableTask(runOptions(fixture, executor));
+    const limitedIdentity = { ...identity, requestLimit: 1 };
+    const first = await executeDurableTask(runOptions(fixture, executor, { identity: limitedIdentity }));
     const second = await executeDurableTask(runOptions(fixture, executor, {
+      identity: limitedIdentity,
       idempotencyKey: "task-retry-key-0002",
       idFactory: () => "task_alpha_0002",
     }));
