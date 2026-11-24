@@ -1,3 +1,4 @@
 retry-3: fix Workers default cache-mode semantics, sanitize task errors, and run one Acceptance-only three-call test; no Production writes
 Rerun after correcting install command: this repository has no package-lock.json; use npm install --no-audit --no-fund. Prior run stopped before install completed, tests, deploy or D1 writes.
 Follow-up test-harness correction: update the legacy API mock to assert that default cache is omitted; retry the same bounded Acceptance-only gate.
+retry-4: use Fastly-served raw.githubusercontent.com CSS as a non-Cloudflare origin; three calls only on existing Acceptance MCP; no Production writes
