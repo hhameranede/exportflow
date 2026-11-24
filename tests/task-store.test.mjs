@@ -197,6 +197,7 @@ test("task reads are tenant-scoped and expose the same retained lifecycle/result
     });
     assert.equal(found.ok, true);
     assert.equal(found.task.state, "succeeded");
+    assert.equal("goal" in found.task, false, "display-only task goals are not retained in D1");
     assert.equal(found.task.result.data.body, "ok");
     assert.deepEqual(found.task.events.map((event) => event.type), ["task.accepted", "task.started", "task.succeeded"]);
     assert.equal(hidden.ok, false);
