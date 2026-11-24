@@ -7,7 +7,7 @@ concurrency:
 
 on:
  push:
-  branches: [main]
+  branches: [main, feat/durable-task-lifecycle-v1-20261124]
  pull_request:
 
 jobs:
@@ -52,6 +52,10 @@ jobs:
      run: npx --yes wrangler@4 deploy --dry-run --outdir dist/auth-acceptance --config cloudflare/auth-acceptance/wrangler.toml
    - name: Build isolated OAuth MCP Acceptance bundle (dry-run only)
      run: npx --yes wrangler@4 deploy --dry-run --outdir dist/mcp-acceptance --config cloudflare/mcp-acceptance/wrangler.toml
+   - name: Build Task Platform Acceptance bundle (dry-run only)
+     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/task-platform-acceptance --config cloudflare/task-acceptance/platform.wrangler.toml
+   - name: Build Task MCP Acceptance bundle (dry-run only)
+     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/task-mcp-acceptance --config cloudflare/task-acceptance/mcp.wrangler.toml
    - name: Locate Wrangler build output
      run: |
       echo "Root dist output:"
@@ -72,6 +76,40 @@ jobs:
       retention-days: 1
       include-hidden-files: true
 
+ deploy-acceptance:
+  needs: test
+  if: >-
+   ${{ github.event_name == 'push' &&
+       github.ref == 'refs/heads/feat/durable-task-lifecycle-v1-20261124' }}
+  runs-on: ubuntu-latest
+  env:
+   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+   CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+  steps:
+   - uses: actions/checkout@v4
+   - uses: actions/setup-node@v4
+     with:
+      node-version: 24
+   - run: npm install --no-audit --no-fund
+   - name: Verify isolated Acceptance deployment credentials
+     run: |
+      if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+       echo "::error::Missing CLOUDFLARE_API_TOKEN (or CF_API_TOKEN) GitHub Actions secret."
+       exit 1
+      fi
+   - name: Apply migration 0005 to the dedicated Acceptance D1 database only
+     run: npx --yes wrangler@4 d1 execute exportflow-tenant-acceptance-20261122 --remote --file migrations/0005_durable_task_lifecycle.sql --config cloudflare/task-acceptance/platform.wrangler.toml --yes
+   - name: Deploy isolated Task Platform Acceptance Worker
+     run: npx --yes wrangler@4 deploy --config cloudflare/task-acceptance/platform.wrangler.toml
+   - name: Deploy isolated Task MCP Acceptance Worker
+     run: npx --yes wrangler@4 deploy --config cloudflare/task-acceptance/mcp.wrangler.toml
+   - name: Seed run-scoped synthetic tenants and API keys
+     run: node scripts/acceptance/durable-task-runtime.mjs seed
+   - name: Run real Cloudflare D1 + Worker durable Task acceptance
+     run: node scripts/acceptance/durable-task-runtime.mjs smoke
+   - name: Clean up run-scoped synthetic Acceptance data
+     if: always()
+     run: node scripts/acceptance/durable-task-runtime.mjs cleanup
  deploy-production:
   needs: test
   if: >-
