@@ -164,6 +164,7 @@ export function createWorker(options = {}) {
             idempotencyKey: request.headers.get("idempotency-key") || undefined,
             signal: request.signal,
             executeTask: executeWebTask,
+            executeOptions: { fetchImpl: options.fetchImpl, now: options.now },
             ...(options.now ? { now: options.now } : {}),
             ...(options.idFactory ? { idFactory: options.idFactory } : {}),
             ...(options.taskTimeoutMs ? { taskTimeoutMs: options.taskTimeoutMs } : {}),
