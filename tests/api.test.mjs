@@ -444,26 +444,35 @@ test("rate limiter enforces boundary, concurrent burst, window reset, auth isola
   });
   const env = makeTestEnv();
 
-  // Failed auth requests must NOT consume the legitimate client's quota
+  // Failed auth requests must NOT consume the legitimate client's quota.
   const badAuth = await worker.fetch(makeTaskRequest({ goal: "Bad", url: "https://example.com/0" }, { token: "bad" }), env);
   assert.equal(badAuth.status, 401);
 
-  // Concurrent requests: 2 valid + 1 invalid authenticated JSON = 3 (consumes full quota)
-  const [r1, r2, r3, r4] = await Promise.all([
+  // Concurrent arrival order is intentionally unspecified: exactly three requests pass.
+  const burst = await Promise.all([
     worker.fetch(makeTaskRequest({ goal: "Req 1", url: "https://example.com/1" }), env),
     worker.fetch(makeTaskRequest({ goal: "Req 2", url: "https://example.com/2" }), env),
-    worker.fetch(makeTaskRequest("{invalid-json"), env),
+    worker.fetch(makeTaskRequest({ goal: "Req 3", url: "https://example.com/3" }), env),
     worker.fetch(makeTaskRequest({ goal: "Req 4", url: "https://example.com/4" }), env),
   ]);
-  assert.equal(r1.status, 200);
-  assert.equal(r2.status, 200);
-  assert.equal(r3.status, 400);
-  assert.equal(r4.status, 429);
-  assert.equal(r4.headers.get("retry-after"), "60");
+  assert.deepEqual(burst.map((response) => response.status).sort((a, b) => a - b), [200, 200, 200, 429]);
+  const limited = burst.find((response) => response.status === 429);
+  assert.equal(limited.headers.get("retry-after"), "60");
 
-  // Window reset restores quota
+  // A sequential invalid authenticated request is rejected as 400 but still consumes one slot.
   currentMs += 60_000;
-  const r5 = await worker.fetch(makeTaskRequest({ goal: "Req 5", url: "https://example.com/5" }), env);
+  const invalid = await worker.fetch(makeTaskRequest("{invalid-json"), env);
+  assert.equal(invalid.status, 400);
+  const afterInvalid1 = await worker.fetch(makeTaskRequest({ goal: "After invalid 1", url: "https://example.com/5" }), env);
+  const afterInvalid2 = await worker.fetch(makeTaskRequest({ goal: "After invalid 2", url: "https://example.com/6" }), env);
+  const afterInvalid3 = await worker.fetch(makeTaskRequest({ goal: "After invalid 3", url: "https://example.com/7" }), env);
+  assert.equal(afterInvalid1.status, 200);
+  assert.equal(afterInvalid2.status, 200);
+  assert.equal(afterInvalid3.status, 429);
+
+  // A second window reset restores quota.
+  currentMs += 60_000;
+  const r5 = await worker.fetch(makeTaskRequest({ goal: "Req 5", url: "https://example.com/8" }), env);
   assert.equal(r5.status, 200);
 });
 
