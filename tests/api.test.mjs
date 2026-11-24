@@ -298,6 +298,7 @@ test("POST /api/v1/tasks executes end-to-end bounded HTTP fetch and returns stru
     "2026-11-19T10:00:00.000Z",
     "2026-11-19T10:00:00.010Z",
     "2026-11-19T10:00:00.085Z",
+    "2026-11-19T10:00:00.085Z",
   ];
   const worker = createWorker({
     idFactory: () => "task-e2e-0001",
