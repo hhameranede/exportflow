@@ -1,0 +1,63 @@
+name: Cache Runtime Acceptance (one-shot)
+
+on:
+  push:
+    branches:
+      - ops/cache-runtime-acceptance-20261124
+    paths:
+      - .github/acceptance/cache-runtime.approved
+      - .github/workflows/cache-runtime-acceptance.yml
+      - scripts/acceptance/cache-runtime-acceptance.mjs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exportflow-cache-runtime-acceptance-20261124
+  cancel-in-progress: false
+
+jobs:
+  acceptance:
+    if: >-
+      \${{ github.event_name == 'push' &&
+          github.ref == 'refs/heads/ops/cache-runtime-acceptance-20261124' &&
+          contains(github.event.head_commit.message, 'cache-runtime-acceptance-approved') &&
+          contains(github.event.head_commit.added, '.github/acceptance/cache-runtime.approved') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+    steps:
+      - name: Checkout the exact one-shot acceptance commit
+        uses: actions/checkout@v4
+        with:
+          ref: \${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify one-shot approval marker and secret presence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .github/acceptance/cache-runtime.approved
+          grep -Fx "one isolated three-call cache acceptance on the existing MCP Acceptance Worker only" .github/acceptance/cache-runtime.approved
+          git diff-tree --no-commit-id --name-only --diff-filter=A -r HEAD | grep -Fx '.github/acceptance/cache-runtime.approved'
+          test -n "$CLOUDFLARE_API_TOKEN"
+          node --check scripts/acceptance/cache-runtime-acceptance.mjs
+
+      - name: Run exactly three authenticated real-runtime Fetch calls and retire fixtures
+        run: node scripts/acceptance/cache-runtime-acceptance.mjs
+
+      - name: Upload cache acceptance evidence (no credentials)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: exportflow-cache-runtime-acceptance-\${{ github.run_id }}
+          path: cache-runtime-acceptance-result.json
+          if-no-files-found: warn
+          retention-days: 3
