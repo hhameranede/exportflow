@@ -397,7 +397,10 @@ export async function executeDurableTask({
       Date.parse(row.lease_expires_at) <= Date.parse(timestamp)) {
     try {
       await markExpired(db, row, timestamp);
-      return { ok: false, httpStatus: 410, code: "TASK_EXPIRED", message: "The task acceptance lease expired before execution began." };
+      const expired = await getDurableTask({ db, tenantId: identity.tenantId, taskId: row.task_id, now });
+      return expired.ok
+        ? { ok: true, task: expired.task, quota: expired.task.quota, replayed: true, httpStatus: 200 }
+        : expired;
     } catch {
       return { ok: false, httpStatus: 503, code: "TASK_STORE_UNAVAILABLE", message: "Expired task acceptance could not be recorded." };
     }
@@ -414,7 +417,10 @@ export async function executeDurableTask({
     if (row.lease_expires_at && Date.parse(row.lease_expires_at) <= Date.parse(timestamp)) {
       try {
         await markExpired(db, row, timestamp);
-        return { ok: false, httpStatus: 410, code: "TASK_EXPIRED", message: "The task execution lease expired before a terminal result was persisted." };
+        const expired = await getDurableTask({ db, tenantId: identity.tenantId, taskId: row.task_id, now });
+        return expired.ok
+          ? { ok: true, task: expired.task, quota: expired.task.quota, replayed: true, httpStatus: 200 }
+          : expired;
       } catch {
         return { ok: false, httpStatus: 503, code: "TASK_STORE_UNAVAILABLE", message: "Expired task execution could not be recorded." };
       }
