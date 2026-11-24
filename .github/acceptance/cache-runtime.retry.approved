@@ -1,1 +1,2 @@
 single retry after fixing GitHub Actions expression interpolation; same Acceptance-only three-call cache test; no Production writes
+second trigger commit after replacing the unreliable added-file webhook predicate
