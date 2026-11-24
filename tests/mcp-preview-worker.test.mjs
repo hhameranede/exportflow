@@ -3,6 +3,7 @@ import test from "node:test";
 import { createAuthServiceJwksFetcher, createExportFlowPreviewWorker } from "../src/mcp/preview-worker.js";
 import { hashApiKey } from "../src/core/tenant-auth.js";
 import { createDurableTenantBurstTestNamespace } from "./helpers/durable-tenant-burst-test-namespace.js";
+import { createDurableTaskD1 } from "./helpers/durable-task-d1.js";
 
 const HOST = "mcp.exportflow.me";
 const URL = "https://" + HOST + "/mcp";
@@ -51,6 +52,7 @@ function makeWorker(options = {}) {
               policyVersion: "test-v1",
               quotaPeriod: "daily",
               requestLimit: 10,
+              scopes: ["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract", "tasks:search", "tasks:research", "tasks:read"],
             },
           };
         },
@@ -70,7 +72,11 @@ function makeWorker(options = {}) {
     expectedHost: HOST,
     ...(tenantTaskGateway ? { tenantTaskGateway } : {}),
   });
+  const taskFixture = options.useRealGateway
+    ? null
+    : createDurableTaskD1({ requestLimit: options.requestLimit ?? 10, tenantIds: ["tenant_test_001"], planCode: "test" });
   const env = options.env || {
+    ...(taskFixture ? { EXPORTFLOW_AUTH_DB: taskFixture.db } : {}),
     MCP_RATE_LIMITER: {
       async limit(value) {
         calls.limits.push(value);
@@ -128,7 +134,7 @@ test("health route describes the read-only MCP preview", async () => {
   assert.equal(response.status, 200);
   assert.equal(body.status, "ok");
   assert.equal(body.endpoint, "/mcp");
-  assert.deepEqual(body.tools, ["exportflow_capabilities", "web_fetch", "web_map", "web_crawl", "web_extract", "web_search", "web_research"]);
+  assert.deepEqual(body.tools, ["exportflow_capabilities", "web_task_status", "web_fetch", "web_map", "web_crawl", "web_extract", "web_search", "web_research"]);
   assert.equal(calls.tasks.length, 0);
 });
 
@@ -410,25 +416,28 @@ test("tool calls enforce operation-specific scopes before quota reservation", as
   assert.equal(calls.tasks.length, 0);
 });
 
-test("MCP rejects exhausted tenant quotas before executing a task", async () => {
-  const { worker, env, calls } = makeWorker({
-    reservationResult: {
-      ok: false,
-      httpStatus: 429,
-      code: "PLAN_QUOTA_EXCEEDED",
-      message: "Quota exhausted.",
-      retryAfterSec: 3600,
-      quota: { limit: 5, remaining: 0, resetAt: "2026-11-21T00:00:00.000Z" },
-    },
-  });
-  const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
+test("MCP rejects exhausted durable task quotas before a second execution", async () => {
+  const fixture = createDurableTaskD1({ requestLimit: 1, tenantIds: ["tenant_test_001"], planCode: "test" });
+  const mcpEnv = {
+    EXPORTFLOW_AUTH_DB: fixture.db,
+    MCP_RATE_LIMITER: { async limit() { return { success: true }; } },
+  };
+  const { worker, calls } = makeWorker({ env: mcpEnv });
+  const call = () => makeRequest(jsonRpc("tools/call", {
     name: "web_fetch",
     arguments: { url: "https://example.com/" },
-  }), { headers: { authorization: "Bearer " + TENANT_TOKEN } }), env);
-  const body = await response.json();
-  assert.equal(body.result.isError, true);
-  assert.equal(body.result.structuredContent.error, "PLAN_QUOTA_EXCEEDED");
-  assert.equal(calls.tasks.length, 0);
+  }), { headers: { authorization: "Bearer " + TENANT_TOKEN } });
+  try {
+    const first = await worker.fetch(call(), mcpEnv);
+    assert.equal((await first.json()).result.isError, undefined);
+    const second = await worker.fetch(call(), mcpEnv);
+    const body = await second.json();
+    assert.equal(body.result.isError, true);
+    assert.equal(body.result.structuredContent.error, "PLAN_QUOTA_EXCEEDED");
+    assert.equal(calls.tasks.length, 1);
+  } finally {
+    fixture.close();
+  }
 });
 
 const TENANT_KEY_ID = "0123456789abcdef";
@@ -544,7 +553,7 @@ test("MCP protected-resource metadata uses configured Auth and MCP origins", asy
   assert.equal(response.status, 200);
   assert.equal(body.resource, "https://mcp-acceptance.hhameranede.workers.dev/mcp");
   assert.deepEqual(body.authorization_servers, ["https://auth-acceptance.hhameranede.workers.dev/api/auth"]);
-  assert.deepEqual(body.scopes_supported, ["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract", "tasks:search", "tasks:research"]);
+  assert.deepEqual(body.scopes_supported, ["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract", "tasks:search", "tasks:research", "tasks:read"]);
 });
 
 test("MCP responses include baseline security headers on JSON, empty, and preflight paths", async () => {
