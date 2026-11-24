@@ -68,6 +68,7 @@ test("web_task_status requires tasks:read independently of task execution scopes
     expectedHost: "mcp.exportflow.me",
     tenantTaskGateway: fetchOnlyGateway,
     getAdapterCatalog: () => [],
+    executeWebTask: async () => { throw new Error("This status-only test must not execute tasks."); },
   });
   const env = {
     EXPORTFLOW_AUTH_DB: fixture.db,
