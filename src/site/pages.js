@@ -499,9 +499,9 @@ curl -sS -X POST http://127.0.0.1:3000/api/v1/tasks \\
     <section class="ef-page-header">
       <div class="ef-container">
         <p class="ef-kicker">Developer Documentation</p>
-        <h1 class="ef-page-title">Build with the ExportFlow task contract.</h1>
+        <h1 class="ef-page-title">Build with the ExportFlow execution API.</h1>
         <p class="ef-lead">
-          Phase 1 exposes bounded HTTP fetch (<code>POST /api/v1/tasks</code>) in local Node.js and Cloudflare Workerd runtimes when authenticated. No public production API, public token issuance, SDK package, or live MCP server is open yet.
+          The current release exposes six bounded static-web operations across the tenant-authenticated REST API and MCP: Fetch, Map, Crawl, Extract, Search, and Research. Requests are policy-bounded, use public-web egress controls, and return normalized evidence and usage metadata.
         </p>
       </div>
     </section>
@@ -530,9 +530,9 @@ curl -sS -X POST http://127.0.0.1:3000/api/v1/tasks \\
               ExportFlow provides deterministic execution infrastructure for AI agents. Instead of handing models raw sockets or unmanaged browser instances, callers submit a bounded task payload and receive a normalized result object containing status, data, source evidence, lifecycle events, and measured usage.
             </p>
             <div class="ef-notice ef-notice-warn">
-              <p class="ef-notice-title">Local execution only in Phase 1</p>
+              <p class="ef-notice-title">Authenticated execution — no public anonymous task access</p>
               <p class="ef-notice-body">
-                Read-only discovery endpoints (<code>GET /api/v1/health</code>, <code>GET /api/v1/platform</code>, <code>GET /api/v1/router-preview</code>) run directly in the Worker. Task execution (<code>POST /api/v1/tasks</code>) requires <code>EXPORTFLOW_API_TOKEN</code> configured in your environment and currently supports <code>operation: "fetch"</code> only.
+                The current Platform Worker exposes <code>POST /api/v1/tasks</code> for the six supported operations. It requires a tenant-scoped <code>ef_live_*</code> API key, operation-specific scopes, tenant burst protection, and a persisted plan quota. The MCP Worker exposes the corresponding six tools with tenant API-key or OAuth authorization. Browser rendering and interaction are not part of the customer execution surface.
               </p>
             </div>
           </article>
@@ -545,9 +545,9 @@ curl -sS -X POST http://127.0.0.1:3000/api/v1/tasks \\
                   <tr><th>Term</th><th>Definition in ExportFlow</th></tr>
                 </thead>
                 <tbody>
-                  <tr><td class="ef-mono-cell">Task</td><td>A single bounded execution unit carrying a natural-language <code>goal</code>, target <code>url</code>, and resource limits. Ephemeral in Phase 1.</td></tr>
-                  <tr><td class="ef-mono-cell">Operation</td><td>Declared intent (<code>fetch</code>, <code>map</code>, <code>crawl</code>, <code>extract</code>, <code>search</code>, <code>research</code>). Only <code>fetch</code> is enabled on the task API right now.</td></tr>
-                  <tr><td class="ef-mono-cell">Execution Path</td><td>Router decision selecting <code>http</code> (lightweight direct retrieval) or <code>browser</code> (JS rendering / interaction, currently unsupported).</td></tr>
+                  <tr><td class="ef-mono-cell">Task</td><td>A bounded request with an operation, goal, validated input, execution limits, normalized result, provenance, and usage metadata. The current release returns lifecycle events inline; D1-backed persistence and status retrieval are staged in Draft PR #134.</td></tr>
+                  <tr><td class="ef-mono-cell">Operation</td><td>One of six supported operations: <code>fetch</code>, <code>map</code>, <code>crawl</code>, <code>extract</code>, <code>search</code>, or <code>research</code>.</td></tr>
+                  <tr><td class="ef-mono-cell">Execution Path</td><td>Request-first static HTTP retrieval. Browser rendering and interaction are deliberately unavailable to customer task execution.</td></tr>
                   <tr><td class="ef-mono-cell">Adapter</td><td>Versioned contract wrapper such as <code>http.fetch.v1</code> declaring capabilities, bounds, and egress rules.</td></tr>
                   <tr><td class="ef-mono-cell">Evidence</td><td>Per-source provenance metadata recording resolved URL, ISO timestamp, HTTP status, content type, bytes, and redirect count.</td></tr>
                 </tbody>
@@ -562,8 +562,9 @@ curl -sS -X POST http://127.0.0.1:3000/api/v1/tasks \\
             </p>
             <ul class="ef-list">
               <li>Content-Type must be <code>application/json</code> (otherwise <code>415</code>) and body size must not exceed <code>32,768</code> bytes (<code>413</code>).</li>
-              <li>Allowed top-level keys only: <code>goal</code> (1–2000 chars), <code>url</code> (public HTTP/HTTPS DNS domain), optional <code>operation</code> (defaults to <code>"fetch"</code>), optional <code>requiresJavascript</code> / <code>requiresInteraction</code> booleans, and optional <code>limits</code>.</li>
-              <li>Limit bounds: <code>timeoutMs</code> integer <code>1..8000</code>, <code>maxBytes</code> integer <code>1..1048576</code>, <code>maxRedirects</code> integer <code>0..3</code>.</li>
+              <li>Every request requires a non-empty <code>goal</code> (up to 2,000 characters) and a supported <code>operation</code>. URL operations use a public HTTP/HTTPS <code>url</code>; Search and Research use a bounded <code>query</code> and one selected source (<code>wikipedia</code>, <code>openalex</code>, or <code>crossref</code>).</li>
+              <li>Operation limits are enforced server-side: Map accepts up to 15 URLs; Crawl accepts up to 3 pages and depth 1; Search and Research accept up to 10 results; Research accepts up to 3 candidates.</li>
+              <li><code>cacheMode</code> is <code>default</code> or <code>bypass</code>. Fetch-specific limits support bounded timeout, response bytes, and redirect count. Browser/JavaScript execution flags are not supported.</li>
             </ul>
             ${renderCodeBlock({
               id: "doc-req-json",
@@ -575,12 +576,12 @@ curl -sS -X POST http://127.0.0.1:3000/api/v1/tasks \\
           <article class="ef-doc-block" id="doc-flow">
             <h2>4. Execution Flow</h2>
             <p>
-              Each accepted request progresses through an explicit, inspectable event sequence inside <code>executeWebTask()</code>:
+              The current release executes bounded work request-first and returns an evidence envelope with lifecycle and usage metadata. Browser execution is not selected for customer tasks. Draft PR #134 adds a shared D1 Task Store for REST and MCP, including accepted/running/terminal states, append-only lifecycle events, status reads, and idempotent replay once its migration and rollout gates are completed.
             </p>
             <ul class="ef-list">
-              <li><code>task.accepted</code>: Task ID assigned via Web Crypto <code>randomUUID()</code> and goal/URL validated.</li>
-              <li><code>task.started</code>: Router selects <code>http</code> or <code>browser</code> path and attaches adapter identity.</li>
-              <li><code>task.succeeded</code> / <code>task.partial</code> / <code>task.failed</code> / <code>task.unsupported</code>: Terminal state emitted with duration, byte usage, and normalized output.</li>
+              <li><code>task.accepted</code>: A tenant-scoped Task record is created and the logical quota is reserved once.</li>
+              <li><code>task.started</code>: The request claims the Task and invokes its bounded static-web adapter.</li>
+              <li><code>task.succeeded</code> / <code>task.partial</code> / <code>task.failed</code> / <code>task.cancelled</code> / <code>task.expired</code> / <code>task.unsupported</code>: Terminal outcome with normalized result, evidence, and usage.</li>
             </ul>
           </article>
 
@@ -590,24 +591,30 @@ curl -sS -X POST http://127.0.0.1:3000/api/v1/tasks \\
               ExportFlow isolates provider details behind adapter contracts registered in <code>src/core/adapters.js</code>. You can inspect the active catalog metadata locally via <code>GET /api/v1/platform</code> (which omits executable handlers and reports <code>liveCapabilities</code> truthfully based on runtime configuration).
             </p>
             <p>
-              Currently, <code>http.fetch.v1</code> is the sole active adapter for task execution. Prototype modules (<code>web.map.v1</code>, <code>web.crawl.v1</code>, <code>web.extract.v1</code>, and search/browser factories) remain disabled behind <code>501</code> until security and quota gates for Phase 2 are complete.
+              The current catalog includes bounded static-web adapters for Fetch, Map, Crawl, Extract, Search and Research. Map/Crawl follow the declared page and depth limits; Search uses selected public scholarly/knowledge sources rather than claiming whole-web coverage. The execution surface does not render JavaScript or interact with websites through a browser.
             </p>
           </article>
 
           <article class="ef-doc-block" id="doc-auth">
             <h2>6. Authentication &amp; Outbound Policy</h2>
             <p>
-              Task execution fails closed: if <code>EXPORTFLOW_API_TOKEN</code> is absent or blank, every request to <code>POST /api/v1/tasks</code> returns <code>503 AUTH_NOT_CONFIGURED</code>. When configured, requests require <code>Authorization: Bearer &lt;token&gt;</code> verified via fixed-length SHA-256 constant-time digest comparison and bounded by an isolate-local rate limiter (60 requests per 60 seconds default).
+              REST task execution uses a tenant API key in the <code>Authorization: Bearer ef_live_…</code> header. The tenant identity, plan, operation scopes, and quota policy are resolved from D1; the caller cannot supply an authoritative tenant or plan. The six operations use separate scopes (<code>tasks:fetch</code>, <code>tasks:map</code>, <code>tasks:crawl</code>, <code>tasks:extract</code>, <code>tasks:search</code>, <code>tasks:research</code>). The MCP tools support the same tenant API-key boundary and OAuth consent.
             </p>
             <p>
-              Application-layer <code>egress-guard.js</code> validates both the initial target and every manual redirect hop against IP literals, local/reserved domain suffixes, non-default ports, embedded credentials, HTTPS downgrades, and ExportFlow-owned origins.
+              A pre-auth IP guard and the shared Durable Object tenant burst limiter protect both REST and MCP. The current quota is persisted per tenant and UTC window. Draft PR #134 moves the logical reservation into the D1 Task acceptance trigger so an idempotent retry cannot charge a second request.
+            </p>
+            <p>
+              Application-layer egress validation checks the initial target and every manual redirect hop against IP literals, local/reserved domain suffixes, non-default ports, embedded credentials, HTTPS downgrades, and ExportFlow-owned origins.
             </p>
           </article>
 
           <article class="ef-doc-block" id="doc-response">
             <h2>7. Response, Evidence &amp; Usage Format</h2>
             <p>
-              All task responses normalize into one consistent structure regardless of upstream outcome. Notice that <code>usage.cost</code> remains <code>null</code> because no billing meter is attached in Phase 1.
+              Task responses normalize status, result data, source provenance, warnings/errors, timestamps, and measured usage. <code>usage.cost</code> remains <code>null</code> until a billing meter is introduced.
+            </p>
+            <p>
+              Draft PR #134 adds optional idempotency: send <code>Idempotency-Key</code> with a REST submission (or <code>idempotencyKey</code> to an MCP tool) to replay the same Task without another logical quota charge. Reusing a key for a different effective request returns <code>409 IDEMPOTENCY_KEY_REUSED</code>. It also adds REST <code>GET /api/v1/tasks/{taskId}</code> and MCP <code>web_task_status</code>, both requiring <code>tasks:read</code>. Retained results are bounded and expire after 24 hours. These additions are staged in the Draft PR and are not available in the current Production release until the code and D1 migration are approved and rolled out.
             </p>
             ${renderCodeBlock({
               id: "doc-res-json",
