@@ -60,9 +60,27 @@ CREATE TABLE IF NOT EXISTS task_events (
 CREATE INDEX IF NOT EXISTS idx_task_events_tenant_task
   ON task_events (tenant_id, task_id, revision);
 
+-- Reject only a genuinely new logical task when the existing UTC window is already exhausted.
+-- The unique-key replay path is excluded, so a client retry can still retrieve its original Task.
+CREATE TRIGGER IF NOT EXISTS guard_task_quota_capacity_before_insert
+BEFORE INSERT ON tasks
+WHEN NOT EXISTS (
+  SELECT 1 FROM tasks
+  WHERE tenant_id = NEW.tenant_id
+    AND idempotency_key_hash = NEW.idempotency_key_hash
+)
+AND EXISTS (
+  SELECT 1 FROM tenant_request_usage
+  WHERE tenant_id = NEW.tenant_id
+    AND window_id = NEW.quota_window_id
+    AND requests_used >= request_limit
+)
+BEGIN
+  SELECT RAISE(ABORT, 'PLAN_REQUEST_QUOTA_EXCEEDED');
+END;
+
 -- The task insert is the single idempotency/quota acceptance point.
 -- An idempotency conflict does not fire this AFTER INSERT trigger and cannot consume quota.
--- If the quota UPSERT has no capacity, RAISE(ABORT) rolls back the task insert as well.
 CREATE TRIGGER IF NOT EXISTS reserve_quota_for_new_task
 AFTER INSERT ON tasks
 BEGIN
@@ -79,10 +97,6 @@ BEGIN
     requests_used = tenant_request_usage.requests_used + 1,
     updated_at = excluded.updated_at
   WHERE tenant_request_usage.requests_used < tenant_request_usage.request_limit;
-
-  SELECT CASE WHEN changes() = 0
-    THEN RAISE(ABORT, 'PLAN_REQUEST_QUOTA_EXCEEDED')
-  END;
 
   UPDATE tasks
   SET plan_code = (
