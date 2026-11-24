@@ -19,20 +19,20 @@ concurrency:
 jobs:
   acceptance:
     if: >-
-      \${{ github.event_name == 'push' &&
+      ${{ github.event_name == 'push' &&
           github.ref == 'refs/heads/ops/cache-runtime-acceptance-20261124' &&
           contains(github.event.head_commit.message, 'cache-runtime-acceptance-approved') &&
           contains(github.event.head_commit.added, '.github/acceptance/cache-runtime.approved') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
     steps:
       - name: Checkout the exact one-shot acceptance commit
         uses: actions/checkout@v4
         with:
-          ref: \${{ github.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Set up Node.js
@@ -57,7 +57,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: exportflow-cache-runtime-acceptance-\${{ github.run_id }}
+          name: exportflow-cache-runtime-acceptance-${{ github.run_id }}
           path: cache-runtime-acceptance-result.json
           if-no-files-found: warn
           retention-days: 3
