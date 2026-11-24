@@ -28,8 +28,8 @@ Both REST and MCP use `src/core/tenant-task-gateway.js`:
 2. Tenant API key authentication, expiry, tenant/plan state and operation-specific scope validation.
 3. Per-isolate tenant burst limiter.
 4. Request contract validation and public egress/schema validation.
-5. One atomic D1 request-quota reservation.
-6. Task execution only after all previous steps pass.
+5. Idempotent task acceptance in the shared Task Store. For a new key, the D1 task-insert trigger atomically creates the accepted Task, reserves one logical request in `tenant_request_usage`, snapshots the effective quota window and writes `task.accepted`. A replay does not reserve quota again.
+6. Task execution only after the task acceptance transaction succeeds.
 
 REST `POST /api/v1/tasks` authorizes the operation-specific scope for Fetch, Map, Crawl, Extract, Search or Research. `GET /api/v1/tasks/{taskId}` requires `tasks:read`.
 
@@ -64,7 +64,7 @@ Tables:
 
 The migrations intentionally seed no plan, tenant or API key. Do not invent Free/Developer/Pro allowances. Decide limits and approve the trusted provisioning/revocation workflow before onboarding customers.
 
-An isolated Tenant Acceptance D1 has been verified to contain the tenant tables and quota, audit, membership and membership-version triggers. This documentation update does not apply migrations or change any D1 database. Production currently has no `EXPORTFLOW_AUTH_DB` binding configured.
+An isolated Tenant Acceptance D1 has been verified to contain the tenant tables and quota, audit, membership and membership-version triggers. A separate read-only Cloudflare settings check on 24 November 2026 confirmed that both Production Workers have the `EXPORTFLOW_AUTH_DB` binding to the shared tenant database. Binding presence does not prove that migration 0005 is applied, that the Task schema is ready, or that authenticated Production task execution has passed. This documentation update does not apply migrations or change any D1 database.
 
 ## Platform Owner Authentication and Tenant Administration API
 
