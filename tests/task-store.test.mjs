@@ -220,10 +220,101 @@ test("expired task results become inaccessible and are cleared from D1", async (
     });
     assert.equal(expired.ok, false);
     assert.equal(expired.httpStatus, 410);
-    const row = fixture.sqlite.prepare("SELECT response_json, result_available FROM tasks WHERE task_id = ?").get(completed.task.id);
-    assert.equal(row.response_json, null);
-    assert.equal(row.result_available, 0);
+    const row = fixture.sqlite.prepare("SELECT task_id FROM tasks WHERE task_id = ?").get(completed.task.id);
+    assert.equal(row, undefined);
+    assert.equal(fixture.sqlite.prepare("SELECT COUNT(*) AS total FROM task_events WHERE task_id = ?").get(completed.task.id).total, 0);
+    const repeatedRead = await getDurableTask({
+      db: fixture.db, tenantId: "tenant_alpha", taskId: completed.task.id, now: () => later,
+    });
+    assert.equal(repeatedRead.ok, false);
+    assert.equal(repeatedRead.httpStatus, 404);
   } finally {
+    fixture.close();
+  }
+});
+
+test("an accepted task whose Worker stops before claiming expires when its lease is observed", async () => {
+  const fixture = createDurableTaskD1();
+  const db = {
+    prepare(sql) {
+      if (sql.startsWith("UPDATE tasks SET state = 'running'")) {
+        return { bind() { return { async first() { return null; } }; } };
+      }
+      return fixture.db.prepare(sql);
+    },
+  };
+  const executor = makeExecutor();
+  try {
+    const accepted = await executeDurableTask({
+      ...runOptions(fixture, executor),
+      db,
+    });
+    assert.equal(accepted.ok, true);
+    assert.equal(accepted.httpStatus, 202);
+    assert.equal(accepted.task.state, "accepted");
+    assert.equal(executor.calls, 0);
+
+    const later = "2026-11-24T10:03:01.000Z";
+    const status = await getDurableTask({
+      db: fixture.db, tenantId: "tenant_alpha", taskId: accepted.task.id, now: () => later,
+    });
+    assert.equal(status.ok, true);
+    assert.equal(status.task.state, "expired");
+    assert.deepEqual(status.task.events.map((event) => event.type), ["task.accepted", "task.expired"]);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("a running task whose executor outlives its lease becomes expired on status read", async () => {
+  const fixture = createDurableTaskD1();
+  let signalStarted;
+  const started = new Promise((resolve) => { signalStarted = resolve; });
+  let finishExecution;
+  const executeTask = async (_input, options) => {
+    signalStarted();
+    return await new Promise((resolve) => { finishExecution = resolve; });
+  };
+  const pending = executeDurableTask({
+    db: fixture.db,
+    identity,
+    input: makeInput(),
+    idempotencyKey: "running-lease-key-0001",
+    executeTask,
+    now: () => FIXED_TIME,
+    idFactory: () => "task_running_lease_01",
+  });
+  try {
+    await started;
+    const later = "2026-11-24T10:03:01.000Z";
+    const status = await getDurableTask({
+      db: fixture.db, tenantId: "tenant_alpha", taskId: "task_running_lease_01", now: () => later,
+    });
+    assert.equal(status.ok, true);
+    assert.equal(status.task.state, "expired");
+    assert.deepEqual(status.task.events.map((event) => event.type), ["task.accepted", "task.started", "task.expired"]);
+
+    finishExecution({
+      id: "task_running_lease_01",
+      state: "succeeded",
+      execution: { operation: "fetch" },
+      timestamps: { createdAt: FIXED_TIME, startedAt: FIXED_TIME, completedAt: FIXED_TIME },
+      usage: { requestsAttempted: 1, responseBytes: 2 },
+      events: [], errors: [],
+      result: { status: "succeeded", data: { ok: true }, sources: [], warnings: [] },
+    });
+    const completion = await pending;
+    assert.equal(completion.ok, false);
+    assert.equal(completion.httpStatus, 503);
+    assert.equal(completion.code, "TASK_COMPLETION_PERSIST_FAILED");
+    const stored = fixture.sqlite.prepare("SELECT state FROM tasks WHERE task_id = 'task_running_lease_01'").get();
+    assert.equal(stored.state, "expired");
+  } finally {
+    if (finishExecution) finishExecution({
+      id: "task_running_lease_01", state: "failed",
+      timestamps: { createdAt: FIXED_TIME, startedAt: FIXED_TIME, completedAt: FIXED_TIME },
+      events: [], errors: [], result: { status: "failed", data: {}, sources: [], warnings: [] },
+    });
     fixture.close();
   }
 });
