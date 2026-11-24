@@ -490,8 +490,9 @@ export async function executeDurableTask({
       retentionHours: TASK_RESULT_RETENTION_MS / (60 * 60 * 1000),
     },
   };
-  delete responseTask.goal;
-  let responseJson = JSON.stringify(responseTask);
+  const retainedTask = { ...responseTask };
+  delete retainedTask.goal;
+  let responseJson = JSON.stringify(retainedTask);
   const resultAvailable = new TextEncoder().encode(responseJson).byteLength <= resultMaxBytes;
   if (!resultAvailable) {
     responseJson = null;
