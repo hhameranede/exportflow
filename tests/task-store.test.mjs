@@ -267,6 +267,15 @@ test("an accepted task whose Worker stops before claiming expires when its lease
     assert.equal(executor.calls, 0);
 
     const later = "2026-11-24T10:03:01.000Z";
+    const retry = await executeDurableTask(runOptions(fixture, executor, { now: () => later }));
+    assert.equal(retry.ok, true);
+    assert.equal(retry.httpStatus, 200);
+    assert.equal(retry.replayed, true);
+    assert.equal(retry.task.id, accepted.task.id);
+    assert.equal(retry.task.state, "expired");
+    assert.equal(executor.calls, 0);
+    assert.equal(fixture.sqlite.prepare("SELECT requests_used FROM tenant_request_usage").get().requests_used, 1);
+
     const status = await getDurableTask({
       db: fixture.db, tenantId: "tenant_alpha", taskId: accepted.task.id, now: () => later,
     });
