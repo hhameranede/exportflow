@@ -3,6 +3,7 @@ import { getAdapterCatalog } from "./core/adapters.js";
 import { createTenantTaskGateway } from "./core/tenant-task-gateway.js";
 import { readBoundedJsonBody, TaskContractError, validateTaskRequest } from "./core/task-contract.js";
 import { executeWebTask } from "./core/tasks.js";
+import { executeDurableTask, getDurableTask } from "./core/task-store.js";
 import { handleWebsiteRequest } from "./site/router.js";
 import { BRAND_MARK_SVG } from "./site/diagrams.js";
 import { renderMarketingNotFoundPage } from "./site/marketing.js";
@@ -107,6 +108,25 @@ export function createWorker(options = {}) {
         const workspaceResponse = await handleWorkspaceRequest(request, env, options);
         if (workspaceResponse) return workspaceResponse;
 
+        const taskReadMatch = /^\/api\/v1\/tasks\/([A-Za-z0-9_-]{8,64})$/.exec(url.pathname);
+        if (taskReadMatch) {
+          if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405, { allow: "GET" });
+          const auth = await tenantTaskGateway.authenticate(request, env, { requiredScope: "tasks:read" });
+          if (!auth.ok) {
+            return json({ error: { code: auth.code, message: auth.message } }, auth.httpStatus, {
+              ...(auth.headers || {}), ...(auth.retryAfterSec ? { "retry-after": String(auth.retryAfterSec) } : {}),
+            });
+          }
+          const found = await getDurableTask({
+            db: env?.EXPORTFLOW_AUTH_DB,
+            tenantId: auth.identity.tenantId,
+            taskId: taskReadMatch[1],
+            ...(options.now ? { now: options.now } : {}),
+          });
+          if (!found.ok) return json({ error: { code: found.code, message: found.message } }, found.httpStatus);
+          return json(found.task, 200, { "cache-control": "no-store" });
+        }
+
         if (url.pathname === "/api/v1/tasks") {
           if (request.method !== "POST") {
             return json({ error: "method_not_allowed" }, 405, { allow: "POST" });
@@ -137,28 +157,34 @@ export function createWorker(options = {}) {
             return json({ error: { code: scopeAuth.code, message: scopeAuth.message } }, scopeAuth.httpStatus);
           }
 
-          const reservation = await tenantTaskGateway.reserve(env, auth.identity);
-          if (!reservation.ok) {
+          const outcome = await executeDurableTask({
+            db: env?.EXPORTFLOW_AUTH_DB,
+            identity: auth.identity,
+            input: contract,
+            idempotencyKey: request.headers.get("idempotency-key") || undefined,
+            signal: request.signal,
+            executeTask: executeWebTask,
+            ...(options.now ? { now: options.now } : {}),
+            ...(options.idFactory ? { idFactory: options.idFactory } : {}),
+            ...(options.taskTimeoutMs ? { taskTimeoutMs: options.taskTimeoutMs } : {}),
+          });
+          if (!outcome.ok) {
             return json(
-              { error: { code: reservation.code, message: reservation.message } },
-              reservation.httpStatus,
-              reservation.retryAfterSec
-                ? { "retry-after": String(reservation.retryAfterSec), "x-plan-limit": String(reservation.quota?.limit ?? auth.identity.requestLimit), "x-plan-remaining": "0", ...(reservation.quota?.resetAt ? { "x-plan-reset": reservation.quota.resetAt } : {}) }
-                : {},
+              { error: { code: outcome.code, message: outcome.message } },
+              outcome.httpStatus,
+              {
+                ...(outcome.retryAfterSec ? { "retry-after": String(outcome.retryAfterSec) } : {}),
+                ...(outcome.quota?.limit ? { "x-plan-limit": String(outcome.quota.limit), "x-plan-remaining": "0" } : {}),
+                ...(outcome.quota?.resetAt ? { "x-plan-reset": outcome.quota.resetAt } : {}),
+              },
             );
           }
-
-          const task = await executeWebTask(contract, {
-            fetchImpl: options.fetchImpl,
-            now: options.now,
-            idFactory: options.idFactory,
-            taskTimeoutMs: options.taskTimeoutMs,
-            signal: request.signal,
-          });
-          return json(task, taskHttpStatus(task), {
-            "x-plan-limit": String(reservation.quota.limit),
-            "x-plan-remaining": String(reservation.quota.remaining),
-            "x-plan-reset": reservation.quota.resetAt,
+          const quota = outcome.quota || outcome.task.quota;
+          return json(outcome.task, outcome.httpStatus === 202 ? 202 : taskHttpStatus(outcome.task), {
+            ...(quota?.limit ? { "x-plan-limit": String(quota.limit) } : {}),
+            ...(Number.isInteger(quota?.remaining) ? { "x-plan-remaining": String(quota.remaining) } : {}),
+            ...(quota?.resetAt ? { "x-plan-reset": quota.resetAt } : {}),
+            ...(outcome.replayed ? { "idempotency-replayed": "true" } : {}),
           });
         }
 
