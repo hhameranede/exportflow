@@ -5,7 +5,10 @@ const PLAN_CODE_PATTERN = /^[a-z][a-z0-9_-]{1,31}$/;
 const POLICY_VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const TENANT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{2,63}$/;
 const KEY_ID_PATTERN = /^[A-Za-z0-9_-]{16}$/;
-const ALLOWED_SCOPES = new Set(["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract", "tasks:*", "*"]);
+const ALLOWED_SCOPES = new Set([
+  "tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract",
+  "tasks:search", "tasks:research", "tasks:read", "tasks:*", "*",
+]);
 const TENANT_STATES = new Set(["active", "suspended", "closed"]);
 const PLAN_STATES = new Set(["active", "retired"]);
 const MAX_REQUEST_LIMIT = 1_000_000_000;
