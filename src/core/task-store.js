@@ -183,7 +183,8 @@ async function markExpired(db, row, timestamp, reason = "TASK_EXECUTION_LEASE_EX
 }
 
 export async function getDurableTask({ db, tenantId, taskId, now = () => new Date().toISOString() } = {}) {
-  db = requireDatabase(db);
+  try { db = requireDatabase(db); }
+  catch { return { ok: false, httpStatus: 503, code: "TASK_STORE_UNAVAILABLE", message: "Task storage is not configured." }; }
   if (typeof tenantId !== "string" || !tenantId || typeof taskId !== "string" || !/^[A-Za-z0-9_-]{8,64}$/.test(taskId)) {
     return { ok: false, httpStatus: 404, code: "TASK_NOT_FOUND", message: "Task was not found." };
   }
@@ -221,7 +222,7 @@ export async function getDurableTask({ db, tenantId, taskId, now = () => new Dat
 }
 
 function taskStatusForResult(result) {
-  return TASK_STATES.has(result?.state) ? result.state : "failed";
+  return TERMINAL_STATES.has(result?.state) ? result.state : "failed";
 }
 
 function taskQuotaError(db, identity, windowId, resetAt, timestamp) {
@@ -259,7 +260,8 @@ export async function executeDurableTask({
   taskTimeoutMs,
   resultMaxBytes = TASK_RESULT_MAX_BYTES,
 } = {}) {
-  db = requireDatabase(db);
+  try { db = requireDatabase(db); }
+  catch { return { ok: false, httpStatus: 503, code: "TASK_STORE_UNAVAILABLE", message: "Task storage is not configured." }; }
   if (!identity || typeof identity.tenantId !== "string" || !identity.tenantId ||
       typeof identity.planCode !== "string" || typeof identity.policyVersion !== "string" ||
       !Number.isSafeInteger(identity.requestLimit) || identity.requestLimit < 1 ||
