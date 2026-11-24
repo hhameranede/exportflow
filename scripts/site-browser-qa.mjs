@@ -100,6 +100,22 @@ function expectedLocale(path) {
   return match?.[1] || "en";
 }
 
+async function evaluateStablePage(page, evaluator) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await page.evaluate(evaluator);
+    } catch (error) {
+      const message = error?.message || String(error);
+      const navigationRace = /execution context was destroyed|cannot find context with specified id|most likely because of a navigation/i.test(message);
+      if (!navigationRace || attempt === 2) throw error;
+      await page.waitForLoadState("domcontentloaded").catch(() => {});
+      await page.waitForLoadState("networkidle", { timeout: 3000 }).catch(() => {});
+      await page.waitForTimeout(100);
+    }
+  }
+  throw new Error("Page navigation did not settle before browser diagnostics.");
+}
+
 async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = false) {
   const context = await browser.newContext({
     viewport: { width, height: width <= 390 ? 844 : 960 },
@@ -137,7 +153,7 @@ async function inspectRoute(browser, width, route, sharedLinkSet, screenshot = f
   await page.waitForFunction(() => document.readyState === "complete", null, { timeout: 10000 });
   await page.waitForTimeout(50);
 
-  const diagnostics = await page.evaluate(() => {
+  const diagnostics = await evaluateStablePage(page, () => {
     const visible = (element) => Boolean(element.getClientRects().length) &&
       getComputedStyle(element).visibility !== "hidden" && getComputedStyle(element).display !== "none";
     const main = document.querySelector("main");
