@@ -13,7 +13,7 @@ function getWebsiteResponse(path) {
   return handleWebsiteRequest(request, new URL(request.url));
 }
 
-test("contact form creates a safely encoded email draft instead of claiming local success", () => {
+test("contact form creates a safely encoded email draft instead of claiming local success", async () => {
   assert.doesNotThrow(() => new Function(MARKETING_JS));
   assert.ok(MARKETING_JS.includes('mailto:support@exportflow.me?subject='));
   assert.ok(MARKETING_JS.includes('encodeURIComponent("[ExportFlow] " + subjectVal)'));
