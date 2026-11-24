@@ -58,8 +58,8 @@ jobs:
       - name: Verify current Acceptance and Production deployment baselines
         run: node scripts/acceptance/cache-runtime-acceptance.mjs --preflight-only
 
-      - name: Install locked dependencies
-        run: npm ci
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
 
       - name: Run repository unit tests and static checks before Acceptance deployment
         run: npm test && npm run check
