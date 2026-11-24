@@ -51,7 +51,7 @@ function makeWorker(options = {}) {
               planCode: "test",
               policyVersion: "test-v1",
               quotaPeriod: "daily",
-              requestLimit: 10,
+              requestLimit: options.requestLimit ?? 10,
               scopes: ["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract", "tasks:search", "tasks:research", "tasks:read"],
             },
           };
@@ -183,6 +183,7 @@ test("tools/list exposes only the currently implemented read-only tools", async 
       web_extract: "tasks:extract",
       web_search: "tasks:search",
       web_research: "tasks:research",
+      web_task_status: "tasks:read",
     }[tool.name]]);
     assert.deepEqual(tool._meta.securitySchemes, tool.securitySchemes);
   }
@@ -424,7 +425,7 @@ test("MCP rejects exhausted durable task quotas before a second execution", asyn
     EXPORTFLOW_AUTH_DB: fixture.db,
     MCP_RATE_LIMITER: { async limit() { return { success: true }; } },
   };
-  const { worker, calls } = makeWorker({ env: mcpEnv });
+  const { worker, calls } = makeWorker({ env: mcpEnv, requestLimit: 1 });
   const call = () => makeRequest(jsonRpc("tools/call", {
     name: "web_fetch",
     arguments: { url: "https://example.com/" },
