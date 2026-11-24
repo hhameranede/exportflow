@@ -21,23 +21,25 @@ export function createDurableTaskD1({ requestLimit = 10, tenantIds = ["tenant_al
 
   const db = {
     prepare(sql) {
-      return {
-        bind(...params) {
-          const statement = sqlite.prepare(sql);
-          return {
-            async first() {
-              return statement.get(...params) ?? null;
-            },
-            async all() {
-              return { results: statement.all(...params) };
-            },
-            async run() {
-              const result = statement.run(...params);
-              return { success: true, meta: { changes: Number(result.changes) } };
-            },
-          };
+      const makeStatement = (params = []) => ({
+        bind(...boundParams) {
+          return makeStatement(boundParams);
         },
-      };
+        async first() {
+          const statement = sqlite.prepare(sql);
+          return statement.get(...params) ?? null;
+        },
+        async all() {
+          const statement = sqlite.prepare(sql);
+          return { results: statement.all(...params) };
+        },
+        async run() {
+          const statement = sqlite.prepare(sql);
+          const result = statement.run(...params);
+          return { success: true, meta: { changes: Number(result.changes) } };
+        },
+      });
+      return makeStatement();
     },
   };
 
