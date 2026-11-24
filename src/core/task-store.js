@@ -63,7 +63,7 @@ async function sha256(value) {
   return toHex(new Uint8Array(digest));
 }
 
-async function canonicalTaskInput(input) {
+function canonicalTaskInput(input) {
   const value = { ...input };
   delete value.goal;
   value.operation = value.operation || "fetch";
@@ -259,6 +259,7 @@ export async function executeDurableTask({
   idFactory = makeId,
   taskTimeoutMs,
   resultMaxBytes = TASK_RESULT_MAX_BYTES,
+  executeOptions = {},
 } = {}) {
   try { db = requireDatabase(db); }
   catch { return { ok: false, httpStatus: 503, code: "TASK_STORE_UNAVAILABLE", message: "Task storage is not configured." }; }
@@ -419,6 +420,7 @@ export async function executeDurableTask({
   let executed;
   try {
     executed = await executeTask(input, {
+      ...executeOptions,
       signal,
       idFactory: () => row.task_id,
       ...(Number.isInteger(taskTimeoutMs) ? { taskTimeoutMs } : {}),
@@ -449,8 +451,8 @@ export async function executeDurableTask({
       retentionHours: TASK_RESULT_RETENTION_MS / (60 * 60 * 1000),
     },
   };
-  const { goal: _displayGoal, ...retainedTask } = responseTask;
-  let responseJson = JSON.stringify(retainedTask);
+  delete responseTask.goal;
+  let responseJson = JSON.stringify(responseTask);
   const resultAvailable = new TextEncoder().encode(responseJson).byteLength <= resultMaxBytes;
   if (!resultAvailable) {
     responseJson = null;
