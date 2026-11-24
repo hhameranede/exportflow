@@ -63,8 +63,29 @@ async function sha256(value) {
   return toHex(new Uint8Array(digest));
 }
 
-async function requestFingerprint(input) {
-  return sha256("exportflow-task-request-v1:" + JSON.stringify(stableValue(input, true)));
+async function canonicalTaskInput(input) {
+  const value = { ...input };
+  delete value.goal;
+  value.operation = value.operation || "fetch";
+  value.cacheMode = value.cacheMode || "default";
+  if (typeof value.url === "string") {
+    try { value.url = new URL(value.url).href; } catch { /* Contract validation reports invalid URLs upstream. */ }
+  }
+  if (typeof value.query === "string") value.query = value.query.trim();
+  if (value.operation === "search" || value.operation === "research") {
+    value.limit = value.limit ?? 5;
+  } else {
+    delete value.limit;
+  }
+  if (value.operation === "research") value.candidateLimit = value.candidateLimit ?? 2;
+  else delete value.candidateLimit;
+  if (value.operation === "fetch") value.limits = value.limits || {};
+  else delete value.limits;
+  return stableValue(value);
+}
+
+function requestFingerprint(input) {
+  return sha256("exportflow-task-request-v1:" + JSON.stringify(canonicalTaskInput(input)));
 }
 
 async function idempotencyFingerprint(tenantId, key) {
@@ -386,7 +407,12 @@ export async function executeDurableTask({
       : current;
   }
 
-  row = await readRow(db, identity.tenantId, row.task_id);
+  try {
+    row = await readRow(db, identity.tenantId, row.task_id);
+  } catch {
+    return { ok: false, httpStatus: 503, code: "TASK_STORE_UNAVAILABLE", message: "Claimed task could not be read." };
+  }
+  if (!row) return { ok: false, httpStatus: 503, code: "TASK_STORE_UNAVAILABLE", message: "Claimed task record is missing." };
   const quota = quotaSnapshot(row);
   let executed;
   try {
@@ -421,7 +447,8 @@ export async function executeDurableTask({
       retentionHours: TASK_RESULT_RETENTION_MS / (60 * 60 * 1000),
     },
   };
-  let responseJson = JSON.stringify(responseTask);
+  const { goal: _displayGoal, ...retainedTask } = responseTask;
+  let responseJson = JSON.stringify(retainedTask);
   const resultAvailable = new TextEncoder().encode(responseJson).byteLength <= resultMaxBytes;
   if (!resultAvailable) {
     responseJson = null;
