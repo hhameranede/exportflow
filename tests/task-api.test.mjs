@@ -73,6 +73,23 @@ test("REST task execution is persisted and an idempotent retry returns the origi
     assert.equal(retry.id, first.id);
     assert.equal(fetchCalls, 1);
 
+    const noReadWorker = createWorker({
+      tenantTaskGateway: {
+        async authenticate(_request, _env, { requiredScope } = {}) {
+          return requiredScope === "tasks:read"
+            ? { ok: false, httpStatus: 403, code: "INSUFFICIENT_SCOPE", message: "scope denied" }
+            : { ok: true, identity: { ...identityA, scopes: ["tasks:fetch"] } };
+        },
+        authorizeScope: makeGateway().authorizeScope,
+      },
+    });
+    const deniedRead = await noReadWorker.fetch(new Request(
+      "https://exportflow.me/api/v1/tasks/" + first.id,
+      { headers: { authorization: "Bearer no-read" } },
+    ), { EXPORTFLOW_AUTH_DB: fixture.db });
+    assert.equal(deniedRead.status, 403);
+    assert.equal((await deniedRead.json()).error.code, "INSUFFICIENT_SCOPE");
+
     const statusResponse = await worker.fetch(new Request(
       "https://exportflow.me/api/v1/tasks/" + first.id,
       { headers: { authorization: "Bearer alpha" } },
