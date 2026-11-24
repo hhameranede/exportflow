@@ -266,8 +266,6 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
     goal: "Fetch official documentation header and verify final URL",
     url: "https://example.com/docs",
     operation: "fetch",
-    requiresJavascript: false,
-    requiresInteraction: false,
     limits: {
       timeoutMs: 5000,
       maxBytes: 262144,
@@ -322,13 +320,13 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
     "",
     "# Query live health and platform discovery endpoints locally",
     "curl -s http://127.0.0.1:3000/api/v1/platform",
-    "curl -s \"http://127.0.0.1:3000/api/v1/router-preview?javascript=true\"",
+    "curl -s http://127.0.0.1:3000/api/v1/router-preview",
   ].join("\n");
 
   return `${pageHero({
 
     title: "Contract-First Execution Reference",
-    description: "Inspect the Phase 1 Task Contract, fail-closed D1 tenant authentication, Durable Object burst guards, normalized source provenance, and error recovery table.",
+    description: "Reference for six bounded static-web operations, tenant scopes, normalized provenance, and the Draft durable task lifecycle.",
     badgeHtml: `${statusBadgeHtml("available", { available: `${t.available} · HTTP Fetch` })} <span aria-hidden="true">·</span> ${statusBadgeHtml("development", t)}`,
 
     actionsHtml: `
@@ -361,16 +359,17 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
           <a href="#dev-contract">2. Task Request Contract</a>
           <a href="#dev-routing">3. Deterministic Routing</a>
           <a href="#dev-response">4. Result &amp; Provenance</a>
-          <a href="#dev-discovery">5. Discovery Endpoints</a>
-          <a href="#dev-errors">6. Error Reference</a>
-          <a href="#dev-local">7. Local Verification</a>
+          <a href="#dev-durable">5. Durable Task Lifecycle (Draft)</a>
+          <a href="#dev-discovery">6. Discovery Endpoints</a>
+          <a href="#dev-errors">7. Error Reference</a>
+          <a href="#dev-local">8. Local Verification</a>
         </nav>
       </aside>
 
       <div class="ef-doc-body">
         <div class="ef-status-banner">
           ${statusBadgeHtml("available", t)}
-          <span>Phase 1 enables bounded <code>http.fetch.v1</code> via <code>POST /api/v1/tasks</code> when D1 and Durable Object bindings are present. Crawl, Extract, Search, Research, and Browser return <code>501</code> until enabled.</span>
+          <span>The current mainline release exposes six bounded static-web operations: Fetch, Map, Crawl, Extract, Search, and Research through REST and MCP. Browser rendering and interaction are not part of the customer execution surface. Durable task persistence, idempotency, and status reads are proposed separately in <strong>Draft PR #134</strong>; they are not enabled in Production.</span>
         </div>
 
         <section id="dev-auth" class="ef-doc-section">
@@ -378,7 +377,7 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
           <p>Task execution in <code>src/core/tenant-task-gateway.js</code> enforces a fail-closed multi-stage gate before any outbound HTTP allocation begins:</p>
           <ul class="ef-spec-list">
             <li><strong>Pre-auth IP rate guard:</strong> Evaluates the connecting client IP before credential hashing.</li>
-            <li><strong>Tenant credential verification:</strong> Accepts D1-backed tenant API keys (<code>Authorization: Bearer ef_live_&lt;keyId&gt;_&lt;secret&gt;</code>, verified via SHA-256 constant-time digest) or verified OAuth 2.0 / MCP tenant access claims requiring <code>tasks:fetch</code> scope.</li>
+            <li><strong>Tenant credential verification:</strong> Accepts D1-backed tenant API keys (<code>Authorization: Bearer ef_live_&lt;keyId&gt;_&lt;secret&gt;</code>, verified via SHA-256 constant-time digest) or verified OAuth 2.0 / MCP tenant access claims. Each operation requires its matching scope: <code>tasks:fetch</code>, <code>tasks:map</code>, <code>tasks:crawl</code>, <code>tasks:extract</code>, <code>tasks:search</code>, or <code>tasks:research</code>. The separate <code>tasks:read</code> scope is part of Draft PR #134.</li>
             <li><strong>Shared Durable Object burst limiter:</strong> <code>TenantBurstRateLimiter</code> serializes burst windows across REST and MCP Worker instances.</li>
             <li><strong>Atomic D1 UTC plan quota:</strong> Reserves quota in <code>tenant_request_usage</code> and emits <code>x-plan-limit</code>, <code>x-plan-remaining</code>, and <code>x-plan-reset</code> headers. Missing D1 or DO bindings fail closed with HTTP <code>503</code>.</li>
           </ul>
@@ -404,23 +403,22 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
                 </tr>
                 <tr>
                   <td><code>url</code></td>
-                  <td>Public HTTP/HTTPS DNS URL</td>
-                  <td>Checked by <code>egress-guard.js</code>; IP literals, localhost, private suffixes, credentials, and non-default ports return <code>400 URL_NOT_ALLOWED</code>.</td>
+                  <td>Required for Fetch, Map, Crawl, and Extract</td>
+                  <td>Public HTTP/HTTPS destination checked by the egress policy; IP literals, localhost, private suffixes, credentials, and non-default ports are rejected.</td>
                 </tr>
                 <tr>
                   <td><code>operation</code></td>
-                  <td><code>"fetch"</code> (default)</td>
-                  <td>Other operations (<code>map</code>, <code>crawl</code>, <code>extract</code>, <code>search</code>, <code>research</code>) return <code>501 OPERATION_NOT_ENABLED</code> on Phase 1 REST.</td>
+                  <td><code>fetch</code> (default), <code>map</code>, <code>crawl</code>, <code>extract</code>, <code>search</code>, <code>research</code></td>
+                  <td>Six bounded static-web operations are implemented in the mainline REST/MCP release. Search and Research use <code>query</code> plus a supported <code>source</code>, not a destination URL.</td>
                 </tr>
                 <tr>
-                  <td><code>requiresJavascript</code> / <code>requiresInteraction</code></td>
-                  <td>Boolean (default <code>false</code>)</td>
-                  <td>Routes to <code>browser</code> path and fails closed with <code>501 BROWSER_UNAVAILABLE</code> until a verified browser binding is configured.</td>
+                  <td><code>query</code>, <code>source</code>, <code>schema</code></td>
+                  <td>Search/Research use a 1–1,024 character query and one supported source (<code>wikipedia</code>, <code>openalex</code>, or <code>crossref</code>). Extract/Research require a supported JSON schema.</td>
                 </tr>
                 <tr>
                   <td><code>limits</code></td>
-                  <td><code>timeoutMs</code> (100–8000), <code>maxBytes</code> (1–1048576), <code>maxRedirects</code> (0–3)</td>
-                  <td>Per-task resource ceiling enforced during streaming download and manual redirect hops.</td>
+                  <td>Fetch-only: <code>timeoutMs</code> (1–8000), <code>maxBytes</code> (1–1048576), <code>maxRedirects</code> (0–3)</td>
+                  <td>Per-task resource ceilings enforced during streaming download and manual redirect hops. The optional <code>cacheMode</code> accepts <code>default</code> or <code>bypass</code>.</td>
                 </tr>
               </tbody>
             </table>
@@ -436,7 +434,7 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
 
         <section id="dev-routing" class="ef-doc-section">
           <h2>3. Deterministic Routing</h2>
-          <p><code>chooseExecutionPath()</code> in <code>src/core/router.js</code> evaluates <code>requiresJavascript</code> and <code>requiresInteraction</code> flags before adapter invocation so lightweight HTTP retrieval never incurs headless browser overhead unless explicitly required.</p>
+          <p><code>chooseExecutionPath()</code> keeps the supported customer execution path on bounded static HTTP operations. Browser rendering and interaction are intentionally excluded from the six-operation release; Playwright is used in CI for site QA, not as a customer Browser Run service.</p>
         </section>
 
         <section id="dev-response" class="ef-doc-section">
@@ -451,8 +449,24 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
           </div>
         </section>
 
+        <section id="dev-durable" class="ef-doc-section">
+          <h2>5. Durable Task Lifecycle — Draft PR #134</h2>
+          <p><strong>Draft only · not enabled in Production.</strong> PR #134 adds a tenant-scoped durable task ledger shared by REST and MCP on the existing Request-First execution path. Its D1 migration is source-only and has not been applied.</p>
+          <ul class="ef-spec-list">
+            <li><strong>Idempotent submission:</strong> Optional REST <code>Idempotency-Key</code> values must contain 8–128 visible ASCII characters. The stored value is a tenant-scoped SHA-256 fingerprint, not the raw key. A same-tenant retry with the same effective request replays the original task without reserving quota again; reusing the key for a different request returns HTTP <code>409 IDEMPOTENCY_KEY_REUSED</code>.</li>
+            <li><strong>Task status and results:</strong> Draft REST <code>GET /api/v1/tasks/{taskId}</code> and MCP <code>web_task_status({ taskId })</code> require the separate <code>tasks:read</code> scope. Reads are filtered by both tenant and task ID; another tenant receives the same not-found response as an unknown task.</li>
+            <li><strong>Lifecycle and retention:</strong> The proposed ledger records accepted, running, partial, succeeded, failed, cancelled, and expired states with ordered events. Results are retained for up to 24 hours, with a 1.5 MB per-task JSON ceiling; the display-only <code>goal</code> is not stored in the retained result JSON.</li>
+            <li><strong>Quota boundary:</strong> The first task-row insert is designed as the single quota acceptance point. A D1 trigger updates the tenant request-usage row and appends the acceptance event atomically; an idempotency conflict must not charge quota a second time.</li>
+            <li><strong>Execution limits:</strong> This version remains synchronous and Request-First. It does not add Queues, Workflows, background execution, resumable work, automatic re-run after a Worker crash, or a public cancel endpoint. Expired execution leases are marked expired rather than resumed.</li>
+          </ul>
+          <div class="ef-notice ef-notice-warn ef-mt-4" role="note">
+            <p class="ef-notice-title">Acceptance gate still open</p>
+            <p class="ef-notice-body">The D1-shaped SQLite tests are supplementary only. Real Cloudflare Worker + D1 acceptance must still verify migration execution, trigger atomicity, concurrent same-key requests, replay, quota exhaustion, task reads, and tenant isolation. Until that target-runtime gate and a separately approved rollout are complete, PR #134 remains Draft and none of these durable lifecycle features should be described as Production-enabled.</p>
+          </div>
+        </section>
+
         <section id="dev-discovery" class="ef-doc-section">
-          <h2>5. Unauthenticated &amp; Auth Discovery Endpoints</h2>
+          <h2>6. Unauthenticated &amp; Auth Discovery Endpoints</h2>
           <div class="ef-table-wrap">
             <table class="ef-spec-table">
               <thead>
@@ -489,7 +503,7 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
         </section>
 
         <section id="dev-errors" class="ef-doc-section">
-          <h2>6. Error Code &amp; Recovery Reference</h2>
+          <h2>7. Error Code &amp; Recovery Reference</h2>
           <div class="ef-table-wrap">
             <table class="ef-spec-table">
               <thead>
@@ -513,7 +527,7 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
         </section>
 
         <section id="dev-local" class="ef-doc-section">
-          <h2>7. Local Verification &amp; CLI Workflow</h2>
+          <h2>8. Local Verification &amp; CLI Workflow</h2>
           <p>Run automated verification and inspect local routes directly from the repository root without external secrets:</p>
           <div class="ef-code-card ef-mt-20">
             <div class="ef-code-head">
