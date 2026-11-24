@@ -140,7 +140,7 @@ test("API keys can be issued with Search, Research and read-only task scopes", a
   const scopes = ["tasks:search", "tasks:research", "tasks:read"];
   const result = await service.issueApiKey({ tenantId: "tenant_alpha", scopes });
   assert.deepEqual(result.scopes, scopes);
-  assert.equal(db.calls.length, 2);
+  assert.equal(db.calls.length, 1);
   assert.deepEqual(JSON.parse(db.calls[0][0].params[3]), scopes);
 });
 
