@@ -51,11 +51,12 @@ async function callTool(worker, env, id, name, args) {
 test("web_task_status requires tasks:read independently of task execution scopes", async () => {
   const fixture = createDurableTaskD1();
   const fetchOnlyGateway = {
-    async authenticate() {
-      return {
-        ok: true,
-        identity: { ...identity, scopes: ["tasks:fetch"] },
-      };
+    async authenticate(_request, _env, { requiredScope } = {}) {
+      const value = { ...identity, scopes: ["tasks:fetch"] };
+      if (requiredScope && !value.scopes.includes(requiredScope)) {
+        return { ok: false, httpStatus: 403, code: "INSUFFICIENT_SCOPE", message: "scope denied" };
+      }
+      return { ok: true, identity: value };
     },
     authorizeIdentity: async (_request, value, { requiredScope } = {}) => (
       requiredScope && !value.scopes.includes(requiredScope)
