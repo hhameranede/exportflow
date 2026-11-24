@@ -68,6 +68,7 @@ test("new task acceptance atomically writes one quota reservation and lifecycle 
     assert.equal(accepted.ok, true);
     assert.equal(accepted.replayed, false);
     assert.equal(accepted.task.id, "task_alpha_0001");
+    assert.equal(accepted.task.goal, "Fetch a public page");
     assert.equal(accepted.task.state, "succeeded");
     assert.equal(accepted.task.quota.used, 1);
     assert.equal(accepted.task.quota.remaining, 9);
@@ -191,9 +192,11 @@ test("task reads are tenant-scoped and expose the same retained lifecycle/result
   const executor = makeExecutor();
   try {
     const completed = await executeDurableTask(runOptions(fixture, executor));
+    const initial = completed.task;
     const found = await getDurableTask({
       db: fixture.db, tenantId: "tenant_alpha", taskId: completed.task.id, now: () => FIXED_TIME,
     });
+    assert.equal(initial.goal, "Fetch a public page");
     const hidden = await getDurableTask({
       db: fixture.db, tenantId: "tenant_beta", taskId: completed.task.id, now: () => FIXED_TIME,
     });
