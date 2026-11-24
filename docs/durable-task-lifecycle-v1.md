@@ -5,7 +5,11 @@ Base: `9fe35036c30114095e3ae782909164d2c0671967`.
 
 ## Scope
 
-This change adds one tenant-scoped durable task ledger shared by REST and MCP. It keeps small bounded operations on the existing synchronous Request-First execution path. It does not provision Queues or Workflows, deploy Workers, apply D1 migrations, create tenants, or change Production.
+This change adds one tenant-scoped durable task ledger shared by REST and MCP. It keeps small bounded operations on the existing synchronous Request-First execution path. It does not add Queues, Workflows, background execution, resumable Crawl or automatic recovery after a Worker crash.
+
+The feature-branch CI includes a **test-only Acceptance deployment** after repository tests, browser QA and Wrangler dry-runs pass. That job applies migration `0005_durable_task_lifecycle.sql` only to the dedicated Acceptance D1 database, deploys the two dedicated Task Acceptance Workers, seeds run-scoped synthetic tenants/API keys, runs real Worker + D1 tests, and removes the synthetic data. The Acceptance Workers and schema are isolated test resources. This is not a Production rollout.
+
+The change does not apply Migration 0005 to the Production tenant D1 database, deploy either Production Worker, change Production bindings, secrets, DNS, permissions or traffic, or provision customer tenants.
 
 ## Shared API
 
@@ -58,6 +62,6 @@ Task reads always filter by both `tenant_id` and `task_id`. A caller from anothe
 
 - No asynchronous task submission contract, Queue fan-out, Workflow orchestration, polling backoff, webhook notifications, child work units, resumable crawl checkpoints, or automatic retry after Worker failure.
 - No public cancel endpoint. An inbound request abort is still forwarded into the existing executor and its resulting cancelled state is persisted when the handler can finish.
-- No D1 schema is applied by this PR; the existing Production D1 remains untouched. The migration is source-only until separately approved for an isolated Acceptance target.
-- Node SQLite tests are supplementary checks. Real Cloudflare D1 Binding acceptance for migrations, trigger atomicity, simultaneous requests, replay, quota exhaustion, status reads and tenant isolation is required before any runtime rollout.
-- Production rollout, Worker bindings, migration execution, secrets, DNS, permissions and customer tenant provisioning each remain separately approval-gated.
+- The isolated Acceptance workflow is part of feature-branch CI, not Production release: it may apply Migration 0005 to the dedicated Acceptance D1 database and deploy the two dedicated Acceptance Workers. It cleans up run-scoped synthetic tenant, key, usage and Task data. It does not modify `exportflow-tenant-production`.
+- Node SQLite tests are supplementary checks. Real Cloudflare D1 Binding acceptance covers migration execution, trigger atomicity, simultaneous requests, replay, quota exhaustion, status reads and tenant isolation. The latest-head Acceptance job must be green after each relevant change before the PR can be considered ready for review.
+- Production rollout, Production D1 migration, Worker bindings, secrets, DNS, permissions and customer tenant provisioning each remain separately approval-gated.
