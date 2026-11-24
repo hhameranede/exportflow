@@ -437,7 +437,7 @@ export async function executeDurableTask({
   if (!claimed) {
     const current = await getDurableTask({ db, tenantId: identity.tenantId, taskId: row.task_id, now });
     return current.ok
-      ? { ok: true, task: current.task, quota: current.task.quota, replayed: true, httpStatus: current.task.state === "running" ? 202 : 200 }
+      ? { ok: true, task: current.task, quota: current.task.quota, replayed: true, httpStatus: ["accepted", "running"].includes(current.task.state) ? 202 : 200 }
       : current;
   }
 
