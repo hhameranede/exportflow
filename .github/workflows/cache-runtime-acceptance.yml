@@ -23,7 +23,7 @@ jobs:
     if: >-
       ${{ github.event_name == 'push' &&
           github.ref == 'refs/heads/ops/cache-runtime-acceptance-20261124' &&
-          contains(github.event.head_commit.message, 'cache-runtime-acceptance-approved-retry-3') }}
+          contains(github.event.head_commit.message, 'cache-runtime-acceptance-armed-retry-5') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
