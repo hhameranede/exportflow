@@ -467,7 +467,10 @@ export async function executeDurableTask({
     };
   }
 
-  const completedAt = timestampValue(now);
+  const completedAt = typeof executed?.timestamps?.completedAt === "string" &&
+      Number.isFinite(Date.parse(executed.timestamps.completedAt))
+    ? new Date(executed.timestamps.completedAt).toISOString()
+    : timestampValue(now);
   const errorCode = executed?.errors?.[0]?.code || executed?.result?.data?.errorCode || null;
   try {
     const completed = await db.prepare(
