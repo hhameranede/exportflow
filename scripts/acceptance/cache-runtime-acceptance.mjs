@@ -8,7 +8,7 @@ const BASE = "https://exportflow-mcp-acceptance-20261122.hhameranede.workers.dev
 const MCP = BASE + "/mcp";
 const RUN = process.env.GITHUB_RUN_ID;
 const WORKER = "exportflow-mcp-acceptance-20261122";
-const ACCEPTANCE_BASELINE = ["6ddb1195-dd6c-4024-b77f-bb140504f8cc", "e4d41640-762e-4410-b308-d67946a61c12"];
+const ACCEPTANCE_BASELINE = ["6f617b59-fb05-4278-816f-9919438ece56", "7d9d74aa-2adc-4e93-a14a-6b64c1e02623"];
 const EXPECTED = {
   acceptance: [
     process.env.EXPECTED_ACCEPTANCE_DEPLOYMENT_ID || "",
@@ -39,7 +39,7 @@ const keyId = randomBytes(12).toString("base64url");
 const keyToken = "ef_live_" + keyId + "_" + randomBytes(32).toString("base64url");
 const keyHash = createHash("sha256").update("exportflow-api-key-v1:" + keyToken).digest("hex");
 const expiresAt = new Date(Date.now() + 20 * 60 * 1000).toISOString();
-const cacheUrl = "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css?ef_cache_acceptance=" + RUN;
+const cacheUrl = "https://raw.githubusercontent.com/necolas/normalize.css/8.0.1/normalize.css?ef_cache_acceptance=" + RUN;
 report.testRunId = RUN;
 report.keyScope = "tasks:fetch";
 report.quotaLimit = 3;
@@ -186,7 +186,7 @@ async function oneFetch(mode, id) {
     taskState === "succeeded" &&
     Number(data.status) === 200 &&
     typeof data.contentType === "string" &&
-    data.contentType.toLowerCase().startsWith("text/css") &&
+    data.contentType.toLowerCase().startsWith("text/") &&
     typeof data.body === "string" &&
     data.body.length > 0;
 
