@@ -295,9 +295,9 @@ test("POST /api/v1/tasks enforces egress redirect validation, redirect limit, st
 
 test("POST /api/v1/tasks executes end-to-end bounded HTTP fetch and returns structured evidence & usage", async () => {
   const timestamps = [
+    "2026-11-19T09:59:59.900Z",
     "2026-11-19T10:00:00.000Z",
     "2026-11-19T10:00:00.010Z",
-    "2026-11-19T10:00:00.085Z",
     "2026-11-19T10:00:00.085Z",
   ];
   const worker = createWorker({
