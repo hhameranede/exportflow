@@ -12,7 +12,7 @@ const MIGRATIONS = [
   "0005_durable_task_lifecycle.sql",
 ];
 
-export function createDurableTaskD1({ requestLimit = 10, tenantIds = ["tenant_alpha"] } = {}) {
+export function createDurableTaskD1({ requestLimit = 10, tenantIds = ["tenant_alpha"], planCode = "developer", policyVersion = "test-v1", quotaPeriod = "daily" } = {}) {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec("PRAGMA foreign_keys = ON");
   for (const filename of MIGRATIONS) {
@@ -44,14 +44,14 @@ export function createDurableTaskD1({ requestLimit = 10, tenantIds = ["tenant_al
   const timestamp = "2026-11-24T10:00:00.000Z";
   db.prepare(
     "INSERT INTO plan_policies (plan_code, quota_period, request_limit, policy_version, status, created_at, updated_at) " +
-    "VALUES (?1, 'daily', ?2, 'test-v1', 'active', ?3, ?3)",
-  ).bind("developer", requestLimit, timestamp).run();
+    "VALUES (?1, ?2, ?3, ?4, 'active', ?5, ?5)",
+  ).bind(planCode, quotaPeriod, requestLimit, policyVersion, timestamp).run();
 
   for (const tenantId of tenantIds) {
     db.prepare(
       "INSERT INTO tenants (tenant_id, plan_code, status, created_at, updated_at) " +
-      "VALUES (?1, 'developer', 'active', ?2, ?2)",
-    ).bind(tenantId, timestamp).run();
+      "VALUES (?1, ?2, 'active', ?3, ?3)",
+    ).bind(tenantId, planCode, timestamp).run();
   }
 
   return {
