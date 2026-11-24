@@ -323,7 +323,9 @@ export async function executeDurableTask({
   try {
     // Expired records are removed only for the authenticated tenant; their event rows cascade.
     await db.prepare(
-      "DELETE FROM tasks WHERE tenant_id = ?1 AND expires_at <= ?2",
+      "DELETE FROM tasks WHERE rowid IN (" +
+      "SELECT rowid FROM tasks WHERE tenant_id = ?1 AND expires_at <= ?2 " +
+      "ORDER BY expires_at ASC LIMIT 100)",
     ).bind(identity.tenantId, timestamp).run();
   } catch {
     return { ok: false, httpStatus: 503, code: "TASK_STORE_UNAVAILABLE", message: "Task retention cleanup is temporarily unavailable." };
