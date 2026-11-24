@@ -279,14 +279,12 @@ export async function fetchPublicResource(input, options = {}) {
         });
       };
       try {
-        response = await fetchImpl(current, {
+        const fetchOptions = {
           method: "GET",
           redirect: "manual",
-          cache: cacheMode === "bypass" ? "no-store" : "default",
-          // Do not force cache eligibility for arbitrary HTML/API responses.
-          // Cloudflare may cache standard static extensions or responses that
-          // explicitly opt in via origin Cache-Control / Expires headers.
-          // Deliberately do not set cacheEverything or force a cache TTL.
+          // Leave cache undefined for the normal Worker/origin cache policy.
+          // Workers only support explicit "no-store" and "no-cache" values.
+          // Do not force cache eligibility or override origin Cache-Control.
           signal: controller.signal,
           headers: {
             accept: "text/html,application/xhtml+xml,application/json,application/xml,text/plain;q=0.9",
@@ -294,7 +292,9 @@ export async function fetchPublicResource(input, options = {}) {
               ? { "user-agent": options.userAgent }
               : {}),
           },
-        });
+        };
+        if (cacheMode === "bypass") fetchOptions.cache = "no-store";
+        response = await fetchImpl(current, fetchOptions);
       } catch {
         if (callerCancelled) {
           emitReceipt("cancelled", "TASK_CANCELLED");

@@ -22,7 +22,7 @@ jobs:
     if: >-
       ${{ github.event_name == 'push' &&
           github.ref == 'refs/heads/ops/cache-runtime-acceptance-20261124' &&
-          contains(github.event.head_commit.message, 'cache-runtime-acceptance-approved-retry-2') }}
+          contains(github.event.head_commit.message, 'cache-runtime-acceptance-approved-retry-3') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -48,10 +48,56 @@ jobs:
           grep -Fx "one isolated three-call cache acceptance on the existing MCP Acceptance Worker only" .github/acceptance/cache-runtime.approved
           test -s .github/acceptance/cache-runtime.retry.approved
           grep -Fx "single retry after fixing GitHub Actions expression interpolation; same Acceptance-only three-call cache test; no Production writes" .github/acceptance/cache-runtime.retry.approved
+          test -s .github/acceptance/cache-runtime.retry-3.approved
+          grep -Fx "retry-3: fix Workers default cache-mode semantics, sanitize task errors, and run one Acceptance-only three-call test; no Production writes" .github/acceptance/cache-runtime.retry-3.approved
           test -n "$CLOUDFLARE_API_TOKEN"
           node --check scripts/acceptance/cache-runtime-acceptance.mjs
+          node --check src/core/http-fetch.js
+
+      - name: Verify current Acceptance and Production deployment baselines
+        run: node scripts/acceptance/cache-runtime-acceptance.mjs --preflight-only
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run repository unit tests and static checks before Acceptance deployment
+        run: npm test && npm run check
+
+      - name: Deploy the cache-mode fix to the existing Acceptance MCP Worker only
+        run: npx --yes wrangler@4 deploy --config cloudflare/mcp-acceptance/wrangler.toml
+
+      - name: Pin the new isolated Acceptance deployment
+        id: acceptance-deployment
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from "node:fs";
+          const account = process.env.CLOUDFLARE_ACCOUNT_ID;
+          const token = process.env.CLOUDFLARE_API_TOKEN;
+          const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/workers/scripts/exportflow-mcp-acceptance-20261122/deployments`, {
+            headers: { authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(20000)
+          });
+          const payload = await response.json().catch(() => null);
+          if (!response.ok || payload?.success !== true) throw new Error("Could not verify the new Acceptance deployment.");
+          const active = payload.result?.deployments?.[0];
+          const versions = active?.versions || [];
+          if (!active?.id || versions.length !== 1 || versions[0].percentage !== 100 || !versions[0].version_id) {
+            throw new Error("The Acceptance Worker is not on one verified 100% deployment.");
+          }
+          if (active.id === "6ddb1195-dd6c-4024-b77f-bb140504f8cc" ||
+              versions[0].version_id === "e4d41640-762e-4410-b308-d67946a61c12") {
+            throw new Error("The Acceptance deployment did not advance to the patched source.");
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT,
+            `deployment_id=${active.id}\nversion_id=${versions[0].version_id}\n`);
+          console.log("Verified the patched Acceptance Worker is deployed at 100%.");
+          NODE
 
       - name: Run exactly three authenticated real-runtime Fetch calls and retire fixtures
+        env:
+          EXPECTED_ACCEPTANCE_DEPLOYMENT_ID: ${{ steps.acceptance-deployment.outputs.deployment_id }}
+          EXPECTED_ACCEPTANCE_VERSION_ID: ${{ steps.acceptance-deployment.outputs.version_id }}
         run: node scripts/acceptance/cache-runtime-acceptance.mjs
 
       - name: Upload cache acceptance evidence (no credentials)

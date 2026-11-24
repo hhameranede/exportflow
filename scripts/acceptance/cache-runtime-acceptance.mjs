@@ -8,8 +8,12 @@ const BASE = "https://exportflow-mcp-acceptance-20261122.hhameranede.workers.dev
 const MCP = BASE + "/mcp";
 const RUN = process.env.GITHUB_RUN_ID;
 const WORKER = "exportflow-mcp-acceptance-20261122";
+const ACCEPTANCE_BASELINE = ["6ddb1195-dd6c-4024-b77f-bb140504f8cc", "e4d41640-762e-4410-b308-d67946a61c12"];
 const EXPECTED = {
-  acceptance: ["6ddb1195-dd6c-4024-b77f-bb140504f8cc", "e4d41640-762e-4410-b308-d67946a61c12"],
+  acceptance: [
+    process.env.EXPECTED_ACCEPTANCE_DEPLOYMENT_ID || "",
+    process.env.EXPECTED_ACCEPTANCE_VERSION_ID || ""
+  ],
   platform: ["b3c3a3b6-3b04-4781-a6a2-6de999b7dd32", "15e90133-8da9-42cd-9bdf-8dcc09468360"],
   mcp: ["2a2a965c-5e77-4376-8d98-c160b30722df", "cb8bea58-aeb7-49ea-8155-64081a4678e3"]
 };
@@ -36,9 +40,7 @@ const keyToken = "ef_live_" + keyId + "_" + randomBytes(32).toString("base64url"
 const keyHash = createHash("sha256").update("exportflow-api-key-v1:" + keyToken).digest("hex");
 const expiresAt = new Date(Date.now() + 20 * 60 * 1000).toISOString();
 const cacheUrl = "https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css?ef_cache_acceptance=" + RUN;
-report.planCode = planCode;
-report.tenantId = tenantId;
-report.keyId = keyId;
+report.testRunId = RUN;
 report.keyScope = "tasks:fetch";
 report.quotaLimit = 3;
 report.cacheUrl = cacheUrl;
@@ -110,30 +112,107 @@ async function rpc(method, params, id, bearer) {
   return body;
 }
 
+function safeErrorCode(value) {
+  return typeof value === "string" && /^[A-Z0-9_]{2,64}$/.test(value) ? value : null;
+}
+
+function safeErrorMessage(value) {
+  if (typeof value !== "string") return null;
+  return value
+    .replace(/ef_live_[A-Za-z0-9_-]{16}_[A-Za-z0-9_-]{43}/g, "[redacted-api-key]")
+    .replace(/(bearer\\s+)[^\\s,;]+/gi, "$1[redacted]")
+    .replace(/(authorization|cookie|client_secret|access_token|refresh_token|secret)\\s*[:=]\\s*[^\\s,;]+/gi, "$1=[redacted]")
+    .replace(/https?:\\/\\/[^\\s"'<>]+/gi, (value) => {
+      try {
+        const url = new URL(value);
+        return url.origin + url.pathname;
+      } catch {
+        return "[redacted-url]";
+      }
+    })
+    .slice(0, 300);
+}
+
+function getStructuredToolValue(tool) {
+  if (tool?.structuredContent && typeof tool.structuredContent === "object") return tool.structuredContent;
+  for (const item of Array.isArray(tool?.content) ? tool.content : []) {
+    if (item?.type !== "text" || typeof item.text !== "string") continue;
+    try {
+      const parsed = JSON.parse(item.text);
+      if (parsed && typeof parsed === "object") return parsed;
+    } catch {
+      // Do not retain raw tool text; an unknown format is represented by a generic diagnostic.
+    }
+  }
+  return null;
+}
+
 async function oneFetch(mode, id) {
-  const t0 = performance.now();
-  const response = await rpc("tools/call", { name: "web_fetch", arguments: { url: cacheUrl, cacheMode: mode } }, id, keyToken);
-  const wallMs = Math.round((performance.now() - t0) * 100) / 100;
+  const started = performance.now();
+  let response;
+  try {
+    response = await rpc(
+      "tools/call",
+      { name: "web_fetch", arguments: { url: cacheUrl, cacheMode: mode } },
+      id,
+      keyToken
+    );
+  } catch (error) {
+    const record = {
+      call: id,
+      cacheMode: mode,
+      taskSucceeded: false,
+      transportError: safeErrorMessage(error?.message) || "MCP transport failed."
+    };
+    report.calls.push(record);
+    return record;
+  }
+
+  const wallMs = Math.round((performance.now() - started) * 100) / 100;
   const tool = response?.result;
-  const task = tool?.structuredContent;
-  const data = task?.result?.data;
-  ensure(tool && tool.isError !== true, "web_fetch " + mode + " returned an MCP tool error.");
-  ensure(task?.state === "succeeded", "web_fetch " + mode + " did not succeed.");
-  ensure(data && Number(data.status) === 200, "web_fetch " + mode + " did not return origin HTTP 200.");
-  ensure(typeof data.contentType === "string" && data.contentType.toLowerCase().startsWith("text/css"),
-    "web_fetch " + mode + " returned an unexpected content type.");
-  ensure(typeof data.body === "string" && data.body.length > 0, "web_fetch " + mode + " returned an empty CSS body.");
+  const value = getStructuredToolValue(tool);
+  const taskErrors = Array.isArray(value?.errors) ? value.errors.slice(0, 3).map((entry) => ({
+    code: safeErrorCode(entry?.code),
+    message: safeErrorMessage(entry?.message)
+  })) : [];
+  const data = value?.result?.data && typeof value.result.data === "object" ? value.result.data : {};
+  const quota = value?.quota && typeof value.quota === "object" ? {
+    period: typeof value.quota.period === "string" ? value.quota.period : null,
+    limit: Number.isSafeInteger(value.quota.limit) ? value.quota.limit : null,
+    remaining: Number.isSafeInteger(value.quota.remaining) ? value.quota.remaining : null
+  } : null;
+  const taskState = typeof value?.state === "string" ? value.state : null;
+  const taskSucceeded = tool?.isError !== true &&
+    taskState === "succeeded" &&
+    Number(data.status) === 200 &&
+    typeof data.contentType === "string" &&
+    data.contentType.toLowerCase().startsWith("text/css") &&
+    typeof data.body === "string" &&
+    data.body.length > 0;
+
   const record = {
-    call: id, cacheMode: mode, httpStatus: Number(data.status), contentType: data.contentType,
-    cacheStatus: data.cacheStatus || null,
+    call: id,
+    cacheMode: mode,
+    taskSucceeded,
+    isError: tool?.isError === true,
+    taskState,
+    errorCode: safeErrorCode(value?.error) || taskErrors[0]?.code || safeErrorCode(data.errorCode),
+    errorMessage: safeErrorMessage(value?.message) || taskErrors[0]?.message,
+    taskErrors,
+    warnings: Array.isArray(value?.result?.warnings)
+      ? value.result.warnings.slice(0, 4).map(safeErrorMessage).filter(Boolean)
+      : [],
+    httpStatus: Number.isInteger(data.status) ? data.status : null,
+    contentType: typeof data.contentType === "string" ? data.contentType.slice(0, 120) : null,
+    cacheStatus: typeof data.cacheStatus === "string" ? data.cacheStatus : null,
     responseBytes: Number.isSafeInteger(data.bytes) ? data.bytes : null,
-    workerDurationMs: Number.isFinite(task.usage?.durationMs) ? task.usage.durationMs : null,
-    runnerWallMs: wallMs, taskState: task.state
+    workerDurationMs: Number.isFinite(value?.usage?.durationMs) ? value.usage.durationMs : null,
+    quota,
+    runnerWallMs: wallMs
   };
   report.calls.push(record);
   return record;
 }
-
 async function cleanup() {
   report.cleanup.attempted = true;
   const errors = [];
@@ -186,11 +265,31 @@ async function cleanup() {
   if (errors.length) report.cleanup.verified = false;
 }
 
+if (process.argv.includes("--preflight-only")) {
+  const before = await Promise.all([
+    deployment(WORKER), deployment("exportflow-platform"), deployment("exportflow-mcp-preview")
+  ]);
+  checkDeployment(before[0], ACCEPTANCE_BASELINE, "Acceptance MCP baseline");
+  checkDeployment(before[1], EXPECTED.platform, "Production Platform");
+  checkDeployment(before[2], EXPECTED.mcp, "Production MCP");
+  console.log(JSON.stringify({
+    preflight: "passed",
+    acceptanceBaseline: before[0],
+    productionPlatform: before[1],
+    productionMcp: before[2]
+  }, null, 2));
+  process.exit(0);
+}
+
+if (!/^[0-9a-f-]{36}$/i.test(EXPECTED.acceptance[0]) || !/^[0-9a-f-]{36}$/i.test(EXPECTED.acceptance[1])) {
+  throw new Error("The new isolated Acceptance deployment was not pinned by the workflow.");
+}
+
 try {
   const before = await Promise.all([
     deployment(WORKER), deployment("exportflow-platform"), deployment("exportflow-mcp-preview")
   ]);
-  checkDeployment(before[0], EXPECTED.acceptance, "Acceptance MCP");
+  checkDeployment(before[0], EXPECTED.acceptance, "Acceptance MCP after isolated patch deployment");
   checkDeployment(before[1], EXPECTED.platform, "Production Platform");
   checkDeployment(before[2], EXPECTED.mcp, "Production MCP");
   report.deploymentsBefore = { acceptance: before[0], productionPlatform: before[1], productionMcp: before[2] };
@@ -237,25 +336,28 @@ try {
   keyCreated = true;
   await audit("cache_acceptance.api_key_created", "api_key", keyId, { scope: "tasks:fetch", expiresAt });
 
-  report.provisioning = { planCode, tenantId, keyId, keyScope: "tasks:fetch", keyExpiresAt: expiresAt };
+  report.provisioning = { keyScope: "tasks:fetch", quotaLimit: 3, keyExpiresAt: expiresAt };
   const first = await oneFetch("default", 1);
   await pause(500);
   const second = await oneFetch("default", 2);
   const bypass = await oneFetch("bypass", 3);
   const statuses = [first.cacheStatus, second.cacheStatus, bypass.cacheStatus];
+  const allTasksSucceeded = report.calls.length === 3 && report.calls.every((call) => call.taskSucceeded === true);
   report.cacheEvidence = {
     observedStatuses: statuses,
+    tasksSucceeded: allTasksSucceeded,
     firstDefaultMiss: statuses[0] === "MISS",
     secondDefaultHit: statuses[1] === "HIT",
     bypassExplicitlySkippedCache: statuses[2] === "BYPASS" || statuses[2] === "DYNAMIC",
-    fullSequenceConfirmed: statuses[0] === "MISS" && statuses[1] === "HIT" &&
+    fullSequenceConfirmed: allTasksSucceeded && statuses[0] === "MISS" && statuses[1] === "HIT" &&
       (statuses[2] === "BYPASS" || statuses[2] === "DYNAMIC")
   };
   report.cacheAcceptance = report.cacheEvidence.fullSequenceConfirmed
     ? "PASS: MISS -> HIT -> BYPASS/DYNAMIC observed"
-    : (report.cacheEvidence.firstDefaultMiss && report.cacheEvidence.secondDefaultHit
+    : (allTasksSucceeded && report.cacheEvidence.firstDefaultMiss && report.cacheEvidence.secondDefaultHit
       ? "PARTIAL: MISS -> HIT observed; bypass status not conclusively exposed"
-      : "NOT_CONFIRMED: three real authenticated calls completed but expected cache statuses were not observed");
+      : "NOT_CONFIRMED: all three authenticated Fetch calls were attempted; inspect sanitized per-call diagnostics");
+  if (!allTasksSucceeded) primaryError = "One or more authenticated Fetch tasks failed; see sanitized per-call diagnostics.";
 } catch (error) {
   primaryError = error instanceof Error ? error.message : "Unclassified acceptance failure";
 } finally {
