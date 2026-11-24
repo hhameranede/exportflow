@@ -75,6 +75,7 @@ function makeWorker(options = {}) {
   const taskFixture = options.useRealGateway
     ? null
     : createDurableTaskD1({ requestLimit: options.requestLimit ?? 10, tenantIds: ["tenant_test_001"], planCode: "test" });
+  if (taskFixture) taskFixture.db.sqlite = taskFixture.sqlite;
   const env = options.env || {
     ...(taskFixture ? { EXPORTFLOW_AUTH_DB: taskFixture.db } : {}),
     MCP_RATE_LIMITER: {
@@ -206,7 +207,8 @@ test("web_fetch delegates to shared task execution and applies weighted rate lim
   assert.equal(calls.auth[0].requiredScope, "tasks:fetch");
   assert.equal(body.result.structuredContent.quota.limit, 10);
   assert.equal(body.result.structuredContent.quota.remaining, 9);
-  assert.equal(calls.reservations.length, 1);
+  assert.equal(calls.reservations.length, 0, "the D1 insert trigger now owns logical quota reservation");
+  assert.equal(env.EXPORTFLOW_AUTH_DB.sqlite.prepare("SELECT requests_used FROM tenant_request_usage WHERE tenant_id = 'tenant_test_001'").get().requests_used, 1);
 });
 
 test("invalid tool arguments are rejected before rate limiting or task execution", async () => {
