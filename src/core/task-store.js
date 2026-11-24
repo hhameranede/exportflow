@@ -206,11 +206,24 @@ export async function getDurableTask({ db, tenantId, taskId, now = () => new Dat
 
   if (Date.parse(row.expires_at) <= Date.parse(timestamp)) {
     try {
-      await markExpired(db, row, timestamp, "TASK_RESULT_EXPIRED");
+      await db.prepare(
+        "DELETE FROM tasks WHERE tenant_id = ?1 AND task_id = ?2 AND expires_at <= ?3",
+      ).bind(tenantId, taskId, timestamp).run();
     } catch {
-      return { ok: false, httpStatus: 503, code: "TASK_STORE_UNAVAILABLE", message: "Task expiration could not be recorded." };
+      return { ok: false, httpStatus: 503, code: "TASK_STORE_UNAVAILABLE", message: "Expired task retention cleanup is temporarily unavailable." };
     }
     return { ok: false, httpStatus: 410, code: "TASK_EXPIRED", message: "The task record or retained result has expired." };
+  }
+
+  if (["accepted", "running"].includes(row.state) &&
+      row.lease_expires_at && Date.parse(row.lease_expires_at) <= Date.parse(timestamp)) {
+    try {
+      await markExpired(db, row, timestamp);
+      row = await readRow(db, tenantId, taskId);
+      if (!row) return { ok: false, httpStatus: 404, code: "TASK_NOT_FOUND", message: "Task was not found." };
+    } catch {
+      return { ok: false, httpStatus: 503, code: "TASK_STORE_UNAVAILABLE", message: "Expired task execution could not be recorded." };
+    }
   }
 
   try {
@@ -322,8 +335,8 @@ export async function executeDurableTask({
       "INSERT INTO tasks (" +
       "task_id, tenant_id, idempotency_key_hash, request_hash, operation, state, " +
       "quota_period, quota_window_id, plan_code, policy_version, quota_limit, quota_reset_at, " +
-      "created_at, updated_at, expires_at" +
-      ") VALUES (?1, ?2, ?3, ?4, ?5, 'accepted', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12, ?13) " +
+      "created_at, updated_at, lease_expires_at, expires_at" +
+      ") VALUES (?1, ?2, ?3, ?4, ?5, 'accepted', ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12, ?13, ?14) " +
       "ON CONFLICT (tenant_id, idempotency_key_hash) DO NOTHING RETURNING task_id",
     ).bind(
       taskId,
@@ -338,6 +351,7 @@ export async function executeDurableTask({
       identity.requestLimit,
       quotaWindow.resetAt,
       timestamp,
+      leaseExpiresAt,
       expiresAt,
     ).first();
   } catch (error) {
@@ -367,7 +381,24 @@ export async function executeDurableTask({
   }
 
   if (Date.parse(row.expires_at) <= Date.parse(timestamp)) {
+    try {
+      await db.prepare(
+        "DELETE FROM tasks WHERE tenant_id = ?1 AND task_id = ?2 AND expires_at <= ?3",
+      ).bind(identity.tenantId, row.task_id, timestamp).run();
+    } catch {
+      return { ok: false, httpStatus: 503, code: "TASK_STORE_UNAVAILABLE", message: "Expired task retention cleanup is temporarily unavailable." };
+    }
     return { ok: false, httpStatus: 410, code: "TASK_EXPIRED", message: "The task record or retained result has expired." };
+  }
+
+  if (row.state === "accepted" && row.lease_expires_at &&
+      Date.parse(row.lease_expires_at) <= Date.parse(timestamp)) {
+    try {
+      await markExpired(db, row, timestamp);
+      return { ok: false, httpStatus: 410, code: "TASK_EXPIRED", message: "The task acceptance lease expired before execution began." };
+    } catch {
+      return { ok: false, httpStatus: 503, code: "TASK_STORE_UNAVAILABLE", message: "Expired task acceptance could not be recorded." };
+    }
   }
 
   if (TERMINAL_STATES.has(row.state)) {
