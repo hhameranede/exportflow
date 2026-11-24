@@ -1,4 +1,10 @@
 name: Worker CI
+
+# Keep one full QA run per PR; never cancel a main release workflow.
+concurrency:
+ group: worker-ci-${{ github.event.pull_request.number || github.ref }}
+ cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 on:
  push:
   branches: [main]
