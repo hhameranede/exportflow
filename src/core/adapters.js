@@ -62,6 +62,8 @@ registerAdapter({
     "default-ports-only",
     "redirects-revalidated",
     "no-cookies-or-origin-credentials",
+    "origin-cache-policy-respected",
+    "cache-bypass-supported",
     "text-content-only",
     "SSRF-hostname-filters",
   ],
@@ -70,6 +72,7 @@ registerAdapter({
     if (input.timeoutMs !== undefined) fetchOptions.timeoutMs = input.timeoutMs;
     if (input.maxBytes !== undefined) fetchOptions.maxBytes = input.maxBytes;
     if (input.maxRedirects !== undefined) fetchOptions.maxRedirects = input.maxRedirects;
+    if (input.cacheMode !== undefined) fetchOptions.cacheMode = input.cacheMode;
     if (typeof options?.fetchImpl === "function") fetchOptions.fetchImpl = options.fetchImpl;
     if (options?.signal) fetchOptions.signal = options.signal;
     if (typeof options?.onUsageReceipt === "function") fetchOptions.onUsageReceipt = options.onUsageReceipt;
@@ -80,6 +83,7 @@ registerAdapter({
         status: response.status,
         httpStatus: response.status,
         contentType: response.contentType,
+        cacheStatus: response.cacheStatus,
         body: response.body,
         bytes: response.bytes,
         originalUrl: response.originalUrl,
@@ -96,6 +100,7 @@ registerAdapter({
           status: response.status,
           contentType: response.contentType,
           bytes: response.bytes,
+          cacheStatus: response.cacheStatus,
           redirectCount: response.redirects.length,
         }],
       }],
@@ -125,6 +130,7 @@ registerAdapter({
   async execute(input = {}, options = {}) {
     const mapped = await mapWebsite(input, {
       maxUrls: input.maxUrls,
+      cacheMode: input.cacheMode,
       signal: options.signal,
     });
     return normalizeResult({
@@ -165,6 +171,7 @@ registerAdapter({
     const crawled = await crawlWebsite(input, {
       maxPages: input.maxPages,
       maxDepth: input.maxDepth,
+      cacheMode: input.cacheMode,
       signal: options.signal,
     });
     return normalizeResult({

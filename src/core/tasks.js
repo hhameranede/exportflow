@@ -386,6 +386,7 @@ export async function executeWebTask(input, options = {}) {
           : "web.extract.v1";
     execution.adapterId = adapterId;
     const adapterInput = { url: url.href };
+    if (input.cacheMode !== undefined) adapterInput.cacheMode = input.cacheMode;
     if (operation === "fetch" && input.limits && typeof input.limits === "object" && !Array.isArray(input.limits)) {
       if (input.limits.timeoutMs !== undefined) adapterInput.timeoutMs = input.limits.timeoutMs;
       if (input.limits.maxBytes !== undefined) adapterInput.maxBytes = input.limits.maxBytes;

@@ -459,6 +459,7 @@ export async function extractStructuredData(input, options = {}) {
     maxBytes: options.maxBytes ?? 1_048_576,
     timeoutMs: options.timeoutMs ?? 8_000,
     maxRedirects: options.maxRedirects ?? 3,
+    cacheMode: input.cacheMode ?? options.cacheMode ?? "default",
     ...(options.signal ? { signal: options.signal } : {}),
   });
   if (response.status < 200 || response.status >= 300) {
@@ -467,6 +468,7 @@ export async function extractStructuredData(input, options = {}) {
       data: {
         url: response.finalUrl || url,
         httpStatus: response.status,
+        cacheStatus: response.cacheStatus ?? null,
         fields: {},
         missingFields: schema.fields.map((field) => field.name),
         fieldEvidence: [],
@@ -475,7 +477,12 @@ export async function extractStructuredData(input, options = {}) {
         url: response.finalUrl || url,
         retrievedAt: response.retrievedAt,
         title: null,
-        evidence: [{ type: "http_response", status: response.status, contentType: response.contentType }],
+        evidence: [{
+          type: "http_response",
+          status: response.status,
+          contentType: response.contentType,
+          cacheStatus: response.cacheStatus ?? null,
+        }],
       }],
       warnings: ["Source returned HTTP " + response.status + "; extraction was not attempted."],
     });
@@ -520,7 +527,13 @@ export async function extractStructuredData(input, options = {}) {
     retrievedAt: response.retrievedAt,
     title: null,
     evidence: [
-      { type: "http_response", status: response.status, contentType: response.contentType, bytes: response.bytes },
+      {
+        type: "http_response",
+        status: response.status,
+        contentType: response.contentType,
+        bytes: response.bytes,
+        cacheStatus: response.cacheStatus ?? null,
+      },
       ...extracted.fieldEvidence.map((item) => ({
         type: "extracted_field",
         field: item.field,
@@ -536,6 +549,7 @@ export async function extractStructuredData(input, options = {}) {
     data: {
       url: response.finalUrl || url,
       httpStatus: response.status,
+      cacheStatus: response.cacheStatus ?? null,
       fields: extracted.data,
       fieldEvidence: extracted.fieldEvidence,
       missingFields: extracted.missingFields,

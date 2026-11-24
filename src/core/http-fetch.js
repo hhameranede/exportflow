@@ -33,6 +33,11 @@ function normalizeReceiptContentType(contentType) {
   return /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/.test(mime) ? mime : null;
 }
 
+function normalizeCacheStatus(value) {
+  const status = String(value || "").trim().toUpperCase();
+  return /^[A-Z_]{2,24}$/.test(status) ? status : null;
+}
+
 function getDeclaredResponseBytes(response) {
   const value = response?.headers?.get("content-length") || "";
   if (!/^\d+$/.test(value)) return null;
@@ -174,6 +179,10 @@ export async function fetchPublicResource(input, options = {}) {
   const maxRedirects = options.maxRedirects ?? HTTP_FETCH_LIMITS.maxRedirects;
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const onUsageReceipt = options.onUsageReceipt;
+  const cacheMode = options.cacheMode ?? "default";
+  if (!["default", "bypass"].includes(cacheMode)) {
+    throw new FetchAdapterError("INVALID_LIMIT", "Cache mode must be 'default' or 'bypass'.", 400);
+  }
   let attemptsStarted = 0;
   let allowedOrigin = null;
   if (options.allowedOrigin !== undefined) {
@@ -260,6 +269,7 @@ export async function fetchPublicResource(input, options = {}) {
           outcome,
           httpStatus: response && Number.isInteger(response.status) ? response.status : null,
           contentType: normalizeReceiptContentType(response?.headers?.get("content-type")),
+          cacheStatus: response ? normalizeCacheStatus(response.headers.get("cf-cache-status")) : null,
           declaredResponseBytes: response ? getDeclaredResponseBytes(response) : null,
           responseBodyBytesRead,
           bytesSource: "stream_reader_observed",
@@ -272,7 +282,11 @@ export async function fetchPublicResource(input, options = {}) {
         response = await fetchImpl(current, {
           method: "GET",
           redirect: "manual",
-          cache: "no-store",
+          cache: cacheMode === "bypass" ? "no-store" : "default",
+          // Do not force cache eligibility for arbitrary HTML/API responses.
+          // Cloudflare may cache standard static extensions or responses that
+          // explicitly opt in via origin Cache-Control / Expires headers.
+          // Deliberately do not set cacheEverything or force a cache TTL.
           signal: controller.signal,
           headers: {
             accept: "text/html,application/xhtml+xml,application/json,application/xml,text/plain;q=0.9",
@@ -366,6 +380,7 @@ export async function fetchPublicResource(input, options = {}) {
         ok: response.ok,
         status: response.status,
         contentType,
+        cacheStatus: normalizeCacheStatus(response.headers.get("cf-cache-status")),
         body: text,
         bytes,
         originalUrl: initialUrl.href,

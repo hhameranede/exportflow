@@ -214,6 +214,8 @@ async function getRobotsPolicy(origin, fetchResource) {
       maxRedirects: MAP_CRAWL_LIMITS.maxRedirects,
       userAgent: EXPORTFLOW_CRAWLER_USER_AGENT,
       allowedOrigin: origin,
+      // Robots policy is rechecked per task instead of trusting a stale edge entry.
+      cacheMode: "bypass",
     });
     if ([401, 403, 429].includes(response.status) || response.status >= 500) {
       throw new MapCrawlError("ROBOTS_UNREACHABLE", "robots.txt denied access or returned a server error; crawling was stopped.", 503);
@@ -304,6 +306,7 @@ function makeSource(url, response, evidenceType) {
       status: response.status,
       contentType: response.contentType,
       bytes: response.bytes,
+      cacheStatus: response.cacheStatus ?? null,
     }],
   };
 }
@@ -345,6 +348,7 @@ async function createSiteContext(input, options) {
     }
     try {
       return await baseFetchResource(url, {
+        cacheMode: options.cacheMode ?? "default",
         ...fetchOptions,
         ...(signal ? { signal } : {}),
       });
@@ -434,6 +438,7 @@ export async function mapWebsite(input, options = {}) {
       status: context.homepage.status,
       bytes: context.homepage.bytes,
       contentType: context.homepage.contentType,
+      cacheStatus: context.homepage.cacheStatus ?? null,
     },
     sitemaps: context.sitemap.fetched,
     urls,
@@ -526,6 +531,7 @@ export async function crawlWebsite(input, options = {}) {
       status: response.status,
       contentType: response.contentType,
       bytes: response.bytes,
+      cacheStatus: response.cacheStatus ?? null,
       depth: item.depth,
       discoveredFrom: item.discoveredFrom,
       body: response.body,
