@@ -558,6 +558,8 @@ test("existing Worker routes remain backward compatible and reflect liveCapabili
   );
   const platformData = await configuredPlatform.json();
   assert.deepEqual(platformData.liveCapabilities, ["http.fetch.v1"]);
+  assert.equal(platformData.auth.ready, true);
+  assert.equal(platformData.taskStore.ready, true);
   assert.equal(platformData.endpoints.tasks, "/api/v1/tasks");
 
   const preview = await worker.fetch(new Request("https://exportflow.local/api/v1/router-preview?javascript=true"), {});
@@ -565,6 +567,45 @@ test("existing Worker routes remain backward compatible and reflect liveCapabili
 
   const badMethod = await worker.fetch(new Request("https://exportflow.local/api/v1/tasks", { method: "GET" }), {});
   assert.equal(badMethod.status, 405);
+});
+
+test("platform does not advertise live execution without the durable Task tables and quota/lifecycle triggers", async () => {
+  const missingTables = makeTestEnv();
+  try {
+    missingTables.__fixture.sqlite.prepare("DROP TABLE task_events").run();
+    missingTables.__fixture.sqlite.prepare("DROP TABLE tasks").run();
+    const response = await createWorker().fetch(
+      new Request("https://exportflow.local/api/v1/platform", {
+        headers: { authorization: `Bearer ${TEST_TOKEN}` },
+      }),
+      missingTables,
+    );
+    const platform = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(platform.auth.ready, true, "the existing tenant/quota schema remains ready");
+    assert.equal(platform.taskStore.ready, false);
+    assert.deepEqual(platform.liveCapabilities, []);
+  } finally {
+    missingTables.__fixture.close();
+  }
+
+  const missingTrigger = makeTestEnv();
+  try {
+    missingTrigger.__fixture.sqlite.prepare("DROP TRIGGER reserve_quota_for_new_task").run();
+    const response = await createWorker().fetch(
+      new Request("https://exportflow.local/api/v1/platform", {
+        headers: { authorization: `Bearer ${TEST_TOKEN}` },
+      }),
+      missingTrigger,
+    );
+    const platform = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(platform.auth.ready, true);
+    assert.equal(platform.taskStore.ready, false);
+    assert.deepEqual(platform.liveCapabilities, []);
+  } finally {
+    missingTrigger.__fixture.close();
+  }
 });
 
 test("Node HTTP server bridges localhost requests safely, enforces body limits, and ignores spoofed Host headers", async () => {
