@@ -11,7 +11,7 @@ ExportFlow gives AI agents one bounded REST/MCP interface for public-web request
 - **Evidence-backed:** outputs preserve requested/final URLs, HTTP status, retrieval time, byte counts, redirect history, and per-field evidence where available.
 - **Model-agnostic:** REST and MCP expose the same ExportFlow-owned task contracts.
 
-ExportFlow does not launch a remote browser, execute website JavaScript, or offer browser-session interaction. JavaScript bundles, embedded application state, sitemaps, and public JSON/API endpoints can be retrieved as ordinary HTTP resources when they are publicly accessible and pass egress policy. If a site only reveals its content after client-side JavaScript execution and exposes no usable public HTTP endpoint, that task is unsupported. ExportFlow does not silently fall back to Browser Run or another hosted browser service.
+ExportFlow does not launch remote or user-owned browser sessions, execute website JavaScript, or offer browser-session interaction. Public HTML, text, JSON and XML resources can be retrieved as ordinary HTTP responses when they pass egress policy. JavaScript files are data, never executed. If a site only reveals its content after client-side JavaScript execution and exposes no usable public HTTP endpoint, that task is unsupported. ExportFlow has no browser-service fallback.
 
 Playwright is used only by GitHub Actions for ExportFlow's own website QA. It is not part of customer task execution.
 
