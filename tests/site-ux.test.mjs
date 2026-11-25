@@ -185,7 +185,7 @@ test("capability cards keep icons beside titles and preserve mobile metrics, fil
     "header actions must shrink on 320px phone viewports");
 
   const home = await fetchHtml("/");
-  assert.match(home, /marketing\.css\?v=9/u,
+  assert.match(home, /marketing\.css\?v=10/u,
     "the stylesheet URL must be versioned so mobile clients do not keep stale CSS");
 });
 
