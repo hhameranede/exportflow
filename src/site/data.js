@@ -22,7 +22,7 @@ export const CAPABILITIES = Object.freeze([
     maturity: "Local Runtime Verified",
     maturityKey: "local-verified",
     summary:
-      "Bounded direct HTTP(S) retrieval for public text, HTML, JSON, and XML sources without headless browser overhead.",
+      "Bounded direct HTTP(S) retrieval for eligible public text, HTML, JSON, and XML resources.",
     details:
       "Verified in Node.js 22/24 and local Cloudflare Workerd via authenticated POST /api/v1/tasks when D1 tenant auth and quota tables are configured. Enforces SSRF egress checks, manual redirect revalidation, and streamed byte caps. Production rollout is pending.",
     limits: [
@@ -182,7 +182,7 @@ export const PLATFORM_LAYERS = Object.freeze([
     responsibility:
       "Evaluates task requirements and selects the lowest-cost, lowest-risk execution path capable of fulfilling the request.",
     howItWorks:
-      "chooseExecutionPath() selects the bounded HTTP request path for every supported task; there is no browser fallback or secondary browser execution path.",
+      "chooseExecutionPath() selects the bounded HTTP request path for every supported task; there is no alternate execution runtime.",
     controls: "Deterministic pure selection logic; never silently falls back to unconfigured bindings.",
   },
   {
