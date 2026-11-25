@@ -85,7 +85,7 @@ function isTextContentType(contentType) {
 
 function createResponseTextDecoder(contentType) {
   const value = String(contentType || "");
-  const match = /(?:^|;)\\s*charset\\s*=\\s*(?:"([^"]+)"|'([^']+)'|([^;\\s]+))/i.exec(value);
+  const match = /(?:^|;)\s*charset\s*=\s*(?:"([^"]+)"|'([^']+)'|([^;\s]+))/i.exec(value);
   const charset = (match?.[1] || match?.[2] || match?.[3] || "utf-8").trim();
   try {
     return new TextDecoder(charset, { fatal: false });
