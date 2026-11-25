@@ -1,6 +1,6 @@
 # Durable Task Lifecycle v1
 
-Status: Merged into `main` via squash merge on 25 November 2026. PR #134 is closed as merged. The implementation passed exact-head CI and real isolated Cloudflare Acceptance; Production migration and rollout remain separate approval-gated steps.
+Status: Merged into `main` via squash merge on 25 November 2026. PR #134 is closed as merged. The implementation passed exact-head CI and real isolated Cloudflare Acceptance. Production D1 Migration 0005 has now been applied after separate explicit approval; the coordinated Platform + MCP Worker rollout is pending its authorized release workflow and real Production smoke checks.
 Original implementation branch: `feat/durable-task-lifecycle-v1-20261124`.
 Verified application-code head: `142c20f84ca9dcf191bb64e798b5fa7bfd15c21a`.
 Final pre-merge head: `1fa7fba94474c01ec726341fd50a49d52e5d79ce`.
@@ -13,7 +13,7 @@ This change adds one tenant-scoped durable task ledger shared by REST and MCP. I
 
 Normal push and pull-request CI runs repository tests, browser QA and Wrangler dry-runs without deploying Acceptance resources. The isolated Acceptance job is opt-in through GitHub Actions `workflow_dispatch`: select the original implementation branch and explicitly set `run_acceptance=true`. With that opt-in, the job applies migration `0005_durable_task_lifecycle.sql` only to the dedicated Acceptance D1 database, deploys the two dedicated Task Acceptance Workers, seeds run-scoped synthetic tenants/API keys, runs real Worker + D1 tests, and removes the run-scoped data. The Acceptance Workers and schema are isolated test resources; this is not a Production rollout. The boolean input defaults to `false`, and the job is skipped for ordinary pushes and pull requests. GitHub makes a `workflow_dispatch` workflow available only after its workflow file exists on the default branch; the workflow file is now present on `main`, so the original implementation branch can be selected for a separately approved manual Acceptance run.
 
-The merge did not apply Migration 0005 to the Production tenant D1 database, deploy either Production Worker, change Production bindings, secrets, DNS, permissions or traffic, or provision customer tenants.
+The PR #134 merge itself did not apply Migration 0005 or deploy either Production Worker. After a separate explicit Production approval, Migration 0005 was applied to the Production tenant D1 database before Worker rollout. Platform/MCP Worker versions, bindings, secrets, DNS, permissions and traffic remain unchanged until the coordinated release completes.
 
 ## Shared API
 
@@ -82,11 +82,15 @@ Task reads always filter by both `tenant_id` and `task_id`. A caller from anothe
 
 The workflow file is already present on `main`, so the `workflow_dispatch` action is available. Running it still requires separate, explicit authorization for the isolated Acceptance migration and Worker deployments.
 
-## Production release gate — read-only check on 25 November 2026
+## Production rollout — Migration 0005 applied; Worker rollout pending — 25 November 2026
 
-- Cloudflare still reports `exportflow-platform` Version 23 at 100% traffic and `exportflow-mcp-preview` Version 8.
-- The Platform Worker's `EXPORTFLOW_AUTH_DB` binding points to Production D1 `exportflow-tenant-production`. A read-only query found no `tasks` or `task_events` tables there; Migration 0005 remains unapplied in Production.
-- No Production D1 writes/migration, Worker deployment/version/traffic change, DNS, secret, binding, permissions or billing change was made. Production remains outside this PR's current verification.
+- After the user's separate explicit approval, the exact repository file `migrations/0005_durable_task_lifecycle.sql` was applied to Production D1 `exportflow-tenant-production` (UUID `535fce81-b961-4097-b83f-c87e56c390bb`). Cloudflare D1 returned success for the full multi-statement SQL batch.
+- Read-only verification confirmed both `tasks` and `task_events` tables and all six expected triggers: `guard_task_quota_capacity_before_insert`, `reserve_quota_for_new_task`, `guard_task_state_transitions`, `record_task_state_transitions`, `guard_task_identity_immutable`, and `guard_task_events_immutable`.
+- The schema preflight confirmed the required existing `tenants`, `plan_policies` and `tenant_request_usage` structures. The new task tables contain no rows immediately after migration. A D1 Time Travel bookmark was recorded before the schema change.
+- The Production Platform Worker still routes 100% to Version 23 (`15e90133-8da9-42cd-9bdf-8dcc09468360`); MCP still routes 100% to Version 8 (`cb8bea58-aeb7-49ea-8155-64081a4678e3`). No Worker version or traffic has changed yet.
+- Main CI #1238 passed on current main commit `3ae77a310150893b3429f25a0a7e7c1bb95e364d`; both Acceptance and Production jobs were skipped for its documentation commit.
+- The coordinated release is being triggered through the existing authorized Production release workflow after this release checkpoint is merged. That workflow uses Wrangler with the repository's checked-in production configs and existing GitHub Actions secrets; it deploys Platform first, then MCP, followed by read-only health and MCP protocol smoke checks.
+- No DNS, secret, binding, permission or billing change is included. Do not claim the Tasks feature is Production-enabled until both Worker deployments and all smoke checks pass.
 
 ## Explicit non-goals / remaining gates
 
@@ -94,5 +98,5 @@ The workflow file is already present on `main`, so the `workflow_dispatch` actio
 - No public cancel endpoint. An inbound request abort is still forwarded into the existing executor and its resulting cancelled state is persisted when the handler can finish.
 - The isolated Acceptance workflow is manual and opt-in only. It may apply Migration 0005 to the dedicated Acceptance D1 database and deploy the two dedicated Task Acceptance Workers, then clean run-scoped synthetic tenant, key, usage and Task data. It does not modify `exportflow-tenant-production`.
 - Node SQLite tests are supplementary checks. Real Cloudflare D1 Binding acceptance covers migration execution, trigger atomicity, simultaneous requests, replay, quota exhaustion, status reads and tenant isolation.
-- A read-only Production D1 check on 25 November 2026 found the tenant/auth tables but no `tasks` or `task_events` tables; Migration 0005 remains unapplied in Production.
-- Production rollout, Production D1 migration, Worker bindings, secrets, DNS, permissions and customer tenant provisioning each remain separately approval-gated. Manually dispatching the isolated Acceptance job also requires explicit action-specific authorization.
+- Production D1 Migration 0005 was applied on 25 November 2026 after explicit approval. Read-only verification confirmed `tasks`, `task_events` and the six lifecycle/quota triggers; both task tables were empty immediately after the migration.
+- Production D1 Migration 0005 is complete. The coordinated Platform + MCP Worker deployment and its health/MCP smoke checks remain in progress under the separate Production release approval. Worker bindings, secrets, DNS, permissions and customer tenant provisioning remain separately approval-gated. Manually dispatching the isolated Acceptance job also requires explicit action-specific authorization.
