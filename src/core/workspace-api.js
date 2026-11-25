@@ -146,7 +146,7 @@ function taskStatusToHttp(task) {
     const code = task.result?.data?.errorCode || task.errors?.[0]?.code;
     if (code === "URL_NOT_ALLOWED" || code === "INVALID_TASK" || code === "INVALID_GOAL" || code === "INVALID_LIMIT") return 400;
     if (code === "RESPONSE_TOO_LARGE") return 413;
-    if (code === "UNSUPPORTED_CONTENT_TYPE") return 415;
+    if (code === "UNSUPPORTED_CONTENT_TYPE" || code === "UNSUPPORTED_CHARSET") return 415;
     if (code === "TASK_TIMEOUT" || code === "UPSTREAM_TIMEOUT") return 504;
     return 502;
   }
@@ -330,18 +330,12 @@ export async function handleWorkspaceRequest(request, env = {}, options = {}) {
     let task;
     let httpStatus;
     if (mode === "simulate") {
-      const decision = chooseExecutionPath({
-        operation: contract.operation,
-        requiresJavascript: contract.requiresJavascript,
-        requiresInteraction: contract.requiresInteraction,
-      });
+      const decision = chooseExecutionPath();
       const nowIso = new Date().toISOString();
       const id = options.idFactory ? options.idFactory() : crypto.randomUUID();
-      const supported = contract.operation === "fetch" && decision.path === "http";
+      const supported = contract.operation === "fetch";
       if (!supported) {
-        const errorCode = contract.operation !== "fetch"
-          ? "OPERATION_NOT_ENABLED"
-          : (contract.requiresInteraction ? "BROWSER_INTERACTION_UNAVAILABLE" : "BROWSER_UNAVAILABLE");
+        const errorCode = "OPERATION_NOT_ENABLED";
         task = {
           id,
           goal: contract.goal,
