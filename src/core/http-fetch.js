@@ -83,6 +83,21 @@ function isTextContentType(contentType) {
     mime.endsWith("+xml");
 }
 
+function createResponseTextDecoder(contentType) {
+  const value = String(contentType || "");
+  const match = /(?:^|;)\\s*charset\\s*=\\s*(?:"([^"]+)"|'([^']+)'|([^;\\s]+))/i.exec(value);
+  const charset = (match?.[1] || match?.[2] || match?.[3] || "utf-8").trim();
+  try {
+    return new TextDecoder(charset, { fatal: false });
+  } catch {
+    throw new FetchAdapterError(
+      "UNSUPPORTED_CHARSET",
+      "Upstream declared a character encoding that this runtime does not support.",
+      415,
+    );
+  }
+}
+
 // Upstream-controlled stream cancellation is best-effort. Never let a slow
 // or stalled cancel() callback hold the task open after its result is unusable.
 function cancelBestEffort(cancel) {
@@ -104,7 +119,7 @@ function cancelReader(reader) {
   cancelBestEffort(() => reader.cancel());
 }
 
-async function readTextBody(response, maxBytes, signal, getAbortCode, onBytesRead) {
+async function readTextBody(response, maxBytes, signal, getAbortCode, onBytesRead, decoder) {
   const declaredLength = response.headers.get("content-length");
   if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxBytes) {
     cancelBody(response);
@@ -164,7 +179,7 @@ async function readTextBody(response, maxBytes, signal, getAbortCode, onBytesRea
   }
 
   return {
-    text: new TextDecoder("utf-8", { fatal: false }).decode(merged),
+    text: decoder.decode(merged),
     bytes: totalBytes,
   };
 }
@@ -360,12 +375,20 @@ export async function fetchPublicResource(input, options = {}) {
         throw new FetchAdapterError("UNSUPPORTED_CONTENT_TYPE", "Only text, HTML, JSON, and XML responses are supported.", 415);
       }
 
+      let decoder;
+      try {
+        decoder = createResponseTextDecoder(contentType);
+      } catch (error) {
+        cancelBody(response);
+        throw error;
+      }
       const { text, bytes } = await readTextBody(
         response,
         maxBytes,
         controller.signal,
         () => callerCancelled ? "TASK_CANCELLED" : timedOut ? "UPSTREAM_TIMEOUT" : null,
         (bytes) => { responseBodyBytesRead = bytes; },
+        decoder,
       );
       if (callerCancelled) {
         throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
