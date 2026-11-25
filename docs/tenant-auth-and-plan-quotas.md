@@ -143,7 +143,7 @@ This implementation does not include:
 - General public admin interface/dashboard and multi-operator/RBAC management. The owner-only API can assign/revoke tenant membership roles, but it does not change Better Auth global roles or the deployment-only platform-owner allowlist.
 - Durable task records or a durable usage-receipt ledger.
 - Cost Router reservation/settlement, EF Credit weights, monetary billing, invoices, checkout, subscriptions, webhooks, top-ups or refunds.
-- Search, Research or Browser runtime enablement.
+- Search and Research provider/runtime enablement.
 - Production D1 binding, schema migration, plan/tenant/key seeding, Worker upload or deployment.
 
 ## Required acceptance before customer enablement
