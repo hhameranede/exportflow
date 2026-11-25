@@ -178,7 +178,6 @@ export function renderUnifiedUseCasesPage({ t, locale, hrefFor, escapeHtml, arro
     "structured-extraction": "uc-extract",
     "deep-research": "uc-research",
     "site-mapping": "uc-map",
-    "browser-escalation": "uc-browser",
   };
   return `${pageHero({
 
@@ -369,7 +368,7 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
       <div class="ef-doc-body">
         <div class="ef-status-banner">
           ${statusBadgeHtml("available", t)}
-          <span>The current mainline release exposes six bounded static-web operations: Fetch, Map, Crawl, Extract, Search, and Research through REST and MCP. Browser rendering and interaction are not part of the customer execution surface. Durable task persistence, idempotency, and status reads are proposed separately in <strong>Draft PR #134</strong>; they are not enabled in Production.</span>
+          <span>The current mainline release exposes six bounded static-web operations: Fetch, Map, Crawl, Extract, Search, and Research through REST and MCP. Execution is request-first over public HTTP(S). The Durable Task lifecycle, idempotency, and status reads are merged and Production-verified.</span>
         </div>
 
         <section id="dev-auth" class="ef-doc-section">
@@ -434,7 +433,7 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
 
         <section id="dev-routing" class="ef-doc-section">
           <h2>3. Deterministic Routing</h2>
-          <p><code>chooseExecutionPath()</code> keeps the supported customer execution path on bounded static HTTP operations. Browser rendering and interaction are intentionally excluded from the six-operation release; Playwright is used in CI for site QA, not as a customer Browser Run service.</p>
+          <p><code>chooseExecutionPath()</code> selects bounded HTTP request execution. It does not launch a remote browser or execute page JavaScript; Playwright is reserved for CI website QA and is not a customer execution runtime.</p>
         </section>
 
         <section id="dev-response" class="ef-doc-section">
@@ -552,7 +551,7 @@ export function renderUnifiedDemoPage({ locale, hrefFor, escapeHtml, arrowRightI
   return `${pageHero({
 
     title: "Bounded Execution Workbench",
-    description: "Inspect how ExportFlow enforces task contract bounds, SSRF egress rules, deterministic routing, and normalized provenance — completely inside your browser.",
+    description: "Inspect how ExportFlow enforces task contract bounds, SSRF egress rules, deterministic routing, and normalized provenance in the interactive preview.",
     badgeHtml: `<span class="ef-badge ef-badge-dev"><span>Simulation only · 0 external network requests</span></span>`,
 
     actionsHtml: `
@@ -629,17 +628,6 @@ export function renderUnifiedDemoPage({ locale, hrefFor, escapeHtml, arrowRightI
             </div>
           </div>
 
-          <div class="ef-demo-flags">
-            <label class="ef-consent">
-              <input type="checkbox" name="requiresJavascript">
-              <span><code>requiresJavascript</code> — needs headless DOM rendering</span>
-            </label>
-            <label class="ef-consent">
-              <input type="checkbox" name="requiresInteraction">
-              <span><code>requiresInteraction</code> — needs clicks or form actions</span>
-            </label>
-          </div>
-
           <div class="ef-hero-actions">
             <button type="submit" class="ef-btn ef-btn-primary">
               <span>Simulate Bounded Execution</span>
@@ -647,7 +635,7 @@ export function renderUnifiedDemoPage({ locale, hrefFor, escapeHtml, arrowRightI
             </button>
             <button type="button" class="ef-btn ef-btn-secondary" data-demo-reset>Reset</button>
           </div>
-          <p class="ef-form-banner" role="status" data-demo-status>Ready. No live upstream fetch is sent from this browser workbench.</p>
+          <p class="ef-form-banner" role="status" data-demo-status>Ready. The preview is illustrative and sends no live upstream request.</p>
         </form>
 
         <div class="ef-demo-output-col">
@@ -702,7 +690,7 @@ export function renderUnifiedDemoPage({ locale, hrefFor, escapeHtml, arrowRightI
             </div>
 
             <div class="ef-code-foot">
-              <span>Deterministic browser simulation matching src/core/egress-guard.js &amp; task-contract.js</span>
+              <span>Deterministic request-policy simulation matching src/core/egress-guard.js &amp; task-contract.js</span>
               <span>JSON</span>
             </div>
           </div>
@@ -736,7 +724,6 @@ export function renderUnifiedRichRoute(routePath, route, { t, locale, hrefFor, e
       ["/product/web-intelligence", "Web Intelligence", "available", "Bounded HTTP Fetch (http.fetch.v1) plus internal map/crawl/extract modules.", "web-intelligence"],
       ["/product/execution-orchestration", "Execution Orchestration", "development", "Task Contract validation, deterministic routing, and tenant gateway controls.", "execution-orchestration"],
       ["/product/developer-platform", "Developer Platform", "development", "REST endpoints, Better Auth / 2FA, and OAuth 2.0 / MCP preview flows.", "developer-platform"],
-      ["/product/browser-automation", "Browser Automation", "planned", "Isolated rendering escalation path (currently returns 501 BROWSER_UNAVAILABLE).", "browser-automation"],
       ["/product/persistent-intelligence", "Persistent Intelligence", "planned", "Future durable queues, long-running task storage, and resumption.", "persistent-intelligence"],
     ];
     return `${pageHero({
@@ -784,13 +771,7 @@ export function renderUnifiedRichRoute(routePath, route, { t, locale, hrefFor, e
         state: "development",
         modules: "src/index.js · src/core/auth-app.js · src/mcp/preview-worker.js",
         summary: "Exposes /api/v1/health, /api/v1/platform, /api/v1/router-preview, and authenticated POST /api/v1/tasks alongside Better Auth (TOTP 2FA) and OAuth 2.0 / MCP preview authorization.",
-        details: "Local developer commands and interactive browser simulations are available directly without remote credentials.",
-      },
-      "/product/browser-automation": {
-        state: "planned",
-        modules: "src/core/browser-render.js · src/core/router.js",
-        summary: "Escalation path designed for JavaScript-rendered applications and explicitly authorized browser workflows when static HTTP retrieval is insufficient.",
-        details: "Requests specifying requiresJavascript or requiresInteraction fail closed with HTTP 501 (BROWSER_UNAVAILABLE / BROWSER_INTERACTION_UNAVAILABLE) until a vetted Browser binding and security review are attached.",
+        details: "Local request-policy previews are available without remote credentials or outbound network calls.",
       },
       "/product/persistent-intelligence": {
         state: "planned",
@@ -824,7 +805,7 @@ export function renderUnifiedRichRoute(routePath, route, { t, locale, hrefFor, e
           </div>
           <div class="ef-info-card">
             <h3>Interactive Workbench</h3>
-            <p>Test URL egress validation, byte limits, and 501 escalation paths in-browser.</p>
+            <p>Test URL egress validation, byte limits, and contract rejection paths in the local preview.</p>
             <p class="ef-mt-12"><a class="ef-cap-link" href="${hrefFor("/demo", locale)}">Launch preview ${arrowUpRightIcon("ef-icon ef-icon-xs ef-dir-arrow")}</a></p>
           </div>
         </div>
@@ -911,7 +892,7 @@ export function renderUnifiedRichRoute(routePath, route, { t, locale, hrefFor, e
       ["Multi-Tenant D1 Auth & Quotas", "available", "Per-tenant ef_live_* API keys, atomic UTC plan quota windows, and shared TenantBurstRateLimiter Durable Object."],
       ["Better Auth, TOTP 2FA & MCP Preview", "development", "Account portal (/signin, /account), owner MFA step-up, OAuth tenant consent UI, and MCP preview worker."],
       ["Internal Web Intelligence Adapters", "development", "Unit-tested web.map.v1, web.crawl.v1, web.extract.v1, web.search.v1, and web.research.v1 factories."],
-      ["Browser Runtime & Durable Queues", "planned", "Isolated JS rendering binding (currently 501) and persistent async task orchestration."],
+      ["Production Durable Tasks", "available", "D1-backed task persistence, idempotency, quota enforcement, and task-status reads passed Production REST/MCP smoke acceptance."],
     ];
 
     return `${pageHero({
