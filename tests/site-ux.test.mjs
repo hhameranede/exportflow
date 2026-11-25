@@ -77,7 +77,8 @@ test("unified design system serves /platform, /use-cases, /developers, /demo, an
   assert.match(developersHtml, /INSUFFICIENT_SCOPE/);
   assert.match(developersHtml, /QUOTA_EXCEEDED/);
   assert.match(developersHtml, /URL_NOT_ALLOWED/);
-  assert.match(developersHtml, /BROWSER_UNAVAILABLE/);
+  assert.doesNotMatch(developersHtml, /BROWSER_UNAVAILABLE|web\\.browser\\.v1|Browser Run/i);
+  assert.equal(MARKETING_PATHS.includes("/product/browser-automation"), false);
   assert.match(developersHtml, /TenantBurstRateLimiter/);
 
   const demoHtml = await fetchHtml("/demo");
