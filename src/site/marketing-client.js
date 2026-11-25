@@ -691,7 +691,7 @@ export const MARKETING_JS = `(function () {
         adapterText: "code: URL_NOT_ALLOWED",
         isWarn: true,
         tokens: [
-          { cls: "ef-tok-dim", text: "// Private and reserved destinations are blocked before outbound HTTP\n" },
+          { cls: "ef-tok-dim", text: "// Private and reserved destinations are blocked before outbound HTTP\\n" },
           { cls: "ef-tok-punc", text: "{\\n  " },
           { cls: "ef-tok-key", text: '"state"' },
           { cls: "ef-tok-punc", text: ": " },
