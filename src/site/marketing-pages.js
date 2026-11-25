@@ -377,7 +377,7 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
           <p>Task execution in <code>src/core/tenant-task-gateway.js</code> enforces a fail-closed multi-stage gate before any outbound HTTP allocation begins:</p>
           <ul class="ef-spec-list">
             <li><strong>Pre-auth IP rate guard:</strong> Evaluates the connecting client IP before credential hashing.</li>
-            <li><strong>Tenant credential verification:</strong> Accepts D1-backed tenant API keys (<code>Authorization: Bearer ef_live_&lt;keyId&gt;_&lt;secret&gt;</code>, verified via SHA-256 constant-time digest) or verified OAuth 2.0 / MCP tenant access claims. Each operation requires its matching scope: <code>tasks:fetch</code>, <code>tasks:map</code>, <code>tasks:crawl</code>, <code>tasks:extract</code>, <code>tasks:search</code>, or <code>tasks:research</code>. The separate <code>tasks:read</code> scope is part of Draft PR #134.</li>
+            <li><strong>Tenant credential verification:</strong> Accepts D1-backed tenant API keys (<code>Authorization: Bearer ef_live_&lt;keyId&gt;_&lt;secret&gt;</code>, verified via SHA-256 constant-time digest) or verified OAuth 2.0 / MCP tenant access claims. Each operation requires its matching scope: <code>tasks:fetch</code>, <code>tasks:map</code>, <code>tasks:crawl</code>, <code>tasks:extract</code>, <code>tasks:search</code>, or <code>tasks:research</code>. The separate <code>tasks:read</code> scope is included in the Production-verified Durable Task lifecycle.</li>
             <li><strong>Shared Durable Object burst limiter:</strong> <code>TenantBurstRateLimiter</code> serializes burst windows across REST and MCP Worker instances.</li>
             <li><strong>Atomic D1 UTC plan quota:</strong> Reserves quota in <code>tenant_request_usage</code> and emits <code>x-plan-limit</code>, <code>x-plan-remaining</code>, and <code>x-plan-reset</code> headers. Missing D1 or DO bindings fail closed with HTTP <code>503</code>.</li>
           </ul>
@@ -450,8 +450,8 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
         </section>
 
         <section id="dev-durable" class="ef-doc-section">
-          <h2>5. Durable Task Lifecycle — Draft PR #134</h2>
-          <p><strong>Draft only · not enabled in Production.</strong> PR #134 adds a tenant-scoped durable task ledger shared by REST and MCP on the existing Request-First execution path. Its D1 migration is source-only and has not been applied.</p>
+          <h2>5. Durable Task Lifecycle — Production Verified</h2>
+          <p><strong>Production verified.</strong> The shared D1-backed task lifecycle is enabled for REST and MCP, with tenant-scoped persistence, idempotency, quota reservation, append-only events, and status reads. The bounded Production smoke workflow exercised synthetic tenant tasks through the real Workers and D1 path and cleaned up its run-scoped data. This is durable task state, not background execution: submissions still run within the request lifecycle.</p>
           <ul class="ef-spec-list">
             <li><strong>Idempotent submission:</strong> Optional REST <code>Idempotency-Key</code> values must contain 8–128 visible ASCII characters. The stored value is a tenant-scoped SHA-256 fingerprint, not the raw key. A same-tenant retry with the same effective request replays the original task without reserving quota again; reusing the key for a different request returns HTTP <code>409 IDEMPOTENCY_KEY_REUSED</code>.</li>
             <li><strong>Task status and results:</strong> Draft REST <code>GET /api/v1/tasks/{taskId}</code> and MCP <code>web_task_status({ taskId })</code> require the separate <code>tasks:read</code> scope. Reads are filtered by both tenant and task ID; another tenant receives the same not-found response as an unknown task.</li>
@@ -460,8 +460,8 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
             <li><strong>Execution limits:</strong> This version remains synchronous and Request-First. It does not add Queues, Workflows, background execution, resumable work, automatic re-run after a Worker crash, or a public cancel endpoint. Expired execution leases are marked expired rather than resumed.</li>
           </ul>
           <div class="ef-notice ef-notice-warn ef-mt-4" role="note">
-            <p class="ef-notice-title">Acceptance gate still open</p>
-            <p class="ef-notice-body">The D1-shaped SQLite tests are supplementary only. Real Cloudflare Worker + D1 acceptance must still verify migration execution, trigger atomicity, concurrent same-key requests, replay, quota exhaustion, task reads, and tenant isolation. Until that target-runtime gate and a separately approved rollout are complete, PR #134 remains Draft and none of these durable lifecycle features should be described as Production-enabled.</p>
+            <p class="ef-notice-title">Production smoke acceptance passed</p>
+            <p class="ef-notice-body">The real Production Durable Task Smoke workflow passed for REST and MCP using synthetic tenants and run-scoped data, then completed cleanup. See <a href="https://github.com/hhameranede/exportflow/actions/runs/45668027661">Production Durable Task Smoke #4</a>. This verifies the tested lifecycle path only; it does not prove that every web operation or upstream source is universally reliable.</p>
           </div>
         </section>
 
