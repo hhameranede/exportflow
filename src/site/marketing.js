@@ -1,5 +1,5 @@
 import { renderDocument, escapeHtml } from "./layout.js";
-import { SITE_META } from "./data.js";
+import { CAPABILITIES, SITE_META } from "./data.js";
 import { renderExecutionGraph } from "./execution-graph.js";
 import { AUTH_ROUTES, renderAuthPage, getAuthCopy } from "./auth-pages.js";
 import { renderUnifiedRichRoute } from "./marketing-pages.js";
@@ -289,40 +289,54 @@ function homeBody(t, locale) {
   const { cards, featuredSpecs, stepSpecs, trustPoints } = ld;
   const featuredCard = cards[0];
   const secondaryCards = cards.slice(1);
+  const adapterEntries = [
+    { name: "HTTP Fetch", adapterId: "http.fetch.v1", state: "available", icon: "web-intelligence", summary: CAPABILITIES[0].summary, href: "/product/web-intelligence" },
+    { name: "Web Search", adapterId: "web.search.v1", state: "development", icon: "web-search", summary: CAPABILITIES[1].details, href: "/product/web-intelligence" },
+    { name: "Site mapping", adapterId: "web.map.v1", state: "development", icon: "map-crawl", summary: CAPABILITIES[2].summary, href: "/product/web-intelligence" },
+    { name: "Bounded crawl", adapterId: "web.crawl.v1", state: "development", icon: "map-crawl", summary: CAPABILITIES[2].details, href: "/product/web-intelligence" },
+    { name: "Structured extraction", adapterId: "web.extract.v1", state: "development", icon: "extract", summary: CAPABILITIES[3].summary, href: "/product/web-intelligence" },
+    { name: "Browser execution", adapterId: "web.browser.v1", state: "planned", icon: "browser-automation", summary: CAPABILITIES[4].details, href: "/product/browser-automation" },
+  ];
 
   return `
-  <!-- HERO: Cupertino Centered Keynote Framing + Hardware Execution Stage -->
-  <section class="ef-hero" data-hero-section>
-    <div class="ef-container ef-hero-editorial">
-      <h1 class="ef-hero-title ef-hero-stagger ef-stagger-2">${escapeHtml(t.hero)}</h1>
-      <p class="ef-hero-lead ef-hero-stagger ef-stagger-3">${escapeHtml(t.lead)}</p>
+  <section class="ef-hero ef-hero-redesign" data-hero-section>
+    <div class="ef-container ef-hero-layout" data-gsap-hero>
+      <div class="ef-hero-copy">
+        <p class="ef-hero-kicker">${escapeHtml(t.eyebrow)}</p>
+        <h1 class="ef-hero-title">${escapeHtml(t.hero)}</h1>
+        <p class="ef-hero-lead">${escapeHtml(t.lead)}</p>
 
-      <div class="ef-hero-actions ef-hero-stagger ef-stagger-4">
-        <a class="ef-btn ef-btn-primary" href="${hrefFor("/developers", locale)}">
-          <span>${escapeHtml(t.start)}</span>
-        </a>
-        <a class="ef-text-link" href="${hrefFor("/platform", locale)}">
-          <span>${escapeHtml(t.explore)}</span>
-          ${arrowRightIcon("ef-icon ef-icon-xs ef-dir-arrow")}
-        </a>
+        <div class="ef-hero-actions">
+          <a class="ef-btn ef-btn-primary" href="${hrefFor("/developers", locale)}">
+            <span>${escapeHtml(t.start)}</span>
+          </a>
+          <a class="ef-text-link" href="${hrefFor("/platform", locale)}">
+            <span>${escapeHtml(t.explore)}</span>
+            ${arrowRightIcon("ef-icon ef-icon-xs ef-dir-arrow")}
+          </a>
+        </div>
+
+        <div class="ef-hero-meta">
+          <span class="ef-hero-live-mark" aria-hidden="true"></span>
+          <span>${escapeHtml(t.available)} · <bdi dir="ltr">${escapeHtml(ld.heroBadgeSuffix)}</bdi></span>
+          <button type="button" class="ef-motion-toggle" data-motion-toggle aria-pressed="false">
+            <span data-motion-label>${escapeHtml(ld.pauseMotion)}</span>
+          </button>
+        </div>
       </div>
 
-      <div class="ef-hero-meta ef-hero-stagger ef-stagger-5">
-        <span>${escapeHtml(t.available)} · ${escapeHtml(ld.heroBadgeSuffix)}</span>
-        <span aria-hidden="true">·</span>
-        <button type="button" class="ef-motion-toggle" data-motion-toggle aria-pressed="false">
-          <span data-motion-label>${escapeHtml(ld.pauseMotion)}</span>
-        </button>
+      <div class="ef-hero-stage">
+        <div class="ef-hero-stage-note">
+          <span>${escapeHtml(ld.graph.kicker)}</span>
+          <span class="ef-hero-stage-contract" dir="ltr">POST /api/v1/tasks</span>
+        </div>
+        ${renderExecutionGraph({
+          availableLabel: t.available,
+          developmentLabel: t.development,
+          plannedLabel: t.planned,
+          locale,
+        })}
       </div>
-    </div>
-
-    <div class="ef-container ef-hero-stage ef-hero-stagger ef-stagger-5">
-      ${renderExecutionGraph({
-        availableLabel: t.available,
-        developmentLabel: t.development,
-        plannedLabel: t.planned,
-        locale,
-      })}
     </div>
   </section>
 
@@ -397,6 +411,26 @@ function homeBody(t, locale) {
           <li>${statusBadgeHtml("development", t)} <span>${escapeHtml(t.legendDev)}</span></li>
           <li>${statusBadgeHtml("planned", t)} <span>${escapeHtml(t.legendPlanned)}</span></li>
         </ul>
+      </div>
+
+      <div class="ef-adapter-atlas" aria-labelledby="adapter-atlas-heading">
+        <div class="ef-adapter-atlas-head">
+          <p>${escapeHtml(ld.architectureKicker)}</p>
+          <h3 id="adapter-atlas-heading">${escapeHtml(ld.adapterCatalogTitle)}</h3>
+          <span>${escapeHtml(ld.adapterCatalogLead)}</span>
+        </div>
+        <div class="ef-adapter-grid">
+          ${adapterEntries.map((adapter, index) => `<a class="ef-adapter-card" href="${hrefFor(adapter.href, locale)}" data-adapter-kind="${escapeHtml(adapter.adapterId)}" data-adapter-state="${adapter.state}">
+            <div class="ef-adapter-card-head">
+              ${renderFeatureIcon(adapter.icon)}
+              ${statusBadgeHtml(adapter.state, t)}
+            </div>
+            <span class="ef-adapter-index">${String(index + 1).padStart(2, "0")}</span>
+            <h4>${escapeHtml(adapter.name)}</h4>
+            <code dir="ltr">${escapeHtml(adapter.adapterId)}</code>
+            <p>${escapeHtml(adapter.summary)}</p>
+          </a>`).join("")}
+        </div>
       </div>
     </div>
   </section>

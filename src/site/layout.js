@@ -84,7 +84,7 @@ export function renderDocument({
     ? `<link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="/assets/marketing.css?v=9">`
+  <link rel="stylesheet" href="/assets/marketing.css?v=12">`
     : `<link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
@@ -92,7 +92,10 @@ export function renderDocument({
 
   const scriptHtml = marketingDetected
     ? `<div class="ef-toast-region" data-toast-region aria-live="polite" aria-atomic="true"></div>
-  <script src="/assets/marketing.js?v=3" defer></script>`
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.1/dist/gsap.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.1/dist/ScrollTrigger.min.js" defer></script>
+  <script src="/assets/marketing.js?v=3" defer></script>
+  <script src="/assets/marketing-motion.js?v=1" defer></script>`
     : `<script src="/assets/site.js" defer></script>`;
 
   const seoHeadTags = SEOManager.renderHeadTags({
