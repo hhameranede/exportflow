@@ -687,37 +687,27 @@ export const MARKETING_JS = `(function () {
         }, null, 2)
       },
       guard: {
-        statusText: "ILLUSTRATIVE · state: unsupported · HTTP 501 · 0 external calls",
-        adapterText: "code: BROWSER_UNAVAILABLE",
+        statusText: "ILLUSTRATIVE · state: rejected · HTTP 400 · 0 external calls",
+        adapterText: "code: URL_NOT_ALLOWED",
         isWarn: true,
         tokens: [
-          { cls: "ef-tok-dim", text: "// Honest boundary when binding is unconfigured\\n" },
+          { cls: "ef-tok-dim", text: "// Private and reserved destinations are blocked before outbound HTTP\n" },
           { cls: "ef-tok-punc", text: "{\\n  " },
           { cls: "ef-tok-key", text: '"state"' },
           { cls: "ef-tok-punc", text: ": " },
-          { cls: "ef-tok-str", text: '"unsupported"' },
+          { cls: "ef-tok-str", text: '"failed"' },
           { cls: "ef-tok-punc", text: ",\\n  " },
-          { cls: "ef-tok-key", text: '"execution"' },
-          { cls: "ef-tok-punc", text: ": { " },
-          { cls: "ef-tok-key", text: '"path"' },
-          { cls: "ef-tok-punc", text: ": " },
-          { cls: "ef-tok-str", text: '"browser"' },
-          { cls: "ef-tok-punc", text: ", " },
-          { cls: "ef-tok-key", text: '"adapterId"' },
-          { cls: "ef-tok-punc", text: ": " },
-          { cls: "ef-tok-num", text: "null" },
-          { cls: "ef-tok-punc", text: " },\\n  " },
           { cls: "ef-tok-key", text: '"errors"' },
           { cls: "ef-tok-punc", text: ": [{ " },
           { cls: "ef-tok-key", text: '"code"' },
           { cls: "ef-tok-punc", text: ": " },
-          { cls: "ef-tok-str", text: '"BROWSER_UNAVAILABLE"' },
+          { cls: "ef-tok-str", text: '"URL_NOT_ALLOWED"' },
           { cls: "ef-tok-punc", text: " }]\\n}" }
         ],
         raw: JSON.stringify({
-          state: "unsupported",
-          execution: { path: "browser", adapterId: null },
-          errors: [{ code: "BROWSER_UNAVAILABLE" }]
+          state: "failed",
+          execution: { path: null, adapterId: null },
+          errors: [{ code: "URL_NOT_ALLOWED" }]
         }, null, 2)
       }
     };
@@ -2234,8 +2224,6 @@ export const MARKETING_JS = `(function () {
       var timeoutMs = Math.max(100, Math.min(8000, Number(demoForm.elements.timeoutMs.value) || 5000));
       var maxBytes = Math.max(64, Math.min(1048576, Number(demoForm.elements.maxBytes.value) || 262144));
       var maxRedirects = Math.max(0, Math.min(3, Number(demoForm.elements.maxRedirects.value) || 0));
-      var requiresJavascript = Boolean(demoForm.elements.requiresJavascript.checked);
-      var requiresInteraction = Boolean(demoForm.elements.requiresInteraction.checked);
 
       setDemoFieldError("goal", goal ? "" : tx("Provide a task goal description.", "أدخل وصفاً لهدف المهمة."));
       var urlCheck = validatePreviewUrl(url);
@@ -2245,8 +2233,6 @@ export const MARKETING_JS = `(function () {
         goal: goal || "(missing)",
         url: url,
         operation: operation,
-        requiresJavascript: requiresJavascript,
-        requiresInteraction: requiresInteraction,
         limits: { timeoutMs: timeoutMs, maxBytes: maxBytes, maxRedirects: maxRedirects }
       };
 
@@ -2294,25 +2280,6 @@ export const MARKETING_JS = `(function () {
           errors: [{ code: "OPERATION_NOT_ENABLED", message: "Operation '" + operation + "' is not enabled in Phase 1." }],
           result: { status: "unsupported", data: null, sources: [], warnings: [] }
         };
-      } else if (requiresJavascript || requiresInteraction) {
-        httpStatus = 501;
-        var errCode = requiresInteraction ? "BROWSER_INTERACTION_UNAVAILABLE" : "BROWSER_UNAVAILABLE";
-        setStage("contract", "PASS", "is-pass");
-        setStage("egress", "PASS", "is-pass");
-        setStage("router", "browser", "is-warn");
-        setStage("engine", "501 UNBOUND", "is-warn");
-        setStage("evidence", "UNSUPPORTED", "is-warn");
-        envelope = {
-          state: "unsupported",
-          execution: {
-            path: "browser",
-            operation: "fetch",
-            adapterId: null,
-            reason: "Routing detected browser requirement; no isolated browser binding is active in Phase 1."
-          },
-          errors: [{ code: errCode, message: "Browser rendering escalation failed closed (HTTP 501)." }],
-          result: { status: "unsupported", data: null, sources: [], warnings: [] }
-        };
       } else {
         httpStatus = 200;
         setStage("contract", "PASS", "is-pass");
@@ -2329,7 +2296,7 @@ export const MARKETING_JS = `(function () {
             path: "http",
             operation: "fetch",
             adapterId: "http.fetch.v1",
-            reason: "Public static HTTP retrieval permitted without browser overhead."
+            reason: "Public HTTP request permitted by the request-only execution policy."
           },
           usage: { durationMs: 142, requestsAttempted: 1, responseBytes: Math.min(maxBytes, 1480), cost: null },
           errors: [],
@@ -2346,7 +2313,7 @@ export const MARKETING_JS = `(function () {
               retrievedAt: "simulated",
               evidence: [{ type: "http_response", status: 200, redirectCount: 0, maxBytesCap: maxBytes }]
             }],
-            warnings: ["Simulation output — 0 external HTTP requests sent by this browser workbench."]
+            warnings: ["Simulation output — 0 external HTTP requests were sent."]
           }
         };
       }
@@ -2366,7 +2333,7 @@ export const MARKETING_JS = `(function () {
 
       evidenceReport = {
         httpStatus: httpStatus,
-        routerPath: requiresJavascript || requiresInteraction ? "browser" : (operation === "fetch" ? "http" : operation),
+        routerPath: operation === "fetch" ? "http" : operation,
         adapterId: httpStatus === 200 ? "http.fetch.v1" : null,
         sources: envelope.result && envelope.result.sources ? envelope.result.sources : []
       };
@@ -2401,8 +2368,6 @@ export const MARKETING_JS = `(function () {
       demoForm.elements.timeoutMs.value = preset.timeoutMs || 5000;
       demoForm.elements.maxBytes.value = preset.maxBytes || 262144;
       demoForm.elements.maxRedirects.value = preset.maxRedirects != null ? preset.maxRedirects : 2;
-      demoForm.elements.requiresJavascript.checked = Boolean(preset.requiresJavascript);
-      demoForm.elements.requiresInteraction.checked = Boolean(preset.requiresInteraction);
       presetBtns.forEach(function (b) {
         b.setAttribute("aria-pressed", String(b.getAttribute("data-demo-preset") === presetId));
       });
