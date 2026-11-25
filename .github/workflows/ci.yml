@@ -67,27 +67,18 @@ jobs:
      shell: bash
      run: |
       set -euo pipefail
-      declare -A entrypoints=(
-       [auth-lab]=index.js
-       [platform]=index.js
-       [mcp-preview]=index.js
-       [tenant-platform-acceptance]=tenant-platform.js
-       [tenant-mcp-acceptance]=tenant-mcp.js
-       [auth-acceptance]=index.js
-       [mcp-acceptance]=index.js
-       [task-platform-acceptance]=platform.js
-       [task-mcp-acceptance]=mcp.js
-      )
-      for bundle in "\${!entrypoints[@]}"; do
-       output="$GITHUB_WORKSPACE/dist/$bundle/\${entrypoints[$bundle]}"
+      for mapping in auth-lab/index.js platform/index.js mcp-preview/index.js tenant-platform-acceptance/tenant-platform.js tenant-mcp-acceptance/tenant-mcp.js auth-acceptance/index.js mcp-acceptance/index.js task-platform-acceptance/platform.js task-mcp-acceptance/mcp.js; do
+       bundle="${mapping%%/*}"
+       entrypoint="${mapping#*/}"
+       output="$GITHUB_WORKSPACE/dist/$bundle/$entrypoint"
        if [[ ! -s "$output" ]]; then
         echo "::error::Expected Worker entrypoint is missing: $output"
-        find "$GITHUB_WORKSPACE/dist" -maxdepth 4 -type f -printf '%p %s bytes\n' || true
+        find "$GITHUB_WORKSPACE/dist" -maxdepth 4 -type f -printf "%p %s bytes\n" || true
         exit 1
        fi
-       echo "$bundle/\${entrypoints[$bundle]}: $(stat -c '%s bytes' "$output")"
+       echo "$bundle/$entrypoint: $(stat -c '%s bytes' "$output")"
       done
-      find "$GITHUB_WORKSPACE/dist" -maxdepth 4 -type f -printf '%p %s bytes\n' | sort
+      find "$GITHUB_WORKSPACE/dist" -maxdepth 4 -type f -printf "%p %s bytes\n" | sort
    - name: Upload all nine Worker bundle artifacts
      uses: actions/upload-artifact@v4
      with:
