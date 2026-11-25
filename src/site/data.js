@@ -426,6 +426,17 @@ export const DEMO_PRESETS = Object.freeze({
     maxRedirects: 3,
     forceOutcome: "RESPONSE_TOO_LARGE",
   },
+  "request-only-unavailable": {
+    id: "request-only-unavailable",
+    label: "JavaScript-only Content (Unsupported)",
+    goal: "Retrieve content that is only exposed after client-side JavaScript runs",
+    url: "https://app.example.org/dashboard",
+    operation: "fetch",
+    timeoutMs: 8000,
+    maxBytes: 1048576,
+    maxRedirects: 3,
+    forceOutcome: "NO_PUBLIC_HTTP_ENDPOINT",
+  },
 });
 
 export const DEVELOPER_ERROR_CODES = Object.freeze([
