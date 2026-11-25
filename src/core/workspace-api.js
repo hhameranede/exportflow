@@ -349,7 +349,7 @@ export async function handleWorkspaceRequest(request, env = {}, options = {}) {
           },
           timestamps: { createdAt: nowIso, startedAt: nowIso, completedAt: nowIso },
           usage: { durationMs: 0, requestsAttempted: 0, responseBytes: 0, cost: null },
-          errors: [{ code: errorCode, message: decision.reason }],
+          errors: [{ code: errorCode, message: "Only the Fetch operation is enabled on this workspace execution endpoint." }],
           result: { status: "unsupported", data: null, sources: [], warnings: ["Dry-run policy verification — 0 external requests."] },
         };
         httpStatus = 501;
