@@ -115,19 +115,17 @@ async function runAcceptanceNetworkProbe(fetchImpl = globalThis.fetch) {
   }
 
   for (const target of ACCEPTANCE_NETWORK_PROBE_TARGETS) {
-    for (const mode of ["adapter-compatible", "minimal"]) {
+    for (const mode of ["default", "bypass"]) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8_000);
       const init = {
         method: "GET",
         redirect: "manual",
         signal: controller.signal,
-        ...(mode === "adapter-compatible" ? {
-          cache: "default",
-          headers: {
-            accept: "text/html,application/xhtml+xml,application/json,application/xml,text/plain;q=0.9",
-          },
-        } : {}),
+        headers: {
+          accept: "text/html,application/xhtml+xml,application/json,application/xml,text/plain;q=0.9",
+        },
+        ...(mode === "bypass" ? { cache: "no-store" } : {}),
       };
       try {
         const response = await fetchImpl(target.url, init);

@@ -108,8 +108,8 @@ test("Acceptance network diagnostics require tasks:fetch and use only fixed boun
     assert.equal(calls.length, 6);
     assert.ok(diagnostic.probes.every((probe) => probe.ok));
     assert.ok(calls.every(({ init }) => init.method === "GET" && init.redirect === "manual"));
-    assert.ok(calls.some(({ init }) => init.cache === "default" && init.headers?.accept));
-    assert.ok(calls.some(({ init }) => init.cache === undefined && init.headers === undefined));
+    assert.ok(calls.some(({ init }) => init.cache === undefined && init.headers?.accept));
+    assert.ok(calls.some(({ init }) => init.cache === "no-store" && init.headers?.accept));
     assert.ok(diagnostic.probes.every((probe) => !("sample" in probe) && !("body" in probe)));
 
     const unauthenticated = await worker.fetch(new Request("https://api.exportflow.local/__acceptance/network-probe"), env);

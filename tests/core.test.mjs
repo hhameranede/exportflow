@@ -207,14 +207,14 @@ test("egress guard normalizes trailing dots and strips URL fragments", () => {
   assert.equal(url.href, "https://example.com/path?q=1");
 });
 
-test("fetch returns bounded text and uses Cloudflare default cache policy", async () => {
+test("fetch returns bounded text and leaves Cloudflare default cache policy unset", async () => {
   const receipts = [];
   const result = await fetchPublicResource("https://example.com/page", {
     onUsageReceipt: (receipt) => receipts.push(receipt),
     fetchImpl: async (_url, init) => {
       assert.equal(init.method, "GET");
       assert.equal(init.redirect, "manual");
-      assert.equal(init.cache, "default");
+      assert.equal(Object.hasOwn(init, "cache"), false);
       assert.equal(Object.hasOwn(init, "cf"), false);
       assert.equal(init.headers.accept.includes("text/html"), true);
       return response("<h1>Hello</h1>", {

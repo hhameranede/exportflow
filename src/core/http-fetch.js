@@ -282,7 +282,7 @@ export async function fetchPublicResource(input, options = {}) {
         response = await fetchImpl(current, {
           method: "GET",
           redirect: "manual",
-          cache: cacheMode === "bypass" ? "no-store" : "default",
+          ...(cacheMode === "bypass" ? { cache: "no-store" } : {}),
           // Do not force cache eligibility for arbitrary HTML/API responses.
           // Cloudflare may cache standard static extensions or responses that
           // explicitly opt in via origin Cache-Control / Expires headers.
