@@ -1,4 +1,5 @@
 import { createTenantTaskGateway } from "../core/tenant-task-gateway.js";
+import { executeDurableTask, getDurableTask } from "../core/task-store.js";
 import { createMcpProtectedRequestHandler } from "@better-auth/mcp";
 import { TenantOAuthIdentityError, resolveOAuthTenantPrincipal } from "../core/tenant-membership.js";
 import { validatePublicHttpUrl } from "../core/http-fetch.js";
@@ -35,6 +36,7 @@ const MAX_BODY_BYTES = 65_536;
 const TOOL_SCOPES = Object.freeze({
   web_fetch: "tasks:fetch", web_map: "tasks:map", web_crawl: "tasks:crawl",
   web_extract: "tasks:extract", web_search: "tasks:search", web_research: "tasks:research",
+  web_task_status: "tasks:read",
 });
 const MAX_URL_LENGTH = 2_048;
 
@@ -99,24 +101,27 @@ const TOOL_DEFINITIONS = Object.freeze([
   { name: "exportflow_capabilities", title: "ExportFlow capabilities",
     description: "Returns the live adapter catalog and currently available read-only tools.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false } },
+  { name: "web_task_status", title: "Read a task status and retained result",
+    description: "Reads one task created by the authenticated tenant. Results are retained for 24 hours. Requires tasks:read.",
+    inputSchema: { type: "object", properties: { taskId: { type: "string", minLength: 8, maxLength: 64 } }, required: ["taskId"], additionalProperties: false } },
   { name: "web_fetch", title: "Fetch a public web page",
     description: "Fetches bounded public HTTP(S) resources using GET only. Requires tasks:fetch.",
-    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, cacheMode: CACHE_MODE_SCHEMA }, required: ["url"], additionalProperties: false } },
+    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, cacheMode: CACHE_MODE_SCHEMA, idempotencyKey: { type: "string", minLength: 8, maxLength: 128 } }, required: ["url"], additionalProperties: false } },
   { name: "web_map", title: "Map a website",
     description: "Discovers same-origin public URLs through robots.txt, sitemaps and static links. Requires tasks:map; no browser runtime.",
-    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, maxUrls: { type: "integer", minimum: 1, maximum: 15 }, cacheMode: CACHE_MODE_SCHEMA }, required: ["url"], additionalProperties: false } },
+    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, maxUrls: { type: "integer", minimum: 1, maximum: 15 }, cacheMode: CACHE_MODE_SCHEMA, idempotencyKey: { type: "string", minLength: 8, maxLength: 128 } }, required: ["url"], additionalProperties: false } },
   { name: "web_crawl", title: "Crawl a public website",
     description: "Crawls at most three same-origin static pages to depth one, respecting robots.txt and bounded byte limits. Requires tasks:crawl.",
-    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, maxPages: { type: "integer", minimum: 1, maximum: 3 }, maxDepth: { type: "integer", minimum: 0, maximum: 1 }, cacheMode: CACHE_MODE_SCHEMA }, required: ["url"], additionalProperties: false } },
+    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, maxPages: { type: "integer", minimum: 1, maximum: 3 }, maxDepth: { type: "integer", minimum: 0, maximum: 1 }, cacheMode: CACHE_MODE_SCHEMA, idempotencyKey: { type: "string", minLength: 8, maxLength: 128 } }, required: ["url"], additionalProperties: false } },
   { name: "web_extract", title: "Extract structured page data",
     description: "Extracts explicit fields from public static HTML or JSON through metadata and JSON-LD. Missing fields are not guessed. Requires tasks:extract.",
-    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, schema: SCHEMA_SCHEMA, cacheMode: CACHE_MODE_SCHEMA }, required: ["url", "schema"], additionalProperties: false } },
+    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, schema: SCHEMA_SCHEMA, cacheMode: CACHE_MODE_SCHEMA, idempotencyKey: { type: "string", minLength: 8, maxLength: 128 } }, required: ["url", "schema"], additionalProperties: false } },
   { name: "web_search", title: "Search a selected public dataset",
     description: "Searches one selected no-key source: Wikipedia (encyclopedic), OpenAlex (scholarly works), or Crossref (DOI metadata). Not a whole-web search engine. Requires tasks:search.",
-    inputSchema: { type: "object", properties: { query: QUERY_SCHEMA, source: SEARCH_SOURCE_SCHEMA, limit: { type: "integer", minimum: 1, maximum: 10 }, cacheMode: CACHE_MODE_SCHEMA }, required: ["query", "source"], additionalProperties: false } },
+    inputSchema: { type: "object", properties: { query: QUERY_SCHEMA, source: SEARCH_SOURCE_SCHEMA, limit: { type: "integer", minimum: 1, maximum: 10 }, cacheMode: CACHE_MODE_SCHEMA, idempotencyKey: { type: "string", minLength: 8, maxLength: 128 } }, required: ["query", "source"], additionalProperties: false } },
   { name: "web_research", title: "Research and extract from public sources",
     description: "Runs selected-source search, bounded static HTTP fetch, and deterministic schema extraction. JavaScript rendering is not supported. Requires tasks:research.",
-    inputSchema: { type: "object", properties: { query: QUERY_SCHEMA, source: SEARCH_SOURCE_SCHEMA, schema: SCHEMA_SCHEMA, limit: { type: "integer", minimum: 1, maximum: 10 }, candidateLimit: { type: "integer", minimum: 1, maximum: 3 }, cacheMode: CACHE_MODE_SCHEMA }, required: ["query", "source", "schema"], additionalProperties: false } },
+    inputSchema: { type: "object", properties: { query: QUERY_SCHEMA, source: SEARCH_SOURCE_SCHEMA, schema: SCHEMA_SCHEMA, limit: { type: "integer", minimum: 1, maximum: 10 }, candidateLimit: { type: "integer", minimum: 1, maximum: 3 }, cacheMode: CACHE_MODE_SCHEMA, idempotencyKey: { type: "string", minLength: 8, maxLength: 128 } }, required: ["query", "source", "schema"], additionalProperties: false } },
 ]);
 
 function jsonResponse(body, status = 200, extraHeaders = {}) {
@@ -191,13 +196,16 @@ function validateToolArguments(name, args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) return "Tool arguments must be an object.";
   if (name === "exportflow_capabilities") return Object.keys(args).length ? "This tool accepts no arguments." : null;
   const allowed = {
-    web_fetch: ["url", "cacheMode"], web_map: ["url", "maxUrls", "cacheMode"],
-    web_crawl: ["url", "maxPages", "maxDepth", "cacheMode"],
-    web_extract: ["url", "schema", "cacheMode"], web_search: ["query", "source", "limit", "cacheMode"],
-    web_research: ["query", "source", "schema", "limit", "candidateLimit", "cacheMode"],
+    web_task_status: ["taskId"],
+    web_fetch: ["url", "cacheMode", "idempotencyKey"], web_map: ["url", "maxUrls", "cacheMode", "idempotencyKey"],
+    web_crawl: ["url", "maxPages", "maxDepth", "cacheMode", "idempotencyKey"],
+    web_extract: ["url", "schema", "cacheMode", "idempotencyKey"], web_search: ["query", "source", "limit", "cacheMode", "idempotencyKey"],
+    web_research: ["query", "source", "schema", "limit", "candidateLimit", "cacheMode", "idempotencyKey"],
   }[name];
   if (!allowed) return "Unknown tool.";
   if (Object.keys(args).some((key) => !allowed.includes(key))) return "Unknown tool argument.";
+  if (name === "web_task_status" && (typeof args.taskId !== "string" || !/^[A-Za-z0-9_-]{8,64}$/.test(args.taskId))) return "taskId must be a valid task identifier.";
+  if (args.idempotencyKey !== undefined && (typeof args.idempotencyKey !== "string" || !/^[\x21-\x7E]{8,128}$/.test(args.idempotencyKey))) return "idempotencyKey must contain 8 to 128 visible ASCII characters without spaces.";
   if (["web_fetch", "web_map", "web_crawl", "web_extract"].includes(name) && !isValidHttpUrl(args.url)) return "url must be a valid credential-free HTTP(S) URL.";
   if (args.cacheMode !== undefined && !["default", "bypass"].includes(args.cacheMode)) return "cacheMode must be default or bypass.";
   if (["web_search", "web_research"].includes(name)) {
@@ -314,15 +322,16 @@ export function createExportFlowPreviewWorker({
       }, true);
     }
 
-    const reservation = await sharedTenantTaskGateway.reserve(env, auth.identity);
-    if (!reservation.ok) {
-      return toolContent({
-        error: reservation.code,
-        message: reservation.message,
-        retryAfterSec: reservation.retryAfterSec ?? null,
-        quota: reservation.quota ?? null,
-      }, true);
+    if (name === "web_task_status") {
+      const found = await getDurableTask({
+        db: env?.EXPORTFLOW_AUTH_DB,
+        tenantId: auth.identity.tenantId,
+        taskId: args.taskId,
+      });
+      if (!found.ok) return toolContent({ error: found.code, message: found.message }, true);
+      return toolContent(found.task, false);
     }
+
     const goal = ({
       web_fetch: `Fetch public web content from ${args.url}`,
       web_map: `Map public pages on ${args.url}`,
@@ -346,18 +355,23 @@ export function createExportFlowPreviewWorker({
     if (name === "web_research" && args.candidateLimit !== undefined) input.candidateLimit = args.candidateLimit;
     if (args.cacheMode !== undefined) input.cacheMode = args.cacheMode;
 
-    const task = await executeWebTask(input, { signal: request.signal });
-    const result = {
-      ...task,
-      quota: {
-        period: auth.identity.quotaPeriod,
-        limit: reservation.quota.limit,
-        remaining: reservation.quota.remaining,
-        resetAt: reservation.quota.resetAt,
-        windowId: reservation.quota.windowId,
-      },
-    };
-    return toolContent(result, result?.state === "failed" || result?.state === "unsupported");
+    const outcome = await executeDurableTask({
+      db: env?.EXPORTFLOW_AUTH_DB,
+      identity: auth.identity,
+      input,
+      idempotencyKey: args.idempotencyKey || request.headers.get("idempotency-key") || undefined,
+      signal: request.signal,
+      executeTask: executeWebTask,
+    });
+    if (!outcome.ok) {
+      return toolContent({
+        error: outcome.code,
+        message: outcome.message,
+        retryAfterSec: outcome.retryAfterSec ?? null,
+        quota: outcome.quota ?? null,
+      }, true);
+    }
+    return toolContent(outcome.task, outcome.task?.state === "failed" || outcome.task?.state === "unsupported");
   }
 
   async function handleRpc(message, request, env, authRequest = request) {

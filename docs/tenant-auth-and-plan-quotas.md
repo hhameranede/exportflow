@@ -2,7 +2,7 @@
 
 ## Scope and release status
 
-This implementation in the current `main` branch provides tenant-scoped developer API keys and persistent daily/monthly request-count quotas for the REST Task endpoint and MCP execution tools. The source is merged, but tenant execution is **not enabled in Production**: the Production Platform and MCP Workers do not have the dedicated `EXPORTFLOW_AUTH_DB` binding. Keep this distinction clear: merged source and successful basic deployment smoke tests do not establish customer-ready authenticated execution.
+This implementation in the current `main` branch provides tenant-scoped developer API keys and persistent daily/monthly request-count quotas for REST and MCP. A read-only Cloudflare settings check on 24 November 2026 confirmed that the Production Platform and MCP Workers both have the dedicated `EXPORTFLOW_AUTH_DB` binding. This is binding evidence only: authenticated customer task execution, tenant provisioning and plan policy readiness still require separate real-runtime acceptance; do not infer customer readiness from the binding alone.
 
 Human account sessions (Better Auth) and developer API credentials are separate identity systems:
 
@@ -17,7 +17,7 @@ Human account sessions (Better Auth) and developer API credentials are separate 
 - `generateTenantApiKey()` returns one-time plaintext token material and its SHA-256 digest. Reveal the token once through a trusted provisioning process; never persist or log the plaintext token.
 - D1 stores only the 64-character SHA-256 digest. Verification hashes the supplied full token and selects the matching key ID + digest.
 - Tenant ID, plan, scope, key status, expiry and request limit are read from D1. Caller-provided tenant or plan identifiers are never authoritative.
-- Keys support active/revoked status, expiry and explicit scopes. A scope can be one of `tasks:fetch`, `tasks:map`, `tasks:crawl`, or `tasks:extract`; `tasks:*` and `*` are supported wildcards.
+- Keys support active/revoked status, expiry and explicit scopes. Supported task scopes are `tasks:fetch`, `tasks:map`, `tasks:crawl`, `tasks:extract`, `tasks:search`, `tasks:research`, and `tasks:read`; `tasks:*` and `*` are supported wildcards. `tasks:read` grants tenant-scoped task status/result reads without granting task execution.
 - No per-request last-used timestamp is written.
 
 ## Shared REST + MCP authorization boundary
@@ -28,16 +28,19 @@ Both REST and MCP use `src/core/tenant-task-gateway.js`:
 2. Tenant API key authentication, expiry, tenant/plan state and operation-specific scope validation.
 3. Per-isolate tenant burst limiter.
 4. Request contract validation and public egress/schema validation.
-5. One atomic D1 request-quota reservation.
-6. Task execution only after all previous steps pass.
+5. Idempotent task acceptance in the shared Task Store. For a new key, the D1 task-insert trigger atomically creates the accepted Task, reserves one logical request in `tenant_request_usage`, snapshots the effective quota window and writes `task.accepted`. A replay does not reserve quota again.
+6. Task execution only after the task acceptance transaction succeeds.
 
-REST `POST /api/v1/tasks` currently requires `tasks:fetch` because the public REST task contract is still Fetch-only.
+REST `POST /api/v1/tasks` authorizes the operation-specific scope for Fetch, Map, Crawl, Extract, Search or Research. `GET /api/v1/tasks/{taskId}` requires `tasks:read`.
 
 MCP maps tools to scopes:
 - `web_fetch` → `tasks:fetch`
 - `web_map` → `tasks:map`
 - `web_crawl` → `tasks:crawl`
 - `web_extract` → `tasks:extract`
+- `web_search` → `tasks:search`
+- `web_research` → `tasks:research`
+- `web_task_status` → `tasks:read`
 
 The read-only `tools/list`, MCP initialization/health and `exportflow_capabilities` discovery do not execute a tenant task. The actual task tools declare HTTP Bearer authentication and reject missing/invalid API keys. The existing Cloudflare weighted MCP Rate Limit binding remains a separate IP-level abuse guard; it is not the tenant plan quota.
 
@@ -49,6 +52,7 @@ The Worker expects a separate D1 binding named `EXPORTFLOW_AUTH_DB`. Apply migra
 2. `migrations/0002_guard_quota_period_transitions.sql`
 3. `migrations/0003_tenant_admin_audit_log.sql`
 4. `migrations/0004_tenant_oauth_memberships.sql`
+5. `migrations/0005_durable_task_lifecycle.sql` (Draft branch only; do not apply until separately approved)
 
 Tables:
 - `plan_policies`: owner-managed daily/monthly request allowance and policy version.
@@ -60,7 +64,7 @@ Tables:
 
 The migrations intentionally seed no plan, tenant or API key. Do not invent Free/Developer/Pro allowances. Decide limits and approve the trusted provisioning/revocation workflow before onboarding customers.
 
-An isolated Tenant Acceptance D1 has been verified to contain the tenant tables and quota, audit, membership and membership-version triggers. This documentation update does not apply migrations or change any D1 database. Production currently has no `EXPORTFLOW_AUTH_DB` binding configured.
+An isolated Tenant Acceptance D1 has been verified to contain the tenant tables and quota, audit, membership and membership-version triggers. A separate read-only Cloudflare settings check on 24 November 2026 confirmed that both Production Workers have the `EXPORTFLOW_AUTH_DB` binding to the shared tenant database. Binding presence does not prove that migration 0005 is applied, that the Task schema is ready, or that authenticated Production task execution has passed. This documentation update does not apply migrations or change any D1 database.
 
 ## Platform Owner Authentication and Tenant Administration API
 
@@ -130,6 +134,7 @@ Migration `0003_tenant_admin_audit_log.sql` adds an append-only audit table with
 
 - Unauthenticated `GET /api/v1/platform` returns discovery metadata, reports only whether the binding exists, performs no D1 query, and keeps `auth.ready=false` and `liveCapabilities=[]`.
 - An authenticated platform request validates that caller's tenant key, active tenant/plan and `tasks:fetch` scope, then probes the quota schema. Readiness is per caller, not a scan of every tenant.
+- The endpoint separately reports `taskStore.ready`. It is true only when the `tasks` and `task_events` tables expose the required columns and all six quota/lifecycle triggers are present. `liveCapabilities` remains empty unless both caller auth/quota readiness and durable Task storage readiness are true.
 - The readiness response is informational only. Each Task/MCP execution always re-authenticates and reserves quota; never cache readiness as authorization.
 
 ## Important exclusions
@@ -209,3 +214,15 @@ The owner guard now applies to an authenticated, allowlisted owner session acros
 Proof consumption has also been tightened: the single-use D1 `DELETE` now includes an `EXISTS` predicate against Better Auth's `session` table for the same session ID, user ID, and unexpired session. Proof consumption and session validity are checked in one D1 statement, so a session revoked or expired after the initial owner check cannot use an outstanding proof.
 
 Focused tests now cover TOTP secret retrieval, backup-code regeneration, backup-code and OTP verification bypasses, enable/send routes, bootstrap-before-allowlist enforcement, sessionless sign-in continuity, and revoked-session proof consumption. These are still unit/contract tests; real Worker/D1/browser acceptance remains outstanding.
+
+
+## Durable Task Lifecycle v1 — Draft implementation
+
+The isolated Draft branch adds a shared REST/MCP Task Store backed by `EXPORTFLOW_AUTH_DB`:
+
+- `POST /api/v1/tasks` and the six MCP execution tools accept an optional idempotency key. The same tenant/key/effective request replays the existing Task; reusing the key for a different effective request returns HTTP 409.
+- New task acceptance is the single quota reservation point. A D1 trigger creates the task, increments `tenant_request_usage`, snapshots the quota window and inserts `task.accepted` atomically. An idempotency replay does not reserve quota again.
+- `GET /api/v1/tasks/{taskId}` and MCP `web_task_status` require `tasks:read` and scope every lookup by both tenant ID and task ID.
+- Results are retained for up to 24 hours, with a 1.5 MB per-task result storage ceiling. Oversized results are returned on the original call but not retained for later retrieval.
+- This remains synchronous Request-First execution. It does not yet add Queue/Workflow orchestration, automatic task recovery after a Worker crash, resumable Crawl checkpoints, or a public cancellation endpoint.
+- Migration 0005, code and tests exist only on the Draft branch. No D1 migration, Worker deployment, binding update or Production task write has occurred. Real Cloudflare D1/Worker Acceptance is a release gate.

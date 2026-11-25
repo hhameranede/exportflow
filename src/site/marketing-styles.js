@@ -2888,6 +2888,10 @@ html[data-theme="dark"] .ef-code-tabs {
   background: var(--surface-2);
 }
 
+.ef-password-toggle svg[hidden] {
+  display: none !important;
+}
+
 .ef-strength-meter {
   display: grid;
   gap: 6px;

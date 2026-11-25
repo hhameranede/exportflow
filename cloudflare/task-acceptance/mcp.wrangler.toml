@@ -1,0 +1,31 @@
+name = "exportflow-task-mcp-acceptance-20261124"
+main = "mcp.js"
+compatibility_date = "2026-11-22"
+workers_dev = true
+preview_urls = false
+keep_vars = false
+
+[[d1_databases]]
+binding = "EXPORTFLOW_AUTH_DB"
+database_name = "exportflow-tenant-acceptance-20261122"
+database_id = "1f94eee0-219e-4a41-86ce-49c29067ef06"
+
+[[ratelimits]]
+name = "MCP_RATE_LIMITER"
+namespace_id = "91420018"
+simple = { limit = 30, period = 60 }
+
+[[durable_objects.bindings]]
+name = "TENANT_BURST_LIMITER"
+class_name = "TenantBurstRateLimiter"
+script_name = "exportflow-task-platform-acceptance-20261124"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+redact_query_string = true
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+head_sampling_rate = 1

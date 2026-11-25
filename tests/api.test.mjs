@@ -7,67 +7,39 @@ import { TaskContractError, validateTaskRequest } from "../src/core/task-contrac
 import { fetchPublicResource, FetchAdapterError } from "../src/core/http-fetch.js";
 import { startServer } from "../src/server.js";
 import { createDurableTenantBurstTestNamespace } from "./helpers/durable-tenant-burst-test-namespace.js";
+import { createDurableTaskD1 } from "./helpers/durable-task-d1.js";
 
 const TEST_KEY_ID = "0123456789abcdef";
 const TEST_TOKEN = `ef_live_${TEST_KEY_ID}_${"A".repeat(43)}`;
 const TEST_KEY_HASH = await hashApiKey(TEST_TOKEN);
 
 function makeTestEnv({ requestLimit = 10_000, keyStatus = "active", tenantStatus = "active", planStatus = "active", scopes = ["tasks:fetch"], expiresAt = null } = {}) {
-  const usage = new Map();
-  const record = {
-    key_id: TEST_KEY_ID,
-    tenant_id: "tenant_test_001",
-    key_status: keyStatus,
-    expires_at: expiresAt,
-    scopes_json: JSON.stringify(scopes),
-    tenant_status: tenantStatus,
-    plan_code: "test",
-    plan_status: planStatus,
-    quota_period: "daily",
-    request_limit: requestLimit,
-    policy_version: "test-v1",
-  };
-  const db = {
-    prepare(sql) {
-      let params = [];
-      return {
-        bind(...values) { params = values; return this; },
-        async first() {
-          if (sql.includes("FROM api_keys")) {
-            const [keyId, keyHash] = params;
-            return keyId === TEST_KEY_ID && keyHash === TEST_KEY_HASH ? { ...record } : null;
-          }
-          if (sql.includes("tenant_request_usage LIMIT 0")) return null;
-          if (sql.includes("INSERT INTO tenant_request_usage")) {
-            const [tenantId, windowId, planCode, policyVersion, limit, updatedAt] = params;
-            const key = tenantId + ":" + windowId;
-            const current = usage.get(key) || {
-              tenant_id: tenantId,
-              window_id: windowId,
-              plan_code: planCode,
-              policy_version: policyVersion,
-              request_limit: limit,
-              requests_used: 0,
-            };
-            if (current.requests_used >= current.request_limit) return null;
-            current.requests_used += 1;
-            current.updated_at = updatedAt;
-            usage.set(key, current);
-            return { requests_used: current.requests_used, request_limit: current.request_limit };
-          }
-          if (sql.includes("SELECT request_limit, requests_used")) {
-            const [tenantId, windowId] = params;
-            const current = usage.get(tenantId + ":" + windowId);
-            return current ? { request_limit: current.request_limit, requests_used: current.requests_used } : null;
-          }
-          throw new Error("Unexpected SQL in synthetic D1 fixture.");
-        },
-      };
-    },
-  };
+  const fixture = createDurableTaskD1({
+    requestLimit,
+    tenantIds: ["tenant_test_001"],
+    planCode: "test",
+    policyVersion: "test-v1",
+  });
+  fixture.sqlite.prepare("UPDATE tenants SET status = ?1 WHERE tenant_id = ?2")
+    .run(tenantStatus, "tenant_test_001");
+  fixture.sqlite.prepare("UPDATE plan_policies SET status = ?1 WHERE plan_code = ?2")
+    .run(planStatus, "test");
+  fixture.sqlite.prepare(
+    "INSERT INTO api_keys (key_id, tenant_id, key_hash, status, scopes_json, expires_at, created_at) " +
+    "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+  ).run(
+    TEST_KEY_ID,
+    "tenant_test_001",
+    TEST_KEY_HASH,
+    keyStatus,
+    JSON.stringify(scopes),
+    expiresAt,
+    "2026-11-24T10:00:00.000Z",
+  );
   return {
-    EXPORTFLOW_AUTH_DB: db,
+    EXPORTFLOW_AUTH_DB: fixture.db,
     TENANT_BURST_LIMITER: createDurableTenantBurstTestNamespace(),
+    __fixture: fixture,
   };
 }
 
@@ -86,6 +58,66 @@ function makeTaskRequest(body, {
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
+
+
+test("Acceptance network diagnostics are disabled by default and require the isolated acceptance marker", async () => {
+  const request = new Request("https://api.exportflow.local/__acceptance/network-probe", {
+    headers: { authorization: `Bearer ${TEST_TOKEN}` },
+  });
+  const env = makeTestEnv();
+  env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
+  try {
+    const disabled = await createWorker().fetch(request, env);
+    assert.equal(disabled.status, 404);
+
+    const wrongRun = await createWorker({ acceptanceNetworkProbe: true }).fetch(request, {
+      ...env,
+      EXPORTFLOW_ACCEPTANCE_RUN: "another-run",
+    });
+    assert.equal(wrongRun.status, 404);
+  } finally {
+    env.__fixture.close();
+  }
+});
+
+test("Acceptance network diagnostics require tasks:fetch and use only fixed bounded public targets", async () => {
+  const calls = [];
+  const worker = createWorker({
+    acceptanceNetworkProbe: true,
+    acceptanceFetch: async (url, init) => {
+      calls.push({ url, init });
+      const body = url.includes("example.com")
+        ? "Example Domain"
+        : url.includes("iana.org")
+          ? "IANA-managed Reserved Domains"
+          : "User-agent: *";
+      return new Response(body, { headers: { "content-type": "text/plain", server: "acceptance-test" } });
+    },
+  });
+  const env = makeTestEnv();
+  env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
+  try {
+    const request = new Request("https://api.exportflow.local/__acceptance/network-probe", {
+      headers: { authorization: `Bearer ${TEST_TOKEN}` },
+    });
+    const response = await worker.fetch(request, env);
+    assert.equal(response.status, 200);
+    const diagnostic = await response.json();
+    assert.equal(diagnostic.status, "reachable");
+    assert.equal(diagnostic.probes.length, 6);
+    assert.equal(calls.length, 6);
+    assert.ok(diagnostic.probes.every((probe) => probe.ok));
+    assert.ok(calls.every(({ init }) => init.method === "GET" && init.redirect === "manual"));
+    assert.ok(calls.some(({ init }) => init.cache === undefined && init.headers?.accept));
+    assert.ok(calls.some(({ init }) => init.cache === "no-store" && init.headers?.accept));
+    assert.ok(diagnostic.probes.every((probe) => !("sample" in probe) && !("body" in probe)));
+
+    const unauthenticated = await worker.fetch(new Request("https://api.exportflow.local/__acceptance/network-probe"), env);
+    assert.equal(unauthenticated.status, 401);
+  } finally {
+    env.__fixture.close();
+  }
+});
 
 test("tenant API authentication fails closed when the dedicated D1 binding is missing or invalid", async () => {
   const worker = createWorker();
@@ -323,6 +355,7 @@ test("POST /api/v1/tasks enforces egress redirect validation, redirect limit, st
 
 test("POST /api/v1/tasks executes end-to-end bounded HTTP fetch and returns structured evidence & usage", async () => {
   const timestamps = [
+    "2026-11-19T09:59:59.900Z",
     "2026-11-19T10:00:00.000Z",
     "2026-11-19T10:00:00.010Z",
     "2026-11-19T10:00:00.085Z",
@@ -333,7 +366,7 @@ test("POST /api/v1/tasks executes end-to-end bounded HTTP fetch and returns stru
     fetchImpl: async (url, init) => {
       assert.equal(init.method, "GET");
       assert.equal(init.redirect, "manual");
-      assert.equal(init.cache, "default");
+      assert.equal(Object.hasOwn(init, "cache"), false);
       assert.equal(Object.hasOwn(init, "cf"), false);
       if (url === "https://example.com/start") {
         return new Response(null, { status: 302, headers: { location: "/final" } });
@@ -471,26 +504,35 @@ test("rate limiter enforces boundary, concurrent burst, window reset, auth isola
   });
   const env = makeTestEnv();
 
-  // Failed auth requests must NOT consume the legitimate client's quota
+  // Failed auth requests must NOT consume the legitimate client's quota.
   const badAuth = await worker.fetch(makeTaskRequest({ goal: "Bad", url: "https://example.com/0" }, { token: "bad" }), env);
   assert.equal(badAuth.status, 401);
 
-  // Concurrent requests: 2 valid + 1 invalid authenticated JSON = 3 (consumes full quota)
-  const [r1, r2, r3, r4] = await Promise.all([
+  // Concurrent arrival order is intentionally unspecified: exactly three requests pass.
+  const burst = await Promise.all([
     worker.fetch(makeTaskRequest({ goal: "Req 1", url: "https://example.com/1" }), env),
     worker.fetch(makeTaskRequest({ goal: "Req 2", url: "https://example.com/2" }), env),
-    worker.fetch(makeTaskRequest("{invalid-json"), env),
+    worker.fetch(makeTaskRequest({ goal: "Req 3", url: "https://example.com/3" }), env),
     worker.fetch(makeTaskRequest({ goal: "Req 4", url: "https://example.com/4" }), env),
   ]);
-  assert.equal(r1.status, 200);
-  assert.equal(r2.status, 200);
-  assert.equal(r3.status, 400);
-  assert.equal(r4.status, 429);
-  assert.equal(r4.headers.get("retry-after"), "60");
+  assert.deepEqual(burst.map((response) => response.status).sort((a, b) => a - b), [200, 200, 200, 429]);
+  const limited = burst.find((response) => response.status === 429);
+  assert.equal(limited.headers.get("retry-after"), "60");
 
-  // Window reset restores quota
+  // A sequential invalid authenticated request is rejected as 400 but still consumes one slot.
   currentMs += 60_000;
-  const r5 = await worker.fetch(makeTaskRequest({ goal: "Req 5", url: "https://example.com/5" }), env);
+  const invalid = await worker.fetch(makeTaskRequest("{invalid-json"), env);
+  assert.equal(invalid.status, 400);
+  const afterInvalid1 = await worker.fetch(makeTaskRequest({ goal: "After invalid 1", url: "https://example.com/5" }), env);
+  const afterInvalid2 = await worker.fetch(makeTaskRequest({ goal: "After invalid 2", url: "https://example.com/6" }), env);
+  const afterInvalid3 = await worker.fetch(makeTaskRequest({ goal: "After invalid 3", url: "https://example.com/7" }), env);
+  assert.equal(afterInvalid1.status, 200);
+  assert.equal(afterInvalid2.status, 200);
+  assert.equal(afterInvalid3.status, 429);
+
+  // A second window reset restores quota.
+  currentMs += 60_000;
+  const r5 = await worker.fetch(makeTaskRequest({ goal: "Req 5", url: "https://example.com/8" }), env);
   assert.equal(r5.status, 200);
 });
 
@@ -516,6 +558,8 @@ test("existing Worker routes remain backward compatible and reflect liveCapabili
   );
   const platformData = await configuredPlatform.json();
   assert.deepEqual(platformData.liveCapabilities, ["http.fetch.v1"]);
+  assert.equal(platformData.auth.ready, true);
+  assert.equal(platformData.taskStore.ready, true);
   assert.equal(platformData.endpoints.tasks, "/api/v1/tasks");
 
   const preview = await worker.fetch(new Request("https://exportflow.local/api/v1/router-preview?javascript=true"), {});
@@ -523,6 +567,45 @@ test("existing Worker routes remain backward compatible and reflect liveCapabili
 
   const badMethod = await worker.fetch(new Request("https://exportflow.local/api/v1/tasks", { method: "GET" }), {});
   assert.equal(badMethod.status, 405);
+});
+
+test("platform does not advertise live execution without the durable Task tables and quota/lifecycle triggers", async () => {
+  const missingTables = makeTestEnv();
+  try {
+    missingTables.__fixture.sqlite.prepare("DROP TABLE task_events").run();
+    missingTables.__fixture.sqlite.prepare("DROP TABLE tasks").run();
+    const response = await createWorker().fetch(
+      new Request("https://exportflow.local/api/v1/platform", {
+        headers: { authorization: `Bearer ${TEST_TOKEN}` },
+      }),
+      missingTables,
+    );
+    const platform = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(platform.auth.ready, true, "the existing tenant/quota schema remains ready");
+    assert.equal(platform.taskStore.ready, false);
+    assert.deepEqual(platform.liveCapabilities, []);
+  } finally {
+    missingTables.__fixture.close();
+  }
+
+  const missingTrigger = makeTestEnv();
+  try {
+    missingTrigger.__fixture.sqlite.prepare("DROP TRIGGER reserve_quota_for_new_task").run();
+    const response = await createWorker().fetch(
+      new Request("https://exportflow.local/api/v1/platform", {
+        headers: { authorization: `Bearer ${TEST_TOKEN}` },
+      }),
+      missingTrigger,
+    );
+    const platform = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(platform.auth.ready, true);
+    assert.equal(platform.taskStore.ready, false);
+    assert.deepEqual(platform.liveCapabilities, []);
+  } finally {
+    missingTrigger.__fixture.close();
+  }
 });
 
 test("Node HTTP server bridges localhost requests safely, enforces body limits, and ignores spoofed Host headers", async () => {

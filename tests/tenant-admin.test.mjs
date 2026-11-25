@@ -135,6 +135,15 @@ test("API key issuance stores only the digest and audits metadata without the se
   assert.equal(JSON.stringify(audit.params).includes(insert.params[2]), false);
 });
 
+test("API keys can be issued with Search, Research and read-only task scopes", async () => {
+  const { service, db } = makeService();
+  const scopes = ["tasks:search", "tasks:research", "tasks:read"];
+  const result = await service.issueApiKey({ tenantId: "tenant_alpha", scopes });
+  assert.deepEqual(result.scopes, scopes);
+  assert.equal(db.calls.length, 1);
+  assert.deepEqual(JSON.parse(db.calls[0][0].params[3]), scopes);
+});
+
 test("API key issue rejects unknown and duplicate scopes before any D1 write", async () => {
   const { service, db } = makeService();
   await assert.rejects(

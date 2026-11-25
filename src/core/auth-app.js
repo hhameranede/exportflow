@@ -84,6 +84,7 @@ const REQUIRED_TENANT_OAUTH_TRIGGERS = Object.freeze([
 const MCP_SCOPES = Object.freeze([
   "openid", "profile", "email", "offline_access",
   "tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract",
+  "tasks:search", "tasks:research", "tasks:read",
 ]);
 
 async function hasSqliteObjects(binding, type, names) {
@@ -921,7 +922,7 @@ export async function handleOAuthBrowserPage(request, env = {}) {
     const scopes = (signedParams.get("scope") || "").split(/\s+/).filter(Boolean);
     const allowedScopes = new Set(MCP_SCOPES);
     if (!clientId || !scopes.length || scopes.some((scope) => !allowedScopes.has(scope)) ||
-        scopes.every((scope) => !["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract"].includes(scope))) {
+        scopes.every((scope) => !["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract", "tasks:search", "tasks:research", "tasks:read"].includes(scope))) {
       return fail(400, "Invalid permission request", "The requested application permissions are invalid.");
     }
     details = { clientId, scopes };

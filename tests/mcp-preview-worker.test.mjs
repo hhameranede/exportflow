@@ -3,6 +3,7 @@ import test from "node:test";
 import { createAuthServiceJwksFetcher, createExportFlowPreviewWorker } from "../src/mcp/preview-worker.js";
 import { hashApiKey } from "../src/core/tenant-auth.js";
 import { createDurableTenantBurstTestNamespace } from "./helpers/durable-tenant-burst-test-namespace.js";
+import { createDurableTaskD1 } from "./helpers/durable-task-d1.js";
 
 const HOST = "mcp.exportflow.me";
 const URL = "https://" + HOST + "/mcp";
@@ -50,7 +51,8 @@ function makeWorker(options = {}) {
               planCode: "test",
               policyVersion: "test-v1",
               quotaPeriod: "daily",
-              requestLimit: 10,
+              requestLimit: options.requestLimit ?? 10,
+              scopes: ["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract", "tasks:search", "tasks:research", "tasks:read"],
             },
           };
         },
@@ -70,7 +72,12 @@ function makeWorker(options = {}) {
     expectedHost: HOST,
     ...(tenantTaskGateway ? { tenantTaskGateway } : {}),
   });
+  const taskFixture = options.useRealGateway
+    ? null
+    : createDurableTaskD1({ requestLimit: options.requestLimit ?? 10, tenantIds: ["tenant_test_001"], planCode: "test" });
+  if (taskFixture) taskFixture.db.sqlite = taskFixture.sqlite;
   const env = options.env || {
+    ...(taskFixture ? { EXPORTFLOW_AUTH_DB: taskFixture.db } : {}),
     MCP_RATE_LIMITER: {
       async limit(value) {
         calls.limits.push(value);
@@ -128,7 +135,7 @@ test("health route describes the read-only MCP preview", async () => {
   assert.equal(response.status, 200);
   assert.equal(body.status, "ok");
   assert.equal(body.endpoint, "/mcp");
-  assert.deepEqual(body.tools, ["exportflow_capabilities", "web_fetch", "web_map", "web_crawl", "web_extract", "web_search", "web_research"]);
+  assert.deepEqual(body.tools, ["exportflow_capabilities", "web_task_status", "web_fetch", "web_map", "web_crawl", "web_extract", "web_search", "web_research"]);
   assert.equal(calls.tasks.length, 0);
 });
 
@@ -163,7 +170,7 @@ test("tools/list exposes only the currently implemented read-only tools", async 
   const body = await response.json();
   const tools = body.result.tools;
   assert.equal(response.status, 200);
-  assert.deepEqual(tools.map((tool) => tool.name), ["exportflow_capabilities", "web_fetch", "web_map", "web_crawl", "web_extract", "web_search", "web_research"]);
+  assert.deepEqual(tools.map((tool) => tool.name), ["exportflow_capabilities", "web_task_status", "web_fetch", "web_map", "web_crawl", "web_extract", "web_search", "web_research"]);
   assert.ok(tools.every((tool) => tool.annotations.readOnlyHint === true));
   const capabilityTool = tools.find((tool) => tool.name === "exportflow_capabilities");
   assert.equal(capabilityTool._meta.securitySchemes[0].type, "noauth");
@@ -176,6 +183,7 @@ test("tools/list exposes only the currently implemented read-only tools", async 
       web_extract: "tasks:extract",
       web_search: "tasks:search",
       web_research: "tasks:research",
+      web_task_status: "tasks:read",
     }[tool.name]]);
     assert.deepEqual(tool._meta.securitySchemes, tool.securitySchemes);
   }
@@ -200,7 +208,8 @@ test("web_fetch delegates to shared task execution and applies weighted rate lim
   assert.equal(calls.auth[0].requiredScope, "tasks:fetch");
   assert.equal(body.result.structuredContent.quota.limit, 10);
   assert.equal(body.result.structuredContent.quota.remaining, 9);
-  assert.equal(calls.reservations.length, 1);
+  assert.equal(calls.reservations.length, 0, "the D1 insert trigger now owns logical quota reservation");
+  assert.equal(env.EXPORTFLOW_AUTH_DB.sqlite.prepare("SELECT requests_used FROM tenant_request_usage WHERE tenant_id = 'tenant_test_001'").get().requests_used, 1);
 });
 
 test("invalid tool arguments are rejected before rate limiting or task execution", async () => {
@@ -410,25 +419,28 @@ test("tool calls enforce operation-specific scopes before quota reservation", as
   assert.equal(calls.tasks.length, 0);
 });
 
-test("MCP rejects exhausted tenant quotas before executing a task", async () => {
-  const { worker, env, calls } = makeWorker({
-    reservationResult: {
-      ok: false,
-      httpStatus: 429,
-      code: "PLAN_QUOTA_EXCEEDED",
-      message: "Quota exhausted.",
-      retryAfterSec: 3600,
-      quota: { limit: 5, remaining: 0, resetAt: "2026-11-21T00:00:00.000Z" },
-    },
-  });
-  const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
+test("MCP rejects exhausted durable task quotas before a second execution", async () => {
+  const fixture = createDurableTaskD1({ requestLimit: 1, tenantIds: ["tenant_test_001"], planCode: "test" });
+  const mcpEnv = {
+    EXPORTFLOW_AUTH_DB: fixture.db,
+    MCP_RATE_LIMITER: { async limit() { return { success: true }; } },
+  };
+  const { worker, calls } = makeWorker({ env: mcpEnv, requestLimit: 1 });
+  const call = () => makeRequest(jsonRpc("tools/call", {
     name: "web_fetch",
     arguments: { url: "https://example.com/" },
-  }), { headers: { authorization: "Bearer " + TENANT_TOKEN } }), env);
-  const body = await response.json();
-  assert.equal(body.result.isError, true);
-  assert.equal(body.result.structuredContent.error, "PLAN_QUOTA_EXCEEDED");
-  assert.equal(calls.tasks.length, 0);
+  }), { headers: { authorization: "Bearer " + TENANT_TOKEN } });
+  try {
+    const first = await worker.fetch(call(), mcpEnv);
+    assert.equal((await first.json()).result.isError, undefined);
+    const second = await worker.fetch(call(), mcpEnv);
+    const body = await second.json();
+    assert.equal(body.result.isError, true);
+    assert.equal(body.result.structuredContent.error, "PLAN_QUOTA_EXCEEDED");
+    assert.equal(calls.tasks.length, 1);
+  } finally {
+    fixture.close();
+  }
 });
 
 const TENANT_KEY_ID = "0123456789abcdef";
@@ -436,50 +448,23 @@ const TENANT_TOKEN = "ef_live_" + TENANT_KEY_ID + "_" + "T".repeat(43);
 const TENANT_KEY_HASH = await hashApiKey(TENANT_TOKEN);
 
 function makeTenantD1({ requestLimit = 1, scopes = ["tasks:fetch"] } = {}) {
-  const usage = new Map();
-  const record = {
-    key_id: TENANT_KEY_ID,
-    tenant_id: "tenant_mcp_test",
-    key_status: "active",
-    expires_at: null,
-    scopes_json: JSON.stringify(scopes),
-    tenant_status: "active",
-    plan_code: "test",
-    plan_status: "active",
-    quota_period: "daily",
-    request_limit: requestLimit,
-    policy_version: "test-v1",
-  };
-  return {
-    usage,
-    prepare(sql) {
-      let params = [];
-      return {
-        bind(...values) { params = values; return this; },
-        async first() {
-          if (sql.includes("FROM api_keys")) {
-            return params[0] === TENANT_KEY_ID && params[1] === TENANT_KEY_HASH ? { ...record } : null;
-          }
-          if (sql.includes("INSERT INTO tenant_request_usage")) {
-            const [tenantId, windowId, planCode, policyVersion, limit, updatedAt] = params;
-            const id = tenantId + ":" + windowId;
-            const row = usage.get(id) || { tenant_id: tenantId, window_id: windowId, plan_code: planCode, policy_version: policyVersion, request_limit: limit, requests_used: 0 };
-            if (row.requests_used >= row.request_limit) return null;
-            row.requests_used += 1;
-            row.updated_at = updatedAt;
-            usage.set(id, row);
-            return { requests_used: row.requests_used, request_limit: row.request_limit };
-          }
-          if (sql.includes("SELECT request_limit, requests_used")) {
-            const [tenantId, windowId] = params;
-            const row = usage.get(tenantId + ":" + windowId);
-            return row ? { request_limit: row.request_limit, requests_used: row.requests_used } : null;
-          }
-          throw new Error("Unexpected D1 SQL in MCP tenant fixture.");
-        },
-      };
-    },
-  };
+  const fixture = createDurableTaskD1({
+    requestLimit,
+    tenantIds: ["tenant_mcp_test"],
+    planCode: "test",
+  });
+  fixture.sqlite.prepare(
+    "INSERT INTO api_keys (key_id, tenant_id, key_hash, status, scopes_json, expires_at, created_at) " +
+    "VALUES (?1, ?2, ?3, 'active', ?4, NULL, ?5)",
+  ).run(
+    TENANT_KEY_ID,
+    "tenant_mcp_test",
+    TENANT_KEY_HASH,
+    JSON.stringify(scopes),
+    "2026-11-24T10:00:00.000Z",
+  );
+  fixture.db.sqlite = fixture.sqlite;
+  return fixture.db;
 }
 
 test("MCP real tenant gateway authorizes, reserves one D1-shaped quota unit, then blocks exhaustion", async () => {
@@ -505,7 +490,7 @@ test("MCP real tenant gateway authorizes, reserves one D1-shaped quota unit, the
   assert.equal(firstBody.result.structuredContent.quota.limit, 1);
   assert.equal(firstBody.result.structuredContent.quota.remaining, 0);
   assert.equal(calls.tasks.length, 1);
-  assert.equal([...db.usage.values()][0].requests_used, 1);
+  assert.equal(db.sqlite.prepare("SELECT requests_used FROM tenant_request_usage WHERE tenant_id = 'tenant_mcp_test'").get().requests_used, 1);
 
   const second = await worker.fetch(makeCall(), env);
   const secondBody = await second.json();
@@ -528,7 +513,7 @@ test("MCP real tenant gateway enforces D1-derived operation scope before quota r
   assert.equal(body.result.isError, true);
   assert.equal(body.result.structuredContent.error, "INSUFFICIENT_SCOPE");
   assert.equal(calls.tasks.length, 0);
-  assert.equal(db.usage.size, 0);
+  assert.equal(db.sqlite.prepare("SELECT COUNT(*) AS total FROM tenant_request_usage").get().total, 0);
 });
 
 
@@ -544,7 +529,7 @@ test("MCP protected-resource metadata uses configured Auth and MCP origins", asy
   assert.equal(response.status, 200);
   assert.equal(body.resource, "https://mcp-acceptance.hhameranede.workers.dev/mcp");
   assert.deepEqual(body.authorization_servers, ["https://auth-acceptance.hhameranede.workers.dev/api/auth"]);
-  assert.deepEqual(body.scopes_supported, ["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract", "tasks:search", "tasks:research"]);
+  assert.deepEqual(body.scopes_supported, ["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract", "tasks:search", "tasks:research", "tasks:read"]);
 });
 
 test("MCP responses include baseline security headers on JSON, empty, and preflight paths", async () => {

@@ -680,6 +680,9 @@ export function renderAuthPage(type, t, locale, hrefFor, escapeHtml, arrowRightI
           "tasks:map": "اكتشاف روابط النطاق ضمن حدود مضبوطة.",
           "tasks:crawl": "زحف عدد محدود من الصفحات العامة.",
           "tasks:extract": "استخراج حقول محددة من الصفحات العامة.",
+          "tasks:search": "البحث في المصادر العامة المحددة وإرجاع النتائج.",
+          "tasks:research": "إجراء بحث محدود وجمع أدلة منظمة من المصادر العامة.",
+          "tasks:read": "قراءة حالة المهام ونتائجها داخل مساحة العمل الخاصة بك فقط.",
         }
       : {
           "openid": "Confirm your account identity.",
@@ -690,6 +693,9 @@ export function renderAuthPage(type, t, locale, hrefFor, escapeHtml, arrowRightI
           "tasks:map": "Discover bounded same-origin pages on a website.",
           "tasks:crawl": "Crawl a small number of public pages.",
           "tasks:extract": "Extract explicitly requested fields from public pages.",
+          "tasks:search": "Search selected public sources and return matching results.",
+          "tasks:research": "Run bounded research and collect structured evidence from public sources.",
+          "tasks:read": "Read task status and retained results belonging to your workspace only.",
         };
     const scopeRows = requestedScopes.map(function (scope) {
       return '<li class="ef-session-row"><div><strong>' + escapeHtml(scope) + '</strong><p>' +
