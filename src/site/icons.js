@@ -29,11 +29,6 @@ const FEATURE_SVGS = {
     <path d="M4 11h24"/>
     <path d="M11 16.5l-3 2.8 3 2.8M21 16.5l3 2.8-3 2.8M17.2 15.5l-2.4 7.6" stroke="var(--accent)"/>
   </svg>`,
-  "browser-automation": `<svg width="16" height="16" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-    <rect x="4" y="5.5" width="24" height="21" rx="4"/>
-    <path d="M4 11h24"/>
-    <path d="M13.5 15.5l8 3.2-3.4 1.5-1.5 3.4-3.1-8.1Z" fill="var(--accent)" fill-opacity="0.18" stroke="var(--accent)"/>
-  </svg>`,
   "persistent-intelligence": `<svg width="16" height="16" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
     <ellipse cx="16" cy="9" rx="9" ry="3.5"/>
     <path d="M7 9v6.8c0 1.9 4 3.5 9 3.5s9-1.6 9-3.5V9"/>
