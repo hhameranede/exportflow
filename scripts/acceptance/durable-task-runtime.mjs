@@ -12,6 +12,17 @@ const FETCH_CANDIDATES = Object.freeze([
   { url: "https://www.cloudflare.com/robots.txt", expectedContent: "User-agent: *", expectedHost: "cloudflare.com" },
 ]);
 
+
+const DNS_REBINDING_RESOLVERS = Object.freeze([
+  { name: "Cloudflare DNS", endpoint: "https://cloudflare-dns.com/dns-query" },
+  { name: "Google DNS", endpoint: "https://dns.google/resolve" },
+]);
+const DNS_REBINDING_PRIVATE_TARGETS = Object.freeze([
+  { name: "loopback", ip: "127.0.0.1" },
+  { name: "unspecified", ip: "0.0.0.0" },
+  { name: "private-10", ip: "10.0.0.1" },
+]);
+
 const DATABASE = "exportflow-tenant-acceptance-20261122";
 const CONFIG = "cloudflare/task-acceptance/platform.wrangler.toml";
 const PLATFORM_URL = "https://exportflow-task-platform-acceptance-20261124.hhameranede.workers.dev";
@@ -179,6 +190,125 @@ async function waitForRestTask(token, taskId) {
   throw new Error("Durable Task did not reach a terminal state within the Acceptance deadline.");
 }
 
+
+function isPublicIpv4(value) {
+  if (typeof value !== "string") return false;
+  const parts = value.split(".");
+  if (parts.length !== 4 || parts.some((part) => !/^(0|[1-9]\d{0,2})$/.test(part))) return false;
+  const [a, b, c, d] = parts.map(Number);
+  if ([a, b, c, d].some((octet) => octet < 0 || octet > 255)) return false;
+  return !(
+    a === 0 || a === 10 || a === 127 || a >= 224 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && (b === 0 || b === 2 || b === 168)) ||
+    (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
+    (a === 203 && b === 0 && c === 113)
+  );
+}
+
+function ipv4ToHex(value) {
+  return value.split(".").map((octet) => Number(octet).toString(16).padStart(2, "0")).join("");
+}
+
+async function queryDnsA(resolver, hostname) {
+  const url = new URL(resolver.endpoint);
+  url.searchParams.set("name", hostname);
+  url.searchParams.set("type", "A");
+  const response = await fetch(url, {
+    headers: { accept: "application/dns-json" },
+    cache: "no-store",
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!response.ok) throw new Error(resolver.name + " returned HTTP " + response.status + " for " + hostname + ".");
+  const payload = await response.json();
+  if (payload.Status !== 0 || !Array.isArray(payload.Answer)) {
+    throw new Error(resolver.name + " returned no successful A answer for " + hostname + ".");
+  }
+  return payload.Answer
+    .filter((answer) => answer.type === 1 && typeof answer.data === "string")
+    .map((answer) => ({ ip: answer.data, ttl: Number(answer.TTL) }));
+}
+
+async function queryDnsBatches(resolver, hostname, count) {
+  const collected = [];
+  for (let offset = 0; offset < count; offset += 4) {
+    const batchSize = Math.min(4, count - offset);
+    const batch = await Promise.all(Array.from({ length: batchSize }, () => queryDnsA(resolver, hostname)));
+    collected.push(...batch.flat());
+  }
+  return collected;
+}
+
+async function discoverPublicRebindingIp() {
+  const resolved = await Promise.all(DNS_REBINDING_RESOLVERS.map(async (resolver) => {
+    const answers = await queryDnsBatches(resolver, "neverssl.com", 4);
+    return new Set(answers.map((answer) => answer.ip).filter(isPublicIpv4));
+  }));
+  const common = [...resolved[0]].filter((ip) => resolved[1].has(ip));
+  assert.ok(common.length > 0, "Cloudflare and Google DNS must agree on a public neverssl.com A record.");
+  return common[0];
+}
+
+async function assertDnsRebindingAlternates(hostname, publicIp, privateIp) {
+  const expected = new Set([publicIp, privateIp]);
+  for (const resolver of DNS_REBINDING_RESOLVERS) {
+    const records = await queryDnsBatches(resolver, hostname, 12);
+    const observed = new Set(records.map((record) => record.ip));
+    assert.deepEqual(
+      [...observed].sort(),
+      [...expected].sort(),
+      resolver.name + " must observe both configured rbndr.us A answers for " + hostname + ".",
+    );
+    assert.ok(
+      records.every((record) => Number.isFinite(record.ttl) && record.ttl <= 5),
+      resolver.name + " must observe short-lived DNS answers for " + hostname + ".",
+    );
+  }
+}
+
+async function runDnsRebindingAcceptance(token) {
+  const publicIp = await discoverPublicRebindingIp();
+  assert.ok(isPublicIpv4(publicIp), "The rebinding public control IP must be globally routable.");
+  const publicHex = ipv4ToHex(publicIp);
+
+  for (const target of DNS_REBINDING_PRIVATE_TARGETS) {
+    const hostname = publicHex + "." + ipv4ToHex(target.ip) + ".rbndr.us";
+    await assertDnsRebindingAlternates(hostname, publicIp, target.ip);
+
+    const url = new URL(PLATFORM_URL + "/__acceptance/dns-rebinding-probe");
+    url.searchParams.set("public", publicIp);
+    url.searchParams.set("private", target.ip);
+    const response = await fetch(url, {
+      headers: { authorization: "Bearer " + token, accept: "application/json" },
+      signal: AbortSignal.timeout(35_000),
+      cache: "no-store",
+    });
+    const result = await readJson(response, "Acceptance DNS rebinding probe");
+    assert.equal(response.status, 200, "Isolated Worker DNS rebinding probe must return HTTP 200.");
+    assert.equal(
+      result.body.status,
+      "mixed",
+      "Worker HEAD probes must show both the public control response and failed private-target attempts: " +
+        JSON.stringify(result.body),
+    );
+    assert.ok(result.body.publicResponses > 0);
+    assert.ok(result.body.networkErrors > 0);
+    assert.equal(result.body.unexpectedResponses, 0);
+    console.log("DNS rebinding verified: " + JSON.stringify({
+      target: target.name,
+      hostname,
+      publicIp,
+      privateIp: target.ip,
+      publicResponses: result.body.publicResponses,
+      networkErrors: result.body.networkErrors,
+      unexpectedResponses: result.body.unexpectedResponses,
+    }));
+  }
+  console.log("DNS rebinding preflight and isolated Worker HEAD probes passed for loopback, 0.0.0.0 and 10.0.0.1.");
+}
+
 async function runNetworkDiagnostics(token) {
   const response = await fetch(PLATFORM_URL + "/__acceptance/network-probe", {
     headers: { authorization: "Bearer " + token, accept: "application/json" },
@@ -249,6 +379,9 @@ async function smoke() {
   // Capture raw native Worker fetch failures before testing the adapter/task path.
   const networkDiagnostics = await runNetworkDiagnostics(probe);
   assert.equal(networkDiagnostics.status, "reachable", "Raw native Worker fetch must reach at least one fixed public source before Task acceptance can proceed.");
+
+  // Prove the DNS rebinding test service actually alternates before any runtime probe.
+  await runDnsRebindingAcceptance(probe);
 
   // Find one genuinely reachable public source before testing cross-transport replay.
   // Probe attempts use a separate synthetic tenant and separate quota policy.

@@ -208,6 +208,158 @@ async function runAcceptanceNetworkProbe(fetchImpl = globalThis.fetch) {
   };
 }
 
+
+const ACCEPTANCE_DNS_REBINDING_PRIVATE_IPS = new Set([
+  "127.0.0.1",
+  "0.0.0.0",
+  "10.0.0.1",
+]);
+
+function parseIpv4Octets(value) {
+  if (typeof value !== "string") return null;
+  const parts = value.split(".");
+  if (parts.length !== 4 || parts.some((part) => !/^(0|[1-9]\d{0,2})$/.test(part))) return null;
+  const octets = parts.map(Number);
+  return octets.every((octet) => octet >= 0 && octet <= 255) ? octets : null;
+}
+
+function isPublicRoutableIpv4(value) {
+  const octets = parseIpv4Octets(value);
+  if (!octets) return false;
+  const [a, b, c] = octets;
+  if (
+    a === 0 || a === 10 || a === 127 || a >= 224 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && (b === 0 || b === 2 || b === 168)) ||
+    (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
+    (a === 203 && b === 0 && c === 113)
+  ) return false;
+  return true;
+}
+
+function ipv4ToHex(value) {
+  return parseIpv4Octets(value).map((octet) => octet.toString(16).padStart(2, "0")).join("");
+}
+
+async function cancelProbeResponseBody(response) {
+  if (!response?.body) return;
+  try {
+    await response.body.cancel();
+  } catch {
+    // HEAD responses normally have no body; cancellation is best-effort.
+  }
+}
+
+async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = globalThis.fetch) {
+  if (typeof fetchImpl !== "function" ||
+      !isPublicRoutableIpv4(publicIp) ||
+      !ACCEPTANCE_DNS_REBINDING_PRIVATE_IPS.has(privateIp)) {
+    return { status: "invalid_target", publicIp, privateIp, probes: [] };
+  }
+
+  const hostname = ipv4ToHex(publicIp) + "." + ipv4ToHex(privateIp) + ".rbndr.us";
+  const requestInit = {
+    method: "HEAD",
+    redirect: "manual",
+    cache: "no-store",
+    headers: { accept: "*/*" },
+  };
+
+  let baseline;
+  const baselineController = new AbortController();
+  const baselineTimeout = setTimeout(() => baselineController.abort(), 2_000);
+  try {
+    const response = await fetchImpl("http://neverssl.com/", {
+      ...requestInit,
+      signal: baselineController.signal,
+    });
+    baseline = {
+      status: response.status,
+      server: safeDiagnosticField(response.headers.get("server"), 80),
+    };
+    await cancelProbeResponseBody(response);
+  } catch (error) {
+    return {
+      status: "inconclusive",
+      hostname,
+      publicIp,
+      privateIp,
+      reason: safeDiagnosticField(error?.message, 240) || "Public HTTP control did not return a response.",
+      probes: [],
+    };
+  } finally {
+    clearTimeout(baselineTimeout);
+  }
+
+  if (baseline.status < 200 || baseline.status >= 500) {
+    return {
+      status: "inconclusive",
+      hostname,
+      publicIp,
+      privateIp,
+      baseline,
+      reason: "Public HTTP control returned an unusable status.",
+      probes: [],
+    };
+  }
+
+  const probes = [];
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2_000);
+    try {
+      const response = await fetchImpl(
+        "http://" + hostname + "/?exportflow_acceptance_probe=" + attempt,
+        { ...requestInit, signal: controller.signal },
+      );
+      const server = safeDiagnosticField(response.headers.get("server"), 80);
+      const matchesPublicControl = response.status === baseline.status && server === baseline.server;
+      probes.push({
+        attempt: attempt + 1,
+        outcome: matchesPublicControl ? "public_control_match" : "unexpected_http_response",
+        status: response.status,
+        server,
+      });
+      await cancelProbeResponseBody(response);
+    } catch (error) {
+      probes.push({
+        attempt: attempt + 1,
+        outcome: "network_error",
+        error: {
+          name: safeDiagnosticField(error?.name, 80) || "Error",
+          message: safeDiagnosticField(error?.message, 240) || "Worker HEAD request failed.",
+        },
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  const publicResponses = probes.filter((probe) => probe.outcome === "public_control_match").length;
+  const networkErrors = probes.filter((probe) => probe.outcome === "network_error").length;
+  const unexpectedResponses = probes.filter((probe) => probe.outcome === "unexpected_http_response").length;
+  const status = unexpectedResponses > 0
+    ? "unexpected_http_response"
+    : publicResponses > 0 && networkErrors > 0
+      ? "mixed"
+      : "inconclusive";
+
+  return {
+    status,
+    hostname,
+    publicIp,
+    privateIp,
+    baseline,
+    attempts: probes.length,
+    publicResponses,
+    networkErrors,
+    unexpectedResponses,
+    probes,
+  };
+}
+
 export function createWorker(options = {}) {
   const tenantTaskGateway = options.tenantTaskGateway || createTenantTaskGateway({
     preAuthRateLimiter: options.preAuthRateLimiter,
@@ -235,6 +387,23 @@ export function createWorker(options = {}) {
 
         const workspaceResponse = await handleWorkspaceRequest(request, env, options);
         if (workspaceResponse) return workspaceResponse;
+
+        if (options.acceptanceDnsRebindingProbe === true &&
+            env?.EXPORTFLOW_ACCEPTANCE_RUN === "durable-task-20261124" &&
+            url.pathname === "/__acceptance/dns-rebinding-probe") {
+          if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405, { allow: "GET" });
+          const auth = await tenantTaskGateway.authenticate(request, env, { requiredScope: "tasks:fetch" });
+          if (!auth.ok) {
+            return json({ error: { code: auth.code, message: auth.message } }, auth.httpStatus);
+          }
+          const publicIp = url.searchParams.get("public");
+          const privateIp = url.searchParams.get("private");
+          if (!isPublicRoutableIpv4(publicIp) || !ACCEPTANCE_DNS_REBINDING_PRIVATE_IPS.has(privateIp)) {
+            return json({ error: { code: "INVALID_DNS_REBINDING_TARGET", message: "Only a public control IP and the fixed private test targets are accepted." } }, 400);
+          }
+          const diagnostics = await runAcceptanceDnsRebindingProbe(publicIp, privateIp, options.acceptanceDnsRebindingFetch);
+          return json(diagnostics, 200, { "cache-control": "no-store" });
+        }
 
         if (options.acceptanceNetworkProbe === true &&
             env?.EXPORTFLOW_ACCEPTANCE_RUN === "durable-task-20261124" &&

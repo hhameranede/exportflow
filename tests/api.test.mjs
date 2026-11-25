@@ -119,6 +119,62 @@ test("Acceptance network diagnostics require tasks:fetch and use only fixed boun
   }
 });
 
+
+test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, and bounded", async () => {
+  const calls = [];
+  let probeCalls = 0;
+  const worker = createWorker({
+    acceptanceDnsRebindingProbe: true,
+    acceptanceDnsRebindingFetch: async (input, init) => {
+      const url = new URL(String(input));
+      calls.push({ url: url.href, init });
+      if (url.hostname === "neverssl.com") {
+        return new Response(null, { status: 200, headers: { server: "acceptance-test" } });
+      }
+      probeCalls += 1;
+      if (probeCalls % 2 === 1) {
+        return new Response(null, { status: 200, headers: { server: "acceptance-test" } });
+      }
+      throw new Error("network connection denied");
+    },
+  });
+  const env = makeTestEnv();
+  env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
+  try {
+    const request = new Request(
+      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=34.223.124.45&private=127.0.0.1",
+      { headers: { authorization: \`Bearer \${TEST_TOKEN}\` } },
+    );
+    const response = await worker.fetch(request, env);
+    assert.equal(response.status, 200);
+    const diagnostic = await response.json();
+    assert.equal(diagnostic.status, "mixed");
+    assert.equal(diagnostic.attempts, 12);
+    assert.equal(diagnostic.publicResponses, 6);
+    assert.equal(diagnostic.networkErrors, 6);
+    assert.equal(diagnostic.unexpectedResponses, 0);
+    assert.equal(calls.length, 13);
+    assert.ok(calls.every(({ init }) =>
+      init.method === "HEAD" && init.redirect === "manual" && init.cache === "no-store"
+    ));
+    assert.ok(calls.every(({ init }) => !init.body && !init.headers?.authorization));
+    assert.equal(diagnostic.probes.some((probe) => "body" in probe), false);
+
+    const unauthenticated = await worker.fetch(new Request(
+      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=34.223.124.45&private=127.0.0.1",
+    ), env);
+    assert.equal(unauthenticated.status, 401);
+
+    const rejectedTarget = await worker.fetch(new Request(
+      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=127.0.0.1&private=127.0.0.1",
+      { headers: { authorization: \`Bearer \${TEST_TOKEN}\` } },
+    ), env);
+    assert.equal(rejectedTarget.status, 400);
+  } finally {
+    env.__fixture.close();
+  }
+});
+
 test("tenant API authentication fails closed when the dedicated D1 binding is missing or invalid", async () => {
   const worker = createWorker();
   const request = makeTaskRequest({ goal: "Fetch page", url: "https://example.com" });
