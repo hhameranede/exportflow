@@ -4757,4 +4757,258 @@ html[dir="rtl"] .ef-legal-progress span {
     display: none;
   }
 }
+
+
+/* ExportFlow UI refresh — clearer product hierarchy, calmer surfaces, stronger workspace */
+.ef-hero {
+  padding-block: clamp(76px, 10vw, 132px) clamp(54px, 7vw, 88px);
+  background:
+    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 10%, transparent) 0%, transparent 58%),
+    linear-gradient(180deg, var(--canvas) 0%, var(--bg) 100%);
+}
+.ef-hero-editorial {
+  max-width: 900px;
+}
+.ef-hero-title {
+  max-width: 15ch;
+  margin-inline: auto;
+  font-size: clamp(2.8rem, 6.8vw, 5.6rem);
+  line-height: .99;
+  letter-spacing: -.065em;
+  text-wrap: balance;
+}
+.ef-hero-lead {
+  max-width: 62ch;
+  margin: 24px auto 0;
+  font-size: clamp(1.05rem, 1.55vw, 1.25rem);
+  line-height: 1.75;
+  color: var(--text-muted);
+}
+.ef-hero-actions {
+  margin-top: 32px;
+  gap: 16px;
+}
+.ef-hero-actions .ef-btn {
+  min-height: 50px;
+  padding-inline: 24px;
+  border-radius: 12px;
+  box-shadow: 0 8px 22px -12px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.ef-hero-meta {
+  margin-top: 22px;
+  color: var(--text-dim);
+  font-size: .82rem;
+  letter-spacing: .01em;
+}
+.ef-hero-stage {
+  margin-top: clamp(42px, 6vw, 72px);
+}
+.ef-section {
+  padding-block: clamp(68px, 8vw, 104px);
+}
+.ef-section-head-split {
+  align-items: end;
+  gap: 28px;
+  margin-bottom: 34px;
+}
+.ef-section-title {
+  letter-spacing: -.045em;
+  line-height: 1.08;
+}
+.ef-section-lead {
+  max-width: 58ch;
+  line-height: 1.7;
+}
+.ef-cap-showcase {
+  gap: 16px;
+}
+.ef-cap-card {
+  border-radius: 18px;
+  border-color: color-mix(in srgb, var(--border) 82%, var(--accent) 18%);
+  box-shadow: 0 2px 8px rgba(18, 35, 60, .035);
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), border-color var(--dur-base) ease;
+}
+.ef-cap-card-featured {
+  min-height: 290px;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 90% 10%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 38%),
+    var(--surface-1);
+}
+.ef-cap-grid {
+  gap: 16px;
+}
+.ef-cap-grid .ef-cap-card {
+  min-height: 238px;
+  padding: clamp(20px, 2.4vw, 28px);
+}
+.ef-cap-grid .ef-cap-card:hover,
+.ef-cap-card-featured:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent-border);
+  box-shadow: 0 18px 42px -26px rgba(21, 54, 112, .32);
+}
+.ef-cap-featured-copy h3,
+.ef-cap-grid .ef-cap-card .ef-title-icon-row h3 {
+  letter-spacing: -.035em;
+}
+.ef-status-legend {
+  margin-top: 20px;
+  border-radius: 14px;
+  background: var(--surface-1);
+}
+.ef-section-obsidian {
+  background: var(--canvas);
+  color: var(--text);
+  border-block: 1px solid var(--border);
+}
+.ef-section-obsidian .ef-section-title,
+.ef-section-obsidian .ef-section-lead {
+  color: var(--text);
+}
+.ef-step-inspector {
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-md);
+}
+.ef-code-card {
+  border-radius: 18px;
+  box-shadow: 0 18px 50px -34px rgba(18, 35, 60, .35);
+}
+.ef-account-hero-row {
+  padding: clamp(18px, 2.6vw, 28px);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 42%),
+    var(--surface-1);
+  box-shadow: var(--shadow-sm);
+}
+.ef-account-grid {
+  gap: 18px;
+}
+.ef-account-col {
+  gap: 18px;
+}
+.ef-account-card {
+  padding: clamp(20px, 2.5vw, 30px);
+  border-radius: 18px;
+  border-color: var(--border);
+  box-shadow: 0 5px 22px -18px rgba(20, 42, 78, .26);
+}
+.ef-account-card-head {
+  margin-bottom: 22px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.ef-account-card-head h2 {
+  letter-spacing: -.025em;
+}
+.ef-account-settings-nav {
+  border-radius: 14px;
+  background: var(--surface-1);
+}
+.ef-account-settings-nav a {
+  min-height: 44px;
+  border-radius: 9px;
+}
+.ef-workspace-bar {
+  align-items: center;
+}
+.ef-workspace-stats {
+  gap: 12px;
+  margin-block: 18px 22px;
+}
+.ef-stat-card {
+  min-height: 100px;
+  padding: 18px 20px;
+  border-radius: 16px;
+  border-color: var(--border);
+  background: var(--surface-1);
+}
+.ef-stat-card strong {
+  margin-top: 8px;
+  font-size: clamp(1.2rem, 2.2vw, 1.65rem);
+  letter-spacing: -.04em;
+}
+.ef-field input,
+.ef-field select,
+.ef-field textarea {
+  min-height: 46px;
+  border-radius: 10px;
+}
+.ef-account-card .ef-btn,
+.ef-workspace-shell .ef-btn {
+  border-radius: 10px;
+}
+@media (max-width: 720px) {
+  .ef-hero {
+    padding-block: 64px 48px;
+  }
+  .ef-hero-title {
+    font-size: clamp(2.45rem, 11vw, 3.65rem);
+    letter-spacing: -.055em;
+  }
+  .ef-hero-lead {
+    margin-top: 18px;
+    font-size: 1rem;
+  }
+  .ef-hero-actions {
+    align-items: stretch;
+    gap: 12px;
+  }
+  .ef-hero-actions .ef-btn {
+    min-height: 48px;
+  }
+  .ef-section {
+    padding-block: 58px;
+  }
+  .ef-section-head-split {
+    align-items: start;
+    gap: 18px;
+  }
+  .ef-cap-grid .ef-cap-card,
+  .ef-cap-card-featured {
+    min-height: 0;
+  }
+  .ef-account-hero-row {
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .ef-workspace-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ef-account-card {
+    padding: 20px;
+  }
+}
+@media (max-width: 420px) {
+  .ef-hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ef-hero-actions .ef-text-link {
+    justify-content: center;
+    min-height: 44px;
+  }
+  .ef-workspace-stats {
+    gap: 8px;
+  }
+  .ef-stat-card {
+    min-height: 88px;
+    padding: 14px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ef-cap-card,
+  .ef-cap-card-featured {
+    transition: none;
+  }
+  .ef-cap-grid .ef-cap-card:hover,
+  .ef-cap-card-featured:hover {
+    transform: none;
+  }
+}
+
 `;
