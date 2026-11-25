@@ -236,6 +236,25 @@ test("fetch returns bounded text and leaves Cloudflare default cache policy unse
   assert.equal(receipts[0].cacheStatus, "HIT");
 });
 
+test("fetch accepts the supported public text media types", async () => {
+  const contentTypes = [
+    "text/html; charset=utf-8",
+    "application/xhtml+xml; charset=utf-8",
+    "application/json; charset=utf-8",
+    "application/ld+json; charset=utf-8",
+    "application/xml; charset=utf-8",
+    "application/atom+xml; charset=utf-8",
+    "text/plain; charset=utf-8",
+  ];
+  for (const contentType of contentTypes) {
+    const result = await fetchPublicResource("https://example.com/resource", {
+      fetchImpl: async () => response("<root>ok</root>", { headers: { "content-type": contentType } }),
+    });
+    assert.equal(result.ok, true, contentType);
+    assert.equal(result.body, "<root>ok</root>", contentType);
+  }
+});
+
 test("fetch decodes response text with its declared charset", async () => {
   const legacyBytes = new Uint8Array([0x63, 0x61, 0x66, 0xe9]);
   const result = await fetchPublicResource("https://example.com/legacy", {
