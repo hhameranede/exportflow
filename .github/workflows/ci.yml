@@ -6,6 +6,13 @@ concurrency:
  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
+ workflow_dispatch:
+  inputs:
+   run_acceptance:
+    description: "Run the isolated Cloudflare Acceptance migration and Worker tests"
+    type: boolean
+    required: true
+    default: false
  push:
   branches: [main, feat/durable-task-lifecycle-v1-20261124]
  pull_request:
@@ -78,8 +85,10 @@ jobs:
 
  deploy-acceptance:
   needs: test
+  # Acceptance mutates only dedicated test resources; require an explicit manual opt-in.
   if: >-
-   ${{ github.event_name == 'push' &&
+   ${{ github.event_name == 'workflow_dispatch' &&
+       inputs.run_acceptance == true &&
        github.ref == 'refs/heads/feat/durable-task-lifecycle-v1-20261124' }}
   runs-on: ubuntu-latest
   env:

@@ -1,15 +1,15 @@
 # Durable Task Lifecycle v1
 
-Status: Ready for independent review; PR #134 is open, unmerged and mergeable.
+Status: Maintainer self-review complete; the implementation passed exact-head CI and real isolated Cloudflare Acceptance. PR #134 remains open and unmerged.
 Branch: `feat/durable-task-lifecycle-v1-20261124`.
-Functional Acceptance code head: `189fc6a32d1bfe0c033cceb63726f59be45df3d6` (the later branch commit is documentation-only).
+Verified application-code head: `142c20f84ca9dcf191bb64e798b5fa7bfd15c21a` (the following commit is limited to CI trigger safety and documentation).
 Base: `9fe35036c30114095e3ae782909164d2c0671967` (`main`, 25 November 2026).
 
 ## Scope
 
 This change adds one tenant-scoped durable task ledger shared by REST and MCP. It keeps small bounded operations on the existing synchronous Request-First execution path. It does not add Queues, Workflows, background execution, resumable Crawl or automatic recovery after a Worker crash.
 
-The feature-branch CI includes a **test-only Acceptance deployment** after repository tests, browser QA and Wrangler dry-runs pass. That job applies migration `0005_durable_task_lifecycle.sql` only to the dedicated Acceptance D1 database, deploys the two dedicated Task Acceptance Workers, seeds run-scoped synthetic tenants/API keys, runs real Worker + D1 tests, and removes the synthetic data. The Acceptance Workers and schema are isolated test resources. This is not a Production rollout.
+Normal push and pull-request CI runs repository tests, browser QA and Wrangler dry-runs without deploying Acceptance resources. The isolated Acceptance job is now opt-in through GitHub Actions `workflow_dispatch`: select this feature branch and explicitly set `run_acceptance=true`. With that opt-in, the job applies migration `0005_durable_task_lifecycle.sql` only to the dedicated Acceptance D1 database, deploys the two dedicated Task Acceptance Workers, seeds run-scoped synthetic tenants/API keys, runs real Worker + D1 tests, and removes the run-scoped data. The Acceptance Workers and schema are isolated test resources; this is not a Production rollout. The boolean input defaults to `false`, and the job is skipped for ordinary pushes and pull requests. GitHub makes a `workflow_dispatch` workflow available only after its workflow file exists on the default branch; after this PR is integrated into `main`, select the feature branch when manually dispatching this workflow.
 
 The change does not apply Migration 0005 to the Production tenant D1 database, deploy either Production Worker, change Production bindings, secrets, DNS, permissions or traffic, or provision customer tenants.
 
@@ -62,16 +62,34 @@ Task reads always filter by both `tenant_id` and `task_id`. A caller from anothe
 
 ## Exact-head verification — 25 November 2026
 
-- Push CI #1218 passed repository tests, syntax checks, full-site Chromium QA, all nine Wrangler v4 dry-run bundles and the isolated Cloudflare D1 + Worker Acceptance flow. The Acceptance migration and Workers were limited to dedicated test resources; run-scoped synthetic data cleanup passed. Production deployment was skipped.
-- PR CI #1219 passed repository tests, syntax checks, full-site Chromium QA and all nine Wrangler v4 dry-run bundles. Acceptance and Production deployment jobs were skipped.
-- At the functional Acceptance checkpoint, the PR was 80 commits ahead and 0 commits behind `main` at the base SHA listed above.
-- No independent review has been submitted yet.
+- Push CI [#1232](https://github.com/hhameranede/exportflow/actions/runs/45654618812) attempt 2 passed on exact application-code head `142c20f84ca9dcf191bb64e798b5fa7bfd15c21a`. Repository tests, `npm run check`, full-site Chromium QA (646/646 route/viewport combinations), same-origin links and all nine Wrangler v4 dry-run bundles passed. Attempt 1 had one browser navigation `net::ERR_ABORTED` at local `/oauth/consent`; attempt 2 did not reproduce it.
+- The same Push CI #1232 attempt 2 completed real Cloudflare D1 + Worker Acceptance. Migration 0005 was applied only to the dedicated Acceptance D1 database; both dedicated Task Acceptance Workers were deployed (Version 11 each); synthetic tenants/API keys were seeded and subsequently cleaned.
+- Real Acceptance verified REST and MCP Fetch HTTP 200, expected content and HTTPS source-host provenance; concurrent idempotency, exactly one quota reservation, REST/MCP replay parity, request-identity conflict (409), status reads, `tasks:read`, cross-tenant isolation, quota exhaustion and 24-hour expiry metadata.
+- Cleanup completed. A separate read-only D1 query confirmed zero run-scoped tenants, API keys, quota usage, Tasks and plan policies; total `task_events` rows were also zero. Pre-existing Acceptance records outside this run were retained.
+- PR CI [#1233](https://github.com/hhameranede/exportflow/actions/runs/45654641938) passed on the same exact head: tests, syntax checks, 646/646 Chromium QA, same-origin links and all nine Wrangler v4 dry-run bundles. Acceptance and Production jobs were skipped on the pull-request event.
+- Maintainer/agent self-review covered REST/MCP submission and status reads, scopes, tenant isolation, idempotency, D1 quota/lifecycle triggers, leases, retention, readiness, token masking and Fetch provenance. No blocking source-code defect was identified. This project does not wait for an external human reviewer by default; required GitHub branch-protection rules must still be respected.
+- The follow-up commit that refreshes this document and changes the Acceptance trigger does not change application source. Its push CI will verify those workflow/documentation edits, but normal push CI will no longer run the Acceptance deployment.
+
+## Manual Acceptance procedure
+
+1. Open GitHub Actions → Worker CI → Run workflow.
+2. Select `feat/durable-task-lifecycle-v1-20261124` as the branch.
+3. Set `run_acceptance` to `true` only when explicitly authorizing the isolated Acceptance migration and two Acceptance Worker deployments. Leaving it false runs no Acceptance deployment.
+4. The job runs after the test job passes and always attempts run-scoped data cleanup. Production deployment is not part of this manual dispatch.
+
+GitHub only exposes `workflow_dispatch` for a workflow file present on the default branch. Therefore this manual UI procedure becomes available after the workflow change is present in `main`; the current implementation already has the real Acceptance evidence recorded above.
+
+## Production release gate — read-only check on 25 November 2026
+
+- Cloudflare still reports `exportflow-platform` Version 23 at 100% traffic and `exportflow-mcp-preview` Version 8.
+- The Platform Worker's `EXPORTFLOW_AUTH_DB` binding points to Production D1 `exportflow-tenant-production`. A read-only query found no `tasks` or `task_events` tables there; Migration 0005 remains unapplied in Production.
+- No Production D1 writes/migration, Worker deployment/version/traffic change, DNS, secret, binding, permissions or billing change was made. Production remains outside this PR's current verification.
 
 ## Explicit non-goals / remaining gates
 
 - No asynchronous task submission contract, Queue fan-out, Workflow orchestration, polling backoff, webhook notifications, child work units, resumable crawl checkpoints, or automatic retry after Worker failure.
 - No public cancel endpoint. An inbound request abort is still forwarded into the existing executor and its resulting cancelled state is persisted when the handler can finish.
-- The isolated Acceptance workflow is part of feature-branch CI, not Production release: it may apply Migration 0005 to the dedicated Acceptance D1 database and deploy the two dedicated Acceptance Workers. It cleans up run-scoped synthetic tenant, key, usage and Task data. It does not modify `exportflow-tenant-production`.
+- The isolated Acceptance workflow is manual and opt-in only. It may apply Migration 0005 to the dedicated Acceptance D1 database and deploy the two dedicated Acceptance Workers, then clean run-scoped synthetic tenant, key, usage and Task data. It does not modify `exportflow-tenant-production`.
 - Node SQLite tests are supplementary checks. Real Cloudflare D1 Binding acceptance covers migration execution, trigger atomicity, simultaneous requests, replay, quota exhaustion, status reads and tenant isolation.
 - A read-only Production D1 check on 25 November 2026 found the tenant/auth tables but no `tasks` or `task_events` tables; Migration 0005 remains unapplied in Production.
-- Production rollout, Production D1 migration, Worker bindings, secrets, DNS, permissions and customer tenant provisioning each remain separately approval-gated.
+- Production rollout, Production D1 migration, Worker bindings, secrets, DNS, permissions and customer tenant provisioning each remain separately approval-gated. Manually dispatching the isolated Acceptance job also requires explicit action-specific authorization.
