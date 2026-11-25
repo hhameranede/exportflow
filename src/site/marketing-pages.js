@@ -178,6 +178,7 @@ export function renderUnifiedUseCasesPage({ t, locale, hrefFor, escapeHtml, arro
     "structured-extraction": "uc-extract",
     "deep-research": "uc-research",
     "site-mapping": "uc-map",
+    "request-first-discovery": "uc-search",
   };
   return `${pageHero({
 
