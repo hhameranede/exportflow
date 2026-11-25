@@ -332,8 +332,8 @@ async function smoke() {
     transport: "REST",
     httpStatus: secondRestStatus.response.status,
     task: secondRestStatus.body,
-    expectedContent: EXPECTED_FETCH_CONTENT,
-    expectedHost: EXPECTED_FETCH_HOST,
+    expectedContent: fetchTarget.expectedContent,
+    expectedHost: fetchTarget.expectedHost,
   });
   assert.equal("goal" in secondRestStatus.body, false);
 
