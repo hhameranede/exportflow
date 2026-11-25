@@ -6,6 +6,10 @@ import { createResearchPipeline } from "./research.js";
 
 const TASK_ID_PATTERN = /^[a-zA-Z0-9_-]{8,64}$/;
 const MAX_GOAL_LENGTH = 2_000;
+const ALLOWED_TASK_INPUT_KEYS = new Set([
+  "goal", "url", "operation", "query", "source", "limit", "candidateLimit",
+  "schema", "maxUrls", "maxPages", "maxDepth", "cacheMode", "limits",
+]);
 
 function createId() {
   const id = globalThis.crypto?.randomUUID?.();
@@ -162,8 +166,7 @@ function buildTask({
  *
  * This is an internal Core primitive, not an HTTP/MCP endpoint. It keeps no
  * durable state and accepts no caller-supplied credentials or headers.
- * All operations use bounded static HTTP; browser rendering and interaction
- * are not part of the supported execution surface.
+ * All operations use bounded HTTP requests; page scripts are never executed.
  */
 export async function executeWebTask(input, options = {}) {
   const now = options.now || (() => new Date().toISOString());
@@ -184,6 +187,12 @@ export async function executeWebTask(input, options = {}) {
   try {
     if (!input || typeof input !== "object" || Array.isArray(input)) {
       throw Object.assign(new TypeError("Task input must be an object."), { code: "INVALID_TASK" });
+    }
+
+    for (const key of Object.keys(input)) {
+      if (!ALLOWED_TASK_INPUT_KEYS.has(key)) {
+        throw Object.assign(new TypeError("Unsupported task property: " + key), { code: "INVALID_TASK" });
+      }
     }
 
     if (typeof input.goal !== "string" || !input.goal.trim() || input.goal.length > MAX_GOAL_LENGTH) {
