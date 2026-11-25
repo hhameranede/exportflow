@@ -112,7 +112,7 @@ export const VALUE_PILLARS = Object.freeze([
     number: "02",
     title: "Multiple execution engine types",
     description:
-      "The router selects the lightest suitable path first—direct HTTP retrieval before any heavier rendering engine is considered.",
+      "The router selects bounded public HTTP request execution for supported tasks; it does not launch browser sessions or execute page JavaScript.",
   },
   {
     number: "03",
