@@ -202,6 +202,40 @@ test("system-aware design system and interactive UX components are served cleanl
   assert.doesNotMatch(js, /ef_auth_preview|window[.]ExportFlowAuth/);
 });
 
+test("execution-first UI redesign preserves landing, workspace, account, and responsive surfaces", async () => {
+  const home = getWebsiteResponse("/");
+  assert.ok(home);
+  const homeHtml = await home.text();
+  assert.match(homeHtml, /marketing\.css\?v=10/);
+  assert.match(homeHtml, /class="ef-hero-editorial/);
+  assert.match(homeHtml, /data-graph-scenario="http"/);
+
+  const workspace = getWebsiteResponse("/workspace");
+  assert.ok(workspace);
+  const workspaceHtml = await workspace.text();
+  assert.match(workspaceHtml, /data-workspace-shell/);
+  assert.match(workspaceHtml, /data-ws-exec-form/);
+  assert.match(workspaceHtml, /data-ws-key-form/);
+  assert.match(workspaceHtml, /data-ws-exec-output/);
+
+  const account = getWebsiteResponse("/account");
+  assert.ok(account);
+  const accountHtml = await account.text();
+  assert.match(accountHtml, /data-account-workspace/);
+  assert.match(accountHtml, /data-account-settings-nav/);
+  assert.match(accountHtml, /data-account-two-factor/);
+
+  const cssResponse = getWebsiteResponse("/assets/marketing.css");
+  assert.ok(cssResponse);
+  const css = await cssResponse.text();
+  assert.match(css, /@media \(min-width: 1024px\)[\s\S]*?grid-template-columns: minmax\(0, 0\.88fr\) minmax\(0, 1\.12fr\)/);
+  assert.match(css, /\.ef-workspace-bar[\s\S]*?background: #172338/);
+  assert.match(css, /\.ef-workspace-stats/);
+  assert.match(css, /\.ef-account-settings-nav/);
+  assert.match(css, /@media \(max-width: 767px\)/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+});
+ 
 test("account routes render real-auth UI, stay noindex, and are excluded from the sitemap", async () => {
   for (const [path, expectedNeedle] of [
     ["/signin", /data-auth-google/],
