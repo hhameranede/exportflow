@@ -38,7 +38,6 @@ const ROUTES = [
   ["/about", "About ExportFlow", "The execution infrastructure behind agentic systems."],
   ["/contact", "Contact", "Reach the ExportFlow team.", "contact"],
   ["/product/web-intelligence", "Web Intelligence", "Bounded retrieval and source evidence.", "available"],
-  ["/product/browser-automation", "Browser Automation", "A future path for rendered pages and explicitly authorized interaction.", "planned"],
   ["/product/execution-orchestration", "Execution Orchestration", "Coordinate task validation, routing, and normalized results.", "development"],
   ["/product/persistent-intelligence", "Persistent Intelligence", "A planned foundation for durable task context and continuity.", "planned"],
   ["/product/developer-platform", "Developer Platform", "Explore the developer entry points and current execution contract.", "development"],
@@ -587,16 +586,16 @@ function genericBody(route, path, t, locale, oauthDetails = {}) {
           ["ما القدرات المفعلة حالياً؟", "عقد REST Task contract العام مقصور حالياً على جلب HTTP المحدود (http.fetch.v1). قدرات البحث والأتمتة بالمتصفح لم تُفعل بعد على النقاط العامة."],
           ["هل تتجاوز المنصة تسجيل الدخول أو الحمايات؟", "لا. المنصة مصممة للموارد العامة المتاحة عبر HTTP(S) ولا تتجاوز المصادقة أو الجدران المدفوعة أو اختبارات CAPTCHA."],
           ["هل تعتمد ExportFlow على مزود نموذج ذكاء اصطناعي واحد؟", "لا. عقد التنفيذ محايد تماماً عن النماذج؛ يرسل الوكيل النية والحدود فتتولى النواة التحقق والتوجيه وإرجاع النتائج."],
-          ["هل أتمتة المتصفح متاحة اليوم؟", "لا. مسار المتصفح يتطلب بيئة متصفح معزولة ومراجعة أمنية مستقلة، ويعيد 501 حالياً حتى يتم ربطه."],
+          ["هل تنفذ ExportFlow JavaScript داخل صفحات الويب؟", "لا. التنفيذ Request-first عبر HTTP(S) فقط. يمكن جلب public API endpoints والبيانات العامة مباشرة؛ أما المحتوى الذي يتطلب تشغيل JavaScript ولا يملك endpoint عاماً قابلاً للجلب فيُعتبر unsupported."],
           ["هل ExportFlow جاهزة للإنتاج الكامل؟", "المشروع في مرحلة بناء ومعاينة محكومة، ولا تضمن الاختبارات المحلية الجاهزية الإنتاجية المفتوحة."],
           ["أين يطلع المطورون على العقد الحالي؟", "ابدأ بصفحة المطورين واستخدم لوحة التجربة التفاعلية للتحقق من قواعد العقد والأدلة."],
         ]
       : [
           ["What is ExportFlow?", "ExportFlow is model-agnostic agentic web infrastructure. It separates an AI agent's reasoning from bounded web execution, policy enforcement, normalized results, and source evidence."],
-          ["Which capabilities are currently enabled?", "The public REST Task contract is intentionally limited to bounded HTTP Fetch. Search, Research, and Browser execution are not generally enabled. Map, Crawl, and structured extraction have internal or preview implementations, but their presence in the repository does not make them production services."],
+          ["Which capabilities are currently available?", "REST and MCP expose six bounded operations: Fetch, Map, Crawl, Extract, Search, and Research. Their verification and availability levels differ. Search uses selected public datasets, not a general whole-web index."],
           ["Can ExportFlow interact with logged-in websites or bypass protections?", "No. The platform is designed for eligible public HTTP(S) resources. It does not bypass authentication, paywalls, CAPTCHAs, or anti-bot controls, and it must enforce destination and redirect restrictions."],
           ["Does ExportFlow depend on one AI model provider?", "No. The execution contract is model-agnostic. Agents supply task intent through the documented interface; the Core validates the request, applies policy, routes supported work, and returns normalized output with provenance."],
-          ["Is browser automation available today?", "No. Browser rendering requires a separately configured browser runtime and security acceptance. User-directed browser interactions remain unsupported until an explicitly reviewed implementation is available."],
+          ["Does ExportFlow execute JavaScript inside websites?", "No. Execution is request-first over HTTP(S). Public API endpoints and public data can be retrieved directly; content that exists only after client-side JavaScript execution and has no usable public HTTP endpoint is unsupported."],
           ["Is ExportFlow ready for production customers?", "The project is still in a controlled development and preview phase. Local tests and Worker dry-runs are not a production availability guarantee. Customer onboarding, durable task operations, and production enablement require separate verification."],
           ["Where can developers see the current contract?", "Start with the Developers page and API Reference. Treat illustrative examples as examples only; verify the live capability response and published API contract before integrating."],
         ];
@@ -760,8 +759,8 @@ function genericBody(route, path, t, locale, oauthDetails = {}) {
        <p>${isAr ? "يتضمن المستودع محول جلب HTTP موثق محلياً مع حماية SSRF وحدود استجابة وإرفاق الأدلة." : "The repository includes a locally verified, authenticated HTTP Fetch adapter with egress controls, response limits, redirect validation, and source metadata. Production availability is not represented here."}</p>
        <div class="ef-sub-grid">
          <div class="ef-info-card">
-           <div class="ef-title-icon-row">${renderFeatureIcon("browser-automation")}<h3>${escapeHtml(ld.browserPreview)}</h3></div>
-           <p>${isAr ? "اختبر قواعد التحقق وحواجز الأمان ومخرجات JSON داخل المتصفح." : "Inspect validation rules, egress guards, and normalized JSON envelopes without sending external requests."}</p>
+           <div class="ef-title-icon-row">${renderFeatureIcon("developer-platform")}<h3>${escapeHtml(ld.browserPreview)}</h3></div>
+           <p>${isAr ? "اختبر قواعد التحقق وحواجز الأمان ومخرجات JSON في المعاينة المحلية." : "Inspect request validation, egress guards, and normalized JSON envelopes without sending external requests."}</p>
            <p class="ef-mt-12"><a class="ef-cap-link" href="${hrefFor("/demo", locale)}">${escapeHtml(t.demo)} ${arrowUpRightIcon("ef-icon ef-icon-xs ef-dir-arrow")}</a></p>
          </div>
          <div class="ef-info-card">
