@@ -3,7 +3,12 @@ import { createHash, randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { assertSuccessfulFetchTask } from "./fetch-assertions.mjs";
+
+const FETCH_URL = "https://www.cloudflare.com/robots.txt";
+const EXPECTED_FETCH_CONTENT = "User-agent: *";
+const EXPECTED_FETCH_HOST = "cloudflare.com";
 
 const DATABASE = "exportflow-tenant-acceptance-20261122";
 const CONFIG = "cloudflare/task-acceptance/platform.wrangler.toml";
@@ -57,6 +62,10 @@ function writeGithubEnv(values) {
   if (!path) throw new Error("GITHUB_ENV is required when seeding CI fixtures.");
   for (const [name, value] of Object.entries(values)) {
     if (/[\r\n]/.test(value)) throw new Error("Invalid fixture environment value.");
+    if (name.endsWith("_TOKEN") && process.env.GITHUB_ACTIONS === "true") {
+      // Register the mask before GitHub Actions emits the next step's environment.
+      process.stdout.write("::add-mask::" + value + "\n");
+    }
     appendFileSync(path, name + "=" + value + "\n", "utf8");
   }
 }
@@ -121,7 +130,7 @@ function taskFromApi(result, label) {
   return result.body;
 }
 
-async function restPost(token, key, url = "https://example.com/") {
+async function restPost(token, key, url = FETCH_URL) {
   const response = await fetch(PLATFORM_URL + "/api/v1/tasks", {
     method: "POST",
     headers: {
@@ -145,6 +154,18 @@ async function restGet(token, taskId) {
     signal: AbortSignal.timeout(20_000),
   });
   return readJson(response, "REST task status");
+}
+
+async function waitForRestTask(token, taskId) {
+  const deadline = Date.now() + 30_000;
+  let latest;
+  do {
+    latest = await restGet(token, taskId);
+    assert.equal(latest.response.status, 200, "Tenant-owned Task status must be readable while awaiting completion.");
+    if (!["accepted", "running"].includes(latest.body?.state)) return latest;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
+  } while (Date.now() < deadline);
+  throw new Error("Durable Task did not reach a terminal state within the Acceptance deadline.");
 }
 
 async function mcpCall(token, id, name, args = {}) {
@@ -201,9 +222,15 @@ async function smoke() {
   assert.equal(conflict.response.status, 409, "A reused key with a different request must return HTTP 409.");
   assert.equal(conflict.body.error?.code, "IDEMPOTENCY_KEY_REUSED");
 
-  const status = await restGet(alpha, firstTask.id);
-  assert.equal(status.response.status, 200, "Tenant-owned Task status must be readable.");
+  const status = await waitForRestTask(alpha, firstTask.id);
   assert.equal(status.body.id, firstTask.id);
+  const restFetchProof = assertSuccessfulFetchTask({
+    transport: "REST",
+    httpStatus: status.response.status,
+    task: status.body,
+    expectedContent: EXPECTED_FETCH_CONTENT,
+    expectedHost: EXPECTED_FETCH_HOST,
+  });
   assert.equal("goal" in status.body, false, "Display-only goal must not be retained in D1.");
   assert.ok(Array.isArray(status.body.events) && status.body.events.some((event) => event.type === "task.accepted"));
   assert.ok(status.body.events.some((event) => event.type.startsWith("task.") && event.type !== "task.accepted"));
@@ -229,11 +256,14 @@ async function smoke() {
   });
   assert.equal(mcpReplay.response.status, 200);
   const mcpReplayTask = mcpReplay.body.result?.structuredContent;
-  assert.equal(
-    mcpReplay.body.result?.isError || false,
-    firstTask.state === "failed" || firstTask.state === "unsupported",
-    "MCP replay error state must match the persisted Task outcome.",
-  );
+  const mcpReplayProof = assertSuccessfulFetchTask({
+    transport: "MCP",
+    httpStatus: mcpReplay.response.status,
+    task: mcpReplayTask,
+    toolIsError: mcpReplay.body.result?.isError || false,
+    expectedContent: EXPECTED_FETCH_CONTENT,
+    expectedHost: EXPECTED_FETCH_HOST,
+  });
   assert.equal(mcpReplayTask?.id, firstTask.id, "MCP must replay the REST-created Task.");
 
   const secondMcpKey = "mcp-second-" + RUN_ID.slice(-24);
@@ -243,23 +273,40 @@ async function smoke() {
   });
   assert.equal(mcpCreated.response.status, 200);
   const mcpSecondTask = mcpCreated.body.result?.structuredContent;
-  assert.equal(
-    mcpCreated.body.result?.isError || false,
-    mcpSecondTask?.state === "failed" || mcpSecondTask?.state === "unsupported",
-    "MCP result error state must match the persisted Task outcome.",
-  );
+  const mcpSecondProof = assertSuccessfulFetchTask({
+    transport: "MCP",
+    httpStatus: mcpCreated.response.status,
+    task: mcpSecondTask,
+    toolIsError: mcpCreated.body.result?.isError || false,
+    expectedContent: EXPECTED_FETCH_CONTENT,
+    expectedHost: EXPECTED_FETCH_HOST,
+  });
   assert.ok(typeof mcpSecondTask?.id === "string", "MCP must create a second durable Task.");
   assert.equal(Number(mcpSecondTask.quota?.used), 2, "A distinct Task must reserve exactly one additional quota unit.");
 
-  const secondRestStatus = await restGet(alpha, mcpSecondTask.id);
-  assert.equal(secondRestStatus.response.status, 200, "REST must read the MCP-created Task from the shared D1 store.");
+  const secondRestStatus = await waitForRestTask(alpha, mcpSecondTask.id);
   assert.equal(secondRestStatus.body.id, mcpSecondTask.id);
+  assertSuccessfulFetchTask({
+    transport: "REST",
+    httpStatus: secondRestStatus.response.status,
+    task: secondRestStatus.body,
+    expectedContent: EXPECTED_FETCH_CONTENT,
+    expectedHost: EXPECTED_FETCH_HOST,
+  });
   assert.equal("goal" in secondRestStatus.body, false);
 
   const mcpStatus = await mcpCall(alpha, 3, "web_task_status", { taskId: firstTask.id });
   assert.equal(mcpStatus.response.status, 200);
   assert.equal(mcpStatus.body.result?.isError || false, false);
   assert.equal(mcpStatus.body.result?.structuredContent?.id, firstTask.id);
+  assertSuccessfulFetchTask({
+    transport: "MCP",
+    httpStatus: mcpStatus.response.status,
+    task: mcpStatus.body.result?.structuredContent,
+    toolIsError: mcpStatus.body.result?.isError || false,
+    expectedContent: EXPECTED_FETCH_CONTENT,
+    expectedHost: EXPECTED_FETCH_HOST,
+  });
 
   // At the exact quota ceiling, a new key is rejected but a valid replay remains readable.
   const exhausted = await restPost(alpha, "rest-quota-limit-" + RUN_ID.slice(-24));
@@ -270,7 +317,8 @@ async function smoke() {
   assert.ok([200, 202, 502].includes(replayAtLimit.response.status), "An idempotency replay at the quota ceiling must remain available.");
   assert.equal(taskFromApi(replayAtLimit, "quota-ceiling replay").id, firstTask.id);
 
-  console.log("Acceptance passed: concurrent idempotency, one-time quota reservation, 409 request identity, 24-hour expiry metadata, tenant isolation, tasks:read, REST/MCP parity and quota exhaustion.");
+  console.log("Acceptance passed: real REST/MCP Fetch with retained content and verified provenance, concurrent idempotency, one-time quota reservation, 409 request identity, 24-hour expiry metadata, tenant isolation, tasks:read, REST/MCP parity and quota exhaustion.");
+  console.log("Verified Fetch proof: " + JSON.stringify({ rest: restFetchProof, mcpReplay: mcpReplayProof, mcpCreated: mcpSecondProof }));
 }
 
 async function cleanup() {
