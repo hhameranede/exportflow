@@ -16,7 +16,7 @@ export const EGRESS_POLICY = Object.freeze({
     "metadata.azure.internal",
     "instance-data",
     "exportflow.me",
-    "exportflow-platform.hhameranede.workers.dev",
+    "hhameranede.workers.dev",
     "exportflow-mcp-preview.hhameranede.workers.dev",
     "exportflow-egress-preview.hhameranede.workers.dev",
     "exportflow-task-mcp-acceptance-20261124.hhameranede.workers.dev",
@@ -47,6 +47,7 @@ export const EGRESS_POLICY = Object.freeze({
     ".corp",
     ".intranet",
     ".exportflow.me",
+    ".hhameranede.workers.dev",
   ]),
 });
 

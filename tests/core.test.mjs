@@ -180,17 +180,6 @@ test("egress guard blocks the ExportFlow zone and Worker origins", () => {
     "https://api.exportflow.me/",
     "https://internal.exportflow.me/",
     "https://exportflow-platform.hhameranede.workers.dev/",
-    "https://exportflow-mcp-preview.hhameranede.workers.dev/",
-    "https://exportflow-egress-preview.hhameranede.workers.dev/",
-    "https://exportflow-task-mcp-acceptance-20261124.hhameranede.workers.dev/",
-    "https://exportflow-task-platform-acceptance-20261124.hhameranede.workers.dev/",
-    "https://exportflow-mcp-acceptance-20261122.hhameranede.workers.dev/",
-    "https://exportflow-auth-acceptance-20261122.hhameranede.workers.dev/",
-    "https://exportflow-tenant-acceptance-20261122.hhameranede.workers.dev/",
-    "https://exportflow-auth-lab.hhameranede.workers.dev/",
-    "https://exportflow-cost-router-lab.hhameranede.workers.dev/",
-    "https://exportflow-usage-receipts-preview.hhameranede.workers.dev/",
-    "https://exportflow-browser-lab.hhameranede.workers.dev/",
   ]) {
     assert.throws(() => validateEgressTarget(value), EgressPolicyError, value);
   }
@@ -208,6 +197,16 @@ test("egress guard rejects legacy IP literals, credentials, and non-default port
     "https://example.com:8443/",
     "file:///etc/passwd",
     "ftp://example.com/",
+  ]) {
+    assert.throws(() => validateEgressTarget(value), EgressPolicyError, value);
+  }
+});
+
+test("egress guard blocks the entire account-owned workers.dev namespace", () => {
+  for (const value of [
+    "https://hhameranede.workers.dev/",
+    "https://future-worker.hhameranede.workers.dev/",
+    "https://nested.preview.future-worker.hhameranede.workers.dev/",
   ]) {
     assert.throws(() => validateEgressTarget(value), EgressPolicyError, value);
   }
