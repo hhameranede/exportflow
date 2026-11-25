@@ -10,7 +10,6 @@ import { escapeHtml } from "./layout.js";
 export function renderExecutionGraph({
   availableLabel = "Available locally",
   developmentLabel = "In development",
-  plannedLabel = "Planned",
   locale = "en",
 } = {}) {
   const g = getLocaleData(locale).graph;
@@ -24,7 +23,6 @@ export function renderExecutionGraph({
     <div class="ef-graph-scenarios" role="group" aria-label="${escapeHtml(g.routeGroupAria)}">
       <button type="button" class="ef-graph-tab" data-graph-scenario="http" aria-pressed="true">${escapeHtml(g.httpTitle)}</button>
       <button type="button" class="ef-graph-tab" data-graph-scenario="search" aria-pressed="false">${escapeHtml(g.searchTitle)}</button>
-      <button type="button" class="ef-graph-tab" data-graph-scenario="browser" aria-pressed="false">${escapeHtml(g.browserTitle)}</button>
     </div>
   </div>
 
@@ -47,10 +45,8 @@ export function renderExecutionGraph({
         <path id="p-agent-core" class="ef-g-path ef-g-path-active" data-path-id="p-agent-core" d="M168 155 L218 155"/>
         <path id="p-core-http" class="ef-g-path ef-g-path-available" data-path-id="p-core-http" d="M394 134 C432 134, 424 62, 466 62"/>
         <path id="p-core-search" class="ef-g-path ef-g-path-dev" data-path-id="p-core-search" d="M394 155 L466 155"/>
-        <path id="p-core-browser" class="ef-g-path ef-g-path-planned" data-path-id="p-core-browser" d="M394 176 C432 176, 424 248, 466 248"/>
         <path id="p-http-result" class="ef-g-path ef-g-path-available" data-path-id="p-http-result" d="M622 62 C654 62, 648 134, 678 134"/>
         <path id="p-search-result" class="ef-g-path ef-g-path-dev" data-path-id="p-search-result" d="M622 155 L678 155"/>
-        <path id="p-browser-result" class="ef-g-path ef-g-path-planned" data-path-id="p-browser-result" d="M622 248 C654 248, 648 176, 678 176"/>
       </g>
 
       <!-- Quiet Single-Pulse Signal Packets -->
@@ -92,12 +88,6 @@ export function renderExecutionGraph({
         <text x="482" y="179" class="ef-g-meta">web.search.v1</text>
       </g>
 
-      <g class="ef-g-node ef-g-node-planned" tabindex="0" role="button" aria-pressed="false" data-graph-node="browser" aria-label="${escapeHtml(g.browserAria)}">
-        <rect x="466" y="210" width="156" height="76" rx="12" class="ef-g-box ef-g-box-planned"/>
-        <text x="482" y="232" class="ef-g-status ef-g-status-planned">${escapeHtml(plannedLabel)}</text>
-        <text x="482" y="254" class="ef-g-title-sm ef-g-title-dim">${escapeHtml(g.browserTitle)}</text>
-        <text x="482" y="272" class="ef-g-meta">web.browser.v1</text>
-      </g>
 
       <!-- Column 4: Verified Results -->
       <g class="ef-g-node ef-g-node-result" tabindex="0" role="button" aria-pressed="false" data-graph-node="result" aria-label="${escapeHtml(g.resultsAria)}">
@@ -131,10 +121,6 @@ export function renderExecutionGraph({
       <button type="button" class="ef-m-engine ef-m-engine-dev" data-graph-node="search" aria-pressed="false">
         <span class="ef-badge ef-badge-dev"><span>${escapeHtml(developmentLabel)}</span></span>
         <strong>${escapeHtml(g.searchTitle)}</strong>
-      </button>
-      <button type="button" class="ef-m-engine ef-m-engine-planned" data-graph-node="browser" aria-pressed="false">
-        <span class="ef-badge ef-badge-planned"><span>${escapeHtml(plannedLabel)}</span></span>
-        <strong>${escapeHtml(g.browserTitle)}</strong>
       </button>
     </div>
     <div class="ef-m-connector" aria-hidden="true"><span></span></div>
