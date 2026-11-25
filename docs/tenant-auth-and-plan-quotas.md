@@ -134,6 +134,7 @@ Migration `0003_tenant_admin_audit_log.sql` adds an append-only audit table with
 
 - Unauthenticated `GET /api/v1/platform` returns discovery metadata, reports only whether the binding exists, performs no D1 query, and keeps `auth.ready=false` and `liveCapabilities=[]`.
 - An authenticated platform request validates that caller's tenant key, active tenant/plan and `tasks:fetch` scope, then probes the quota schema. Readiness is per caller, not a scan of every tenant.
+- The endpoint separately reports `taskStore.ready`. It is true only when the `tasks` and `task_events` tables expose the required columns and all six quota/lifecycle triggers are present. `liveCapabilities` remains empty unless both caller auth/quota readiness and durable Task storage readiness are true.
 - The readiness response is informational only. Each Task/MCP execution always re-authenticates and reserves quota; never cache readiness as authorization.
 
 ## Important exclusions
