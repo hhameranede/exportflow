@@ -6,9 +6,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertSuccessfulFetchTask } from "./fetch-assertions.mjs";
 
-const FETCH_URL = "https://www.cloudflare.com/robots.txt";
-const EXPECTED_FETCH_CONTENT = "User-agent: *";
-const EXPECTED_FETCH_HOST = "cloudflare.com";
+const FETCH_CANDIDATES = Object.freeze([
+  { url: "https://example.com/", expectedContent: "Example Domain", expectedHost: "example.com" },
+  { url: "https://www.iana.org/domains/reserved", expectedContent: "IANA", expectedHost: "iana.org" },
+  { url: "https://www.cloudflare.com/robots.txt", expectedContent: "User-agent: *", expectedHost: "cloudflare.com" },
+]);
 
 const DATABASE = "exportflow-tenant-acceptance-20261122";
 const CONFIG = "cloudflare/task-acceptance/platform.wrangler.toml";
@@ -16,10 +18,12 @@ const PLATFORM_URL = "https://exportflow-task-platform-acceptance-20261124.hhame
 const MCP_URL = "https://exportflow-task-mcp-acceptance-20261124.hhameranede.workers.dev/mcp";
 const RUN_ID = String(process.env.GITHUB_RUN_ID || process.env.CI_RUN_ID || "local-acceptance").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 48);
 const PLAN_CODE = "qa_task_acceptance_" + RUN_ID;
+const PROBE_PLAN_CODE = "qa_task_probe_" + RUN_ID;
 const TENANTS = {
   alpha: "qa_task_alpha_" + RUN_ID,
   beta: "qa_task_beta_" + RUN_ID,
   noRead: "qa_task_noread_" + RUN_ID,
+  probe: "qa_task_probe_" + RUN_ID,
 };
 
 function sql(value) {
@@ -75,6 +79,7 @@ async function seed() {
   const alphaKey = newApiKey();
   const betaKey = newApiKey();
   const noReadKey = newApiKey();
+  const probeKey = newApiKey();
   const commonScopes = [
     "tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract",
     "tasks:search", "tasks:research", "tasks:read",
@@ -83,16 +88,21 @@ async function seed() {
     [TENANTS.alpha, alphaKey, commonScopes],
     [TENANTS.beta, betaKey, commonScopes],
     [TENANTS.noRead, noReadKey, ["tasks:fetch"]],
+    [TENANTS.probe, probeKey, commonScopes],
   ];
   const statements = [
     "INSERT INTO plan_policies (plan_code, quota_period, request_limit, policy_version, status, created_at, updated_at) VALUES (" +
       [sql(PLAN_CODE), sql("daily"), "2", sql("durable-task-acceptance-v1"), sql("active"), sql(now), sql(now)].join(", ") +
       ") ON CONFLICT(plan_code) DO NOTHING;",
+    "INSERT INTO plan_policies (plan_code, quota_period, request_limit, policy_version, status, created_at, updated_at) VALUES (" +
+      [sql(PROBE_PLAN_CODE), sql("daily"), String(FETCH_CANDIDATES.length), sql("durable-task-fetch-probe-v1"), sql("active"), sql(now), sql(now)].join(", ") +
+      ") ON CONFLICT(plan_code) DO NOTHING;",
   ];
-  for (const tenantId of Object.values(TENANTS)) {
+  for (const [label, tenantId] of Object.entries(TENANTS)) {
+    const planCode = label === "probe" ? PROBE_PLAN_CODE : PLAN_CODE;
     statements.push(
       "INSERT INTO tenants (tenant_id, plan_code, status, created_at, updated_at) VALUES (" +
-      [sql(tenantId), sql(PLAN_CODE), sql("active"), sql(now), sql(now)].join(", ") +
+      [sql(tenantId), sql(planCode), sql("active"), sql(now), sql(now)].join(", ") +
       ") ON CONFLICT(tenant_id) DO NOTHING;",
     );
   }
@@ -109,6 +119,7 @@ async function seed() {
     EF_TASK_ALPHA_TOKEN: alphaKey.token,
     EF_TASK_BETA_TOKEN: betaKey.token,
     EF_TASK_NOREAD_TOKEN: noReadKey.token,
+    EF_TASK_PROBE_TOKEN: probeKey.token,
   });
   console.log("Created three synthetic, run-scoped Acceptance tenants and API keys (tokens withheld).");
 }
@@ -130,7 +141,7 @@ function taskFromApi(result, label) {
   return result.body;
 }
 
-async function restPost(token, key, url = FETCH_URL) {
+async function restPost(token, key, url) {
   const response = await fetch(PLATFORM_URL + "/api/v1/tasks", {
     method: "POST",
     headers: {
@@ -168,6 +179,32 @@ async function waitForRestTask(token, taskId) {
   throw new Error("Durable Task did not reach a terminal state within the Acceptance deadline.");
 }
 
+async function findWorkingFetchTarget(token) {
+  const failures = [];
+  for (const [index, candidate] of FETCH_CANDIDATES.entries()) {
+    const key = "fetch-probe-" + index + "-" + RUN_ID.slice(-24);
+    try {
+      const submission = await restPost(token, key, candidate.url);
+      const task = taskFromApi(submission, "Fetch probe " + candidate.url);
+      const status = await waitForRestTask(token, task.id);
+      const proof = assertSuccessfulFetchTask({
+        transport: "REST",
+        httpStatus: status.response.status,
+        task: status.body,
+        expectedContent: candidate.expectedContent,
+        expectedHost: candidate.expectedHost,
+      });
+      return { ...candidate, proof };
+    } catch (error) {
+      failures.push({
+        url: candidate.url,
+        diagnostic: String(error?.message || "Fetch probe failed").slice(0, 1400),
+      });
+    }
+  }
+  throw new Error("No deterministic public Fetch endpoint passed real Worker Acceptance: " + JSON.stringify(failures));
+}
+
 async function mcpCall(token, id, name, args = {}) {
   const response = await fetch(MCP_URL, {
     method: "POST",
@@ -192,16 +229,21 @@ async function smoke() {
   const alpha = process.env.EF_TASK_ALPHA_TOKEN;
   const beta = process.env.EF_TASK_BETA_TOKEN;
   const noRead = process.env.EF_TASK_NOREAD_TOKEN;
-  assert.ok(alpha && beta && noRead, "Acceptance API-key fixtures are missing.");
+  const probe = process.env.EF_TASK_PROBE_TOKEN;
+  assert.ok(alpha && beta && noRead && probe, "Acceptance API-key fixtures are missing.");
 
   const healthResponse = await fetch(PLATFORM_URL + "/api/v1/health", { signal: AbortSignal.timeout(15_000) });
   assert.equal(healthResponse.status, 200, "Acceptance Platform health must be ready.");
 
+  // Find one genuinely reachable public source before testing cross-transport replay.
+  // Probe attempts use a separate synthetic tenant and separate quota policy.
+  const fetchTarget = await findWorkingFetchTarget(probe);
+
   // Two callers submit the same key concurrently. One task row and one quota unit must win.
   const concurrentKey = "rest-concurrent-" + RUN_ID.slice(-24);
   const concurrent = await Promise.all([
-    restPost(alpha, concurrentKey),
-    restPost(alpha, concurrentKey),
+    restPost(alpha, concurrentKey, fetchTarget.url),
+    restPost(alpha, concurrentKey, fetchTarget.url),
   ]);
   for (const [index, result] of concurrent.entries()) {
     assert.ok([200, 202, 502].includes(result.response.status), "Concurrent REST submission " + index + " returned HTTP " + result.response.status + ".");
@@ -212,7 +254,7 @@ async function smoke() {
   assert.equal(Number(firstTask.quota?.used), 1, "The first Task must reserve exactly one quota unit.");
   assert.equal(Number(secondTask.quota?.used), 1, "The replay must not reserve a second quota unit.");
 
-  const replay = await restPost(alpha, concurrentKey);
+  const replay = await restPost(alpha, concurrentKey, fetchTarget.url);
   assert.ok([200, 202, 502].includes(replay.response.status), "REST replay returned unexpected HTTP " + replay.response.status + ".");
   const replayTask = taskFromApi(replay, "REST idempotent replay");
   assert.equal(replayTask.id, firstTask.id);
@@ -228,8 +270,8 @@ async function smoke() {
     transport: "REST",
     httpStatus: status.response.status,
     task: status.body,
-    expectedContent: EXPECTED_FETCH_CONTENT,
-    expectedHost: EXPECTED_FETCH_HOST,
+    expectedContent: fetchTarget.expectedContent,
+    expectedHost: fetchTarget.expectedHost,
   });
   assert.equal("goal" in status.body, false, "Display-only goal must not be retained in D1.");
   assert.ok(Array.isArray(status.body.events) && status.body.events.some((event) => event.type === "task.accepted"));
@@ -251,7 +293,7 @@ async function smoke() {
 
   // MCP reuses the REST-created Task, then creates a second Task in the same D1 database.
   const mcpReplay = await mcpCall(alpha, 1, "web_fetch", {
-    url: FETCH_URL,
+    url: fetchTarget.url,
     idempotencyKey: concurrentKey,
   });
   assert.equal(mcpReplay.response.status, 200);
@@ -261,14 +303,14 @@ async function smoke() {
     httpStatus: mcpReplay.response.status,
     task: mcpReplayTask,
     toolIsError: mcpReplay.body.result?.isError || false,
-    expectedContent: EXPECTED_FETCH_CONTENT,
-    expectedHost: EXPECTED_FETCH_HOST,
+    expectedContent: fetchTarget.expectedContent,
+    expectedHost: fetchTarget.expectedHost,
   });
   assert.equal(mcpReplayTask?.id, firstTask.id, "MCP must replay the REST-created Task.");
 
   const secondMcpKey = "mcp-second-" + RUN_ID.slice(-24);
   const mcpCreated = await mcpCall(alpha, 2, "web_fetch", {
-    url: FETCH_URL,
+    url: fetchTarget.url,
     idempotencyKey: secondMcpKey,
   });
   assert.equal(mcpCreated.response.status, 200);
@@ -278,8 +320,8 @@ async function smoke() {
     httpStatus: mcpCreated.response.status,
     task: mcpSecondTask,
     toolIsError: mcpCreated.body.result?.isError || false,
-    expectedContent: EXPECTED_FETCH_CONTENT,
-    expectedHost: EXPECTED_FETCH_HOST,
+    expectedContent: fetchTarget.expectedContent,
+    expectedHost: fetchTarget.expectedHost,
   });
   assert.ok(typeof mcpSecondTask?.id === "string", "MCP must create a second durable Task.");
   assert.equal(Number(mcpSecondTask.quota?.used), 2, "A distinct Task must reserve exactly one additional quota unit.");
@@ -304,20 +346,21 @@ async function smoke() {
     httpStatus: mcpStatus.response.status,
     task: mcpStatus.body.result?.structuredContent,
     toolIsError: mcpStatus.body.result?.isError || false,
-    expectedContent: EXPECTED_FETCH_CONTENT,
-    expectedHost: EXPECTED_FETCH_HOST,
+    expectedContent: fetchTarget.expectedContent,
+    expectedHost: fetchTarget.expectedHost,
   });
 
   // At the exact quota ceiling, a new key is rejected but a valid replay remains readable.
-  const exhausted = await restPost(alpha, "rest-quota-limit-" + RUN_ID.slice(-24));
+  const exhausted = await restPost(alpha, "rest-quota-limit-" + RUN_ID.slice(-24), fetchTarget.url);
   assert.equal(exhausted.response.status, 429, "A new logical Task beyond the quota ceiling must be rejected.");
   assert.equal(exhausted.body.error?.code, "PLAN_QUOTA_EXCEEDED");
 
-  const replayAtLimit = await restPost(alpha, concurrentKey);
+  const replayAtLimit = await restPost(alpha, concurrentKey, fetchTarget.url);
   assert.ok([200, 202, 502].includes(replayAtLimit.response.status), "An idempotency replay at the quota ceiling must remain available.");
   assert.equal(taskFromApi(replayAtLimit, "quota-ceiling replay").id, firstTask.id);
 
   console.log("Acceptance passed: real REST/MCP Fetch with retained content and verified provenance, concurrent idempotency, one-time quota reservation, 409 request identity, 24-hour expiry metadata, tenant isolation, tasks:read, REST/MCP parity and quota exhaustion.");
+  console.log("Selected deterministic public source: " + JSON.stringify({ url: fetchTarget.url, proof: fetchTarget.proof }));
   console.log("Verified Fetch proof: " + JSON.stringify({ rest: restFetchProof, mcpReplay: mcpReplayProof, mcpCreated: mcpSecondProof }));
 }
 
@@ -329,7 +372,7 @@ async function cleanup() {
     "DELETE FROM tenant_request_usage WHERE tenant_id IN (" + inList + ");",
     "DELETE FROM api_keys WHERE tenant_id IN (" + inList + ");",
     "DELETE FROM tenants WHERE tenant_id IN (" + inList + ");",
-    "DELETE FROM plan_policies WHERE plan_code = " + sql(PLAN_CODE) + ";",
+    "DELETE FROM plan_policies WHERE plan_code IN (" + [sql(PLAN_CODE), sql(PROBE_PLAN_CODE)].join(", ") + ");",
   ];
   execD1(statements.join("\n"));
   console.log("Removed run-scoped Acceptance Tasks, usage, API keys, tenants and plan policy.");
