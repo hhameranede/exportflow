@@ -72,6 +72,44 @@ async function hasQuotaSchema(env) {
   }
 }
 
+async function hasTaskExecutionSchema(env) {
+  const db = env?.EXPORTFLOW_AUTH_DB;
+  if (typeof db?.prepare !== "function") return false;
+
+  const requiredTriggers = [
+    "guard_task_quota_capacity_before_insert",
+    "reserve_quota_for_new_task",
+    "guard_task_state_transitions",
+    "record_task_state_transitions",
+    "guard_task_identity_immutable",
+    "guard_task_events_immutable",
+  ];
+
+  try {
+    await db.prepare(
+      "SELECT task_id, tenant_id, idempotency_key_hash, request_hash, operation, state, " +
+      "quota_period, quota_window_id, plan_code, policy_version, quota_limit, quota_used, " +
+      "quota_remaining, quota_reset_at, created_at, updated_at, started_at, completed_at, " +
+      "lease_expires_at, expires_at, attempt_count, revision, response_json, result_available, " +
+      "error_code, usage_json, execution_json FROM tasks LIMIT 0",
+    ).first();
+    await db.prepare(
+      "SELECT event_id, task_id, tenant_id, revision, event_type, occurred_at, details_json " +
+      "FROM task_events LIMIT 0",
+    ).first();
+    const triggerRows = await db.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name IN (" +
+      "'guard_task_quota_capacity_before_insert', 'reserve_quota_for_new_task', " +
+      "'guard_task_state_transitions', 'record_task_state_transitions', " +
+      "'guard_task_identity_immutable', 'guard_task_events_immutable')",
+    ).all();
+    const available = new Set((triggerRows?.results || []).map((row) => row.name));
+    return requiredTriggers.every((name) => available.has(name));
+  } catch {
+    return false;
+  }
+}
+
 function taskHttpStatus(task) {
   if (task.state === "unsupported") return 501;
   if ((task.state === "failed" || task.state === "cancelled") && task.result?.data?.errorCode) {
@@ -311,6 +349,7 @@ export function createWorker(options = {}) {
         if (url.pathname === "/api/v1/platform") {
           const authConfigured = isAuthConfigured(env);
           let authReady = false;
+          let taskStoreReady = false;
           let platformScopes = [];
           if (request.headers.has("authorization")) {
             const auth = await tenantTaskGateway.authenticate(request, env, {
@@ -328,6 +367,7 @@ export function createWorker(options = {}) {
             }
             platformScopes = auth.identity.scopes;
             authReady = await hasQuotaSchema(env);
+            taskStoreReady = authReady && await hasTaskExecutionSchema(env);
           }
           return json({
             name: "ExportFlow",
@@ -341,13 +381,16 @@ export function createWorker(options = {}) {
               configured: authConfigured,
               ready: authReady,
             },
+            taskStore: {
+              ready: taskStoreReady,
+            },
             endpoints: {
               health: "/api/v1/health",
               platform: "/api/v1/platform",
               routerPreview: "/api/v1/router-preview",
               tasks: "/api/v1/tasks",
             },
-            liveCapabilities: authReady ? [
+            liveCapabilities: taskStoreReady ? [
               ...getAdapterCatalog().filter((adapter) => {
                 const required = {
                   "http.fetch.v1": "tasks:fetch", "web.map.v1": "tasks:map",
