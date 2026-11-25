@@ -2,7 +2,7 @@
 
 Status: Ready for independent review; PR #134 is open, unmerged and mergeable.
 Branch: `feat/durable-task-lifecycle-v1-20261124`.
-Verified head: `189fc6a32d1bfe0c033cceb63726f59be45df3d6`.
+Functional Acceptance code head: `189fc6a32d1bfe0c033cceb63726f59be45df3d6` (the later branch commit is documentation-only).
 Base: `9fe35036c30114095e3ae782909164d2c0671967` (`main`, 25 November 2026).
 
 ## Scope
@@ -64,7 +64,7 @@ Task reads always filter by both `tenant_id` and `task_id`. A caller from anothe
 
 - Push CI #1218 passed repository tests, syntax checks, full-site Chromium QA, all nine Wrangler v4 dry-run bundles and the isolated Cloudflare D1 + Worker Acceptance flow. The Acceptance migration and Workers were limited to dedicated test resources; run-scoped synthetic data cleanup passed. Production deployment was skipped.
 - PR CI #1219 passed repository tests, syntax checks, full-site Chromium QA and all nine Wrangler v4 dry-run bundles. Acceptance and Production deployment jobs were skipped.
-- The PR is 80 commits ahead and 0 commits behind `main` at the base SHA listed above.
+- At the functional Acceptance checkpoint, the PR was 80 commits ahead and 0 commits behind `main` at the base SHA listed above.
 - No independent review has been submitted yet.
 
 ## Explicit non-goals / remaining gates
