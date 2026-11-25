@@ -67,14 +67,25 @@ jobs:
      shell: bash
      run: |
       set -euo pipefail
-      for bundle in auth-lab platform mcp-preview tenant-platform-acceptance tenant-mcp-acceptance auth-acceptance mcp-acceptance task-platform-acceptance task-mcp-acceptance; do
-       output="$GITHUB_WORKSPACE/dist/$bundle/index.js"
+      declare -A entrypoints=(
+       [auth-lab]=index.js
+       [platform]=index.js
+       [mcp-preview]=index.js
+       [tenant-platform-acceptance]=tenant-platform.js
+       [tenant-mcp-acceptance]=tenant-mcp.js
+       [auth-acceptance]=index.js
+       [mcp-acceptance]=index.js
+       [task-platform-acceptance]=platform.js
+       [task-mcp-acceptance]=mcp.js
+      )
+      for bundle in "\${!entrypoints[@]}"; do
+       output="$GITHUB_WORKSPACE/dist/$bundle/\${entrypoints[$bundle]}"
        if [[ ! -s "$output" ]]; then
-        echo "::error::Expected Worker bundle is missing: $output"
+        echo "::error::Expected Worker entrypoint is missing: $output"
         find "$GITHUB_WORKSPACE/dist" -maxdepth 4 -type f -printf '%p %s bytes\n' || true
         exit 1
        fi
-       echo "$bundle: $(stat -c '%s bytes' "$output")"
+       echo "$bundle/\${entrypoints[$bundle]}: $(stat -c '%s bytes' "$output")"
       done
       find "$GITHUB_WORKSPACE/dist" -maxdepth 4 -type f -printf '%p %s bytes\n' | sort
    - name: Upload all nine Worker bundle artifacts
