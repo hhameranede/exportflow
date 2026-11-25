@@ -2224,6 +2224,7 @@ export const MARKETING_JS = `(function () {
       var timeoutMs = Math.max(100, Math.min(8000, Number(demoForm.elements.timeoutMs.value) || 5000));
       var maxBytes = Math.max(64, Math.min(1048576, Number(demoForm.elements.maxBytes.value) || 262144));
       var maxRedirects = Math.max(0, Math.min(3, Number(demoForm.elements.maxRedirects.value) || 0));
+      var forceOutcome = demoForm.dataset.forceOutcome || "";
 
       setDemoFieldError("goal", goal ? "" : tx("Provide a task goal description.", "أدخل وصفاً لهدف المهمة."));
       var urlCheck = validatePreviewUrl(url);
@@ -2261,6 +2262,29 @@ export const MARKETING_JS = `(function () {
           execution: { path: null, adapterId: null, reason: urlCheck.reason },
           errors: [{ code: urlCheck.code, message: urlCheck.reason }],
           result: { status: "failed", data: null, sources: [], warnings: [] }
+        };
+      } else if (forceOutcome === "NO_PUBLIC_HTTP_ENDPOINT") {
+        httpStatus = 501;
+        setStage("contract", "PASS", "is-pass");
+        setStage("egress", "PASS", "is-pass");
+        setStage("router", "HTTP ONLY", "is-warn");
+        setStage("engine", "NO PUBLIC ENDPOINT", "is-warn");
+        setStage("evidence", "UNSUPPORTED", "is-warn");
+        envelope = {
+          state: "unsupported",
+          execution: {
+            path: "http",
+            operation: "fetch",
+            adapterId: null,
+            reason: "No usable public HTTP/API endpoint exposes the required content. Page JavaScript is never executed."
+          },
+          errors: [{
+            code: "DYNAMIC_CONTENT_UNAVAILABLE",
+            message: "The required content is not exposed through a usable public HTTP/API endpoint."
+          }],
+          result: { status: "unsupported", data: null, sources: [], warnings: [
+            "No browser session was started and no page JavaScript was executed."
+          ] }
         };
       } else if (operation !== "fetch") {
         httpStatus = 501;
@@ -2368,6 +2392,7 @@ export const MARKETING_JS = `(function () {
       demoForm.elements.timeoutMs.value = preset.timeoutMs || 5000;
       demoForm.elements.maxBytes.value = preset.maxBytes || 262144;
       demoForm.elements.maxRedirects.value = preset.maxRedirects != null ? preset.maxRedirects : 2;
+      demoForm.dataset.forceOutcome = preset.forceOutcome || "";
       presetBtns.forEach(function (b) {
         b.setAttribute("aria-pressed", String(b.getAttribute("data-demo-preset") === presetId));
       });
