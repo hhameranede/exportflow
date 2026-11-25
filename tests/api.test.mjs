@@ -248,7 +248,7 @@ test("POST /api/v1/tasks enforces content-type, empty/invalid UTF-8/malformed JS
   assert.equal((await unknownOp.json()).error.code, "UNSUPPORTED_OPERATION");
 });
 
-test("validateTaskRequest enables bounded static operations and rejects browser requirements", () => {
+test("validateTaskRequest enables bounded operations and rejects unknown properties", () => {
   for (const [operation, payload] of [
     ["map", { url: "https://example.com", maxUrls: 10 }],
     ["crawl", { url: "https://example.com", maxPages: 3, maxDepth: 1 }],
@@ -268,7 +268,7 @@ test("validateTaskRequest enables bounded static operations and rejects browser 
   assert.equal(validateTaskRequest({ goal: "Fetch", url: "https://example.com", cacheMode: "bypass" }).cacheMode, "bypass");
   assert.throws(() => validateTaskRequest({ goal: "Fetch", url: "https://example.com", cacheMode: "force" }),
     (err) => err instanceof TaskContractError && err.code === "INVALID_CACHE_MODE");
-  assert.throws(() => validateTaskRequest({ goal: "Render", url: "https://example.com", requiresJavascript: true }),
+  assert.throws(() => validateTaskRequest({ goal: "Fetch", url: "https://example.com", extraRuntimeField: true }),
     (err) => err instanceof TaskContractError && err.code === "INVALID_TASK");
 });
 
@@ -483,12 +483,12 @@ test("POST /api/v1/tasks handles upstream 404, 500, and network failures without
   assert.equal(errTask.usage.requestsAttempted, null);
 });
 
-test("POST /api/v1/tasks refuses browser rendering and interaction flags", async () => {
+test("POST /api/v1/tasks rejects unknown runtime properties before outbound execution", async () => {
   let fetchCalls = 0;
   const worker = createWorker({ fetchImpl: async () => { fetchCalls++; return new Response("unused"); } });
   const env = makeTestEnv();
-  for (const flags of [{ requiresJavascript: true }, { requiresInteraction: true }]) {
-    const response = await worker.fetch(makeTaskRequest({ goal: "Dynamic page", url: "https://example.com/app", ...flags }), env);
+  for (const extra of [{ scriptMode: "client" }, { runtime: "unsupported" }]) {
+    const response = await worker.fetch(makeTaskRequest({ goal: "Fetch page", url: "https://example.com/app", ...extra }), env);
     assert.equal(response.status, 400);
     assert.equal((await response.json()).error.code, "INVALID_TASK");
   }
