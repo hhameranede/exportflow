@@ -251,7 +251,7 @@ async function smoke() {
 
   // MCP reuses the REST-created Task, then creates a second Task in the same D1 database.
   const mcpReplay = await mcpCall(alpha, 1, "web_fetch", {
-    url: "https://example.com/",
+    url: FETCH_URL,
     idempotencyKey: concurrentKey,
   });
   assert.equal(mcpReplay.response.status, 200);
@@ -268,7 +268,7 @@ async function smoke() {
 
   const secondMcpKey = "mcp-second-" + RUN_ID.slice(-24);
   const mcpCreated = await mcpCall(alpha, 2, "web_fetch", {
-    url: "https://example.com/",
+    url: FETCH_URL,
     idempotencyKey: secondMcpKey,
   });
   assert.equal(mcpCreated.response.status, 200);
