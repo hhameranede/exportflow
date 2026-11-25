@@ -412,6 +412,46 @@ test("POST /api/v1/tasks executes end-to-end bounded HTTP fetch and returns stru
   assert.deepEqual(task.events.map((e) => e.type), ["task.accepted", "task.started", "task.succeeded"]);
 });
 
+test("POST /api/v1/tasks decodes legacy text using the declared charset", async () => {
+  const env = makeTestEnv();
+  try {
+    const worker = createWorker({
+      fetchImpl: async () => new Response(new Uint8Array([0x63, 0x61, 0x66, 0xe9]), {
+        headers: { "content-type": "text/plain; charset=windows-1252" },
+      }),
+    });
+    const response = await worker.fetch(
+      makeTaskRequest({ goal: "Fetch legacy text", url: "https://example.com/legacy" }),
+      env,
+    );
+    assert.equal(response.status, 200);
+    const task = await response.json();
+    assert.equal(task.result.data.body, "café");
+  } finally {
+    env.__fixture.close();
+  }
+});
+
+test("POST /api/v1/tasks maps unsupported response charsets to HTTP 415", async () => {
+  const env = makeTestEnv();
+  try {
+    const worker = createWorker({
+      fetchImpl: async () => new Response("body", {
+        headers: { "content-type": "text/plain; charset=x-exportflow-unknown" },
+      }),
+    });
+    const response = await worker.fetch(
+      makeTaskRequest({ goal: "Fetch unknown charset", url: "https://example.com/encoding" }),
+      env,
+    );
+    assert.equal(response.status, 415);
+    const task = await response.json();
+    assert.equal(task.errors[0].code, "UNSUPPORTED_CHARSET");
+  } finally {
+    env.__fixture.close();
+  }
+});
+
 test("POST /api/v1/tasks supports explicit cache bypass without custom TTL overrides", async () => {
   let observedInit;
   const worker = createWorker({
