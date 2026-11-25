@@ -96,7 +96,7 @@ export function renderHomePage(requestUrl) {
         <div class="ef-notice ef-notice-warn ef-mt-4" role="note">
           <p class="ef-notice-title">Honest foundation status</p>
           <p class="ef-notice-body">
-            ExportFlow is actively progressing through Phase 1. Bounded HTTP Fetch (<code>http.fetch.v1</code>) is implemented and verified on local Node.js and Cloudflare Workerd runtimes, while multi-engine production endpoints, hosted MCP, durable queues, and live browser execution remain in development or prototype stages.
+            ExportFlow is actively progressing through Phase 1. Bounded HTTP Fetch (<code>http.fetch.v1</code>) is implemented and verified on local Node.js and Cloudflare Workerd runtimes, while multi-operation Production maturity, broader Search coverage, and asynchronous orchestration remain under staged verification.
           </p>
         </div>
       </div>
@@ -111,7 +111,7 @@ export function renderHomePage(requestUrl) {
           </div>
 
           <div class="ef-filter-bar" role="group" aria-label="Filter capabilities by maturity">
-            <button type="button" class="ef-filter-btn" data-cap-filter="all" aria-pressed="true">All (6)</button>
+            <button type="button" class="ef-filter-btn" data-cap-filter="all" aria-pressed="true">All (5)</button>
             <button type="button" class="ef-filter-btn" data-cap-filter="local-verified" aria-pressed="false">Local Verified</button>
             <button type="button" class="ef-filter-btn" data-cap-filter="prototype" aria-pressed="false">Prototype</button>
             <button type="button" class="ef-filter-btn" data-cap-filter="concept" aria-pressed="false">Concept</button>
@@ -130,7 +130,7 @@ export function renderHomePage(requestUrl) {
           <div>
             <h2 class="ef-h2">Inspect the architecture and execution flow.</h2>
             <p class="ef-notice-body ef-mt-2">
-              Walk through all seven infrastructure layers, examine the JSON task contract, or explore an interactive execution preview in your browser.
+              Walk through all seven infrastructure layers, examine the JSON task contract, or explore an interactive execution preview.
             </p>
           </div>
           <div class="ef-actions">
@@ -242,7 +242,7 @@ export function renderPlatformPage(requestUrl) {
             </p>
             <ul class="ef-list">
               <li><strong>Consistent Input:</strong> Goal, public HTTP(S) URL, explicit operation, and bounded limits.</li>
-              <li><strong>Swappable Engines:</strong> Replacing direct HTTP with extraction or future browser engines preserves the outer envelope.</li>
+              <li><strong>Swappable Engines:</strong> Deterministic parsers can extend direct HTTP retrieval while preserving the outer task envelope.</li>
             </ul>
           </article>
         </div>
@@ -250,7 +250,7 @@ export function renderPlatformPage(requestUrl) {
         <div class="ef-notice ef-notice-warn ef-mt-4" role="note">
           <p class="ef-notice-title">Deployment vs. Target Architecture</p>
           <p class="ef-notice-body">
-            The diagram above combines components verified locally in Phase 1 (contract, auth, egress guard, router, and <code>http.fetch.v1</code>) with planned platform capabilities (public multi-tenant quotas, durable task persistence, MCP surface, and live Browser/Search bindings).
+            The diagram above combines components verified locally in Phase 1 (contract, auth, egress guard, router, and <code>http.fetch.v1</code>) with planned platform capabilities (broader Search coverage and asynchronous orchestration).
           </p>
         </div>
       </div>
@@ -338,7 +338,7 @@ export function renderUseCasesPage(requestUrl) {
     requestUrl,
     title: "Use Cases — ExportFlow",
     description:
-      "Explore AI agent execution workflows for multi-source research, website intelligence, structured data collection, browser execution, and long-running tasks.",
+      "Explore AI agent execution workflows for multi-source research, website intelligence, structured data collection, and long-running tasks.",
     bodyHtml,
     ogEyebrow: "EXPORTFLOW / USE CASES",
     includeAlternates: false,
@@ -351,8 +351,6 @@ export function renderDevelopersPage(requestUrl) {
       goal: "Fetch public documentation page title and headers",
       url: "https://example.com/docs",
       operation: "fetch",
-      requiresJavascript: false,
-      requiresInteraction: false,
       limits: {
         timeoutMs: 5000,
         maxBytes: 262144,
@@ -431,39 +429,9 @@ export function renderDevelopersPage(requestUrl) {
 
   const sampleErrorJson = JSON.stringify(
     {
-      id: "91c4a01e-2240-41df-a8f4-091e2347d112",
-      goal: "Render client-side SPA dashboard",
-      requestedUrl: "https://example.com/app",
-      state: "unsupported",
-      execution: {
-        path: "browser",
-        operation: "fetch",
-        adapterId: null,
-        reason: "The task requires page rendering or user-directed interaction.",
-      },
-      usage: {
-        durationMs: 1,
-        requestsAttempted: 0,
-        responseBytes: 0,
-        cost: null,
-      },
-      events: [
-        { type: "task.accepted", at: "2026-11-19T12:01:00.000Z" },
-        { type: "task.started", at: "2026-11-19T12:01:00.001Z", executionPath: "browser" },
-        { type: "task.unsupported", at: "2026-11-19T12:01:00.002Z", reason: "browser_adapter_unavailable" },
-      ],
-      errors: [
-        {
-          code: "BROWSER_UNAVAILABLE",
-          message: "Browser Run binding is not configured.",
-        },
-      ],
-      result: {
-        status: "failed",
-        data: null,
-        sources: [],
-        warnings: ["Browser Run binding is not configured; no browser navigation was performed."],
-        generatedAt: "2026-11-19T12:01:00.002Z",
+      error: {
+        code: "URL_NOT_ALLOWED",
+        message: "Destination URL is not allowed by the public-egress policy."
       },
     },
     null,
@@ -527,12 +495,12 @@ curl -sS -X POST http://127.0.0.1:3000/api/v1/tasks \\
           <article class="ef-doc-block" id="doc-intro">
             <h2>1. Introduction &amp; Current Scope</h2>
             <p>
-              ExportFlow provides deterministic execution infrastructure for AI agents. Instead of handing models raw sockets or unmanaged browser instances, callers submit a bounded task payload and receive a normalized result object containing status, data, source evidence, lifecycle events, and measured usage.
+              ExportFlow provides deterministic execution infrastructure for AI agents. Instead of handing models unrestricted network access, callers submit a bounded task payload and receive a normalized result object containing status, data, source evidence, lifecycle events, and measured usage.
             </p>
             <div class="ef-notice ef-notice-warn">
               <p class="ef-notice-title">Authenticated execution — no public anonymous task access</p>
               <p class="ef-notice-body">
-                The current Platform Worker exposes <code>POST /api/v1/tasks</code> for the six supported operations. It requires a tenant-scoped <code>ef_live_*</code> API key, operation-specific scopes, tenant burst protection, and a persisted plan quota. The MCP Worker exposes the corresponding six tools with tenant API-key or OAuth authorization. Browser rendering and interaction are not part of the customer execution surface.
+                The current Platform Worker exposes <code>POST /api/v1/tasks</code> for the six supported operations. It requires a tenant-scoped <code>ef_live_*</code> API key, operation-specific scopes, tenant burst protection, and a persisted plan quota. The MCP Worker exposes the corresponding six tools with tenant API-key or OAuth authorization. Customer execution is request-first over public HTTP(S) and does not execute page JavaScript.
               </p>
             </div>
           </article>
@@ -545,9 +513,9 @@ curl -sS -X POST http://127.0.0.1:3000/api/v1/tasks \\
                   <tr><th>Term</th><th>Definition in ExportFlow</th></tr>
                 </thead>
                 <tbody>
-                  <tr><td class="ef-mono-cell">Task</td><td>A bounded request with an operation, goal, validated input, execution limits, normalized result, provenance, and usage metadata. The current release returns lifecycle events inline; D1-backed persistence and status retrieval are staged in Draft PR #134.</td></tr>
+                  <tr><td class="ef-mono-cell">Task</td><td>A bounded request with an operation, goal, validated input, execution limits, normalized result, provenance, and usage metadata. The current release returns lifecycle events inline; D1-backed persistence, idempotency, and status retrieval are merged and Production-verified.</td></tr>
                   <tr><td class="ef-mono-cell">Operation</td><td>One of six supported operations: <code>fetch</code>, <code>map</code>, <code>crawl</code>, <code>extract</code>, <code>search</code>, or <code>research</code>.</td></tr>
-                  <tr><td class="ef-mono-cell">Execution Path</td><td>Request-first static HTTP retrieval. Browser rendering and interaction are deliberately unavailable to customer task execution.</td></tr>
+                  <tr><td class="ef-mono-cell">Execution Path</td><td>Request-first HTTP retrieval. The runtime does not execute page JavaScript or launch remote browser sessions.</td></tr>
                   <tr><td class="ef-mono-cell">Adapter</td><td>Versioned contract wrapper such as <code>http.fetch.v1</code> declaring capabilities, bounds, and egress rules.</td></tr>
                   <tr><td class="ef-mono-cell">Evidence</td><td>Per-source provenance metadata recording resolved URL, ISO timestamp, HTTP status, content type, bytes, and redirect count.</td></tr>
                 </tbody>
@@ -564,7 +532,7 @@ curl -sS -X POST http://127.0.0.1:3000/api/v1/tasks \\
               <li>Content-Type must be <code>application/json</code> (otherwise <code>415</code>) and body size must not exceed <code>32,768</code> bytes (<code>413</code>).</li>
               <li>Every request requires a non-empty <code>goal</code> (up to 2,000 characters) and a supported <code>operation</code>. URL operations use a public HTTP/HTTPS <code>url</code>; Search and Research use a bounded <code>query</code> and one selected source (<code>wikipedia</code>, <code>openalex</code>, or <code>crossref</code>).</li>
               <li>Operation limits are enforced server-side: Map accepts up to 15 URLs; Crawl accepts up to 3 pages and depth 1; Search and Research accept up to 10 results; Research accepts up to 3 candidates.</li>
-              <li><code>cacheMode</code> is <code>default</code> or <code>bypass</code>. Fetch-specific limits support bounded timeout, response bytes, and redirect count. Browser/JavaScript execution flags are not supported.</li>
+              <li><code>cacheMode</code> is <code>default</code> or <code>bypass</code>. Fetch-specific limits support bounded timeout, response bytes, and redirect count. No JavaScript execution or interactive controls are accepted.</li>
             </ul>
             ${renderCodeBlock({
               id: "doc-req-json",
@@ -576,7 +544,7 @@ curl -sS -X POST http://127.0.0.1:3000/api/v1/tasks \\
           <article class="ef-doc-block" id="doc-flow">
             <h2>4. Execution Flow</h2>
             <p>
-              The current release executes bounded work request-first and returns an evidence envelope with lifecycle and usage metadata. Browser execution is not selected for customer tasks. Draft PR #134 adds a shared D1 Task Store for REST and MCP, including accepted/running/terminal states, append-only lifecycle events, status reads, and idempotent replay once its migration and rollout gates are completed.
+              The current release executes bounded work request-first and returns an evidence envelope with lifecycle and usage metadata. The shared D1 Task Store, idempotency, and task-status reads are merged and have passed Production REST/MCP smoke acceptance.
             </p>
             <ul class="ef-list">
               <li><code>task.accepted</code>: A tenant-scoped Task record is created and the logical quota is reserved once.</li>
@@ -591,7 +559,7 @@ curl -sS -X POST http://127.0.0.1:3000/api/v1/tasks \\
               ExportFlow isolates provider details behind adapter contracts registered in <code>src/core/adapters.js</code>. You can inspect the active catalog metadata locally via <code>GET /api/v1/platform</code> (which omits executable handlers and reports <code>liveCapabilities</code> truthfully based on runtime configuration).
             </p>
             <p>
-              The current catalog includes bounded static-web adapters for Fetch, Map, Crawl, Extract, Search and Research. Map/Crawl follow the declared page and depth limits; Search uses selected public scholarly/knowledge sources rather than claiming whole-web coverage. The execution surface does not render JavaScript or interact with websites through a browser.
+              The current catalog includes bounded static-web adapters for Fetch, Map, Crawl, Extract, Search and Research. Map/Crawl follow the declared page and depth limits; Search uses selected public scholarly/knowledge sources rather than claiming whole-web coverage. Execution uses bounded HTTP requests only; it does not execute page JavaScript or perform interactive actions.
             </p>
           </article>
 
@@ -601,7 +569,7 @@ curl -sS -X POST http://127.0.0.1:3000/api/v1/tasks \\
               REST task execution uses a tenant API key in the <code>Authorization: Bearer ef_live_…</code> header. The tenant identity, plan, operation scopes, and quota policy are resolved from D1; the caller cannot supply an authoritative tenant or plan. The six operations use separate scopes (<code>tasks:fetch</code>, <code>tasks:map</code>, <code>tasks:crawl</code>, <code>tasks:extract</code>, <code>tasks:search</code>, <code>tasks:research</code>). The MCP tools support the same tenant API-key boundary and OAuth consent.
             </p>
             <p>
-              A pre-auth IP guard and the shared Durable Object tenant burst limiter protect both REST and MCP. The current quota is persisted per tenant and UTC window. Draft PR #134 moves the logical reservation into the D1 Task acceptance trigger so an idempotent retry cannot charge a second request.
+              A pre-auth IP guard and the shared Durable Object tenant burst limiter protect both REST and MCP. The current quota is persisted per tenant and UTC window. The D1 Task acceptance trigger reserves the logical quota once so an idempotent retry cannot charge a second request.
             </p>
             <p>
               Application-layer egress validation checks the initial target and every manual redirect hop against IP literals, local/reserved domain suffixes, non-default ports, embedded credentials, HTTPS downgrades, and ExportFlow-owned origins.
@@ -614,7 +582,7 @@ curl -sS -X POST http://127.0.0.1:3000/api/v1/tasks \\
               Task responses normalize status, result data, source provenance, warnings/errors, timestamps, and measured usage. <code>usage.cost</code> remains <code>null</code> until a billing meter is introduced.
             </p>
             <p>
-              Draft PR #134 adds optional idempotency: send <code>Idempotency-Key</code> with a REST submission (or <code>idempotencyKey</code> to an MCP tool) to replay the same Task without another logical quota charge. Reusing a key for a different effective request returns <code>409 IDEMPOTENCY_KEY_REUSED</code>. It also adds REST <code>GET /api/v1/tasks/{taskId}</code> and MCP <code>web_task_status</code>, both requiring <code>tasks:read</code>. Retained results are bounded and expire after 24 hours. These additions are staged in the Draft PR and are not available in the current Production release until the code and D1 migration are approved and rolled out.
+              The Production-verified Task lifecycle supports idempotency: send <code>Idempotency-Key</code> with a REST submission (or <code>idempotencyKey</code> to an MCP tool) to replay the same Task without another logical quota charge. Reusing a key for a different effective request returns <code>409 IDEMPOTENCY_KEY_REUSED</code>. It also adds REST <code>GET /api/v1/tasks/{taskId}</code> and MCP <code>web_task_status</code>, both requiring <code>tasks:read</code>. Retained results are bounded and expire after 24 hours. The Production release has applied the required D1 migration and passed real REST/MCP smoke checks for the lifecycle.
             </p>
             ${renderCodeBlock({
               id: "doc-res-json",
@@ -623,7 +591,7 @@ curl -sS -X POST http://127.0.0.1:3000/api/v1/tasks \\
             })}
             ${renderCodeBlock({
               id: "doc-err-json",
-              label: "Unsupported browser task response example (HTTP 501)",
+              label: "Private destination rejection example (HTTP 400)", 
               code: sampleErrorJson,
             })}
           </article>
@@ -762,17 +730,6 @@ export function renderDemoPage(requestUrl) {
                 <label class="ef-label" for="demo-max-redirects">limits.maxRedirects</label>
                 <input id="demo-max-redirects" class="ef-input" type="number" min="0" max="3" value="3">
               </div>
-            </div>
-
-            <div class="ef-check-row">
-              <label class="ef-check-label">
-                <input id="demo-requires-js" type="checkbox">
-                <span>requiresJavascript</span>
-              </label>
-              <label class="ef-check-label">
-                <input id="demo-requires-interaction" type="checkbox">
-                <span>requiresInteraction</span>
-              </label>
             </div>
 
             <div class="ef-actions">
