@@ -198,9 +198,6 @@ export async function executeWebTask(input, options = {}) {
       throw Object.assign(new TypeError("Unsupported task operation."), { code: "UNSUPPORTED_OPERATION" });
     }
     const queryOperation = operation === "search" || operation === "research";
-    if (input.requiresJavascript === true || input.requiresInteraction === true) {
-      throw Object.assign(new TypeError("Dynamic rendering and browser interaction are not supported."), { code: "INVALID_TASK" });
-    }
     const url = queryOperation ? null : validatePublicHttpUrl(input.url);
     requestedUrl = url ? url.href : null;
     if (queryOperation && (typeof input.query !== "string" || !input.query.trim() || input.query.length > 1024)) {
