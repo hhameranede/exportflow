@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { resolve4 } from "node:dns/promises";
 import { assertSuccessfulFetchTask } from "./fetch-assertions.mjs";
 
 const FETCH_CANDIDATES = Object.freeze([
@@ -14,8 +15,8 @@ const FETCH_CANDIDATES = Object.freeze([
 
 
 const DNS_REBINDING_RESOLVERS = Object.freeze([
-  { name: "Cloudflare DNS", endpoint: "https://cloudflare-dns.com/dns-query" },
-  { name: "Google DNS", endpoint: "https://dns.google/resolve" },
+  { name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve" },
+  { name: "GitHub runner system DNS", system: true },
 ]);
 const DNS_REBINDING_PRIVATE_TARGETS = Object.freeze([
   { name: "loopback", ip: "127.0.0.1" },
@@ -213,6 +214,14 @@ function ipv4ToHex(value) {
 }
 
 async function queryDnsA(resolver, hostname) {
+  if (resolver.system === true) {
+    const answers = await resolve4(hostname, { ttl: true });
+    return answers.map((answer) => ({
+      ip: answer.address,
+      ttl: Number(answer.ttl),
+    }));
+  }
+
   const url = new URL(resolver.endpoint);
   url.searchParams.set("name", hostname);
   url.searchParams.set("type", "A");
@@ -223,12 +232,19 @@ async function queryDnsA(resolver, hostname) {
   });
   if (!response.ok) throw new Error(resolver.name + " returned HTTP " + response.status + " for " + hostname + ".");
   const payload = await response.json();
-  if (payload.Status !== 0 || !Array.isArray(payload.Answer)) {
-    throw new Error(resolver.name + " returned no successful A answer for " + hostname + ".");
+  if (Number(payload.Status) !== 0 || !Array.isArray(payload.Answer)) {
+    throw new Error(
+      resolver.name + " returned DNS status " + String(payload.Status) +
+      " with no A-answer array for " + hostname + ".",
+    );
   }
-  return payload.Answer
+  const answers = payload.Answer
     .filter((answer) => answer.type === 1 && typeof answer.data === "string")
     .map((answer) => ({ ip: answer.data, ttl: Number(answer.TTL) }));
+  if (answers.length === 0) {
+    throw new Error(resolver.name + " returned no A records for " + hostname + ".");
+  }
+  return answers;
 }
 
 async function queryDnsBatches(resolver, hostname, count) {
@@ -245,18 +261,18 @@ async function queryDnsBatches(resolver, hostname, count) {
 }
 
 async function discoverPublicRebindingIp() {
-  const resolved = await Promise.all(DNS_REBINDING_RESOLVERS.map(async (resolver) => {
-    const answers = await queryDnsBatches(resolver, "neverssl.com", 4);
-    return new Set(answers.map((answer) => answer.ip).filter(isPublicIpv4));
-  }));
-  const common = [...resolved[0]].filter((ip) => resolved[1].has(ip));
-  assert.ok(common.length > 0, "Cloudflare and Google DNS must agree on a public neverssl.com A record.");
-  return common[0];
+  // Use Google DoH for the public control address. Cloudflare's public DoH
+  // endpoint may suppress private rbndr answers; it is not required to prove
+  // that the authoritative rbndr service is returning both configured A records.
+  const answers = await queryDnsBatches(DNS_REBINDING_RESOLVERS[0], "neverssl.com", 4);
+  const publicIp = answers.map((answer) => answer.ip).find(isPublicIpv4);
+  assert.ok(publicIp, "Google Public DNS must return a public neverssl.com A record.");
+  return publicIp;
 }
 
 async function assertDnsRebindingAlternates(hostname, publicIp, privateIp) {
   const expected = new Set([publicIp, privateIp]);
-  for (const resolver of DNS_REBINDING_RESOLVERS) {
+  const observations = await Promise.all(DNS_REBINDING_RESOLVERS.map(async (resolver) => {
     const records = await queryDnsBatches(resolver, hostname, 12);
     const observed = new Set(records.map((record) => record.ip));
     assert.deepEqual(
@@ -268,7 +284,9 @@ async function assertDnsRebindingAlternates(hostname, publicIp, privateIp) {
       records.every((record) => Number.isFinite(record.ttl) && record.ttl <= 5),
       resolver.name + " must observe short-lived DNS answers for " + hostname + ".",
     );
-  }
+    return { resolver: resolver.name, queries: records.length, answers: [...observed].sort() };
+  }));
+  console.log("Verified DNS rebinding preflight: " + JSON.stringify({ hostname, observations }));
 }
 
 async function runDnsRebindingAcceptance(token) {
