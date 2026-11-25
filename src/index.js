@@ -80,6 +80,97 @@ function taskHttpStatus(task) {
   return 200;
 }
 
+const ACCEPTANCE_NETWORK_PROBE_TARGETS = Object.freeze([
+  { host: "example.com", url: "https://example.com/", marker: "Example Domain" },
+  { host: "iana.org", url: "https://www.iana.org/domains/reserved", marker: "IANA" },
+  { host: "cloudflare.com", url: "https://www.cloudflare.com/robots.txt", marker: "User-agent: *" },
+]);
+
+function safeDiagnosticField(value, maxLength = 240) {
+  if (typeof value !== "string") return null;
+  return value.replace(/[\r\n\t]/g, " ").slice(0, maxLength);
+}
+
+async function readProbeSample(response) {
+  const reader = response.body?.getReader();
+  if (!reader) return { bytesRead: 0, sample: "" };
+  try {
+    const { value } = await reader.read();
+    const bytes = value ? value.subarray(0, 4096) : new Uint8Array();
+    return { bytesRead: bytes.byteLength, sample: new TextDecoder().decode(bytes) };
+  } finally {
+    try {
+      const cancellation = reader.cancel();
+      if (cancellation && typeof cancellation.catch === "function") void cancellation.catch(() => {});
+    } catch {
+      // Diagnostic cleanup is best-effort.
+    }
+  }
+}
+
+async function runAcceptanceNetworkProbe(fetchImpl = globalThis.fetch) {
+  const results = [];
+  if (typeof fetchImpl !== "function") {
+    return { status: "unavailable", probes: [], reason: "fetch is not available in this Worker runtime." };
+  }
+
+  for (const target of ACCEPTANCE_NETWORK_PROBE_TARGETS) {
+    for (const mode of ["adapter-compatible", "minimal"]) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8_000);
+      const init = {
+        method: "GET",
+        redirect: "manual",
+        signal: controller.signal,
+        ...(mode === "adapter-compatible" ? {
+          cache: "default",
+          headers: {
+            accept: "text/html,application/xhtml+xml,application/json,application/xml,text/plain;q=0.9",
+          },
+        } : {}),
+      };
+      try {
+        const response = await fetchImpl(target.url, init);
+        const sample = await readProbeSample(response);
+        results.push({
+          host: target.host,
+          mode,
+          ok: response.status === 200 && sample.sample.includes(target.marker),
+          status: response.status,
+          contentType: safeDiagnosticField(response.headers.get("content-type"), 120),
+          server: safeDiagnosticField(response.headers.get("server"), 80),
+          cfRay: safeDiagnosticField(response.headers.get("cf-ray"), 100),
+          cfCacheStatus: safeDiagnosticField(response.headers.get("cf-cache-status"), 40),
+          bytesRead: sample.bytesRead,
+          expectedMarkerFound: sample.sample.includes(target.marker),
+        });
+      } catch (error) {
+        const cause = error?.cause;
+        results.push({
+          host: target.host,
+          mode,
+          ok: false,
+          error: {
+            name: safeDiagnosticField(error?.name, 80) || "Error",
+            message: safeDiagnosticField(error?.message, 300) || "Worker fetch failed.",
+            code: safeDiagnosticField(typeof error?.code === "string" ? error.code : null, 80),
+            causeName: safeDiagnosticField(cause?.name, 80),
+            causeMessage: safeDiagnosticField(cause?.message, 300),
+            causeCode: safeDiagnosticField(typeof cause?.code === "string" ? cause.code : null, 80),
+          },
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+  }
+
+  return {
+    status: results.some((item) => item.ok) ? "reachable" : "unreachable",
+    probes: results,
+  };
+}
+
 export function createWorker(options = {}) {
   const tenantTaskGateway = options.tenantTaskGateway || createTenantTaskGateway({
     preAuthRateLimiter: options.preAuthRateLimiter,
@@ -107,6 +198,22 @@ export function createWorker(options = {}) {
 
         const workspaceResponse = await handleWorkspaceRequest(request, env, options);
         if (workspaceResponse) return workspaceResponse;
+
+        if (options.acceptanceNetworkProbe === true &&
+            env?.EXPORTFLOW_ACCEPTANCE_RUN === "durable-task-20261124" &&
+            url.pathname === "/__acceptance/network-probe") {
+          if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405, { allow: "GET" });
+          const auth = await tenantTaskGateway.authenticate(request, env, { requiredScope: "tasks:fetch" });
+          if (!auth.ok) {
+            return json({ error: { code: auth.code, message: auth.message } }, auth.httpStatus);
+          }
+          const diagnostics = await runAcceptanceNetworkProbe(options.acceptanceFetch);
+          return json({
+            status: diagnostics.status,
+            probes: diagnostics.probes,
+            ...(diagnostics.reason ? { reason: diagnostics.reason } : {}),
+          }, 200, { "cache-control": "no-store" });
+        }
 
         const taskReadMatch = /^\/api\/v1\/tasks\/([A-Za-z0-9_-]{8,64})$/.exec(url.pathname);
         if (taskReadMatch) {

@@ -59,6 +59,66 @@ function makeTaskRequest(body, {
   });
 }
 
+
+test("Acceptance network diagnostics are disabled by default and require the isolated acceptance marker", async () => {
+  const request = new Request("https://api.exportflow.local/__acceptance/network-probe", {
+    headers: { authorization: `Bearer ${TEST_TOKEN}` },
+  });
+  const env = makeTestEnv();
+  env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
+  try {
+    const disabled = await createWorker().fetch(request, env);
+    assert.equal(disabled.status, 404);
+
+    const wrongRun = await createWorker({ acceptanceNetworkProbe: true }).fetch(request, {
+      ...env,
+      EXPORTFLOW_ACCEPTANCE_RUN: "another-run",
+    });
+    assert.equal(wrongRun.status, 404);
+  } finally {
+    env.__fixture.close();
+  }
+});
+
+test("Acceptance network diagnostics require tasks:fetch and use only fixed bounded public targets", async () => {
+  const calls = [];
+  const worker = createWorker({
+    acceptanceNetworkProbe: true,
+    acceptanceFetch: async (url, init) => {
+      calls.push({ url, init });
+      const body = url.includes("example.com")
+        ? "Example Domain"
+        : url.includes("iana.org")
+          ? "IANA-managed Reserved Domains"
+          : "User-agent: *";
+      return new Response(body, { headers: { "content-type": "text/plain", server: "acceptance-test" } });
+    },
+  });
+  const env = makeTestEnv();
+  env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
+  try {
+    const request = new Request("https://api.exportflow.local/__acceptance/network-probe", {
+      headers: { authorization: `Bearer ${TEST_TOKEN}` },
+    });
+    const response = await worker.fetch(request, env);
+    assert.equal(response.status, 200);
+    const diagnostic = await response.json();
+    assert.equal(diagnostic.status, "reachable");
+    assert.equal(diagnostic.probes.length, 6);
+    assert.equal(calls.length, 6);
+    assert.ok(diagnostic.probes.every((probe) => probe.ok));
+    assert.ok(calls.every(({ init }) => init.method === "GET" && init.redirect === "manual"));
+    assert.ok(calls.some(({ init }) => init.cache === "default" && init.headers?.accept));
+    assert.ok(calls.some(({ init }) => init.cache === undefined && init.headers === undefined));
+    assert.ok(diagnostic.probes.every((probe) => !("sample" in probe) && !("body" in probe)));
+
+    const unauthenticated = await worker.fetch(new Request("https://api.exportflow.local/__acceptance/network-probe"), env);
+    assert.equal(unauthenticated.status, 401);
+  } finally {
+    env.__fixture.close();
+  }
+});
+
 test("tenant API authentication fails closed when the dedicated D1 binding is missing or invalid", async () => {
   const worker = createWorker();
   const request = makeTaskRequest({ goal: "Fetch page", url: "https://example.com" });

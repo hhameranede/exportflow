@@ -179,6 +179,17 @@ async function waitForRestTask(token, taskId) {
   throw new Error("Durable Task did not reach a terminal state within the Acceptance deadline.");
 }
 
+async function runNetworkDiagnostics(token) {
+  const response = await fetch(PLATFORM_URL + "/__acceptance/network-probe", {
+    headers: { authorization: "Bearer " + token, accept: "application/json" },
+    signal: AbortSignal.timeout(30_000),
+  });
+  const result = await readJson(response, "Acceptance network diagnostics");
+  assert.equal(response.status, 200, "Acceptance network diagnostics endpoint must be available only on the isolated Worker.");
+  console.log("Raw Worker network diagnostics: " + JSON.stringify(result.body));
+  return result.body;
+}
+
 async function findWorkingFetchTarget(token) {
   const failures = [];
   for (const [index, candidate] of FETCH_CANDIDATES.entries()) {
@@ -234,6 +245,10 @@ async function smoke() {
 
   const healthResponse = await fetch(PLATFORM_URL + "/api/v1/health", { signal: AbortSignal.timeout(15_000) });
   assert.equal(healthResponse.status, 200, "Acceptance Platform health must be ready.");
+
+  // Capture raw native Worker fetch failures before testing the adapter/task path.
+  const networkDiagnostics = await runNetworkDiagnostics(probe);
+  assert.equal(networkDiagnostics.status, "reachable", "Raw native Worker fetch must reach at least one fixed public source before Task acceptance can proceed.");
 
   // Find one genuinely reachable public source before testing cross-transport replay.
   // Probe attempts use a separate synthetic tenant and separate quota policy.
