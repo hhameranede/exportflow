@@ -420,7 +420,7 @@ export async function fetchPublicResource(input, options = {}) {
               ? "timeout"
               : code?.startsWith("REDIRECT_") || code === "TOO_MANY_REDIRECTS" || code === "INVALID_REDIRECT"
                 ? "redirect_rejected"
-                : code === "UNSUPPORTED_CONTENT_TYPE" || code === "RESPONSE_TOO_LARGE"
+                : code === "UNSUPPORTED_CONTENT_TYPE" || code === "UNSUPPORTED_CHARSET" || code === "RESPONSE_TOO_LARGE"
                   ? "response_rejected"
                   : "failed";
           emitReceipt(outcome, code);
