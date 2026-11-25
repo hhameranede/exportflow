@@ -252,7 +252,7 @@ async function cancelProbeResponseBody(response) {
   }
 }
 
-async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = globalThis.fetch) {
+async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = globalThis.fetch, probeIntervalMs = 1_100) {
   if (typeof fetchImpl !== "function" ||
       !isPublicRoutableIpv4(publicIp) ||
       !ACCEPTANCE_DNS_REBINDING_PRIVATE_IPS.has(privateIp)) {
@@ -335,6 +335,11 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = g
     } finally {
       clearTimeout(timeout);
     }
+    // rbndr.us publishes a one-second TTL. Wait beyond it so the Worker resolver
+    // has a chance to observe the alternate address on the next request.
+    if (attempt < 11 && probeIntervalMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, probeIntervalMs));
+    }
   }
 
   const publicResponses = probes.filter((probe) => probe.outcome === "public_control_match").length;
@@ -401,7 +406,12 @@ export function createWorker(options = {}) {
           if (!isPublicRoutableIpv4(publicIp) || !ACCEPTANCE_DNS_REBINDING_PRIVATE_IPS.has(privateIp)) {
             return json({ error: { code: "INVALID_DNS_REBINDING_TARGET", message: "Only a public control IP and the fixed private test targets are accepted." } }, 400);
           }
-          const diagnostics = await runAcceptanceDnsRebindingProbe(publicIp, privateIp, options.acceptanceDnsRebindingFetch);
+          const diagnostics = await runAcceptanceDnsRebindingProbe(
+            publicIp,
+            privateIp,
+            options.acceptanceDnsRebindingFetch,
+            options.acceptanceDnsRebindingProbeIntervalMs ?? 1_100,
+          );
           return json(diagnostics, 200, { "cache-control": "no-store" });
         }
 

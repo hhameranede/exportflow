@@ -125,6 +125,7 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
   let probeCalls = 0;
   const worker = createWorker({
     acceptanceDnsRebindingProbe: true,
+    acceptanceDnsRebindingProbeIntervalMs: 0,
     acceptanceDnsRebindingFetch: async (input, init) => {
       const url = new URL(String(input));
       calls.push({ url: url.href, init });

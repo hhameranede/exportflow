@@ -233,10 +233,13 @@ async function queryDnsA(resolver, hostname) {
 
 async function queryDnsBatches(resolver, hostname, count) {
   const collected = [];
-  for (let offset = 0; offset < count; offset += 4) {
-    const batchSize = Math.min(4, count - offset);
-    const batch = await Promise.all(Array.from({ length: batchSize }, () => queryDnsA(resolver, hostname)));
-    collected.push(...batch.flat());
+  for (let offset = 0; offset < count; offset += 1) {
+    // rbndr.us uses a one-second TTL; serialized queries spaced beyond that TTL
+    // avoid observing the same recursive-resolver cache entry in one burst.
+    collected.push(...await queryDnsA(resolver, hostname));
+    if (offset + 1 < count) {
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+    }
   }
   return collected;
 }
@@ -282,7 +285,7 @@ async function runDnsRebindingAcceptance(token) {
     url.searchParams.set("private", target.ip);
     const response = await fetch(url, {
       headers: { authorization: "Bearer " + token, accept: "application/json" },
-      signal: AbortSignal.timeout(35_000),
+      signal: AbortSignal.timeout(45_000),
       cache: "no-store",
     });
     const result = await readJson(response, "Acceptance DNS rebinding probe");
