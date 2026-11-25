@@ -310,6 +310,31 @@ export const USE_CASES = Object.freeze([
     },
   },
   {
+    id: "request-first-discovery",
+    title: "Request-first Dynamic Content Discovery",
+    maturity: "Planned · HTTP-only",
+    maturityKey: "concept",
+    summary:
+      "An agent finds public data exposed in HTML, embedded JSON, metadata, and documented public API endpoints without running page scripts.",
+    problem:
+      "Dynamic websites may place useful public data in linked endpoints or embedded state while their visible interface is assembled by client-side code.",
+    agentRole:
+      "Inspects retrieved HTML and public resource references, then identifies eligible HTTP endpoints that can be requested directly.",
+    exportflowRole:
+      "Retrieves eligible public resources through bounded HTTP requests, treats JavaScript assets as untrusted data, and reports unsupported when no usable public endpoint exists.",
+    sampleJson: {
+      taskId: "ef_demo_request_discovery_06",
+      state: "planned",
+      execution: { path: "http", operation: "fetch", adapterId: "http.fetch.v1" },
+      result: {
+        status: "partial",
+        data: { discoveredPublicEndpoints: [], scriptExecution: false },
+        sources: [{ url: "https://example.org/app", evidence: [{ type: "http_response", status: 200 }] }],
+        warnings: ["Illustrative only: no browser session or page JavaScript execution is available."],
+      },
+    },
+  },
+  {
     id: "structured-data-collection",
     title: "Structured Data Collection",
     maturity: "Internal Prototype (web.extract.v1)",
