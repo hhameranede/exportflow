@@ -54,7 +54,7 @@ const LOCALE_DATA = {
     stepSpecs: [
       { index: "01", phase: "Task Contract Ingress", summary: "Agent or client submits goal, target public URL, and explicit resource ceilings under strict JSON schema validation.", module: "src/core/task-contract.js", guard: "Strict schema · 32 KiB body cap", icon: "step-ingress" },
       { index: "02", phase: "Auth & SSRF Egress Policy", summary: "Gateway verifies SHA-256 tenant key or OAuth token, applies rate limits and quotas, and rejects local/private/IP destinations.", module: "src/core/egress-guard.js", guard: "Fail-closed SSRF · Non-default ports blocked", icon: "step-policy" },
-      { index: "03", phase: "Deterministic Execution Router", summary: "Router selects the leanest permitted engine (http.fetch.v1 by default) or fails closed with HTTP 501 when browser binding is absent.", module: "src/core/router.js", guard: "No speculative escalation · Explicit 501", icon: "step-router" },
+      { index: "03", phase: "Deterministic Execution Router", summary: "Router selects bounded HTTP request execution for supported tasks; no alternate runtime is configured.", module: "src/core/router.js", guard: "No speculative escalation · Explicit 501", icon: "step-router" },
       { index: "04", phase: "Bounded Adapter Execution", summary: "HTTP Fetch adapter executes a bounded GET stream with manual hop-by-hop redirect revalidation and AbortController deadlines.", module: "src/core/http-fetch.js", guard: "1 MiB stream cap · 8s timeout · 3 hops", icon: "step-engine" },
       { index: "05", phase: "Normalized Envelope & Evidence", summary: "Result envelope packages state, usage metrics, sanitized codes, and source[].evidence entries for downstream agent verification.", module: "src/core/result.js", guard: "No leaked bodies on error · Full provenance", icon: "step-evidence" },
     ],
@@ -175,7 +175,7 @@ const LOCALE_DATA = {
       idLabel: "مسار التوجيه وحماية المخارج",
       routeGroupAria: "محاكاة مسار التنفيذ",
       svgTitle: "مخطط بنية التنفيذ في ExportFlow",
-      svgDesc: "تدفق البيانات من الوكيل الذكي عبر نواة ExportFlow إلى جلب HTTP (متاح محلياً) والبحث (قيد التطوير) والمتصفح (مخطط له) مع إرجاع نتائج موثقة بالأدلة.",
+      svgDesc: "تدفق البيانات من الوكيل الذكي عبر نواة ExportFlow إلى جلب HTTP والبحث مع إرجاع نتائج موثقة بالأدلة.",
       inputRole: "إدخال",
       agentTitle: "الوكيل الذكي",
       agentAria: "الوكيل الذكي: إرسال الهدف وقيود المهمة",
@@ -364,7 +364,7 @@ LOCALE_DATA.es = makeCompactLocale({
   footerPrivacy: "Privacidad",
   footerCookies: "Cookies",
   footerSecurity: "Seguridad",
-  graph: { kicker: "Arquitectura de ejecución", idLabel: "Pipeline de enrutamiento y salida", agentTitle: "Agente IA", httpTitle: "HTTP Fetch", searchTitle: "Búsqueda", browserTitle: "Navegador", resultsCombined: "Resultados verificados", resultsTitle1: "Resultados", resultsTitle2: "verificados" },
+  graph: { kicker: "Arquitectura de ejecución", idLabel: "Pipeline de enrutamiento y salida", agentTitle: "Agente IA", httpTitle: "HTTP Fetch", searchTitle: "Búsqueda", resultsCombined: "Resultados verificados", resultsTitle1: "Resultados", resultsTitle2: "verificados" },
 });
 
 LOCALE_DATA.de = makeCompactLocale({
@@ -400,7 +400,7 @@ LOCALE_DATA.de = makeCompactLocale({
   footerPrivacy: "Datenschutz",
   footerCookies: "Cookies",
   footerSecurity: "Sicherheit",
-  graph: { kicker: "Ausführungsarchitektur", idLabel: "Routing- & Egress-Pipeline", agentTitle: "KI-Agent", httpTitle: "HTTP Fetch", searchTitle: "Suche", browserTitle: "Browser", resultsCombined: "Geprüfte Ergebnisse", resultsTitle1: "Geprüfte", resultsTitle2: "Ergebnisse" },
+  graph: { kicker: "Ausführungsarchitektur", idLabel: "Routing- & Egress-Pipeline", agentTitle: "KI-Agent", httpTitle: "HTTP Fetch", searchTitle: "Suche", resultsCombined: "Geprüfte Ergebnisse", resultsTitle1: "Geprüfte", resultsTitle2: "Ergebnisse" },
 });
 
 LOCALE_DATA.pt = makeCompactLocale({
@@ -436,7 +436,7 @@ LOCALE_DATA.pt = makeCompactLocale({
   footerPrivacy: "Privacidade",
   footerCookies: "Cookies",
   footerSecurity: "Segurança",
-  graph: { kicker: "Arquitetura de execução", idLabel: "Pipeline de roteamento e saída", agentTitle: "Agente de IA", httpTitle: "HTTP Fetch", searchTitle: "Busca", browserTitle: "Navegador", resultsCombined: "Resultados verificados", resultsTitle1: "Resultados", resultsTitle2: "verificados" },
+  graph: { kicker: "Arquitetura de execução", idLabel: "Pipeline de roteamento e saída", agentTitle: "Agente de IA", httpTitle: "HTTP Fetch", searchTitle: "Busca", resultsCombined: "Resultados verificados", resultsTitle1: "Resultados", resultsTitle2: "verificados" },
 });
 
 LOCALE_DATA.zh = makeCompactLocale({
@@ -472,7 +472,7 @@ LOCALE_DATA.zh = makeCompactLocale({
   footerPrivacy: "隐私政策",
   footerCookies: "Cookie 政策",
   footerSecurity: "安全策略",
-  graph: { kicker: "执行架构", idLabel: "路由与出站防护管道", agentTitle: "AI 智能体", httpTitle: "HTTP 获取", searchTitle: "搜索", browserTitle: "浏览器", resultsCombined: "验证结果", resultsTitle1: "已验证", resultsTitle2: "结果" },
+  graph: { kicker: "执行架构", idLabel: "路由与出站防护管道", agentTitle: "AI 智能体", httpTitle: "HTTP 获取", searchTitle: "搜索", resultsCombined: "验证结果", resultsTitle1: "已验证", resultsTitle2: "结果" },
 });
 
 LOCALE_DATA.ja = makeCompactLocale({
@@ -508,7 +508,7 @@ LOCALE_DATA.ja = makeCompactLocale({
   footerPrivacy: "プライバシー",
   footerCookies: "Cookie ポリシー",
   footerSecurity: "セキュリティ",
-  graph: { kicker: "実行アーキテクチャ", idLabel: "ルーティングと出力パイプライン", agentTitle: "AIエージェント", httpTitle: "HTTP取得", searchTitle: "検索", browserTitle: "ブラウザー", resultsCombined: "検証済み結果", resultsTitle1: "検証済み", resultsTitle2: "結果" },
+  graph: { kicker: "実行アーキテクチャ", idLabel: "ルーティングと出力パイプライン", agentTitle: "AIエージェント", httpTitle: "HTTP取得", searchTitle: "検索", resultsCombined: "検証済み結果", resultsTitle1: "検証済み", resultsTitle2: "結果" },
 });
 
 export function getLocaleData(locale = "en") {
