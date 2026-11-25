@@ -30,6 +30,7 @@ const SAFE_ERROR_MESSAGES = Object.freeze({
   URL_NOT_ALLOWED: "Destination URL is not allowed by the egress policy.",
   RESPONSE_TOO_LARGE: "Upstream response exceeded the maximum allowed byte limit.",
   UNSUPPORTED_CONTENT_TYPE: "Upstream returned an unsupported content type.",
+  UNSUPPORTED_CHARSET: "Upstream declared an unsupported character encoding.",
   UPSTREAM_TIMEOUT: "Upstream request timed out.",
   UPSTREAM_FETCH_FAILED: "Could not retrieve the upstream resource.",
   TOO_MANY_REDIRECTS: "Upstream exceeded the redirect limit.",
