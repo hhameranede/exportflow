@@ -4757,4 +4757,485 @@ html[dir="rtl"] .ef-legal-progress span {
     display: none;
   }
 }
+
+/* ==========================================================================
+   ExportFlow UI Redesign — execution-first hierarchy (2026-11-25)
+   Keeps the established cobalt / ink / paper identity and existing behavior.
+   ========================================================================== */
+
+.ef-header.ef-header-new {
+  background: var(--surface-glass);
+  border-bottom-color: color-mix(in srgb, var(--border) 82%, transparent);
+  box-shadow: 0 1px 0 rgba(23, 35, 56, 0.025);
+}
+
+.ef-header-new .ef-nav {
+  gap: clamp(16px, 2vw, 28px);
+}
+
+.ef-header-new .ef-nav a {
+  font-size: 0.84rem;
+  font-weight: 500;
+}
+
+.ef-header-new .ef-header-actions {
+  gap: clamp(6px, 0.8vw, 12px);
+}
+
+.ef-hero {
+  padding-block: clamp(52px, 7vw, 88px) clamp(56px, 7vw, 92px);
+}
+
+.ef-hero-title {
+  max-width: 15ch;
+  font-weight: 650;
+  letter-spacing: -0.045em;
+  line-height: 1.02;
+}
+
+html[dir="rtl"] .ef-hero-title {
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.ef-hero-lead {
+  max-width: 58ch;
+  line-height: 1.62;
+}
+
+.ef-hero-meta {
+  gap: 10px 12px;
+}
+
+.ef-hero-meta > span:first-child::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-inline-end: 8px;
+  border-radius: 50%;
+  background: var(--status-available);
+  vertical-align: 1px;
+}
+
+.ef-hero-stage {
+  margin-top: clamp(34px, 4vw, 52px);
+}
+
+.ef-graph-card {
+  background: #172338;
+  border: 1px solid rgba(130, 176, 255, 0.2);
+  border-radius: 18px;
+  box-shadow: 0 26px 64px -30px rgba(23, 35, 56, 0.5);
+}
+
+.ef-graph-head {
+  border-bottom-color: rgba(255, 255, 255, 0.13);
+}
+
+.ef-cap-showcase {
+  gap: 18px;
+}
+
+.ef-cap-card-featured {
+  border-radius: 16px;
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.ef-cap-card-featured:hover {
+  border-color: var(--accent-border);
+  background: var(--surface-1);
+}
+
+.ef-cap-grid {
+  border-radius: 16px;
+}
+
+.ef-cap-grid .ef-cap-card {
+  min-height: 250px;
+  padding: clamp(22px, 2.8vw, 32px);
+}
+
+.ef-cap-grid .ef-cap-card:hover {
+  background: var(--surface-2);
+}
+
+.ef-cap-grid .ef-cap-card h3 {
+  line-height: 1.24;
+  text-wrap: balance;
+}
+
+.ef-section-head-split {
+  align-items: flex-end;
+  gap: 18px 28px;
+}
+
+.ef-auth-section {
+  background: var(--bg);
+}
+
+.ef-auth-section-wide {
+  padding-block: clamp(40px, 5vw, 68px);
+}
+
+.ef-auth-page-head {
+  max-width: 760px;
+  margin-block-end: clamp(22px, 3vw, 34px);
+}
+
+.ef-auth-page-head .ef-auth-title {
+  max-width: 18ch;
+  font-size: clamp(2rem, 3.4vw, 2.75rem);
+  letter-spacing: -0.04em;
+  line-height: 1.08;
+}
+
+.ef-auth-card {
+  border-radius: 16px;
+  border-color: var(--border-strong);
+  box-shadow: 0 14px 38px -28px rgba(23, 35, 56, 0.34);
+}
+
+.ef-auth-card-title {
+  line-height: 1.18;
+}
+
+.ef-workspace-bar {
+  position: relative;
+  overflow: hidden;
+  background: #172338;
+  color: #F7FAFF;
+  border: 1px solid #172338;
+  border-inline-start: 4px solid #4B83F5;
+  border-radius: 14px;
+  box-shadow: 0 14px 34px -28px rgba(23, 35, 56, 0.7);
+}
+
+.ef-workspace-bar .ef-workspace-user-name {
+  color: #F7FAFF;
+}
+
+.ef-workspace-bar .ef-acc-email-line {
+  color: rgba(247, 250, 255, 0.76);
+}
+
+.ef-workspace-bar .ef-btn-secondary {
+  color: #F7FAFF;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.ef-workspace-bar .ef-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.ef-workspace-stats {
+  gap: 12px;
+  margin-block: 18px 24px;
+}
+
+.ef-stat-card {
+  min-width: 0;
+  padding: 18px 20px;
+  border-radius: 12px;
+  border-color: var(--border);
+  border-block-start: 2px solid var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.ef-stat-card:nth-child(1),
+.ef-stat-card:nth-child(2) {
+  border-block-start-color: var(--accent);
+}
+
+.ef-stat-card span {
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.ef-stat-card strong {
+  font-size: clamp(1.1rem, 1.5vw, 1.35rem);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.ef-account-grid {
+  gap: clamp(16px, 2vw, 24px);
+}
+
+.ef-account-col {
+  gap: clamp(16px, 2vw, 22px);
+}
+
+.ef-account-card {
+  min-width: 0;
+  padding: clamp(20px, 2.2vw, 28px);
+  border-radius: 14px;
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.ef-account-card-head {
+  padding-block-end: 14px;
+  margin-block-end: 18px;
+  border-block-end: 1px solid var(--border);
+}
+
+.ef-account-card-head h2 {
+  font-size: 1.18rem;
+  letter-spacing: -0.02em;
+}
+
+.ef-acc-card-desc {
+  max-width: 62ch;
+  line-height: 1.6;
+}
+
+.ef-account-settings-nav {
+  padding: 6px;
+  gap: 6px;
+  border-radius: 12px;
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.ef-account-settings-nav a {
+  min-height: 42px;
+  border-radius: 8px;
+  font-weight: 550;
+}
+
+.ef-account-settings-nav a[aria-current="location"] {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+html[dir="rtl"] .ef-account-settings-nav a[aria-current="location"] {
+  box-shadow: inset -3px 0 0 var(--accent);
+}
+
+.ef-account-card .ef-code-card {
+  border-radius: 12px;
+  border-color: var(--border-strong);
+}
+
+.ef-account-card .ef-code-head {
+  min-height: 46px;
+}
+
+.ef-account-card .ef-code-pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.ef-field input,
+.ef-field select,
+.ef-field textarea {
+  border-radius: 9px;
+  border-color: var(--border-strong);
+  background: var(--surface-1);
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+
+.ef-field input:focus-visible,
+.ef-field select:focus-visible,
+.ef-field textarea:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-tint);
+  outline-offset: 1px;
+}
+
+@media (min-width: 1024px) {
+  .ef-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+    align-items: center;
+    gap: clamp(28px, 4vw, 56px);
+    width: 100%;
+    margin: 0;
+    padding-inline: max(18px, calc((100vw - var(--container-max)) / 2));
+  }
+
+  .ef-hero > .ef-container {
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+  }
+
+  .ef-hero-editorial {
+    align-items: flex-start;
+    max-width: none;
+    text-align: start;
+  }
+
+  .ef-hero-title,
+  .ef-hero-lead {
+    margin-inline: 0;
+  }
+
+  .ef-hero-title {
+    max-width: 12ch;
+  }
+
+  .ef-hero-actions,
+  .ef-hero-meta {
+    justify-content: flex-start;
+  }
+
+  .ef-hero-stage {
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 1023px) {
+  .ef-hero {
+    padding-block: clamp(48px, 7vw, 72px) clamp(54px, 7vw, 76px);
+  }
+
+  .ef-hero-title {
+    max-width: 16ch;
+  }
+}
+
+@media (max-width: 767px) {
+  .ef-hero {
+    padding-block: 44px 54px;
+  }
+
+  .ef-hero-title {
+    font-size: clamp(2.2rem, 9.2vw, 3rem);
+    line-height: 1.06;
+  }
+
+  html[dir="rtl"] .ef-hero-title {
+    line-height: 1.22;
+  }
+
+  .ef-hero-lead {
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+
+  .ef-hero-stage {
+    margin-top: 30px;
+  }
+
+  .ef-graph-card {
+    padding: 18px;
+    border-radius: 14px;
+  }
+
+  .ef-cap-grid {
+    border-radius: 14px;
+  }
+
+  .ef-cap-grid .ef-cap-card {
+    min-height: 0;
+    padding: 22px;
+  }
+
+  .ef-auth-section {
+    padding-block: 32px 48px;
+  }
+
+  .ef-auth-section-wide {
+    padding-block: 34px 48px;
+  }
+
+  .ef-workspace-bar {
+    align-items: flex-start;
+    gap: 16px;
+    padding: 18px;
+  }
+
+  .ef-workspace-bar .ef-account-hero-actions,
+  .ef-workspace-bar .ef-account-hero-actions .ef-btn {
+    flex: 1 1 auto;
+  }
+
+  .ef-workspace-stats {
+    gap: 10px;
+    margin-block: 14px 18px;
+  }
+
+  .ef-stat-card {
+    padding: 14px;
+    gap: 7px;
+  }
+
+  .ef-stat-card strong {
+    font-size: 1.08rem;
+  }
+
+  .ef-account-grid,
+  .ef-account-col {
+    gap: 14px;
+  }
+
+  .ef-account-card {
+    padding: 18px;
+    border-radius: 12px;
+  }
+
+  .ef-account-settings-nav {
+    margin-block-end: 2px;
+    scroll-padding-inline: 8px;
+  }
+
+  .ef-account-settings-nav a {
+    min-height: 44px;
+    padding-inline: 11px;
+  }
+
+  .ef-auth-card {
+    padding: 22px;
+  }
+}
+
+@media (max-width: 380px) {
+  .ef-hero {
+    padding-block: 36px 46px;
+  }
+
+  .ef-hero-title {
+    font-size: clamp(2rem, 9vw, 2.35rem);
+  }
+
+  .ef-workspace-bar {
+    padding: 15px;
+  }
+
+  .ef-workspace-bar .ef-account-hero-actions {
+    width: 100%;
+  }
+
+  .ef-stat-card {
+    padding: 12px;
+  }
+
+  .ef-stat-card span {
+    font-size: 0.74rem;
+  }
+
+  .ef-stat-card strong {
+    font-size: 1rem;
+  }
+
+  .ef-account-card {
+    padding: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ef-header-new,
+  .ef-cap-card,
+  .ef-account-settings-nav a,
+  .ef-field input,
+  .ef-field select,
+  .ef-field textarea {
+    transition: none !important;
+  }
+}
+
 `;
