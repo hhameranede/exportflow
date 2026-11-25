@@ -185,8 +185,18 @@ test("capability cards keep icons beside titles and preserve mobile metrics, fil
     "header actions must shrink on 320px phone viewports");
 
   const home = await fetchHtml("/");
-  assert.match(home, /marketing\.css\?v=9/u,
+  assert.match(home, /marketing\.css\?v=10/u,
     "the stylesheet URL must be versioned so mobile clients do not keep stale CSS");
+});
+
+test("password visibility suppresses its inactive SVG despite the shared SVG display reset", async () => {
+  const html = await fetchHtml("/signin");
+  assert.match(html, /<svg data-eye-open width="16" height="16"/u);
+  assert.match(html, /<svg data-eye-closed width="16" height="16"[^>]* hidden>/u);
+  assert.match(MARKETING_CSS,
+    /\.ef-password-toggle svg\[hidden\]\s*\{\s*display:\s*none !important;\s*\}/u);
+  assert.match(MARKETING_JS, /eyeOpen\.hidden = visible/u);
+  assert.match(MARKETING_JS, /eyeClosed\.hidden = !visible/u);
 });
 
 test("account settings navigation points only to existing profile, identity, security, and session controls", async () => {
