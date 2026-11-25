@@ -143,7 +143,7 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
   try {
     const request = new Request(
       "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=34.223.124.45&private=127.0.0.1",
-      { headers: { authorization: \`Bearer \${TEST_TOKEN}\` } },
+      { headers: { authorization: "Bearer " + TEST_TOKEN } },
     );
     const response = await worker.fetch(request, env);
     assert.equal(response.status, 200);
@@ -167,7 +167,7 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
 
     const rejectedTarget = await worker.fetch(new Request(
       "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=127.0.0.1&private=127.0.0.1",
-      { headers: { authorization: \`Bearer \${TEST_TOKEN}\` } },
+      { headers: { authorization: "Bearer " + TEST_TOKEN } },
     ), env);
     assert.equal(rejectedTarget.status, 400);
   } finally {
