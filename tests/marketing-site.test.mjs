@@ -207,7 +207,7 @@ test("execution-first UI redesign preserves landing, workspace, account, and res
   assert.ok(home);
   const homeHtml = await home.text();
   assert.match(homeHtml, /marketing\.css\?v=10/);
-  assert.match(homeHtml, /class="[^"]*\\bef-hero-editorial\\b/);
+  assert.match(homeHtml, /class="[^"]*ef-hero-editorial/);
   assert.match(homeHtml, /data-graph-scenario="http"/);
 
   const workspace = getWebsiteResponse("/workspace");
