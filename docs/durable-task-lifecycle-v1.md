@@ -1,7 +1,9 @@
 # Durable Task Lifecycle v1
 
-Status: Draft implementation on `feat/durable-task-lifecycle-v1-20261124`.
-Base: `9fe35036c30114095e3ae782909164d2c0671967`.
+Status: Ready for independent review; PR #134 is open, unmerged and mergeable.
+Branch: `feat/durable-task-lifecycle-v1-20261124`.
+Verified head: `189fc6a32d1bfe0c033cceb63726f59be45df3d6`.
+Base: `9fe35036c30114095e3ae782909164d2c0671967` (`main`, 25 November 2026).
 
 ## Scope
 
@@ -58,10 +60,18 @@ Task reads always filter by both `tenant_id` and `task_id`. A caller from anothe
 - Logical result/status availability ends after 24 hours. An expired status read returns HTTP 410 and deletes that task row; its lifecycle events are removed by the foreign-key cascade. New task acceptance also opportunistically cleans at most 100 expired rows for that tenant. Cleanup is indexed by tenant and expiry time to avoid an unbounded scan. A scheduled global cleanup job is not part of v1, so physical deletion for an inactive tenant is best-effort and may occur later than the 24-hour access expiry.
 - Execution remains inline. Both the accepted-before-claim phase and the running phase have a 3-minute lease. A status read or idempotent retry that observes an expired lease records the task as `expired`; this version does not automatically resume or re-run that task.
 
+## Exact-head verification — 25 November 2026
+
+- Push CI #1218 passed repository tests, syntax checks, full-site Chromium QA, all nine Wrangler v4 dry-run bundles and the isolated Cloudflare D1 + Worker Acceptance flow. The Acceptance migration and Workers were limited to dedicated test resources; run-scoped synthetic data cleanup passed. Production deployment was skipped.
+- PR CI #1219 passed repository tests, syntax checks, full-site Chromium QA and all nine Wrangler v4 dry-run bundles. Acceptance and Production deployment jobs were skipped.
+- The PR is 80 commits ahead and 0 commits behind `main` at the base SHA listed above.
+- No independent review has been submitted yet.
+
 ## Explicit non-goals / remaining gates
 
 - No asynchronous task submission contract, Queue fan-out, Workflow orchestration, polling backoff, webhook notifications, child work units, resumable crawl checkpoints, or automatic retry after Worker failure.
 - No public cancel endpoint. An inbound request abort is still forwarded into the existing executor and its resulting cancelled state is persisted when the handler can finish.
 - The isolated Acceptance workflow is part of feature-branch CI, not Production release: it may apply Migration 0005 to the dedicated Acceptance D1 database and deploy the two dedicated Acceptance Workers. It cleans up run-scoped synthetic tenant, key, usage and Task data. It does not modify `exportflow-tenant-production`.
-- Node SQLite tests are supplementary checks. Real Cloudflare D1 Binding acceptance covers migration execution, trigger atomicity, simultaneous requests, replay, quota exhaustion, status reads and tenant isolation. The latest-head Acceptance job must be green after each relevant change before the PR can be considered ready for review.
+- Node SQLite tests are supplementary checks. Real Cloudflare D1 Binding acceptance covers migration execution, trigger atomicity, simultaneous requests, replay, quota exhaustion, status reads and tenant isolation.
+- A read-only Production D1 check on 25 November 2026 found the tenant/auth tables but no `tasks` or `task_events` tables; Migration 0005 remains unapplied in Production.
 - Production rollout, Production D1 migration, Worker bindings, secrets, DNS, permissions and customer tenant provisioning each remain separately approval-gated.
