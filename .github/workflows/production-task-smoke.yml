@@ -1,0 +1,47 @@
+name: Production Durable Task Smoke
+
+on:
+  push:
+    branches:
+      - test/production-durable-task-smoke-20261125
+
+permissions:
+  contents: read
+
+concurrency:
+  group: exportflow-production-durable-task-smoke
+  cancel-in-progress: false
+
+jobs:
+  production-task-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: "435030befbb9df09ab76f69209c05347
+"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify release base and Cloudflare credentials
+        run: |
+          git merge-base --is-ancestor 8cf894e0d1f0f00dcaa79bc5b6f914ad196b8cc6 HEAD
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Missing Cloudflare deployment credentials."
+            exit 1
+          fi
+      - name: Install repository dependencies
+        run: npm install --no-audit --no-fund
+      - name: Check smoke harness syntax
+        run: node --check scripts/acceptance/durable-task-production-smoke.mjs
+      - name: Seed bounded synthetic Production tenants and short-lived API keys
+        id: seed
+        run: node scripts/acceptance/durable-task-production-smoke.mjs seed
+      - name: Test real Production REST and MCP Durable Task lifecycle
+        if: steps.seed.outcome == 'success'
+        run: node scripts/acceptance/durable-task-production-smoke.mjs smoke
+      - name: Always clean synthetic Production Tasks, usage, keys, tenants and test policies
+        if: always() && steps.seed.outcome != 'skipped'
+        run: node scripts/acceptance/durable-task-production-smoke.mjs cleanup
