@@ -48,6 +48,38 @@ test("every marketing sitemap route renders one marketing client script and styl
   }
 });
 
+test("homepage redesign shows the real execution flow and loads accessible GSAP motion", async () => {
+  const homeResponse = getWebsiteResponse("/");
+  assert.ok(homeResponse);
+  const homeHtml = await homeResponse.text();
+  assert.match(homeHtml, /class="ef-container ef-hero-layout" data-gsap-hero/);
+  assert.match(homeHtml, /POST \/api\/v1\/tasks/);
+  assert.match(homeHtml, /data-exec-graph/);
+  assert.match(homeHtml, /data-graph-scenario="http"/);
+  for (const adapterId of ["http.fetch.v1", "web.search.v1", "web.map.v1", "web.crawl.v1", "web.extract.v1", "web.browser.v1"]) {
+    assert.match(homeHtml, new RegExp(adapterId.replaceAll(".", "\\.")));
+  }
+  assert.match(homeHtml, /data-adapter-state="available"/);
+  assert.match(homeHtml, /data-adapter-state="planned"/);
+  assert.match(homeHtml, /data-motion-toggle/);
+  assert.match(homeHtml, /gsap@3\.15\.1\/dist\/gsap\.min\.js/);
+  assert.match(homeHtml, /gsap@3\.15\.1\/dist\/ScrollTrigger\.min\.js/);
+  assert.match(homeResponse.headers.get("content-security-policy") ?? "", /script-src 'self' https:\/\/cdn\.jsdelivr\.net/);
+
+  const motionResponse = getWebsiteResponse("/assets/marketing-motion.js");
+  assert.ok(motionResponse);
+  const motionScript = await motionResponse.text();
+  assert.doesNotThrow(() => new Function(motionScript));
+  assert.match(motionScript, /prefers-reduced-motion: reduce/);
+  assert.match(motionScript, /ScrollTrigger\.batch/);
+  assert.match(motionScript, /media\.revert\(\)/);
+
+  const stylesheet = await (await getWebsiteResponse("/assets/marketing.css")).text();
+  assert.match(stylesheet, /\.ef-hero-layout\s*\{/);
+  assert.match(stylesheet, /\.ef-uc-card\s*\{/);
+  assert.match(stylesheet, /\.ef-section-obsidian\s*\{/);
+});
+
 test("localized root routes set document language and Arabic text direction", async () => {
   for (const [path, locale] of [["/ar/", "ar"], ["/fr/", "fr"], ["/zh/", "zh"]]) {
     const response = getWebsiteResponse(path);

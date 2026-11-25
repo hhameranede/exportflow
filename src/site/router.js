@@ -15,6 +15,7 @@ import { MARKETING_PATHS, renderMarketingPage, resolveMarketingRoute } from "./m
 import { AUTH_ROUTES } from "./auth-pages.js";
 import { MARKETING_CSS } from "./marketing-styles.js";
 import { MARKETING_JS } from "./marketing-client.js";
+import { MARKETING_MOTION_JS } from "./marketing-motion.js";
 
 const HTML_SECURITY_HEADERS = Object.freeze({
   "content-type": "text/html; charset=utf-8",
@@ -24,7 +25,7 @@ const HTML_SECURITY_HEADERS = Object.freeze({
   "strict-transport-security": "max-age=63072000",
   "permissions-policy": "camera=(), microphone=(), geolocation=()",
   "content-security-policy":
-    "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'",
+    "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' https://cdn.jsdelivr.net; img-src 'self' data:; base-uri 'none'; form-action 'self'",
 });
 
 function assetResponse(body, contentType, method, maxAge = 300) {
@@ -72,6 +73,9 @@ export function handleWebsiteRequest(request, url) {
   }
   if (pathname === "/assets/marketing.js") {
     return assetResponse(MARKETING_JS, "application/javascript; charset=utf-8", request.method);
+  }
+  if (pathname === "/assets/marketing-motion.js") {
+    return assetResponse(MARKETING_MOTION_JS, "application/javascript; charset=utf-8", request.method);
   }
   if (pathname === "/assets/mark.svg" || pathname === "/favicon.ico") {
     return assetResponse(BRAND_MARK_SVG, "image/svg+xml; charset=utf-8", request.method, 3600);
