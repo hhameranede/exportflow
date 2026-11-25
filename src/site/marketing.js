@@ -583,7 +583,7 @@ function genericBody(route, path, t, locale, oauthDetails = {}) {
     const questions = isAr
       ? [
           ["ما هي منصة ExportFlow؟", "ExportFlow بنية تنفيذ للويب مستقلة عن المزود؛ تفصل منطق الوكيل الذكي عن التنفيذ المنضبط على الويب وتطبيق السياسات وإرجاع النتائج المهيكلة مع سجل الأدلة."],
-          ["ما القدرات المفعلة حالياً؟", "عقد REST Task contract العام مقصور حالياً على جلب HTTP المحدود (http.fetch.v1). قدرات البحث والأتمتة بالمتصفح لم تُفعل بعد على النقاط العامة."],
+          ["ما القدرات المفعلة حالياً؟", "يعرض public REST Task contract وMCP ست عمليات محدودة: Fetch وMap وCrawl وExtract وSearch وResearch. تختلف مستويات التحقق والتوفر بينها، ويعتمد Search على مصادر عامة محددة لا على فهرس شامل للويب."],
           ["هل تتجاوز المنصة تسجيل الدخول أو الحمايات؟", "لا. المنصة مصممة للموارد العامة المتاحة عبر HTTP(S) ولا تتجاوز المصادقة أو الجدران المدفوعة أو اختبارات CAPTCHA."],
           ["هل تعتمد ExportFlow على مزود نموذج ذكاء اصطناعي واحد؟", "لا. عقد التنفيذ محايد تماماً عن النماذج؛ يرسل الوكيل النية والحدود فتتولى النواة التحقق والتوجيه وإرجاع النتائج."],
           ["هل تنفذ ExportFlow JavaScript داخل صفحات الويب؟", "لا. التنفيذ Request-first عبر HTTP(S) فقط. يمكن جلب public API endpoints والبيانات العامة مباشرة؛ أما المحتوى الذي يتطلب تشغيل JavaScript ولا يملك endpoint عاماً قابلاً للجلب فيُعتبر unsupported."],
@@ -592,7 +592,7 @@ function genericBody(route, path, t, locale, oauthDetails = {}) {
         ]
       : [
           ["What is ExportFlow?", "ExportFlow is model-agnostic agentic web infrastructure. It separates an AI agent's reasoning from bounded web execution, policy enforcement, normalized results, and source evidence."],
-          ["Which capabilities are currently available?", "REST and MCP expose six bounded operations: Fetch, Map, Crawl, Extract, Search, and Research. Their verification and availability levels differ. Search uses selected public datasets, not a general whole-web index."],
+          ["Which capabilities are currently available?", "The public REST Task contract and MCP surface expose six bounded operations: Fetch, Map, Crawl, Extract, Search, and Research. Their verification and availability levels differ. Search uses selected public datasets, not a general whole-web index."],
           ["Can ExportFlow interact with logged-in websites or bypass protections?", "No. The platform is designed for eligible public HTTP(S) resources. It does not bypass authentication, paywalls, CAPTCHAs, or anti-bot controls, and it must enforce destination and redirect restrictions."],
           ["Does ExportFlow depend on one AI model provider?", "No. The execution contract is model-agnostic. Agents supply task intent through the documented interface; the Core validates the request, applies policy, routes supported work, and returns normalized output with provenance."],
           ["Does ExportFlow execute JavaScript inside websites?", "No. Execution is request-first over HTTP(S). Public API endpoints and public data can be retrieved directly; content that exists only after client-side JavaScript execution and has no usable public HTTP endpoint is unsupported."],
