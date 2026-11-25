@@ -40,6 +40,16 @@ The shared D1-backed Task lifecycle is Production-enabled for REST and MCP. It p
 
 The application policy is paired with Cloudflare Workers' native outbound Fetch network boundary. Unit tests and local simulations are supporting evidence only; real egress and compression behavior must be tested in the target Worker runtime.
 
+## Cloudflare global fetch routing
+
+The Platform, MCP, and isolated Acceptance Wrangler configurations explicitly enable `global_fetch_strictly_public`. Cloudflare documents that this routes global `fetch()` requests as if they originated on the public Internet, including requests to the Worker's own zone; without it, same-zone requests can go directly to the origin and bypass Cloudflare security settings. This is a routing hardening layer, not a complete DNS-rebinding defense.
+
+The application egress guard does not resolve or pin DNS addresses before Fetch. It rejects known private/reserved URL forms and known ExportFlow-owned origins, then delegates the actual connection to Cloudflare's native Worker `fetch()` network boundary. Do not add a separate DNS lookup followed by ordinary Fetch: that would create a DNS time-of-check/time-of-use gap. A passing URL-validation unit test is not evidence that a hostname cannot rebind to a private address. DNS-rebinding and private-resolving hostname behavior remain a target-Worker acceptance requirement until directly measured with controlled, non-sensitive test destinations.
+
+The egress guard also blocks the known `hhameranede.workers.dev` hostnames used by ExportFlow Platform, MCP, diagnostic, and Acceptance Workers, preventing customer tasks from recursively calling ExportFlow's own infrastructure.
+
+Cloudflare reference: [Compatibility flags — Global fetch() strictly public](https://developers.cloudflare.com/workers/configuration/compatibility-flags/).
+
 ## Playwright
 
 Pinned Playwright + Chromium runs only in GitHub Actions for regression testing of ExportFlow's own website, routes, locales and responsive layouts. It is separate from the customer task runtime and is not used to fetch customer URLs.
