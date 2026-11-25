@@ -171,7 +171,8 @@ test("system-aware design system and interactive UX components are served cleanl
   assert.match(html, /Plus\+Jakarta\+Sans/);
   assert.match(html, /data-graph-scenario="http"/);
   assert.match(html, /data-graph-scenario="search"/);
-  assert.match(html, /data-graph-scenario="browser"/);
+  assert.doesNotMatch(html, /data-graph-scenario="browser"/);
+  assert.match(html, /data-graph-scenario="http"/);
   assert.match(html, /data-cap-filter="all"/);
   assert.match(html, /data-cap-filter="available"/);
   assert.match(html, /data-step-inspector/);
@@ -212,7 +213,7 @@ test("developer documentation matches the six-operation release and labels durab
   assert.match(html, /tasks:read/);
   assert.match(html, /Idempotency-Key/);
   assert.match(html, /24 hours/);
-  assert.match(html, /Draft PR #134/);
+  assert.match(html, /Durable Task Lifecycle — Production Verified/);
   assert.doesNotMatch(html, /currently supports <code>operation: "fetch"<\/code> only/);
   assert.doesNotMatch(html, /http\.fetch\.v1<\/code> is the sole active adapter/);
 });
