@@ -46,7 +46,7 @@ The Platform, MCP, and isolated Acceptance Wrangler configurations explicitly en
 
 The application egress guard does not resolve or pin DNS addresses before Fetch. It rejects known private/reserved URL forms and known ExportFlow-owned origins, then delegates the actual connection to Cloudflare's native Worker `fetch()` network boundary. Do not add a separate DNS lookup followed by ordinary Fetch: that would create a DNS time-of-check/time-of-use gap. A passing URL-validation unit test is not evidence that a hostname cannot rebind to a private address. DNS-rebinding and private-resolving hostname behavior remain a target-Worker acceptance requirement until directly measured with controlled, non-sensitive test destinations.
 
-The egress guard also blocks the known `hhameranede.workers.dev` hostnames used by ExportFlow Platform, MCP, diagnostic, and Acceptance Workers, preventing customer tasks from recursively calling ExportFlow's own infrastructure.
+The egress guard blocks the account-owned `hhameranede.workers.dev` apex and its entire subdomain namespace (including future Workers), preventing customer tasks from recursively calling ExportFlow's own Cloudflare Workers infrastructure.
 
 Cloudflare reference: [Compatibility flags — Global fetch() strictly public](https://developers.cloudflare.com/workers/configuration/compatibility-flags/).
 
