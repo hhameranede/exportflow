@@ -247,12 +247,42 @@ async function queryDnsA(resolver, hostname) {
   return answers;
 }
 
+function isRetryableDnsError(error) {
+  const code = String(error?.code || "").toUpperCase();
+  return ["ESERVFAIL", "ETIMEOUT", "EAI_AGAIN", "ECONNREFUSED", "EDNS"].includes(code) ||
+    ["AbortError", "TimeoutError"].includes(error?.name) ||
+    /DNS status 2\\b|SERVFAIL|temporarily unavailable/i.test(String(error?.message || ""));
+}
+
+async function queryDnsAWithRetry(resolver, hostname) {
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await queryDnsA(resolver, hostname);
+    } catch (error) {
+      if (!isRetryableDnsError(error) || attempt === maxAttempts) {
+        throw new Error(
+          resolver.name + " failed to resolve " + hostname + " after " + attempt +
+          " attempt(s): " + String(error?.code || error?.message || error),
+          { cause: error },
+        );
+      }
+      console.warn(
+        "Retrying transient DNS resolver failure: " +
+        JSON.stringify({ resolver: resolver.name, hostname, attempt, code: error?.code || error?.name || "DNS_ERROR" }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+    }
+  }
+  throw new Error(resolver.name + " exhausted DNS retries for " + hostname + ".");
+}
+
 async function queryDnsBatches(resolver, hostname, count) {
   const collected = [];
   for (let offset = 0; offset < count; offset += 1) {
     // rbndr.us uses a one-second TTL; serialized queries spaced beyond that TTL
     // avoid observing the same recursive-resolver cache entry in one burst.
-    collected.push(...await queryDnsA(resolver, hostname));
+    collected.push(...await queryDnsAWithRetry(resolver, hostname));
     if (offset + 1 < count) {
       await new Promise((resolve) => setTimeout(resolve, 1_100));
     }
