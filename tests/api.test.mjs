@@ -247,13 +247,23 @@ test("Acceptance DNS rebinding probe fails closed when the mixed hostname return
   }
 });
 
-test("Acceptance DNS rebinding probes reject a Cloudflare edge as their public control", async () => {
+test("Acceptance DNS rebinding probes reject Cloudflare edge controls and retain bounded DNS diagnostics", async () => {
   const calls = [];
   const worker = createWorker({
     acceptanceDnsRebindingProbe: true,
     acceptanceDnsRebindingFetch: async (input) => {
       calls.push(String(input));
-      return new Response(null, { status: 409, headers: { server: "cloudflare" } });
+      return new Response(null, {
+        status: 530,
+        headers: {
+          server: "cloudflare",
+          "cf-error-type": "error=1016",
+          "cf-error-origin": "dns",
+          "cf-ray": "acceptance-test-ray",
+          "cf-cache-status": "DYNAMIC",
+          "server-timing": "cfOrigin;dur=0",
+        },
+      });
     },
   });
   const env = makeTestEnv();
@@ -268,6 +278,12 @@ test("Acceptance DNS rebinding probes reject a Cloudflare edge as their public c
     const diagnostic = await response.json();
     assert.equal(diagnostic.status, "inconclusive");
     assert.match(diagnostic.reason, /Cloudflare edge response/);
+    assert.equal(diagnostic.baseline.status, 530);
+    assert.equal(diagnostic.baseline.cfErrorType, "error=1016");
+    assert.equal(diagnostic.baseline.cfErrorOrigin, "dns");
+    assert.equal(diagnostic.baseline.cfRay, "acceptance-test-ray");
+    assert.equal(diagnostic.baseline.cfCacheStatus, "DYNAMIC");
+    assert.equal(diagnostic.baseline.serverTiming, "cfOrigin;dur=0");
     assert.deepEqual(calls, ["http://b9c76c99.b9c76d99.rbndr.us/?exportflow_acceptance_control=1"]);
   } finally {
     env.__fixture.close();

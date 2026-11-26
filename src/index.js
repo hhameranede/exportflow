@@ -277,6 +277,11 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, controlIp, fe
     contentType: safeDiagnosticField(response.headers.get("content-type"), 120),
     contentLength: safeDiagnosticField(response.headers.get("content-length"), 40),
     etag: safeDiagnosticField(response.headers.get("etag"), 120),
+    cfErrorType: safeDiagnosticField(response.headers.get("cf-error-type"), 120),
+    cfErrorOrigin: safeDiagnosticField(response.headers.get("cf-error-origin"), 120),
+    cfRay: safeDiagnosticField(response.headers.get("cf-ray"), 120),
+    cfCacheStatus: safeDiagnosticField(response.headers.get("cf-cache-status"), 80),
+    serverTiming: safeDiagnosticField(response.headers.get("server-timing"), 180),
   });
 
   let baseline;
