@@ -123,18 +123,39 @@ test("Acceptance network diagnostics require tasks:fetch and use only fixed boun
 test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, and bounded", async () => {
   const calls = [];
   let probeCalls = 0;
+  const publicLabel = "22df7c2d";
+  const privateLabel = "7f000001";
+  const controlHostname = publicLabel + "." + publicLabel + ".rbndr.us";
+  const targetHostname = publicLabel + "." + privateLabel + ".rbndr.us";
   const worker = createWorker({
     acceptanceDnsRebindingProbe: true,
     acceptanceDnsRebindingProbeIntervalMs: 0,
     acceptanceDnsRebindingFetch: async (input, init) => {
       const url = new URL(String(input));
       calls.push({ url: url.href, init });
-      if (url.hostname === "neverssl.com") {
-        return new Response(null, { status: 200, headers: { server: "acceptance-test" } });
+      if (url.hostname === controlHostname) {
+        return new Response(null, {
+          status: 200,
+          headers: {
+            server: "acceptance-test",
+            "content-type": "text/html",
+            "content-length": "128",
+            etag: '"control-fingerprint"',
+          },
+        });
       }
+      assert.equal(url.hostname, targetHostname);
       probeCalls += 1;
       if (probeCalls % 2 === 1) {
-        return new Response(null, { status: 200, headers: { server: "acceptance-test" } });
+        return new Response(null, {
+          status: 200,
+          headers: {
+            server: "acceptance-test",
+            "content-type": "text/html",
+            "content-length": "128",
+            etag: '"control-fingerprint"',
+          },
+        });
       }
       throw new Error("network connection denied");
     },
@@ -154,7 +175,11 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
     assert.equal(diagnostic.publicResponses, 6);
     assert.equal(diagnostic.networkErrors, 6);
     assert.equal(diagnostic.unexpectedResponses, 0);
+    assert.equal(diagnostic.controlHostname, controlHostname);
+    assert.equal(diagnostic.hostname, targetHostname);
     assert.equal(calls.length, 13);
+    assert.equal(calls[0].url, "http://" + controlHostname + "/?exportflow_acceptance_control=1");
+    assert.ok(calls.slice(1).every(({ url }) => url.startsWith("http://" + targetHostname + "/?")));
     assert.ok(calls.every(({ init }) =>
       init.method === "HEAD" && init.redirect === "manual" && init.cache === "no-store"
     ));
@@ -177,6 +202,43 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
 });
 
 
+test("Acceptance DNS rebinding probe fails closed when the mixed hostname returns a different HTTP fingerprint", async () => {
+  const worker = createWorker({
+    acceptanceDnsRebindingProbe: true,
+    acceptanceDnsRebindingProbeIntervalMs: 0,
+    acceptanceDnsRebindingFetch: async (input) => {
+      const hostname = new URL(String(input)).hostname;
+      if (hostname === "22df7c2d.22df7c2d.rbndr.us") {
+        return new Response(null, {
+          status: 200,
+          headers: { server: "acceptance-test", "content-type": "text/html", "content-length": "128" },
+        });
+      }
+      return new Response(null, {
+        status: 200,
+        headers: { server: "private-service", "content-type": "text/html", "content-length": "128" },
+      });
+    },
+  });
+  const env = makeTestEnv();
+  env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
+  try {
+    const request = new Request(
+      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=34.223.124.45&private=127.0.0.1",
+      { headers: { authorization: "Bearer " + TEST_TOKEN } },
+    );
+    const response = await worker.fetch(request, env);
+    const diagnostic = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(diagnostic.status, "unexpected_http_response");
+    assert.equal(diagnostic.publicResponses, 0);
+    assert.equal(diagnostic.networkErrors, 0);
+    assert.equal(diagnostic.unexpectedResponses, 12);
+  } finally {
+    env.__fixture.close();
+  }
+});
+
 test("Acceptance DNS rebinding probes reject a Cloudflare edge as their public control", async () => {
   const calls = [];
   const worker = createWorker({
@@ -197,8 +259,8 @@ test("Acceptance DNS rebinding probes reject a Cloudflare edge as their public c
     assert.equal(response.status, 200);
     const diagnostic = await response.json();
     assert.equal(diagnostic.status, "inconclusive");
-    assert.match(diagnostic.reason, /non-Cloudflare public origin/);
-    assert.deepEqual(calls, ["http://neverssl.com/"]);
+    assert.match(diagnostic.reason, /Cloudflare edge response/);
+    assert.deepEqual(calls, ["http://22df7c2d.22df7c2d.rbndr.us/?exportflow_acceptance_control=1"]);
   } finally {
     env.__fixture.close();
   }
