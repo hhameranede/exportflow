@@ -14,7 +14,7 @@ test("authoritative DNS log URL is scoped to the exact 1u.ms Worker session", ()
   assert.equal(url.pathname, "/log");
   assert.equal(url.searchParams.get("grep"), sessionId);
   assert.throws(() => createAuthoritativeDnsLogUrl("example.com", sessionId), /1u.ms hostname/);
-  assert.throws(() => createAuthoritativeDnsLogUrl(hostname, "another-worker-session"), /belong to the requested Worker session/);
+  assert.throws(() => createAuthoritativeDnsLogUrl(hostname, "worker-45889105483-2"), /belong to the requested Worker session/);
   assert.throws(() => createAuthoritativeDnsLogUrl(hostname, sessionId, "http://example.com/log"), /restricted to the 1u.ms/);
 });
 
