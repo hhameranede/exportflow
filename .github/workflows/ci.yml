@@ -100,7 +100,9 @@ jobs:
         inputs.run_acceptance == true &&
         github.ref == 'refs/heads/feat/p0-request-only-fetch-20261125') ||
        (github.event_name == 'pull_request' &&
-        github.event.pull_request.number == 142) }}
+        (github.event.pull_request.number == 142 ||
+         (github.event.pull_request.number == 143 &&
+          github.event.pull_request.head.ref == 'fix/dns-rebinding-resolver-isolation-20261126'))) }}
   runs-on: ubuntu-latest
   env:
    CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
