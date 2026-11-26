@@ -19,6 +19,13 @@ const DNS_REBINDING_RESOLVERS = Object.freeze([
   { name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
   { name: "GitHub runner system DNS", system: true, required: false },
 ]);
+// Official GitHub Pages A records, documented for custom-domain configuration:
+// https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site
+// rbndr.us requires distinct public-IP labels for its DNS control hostname.
+const DNS_REBINDING_CONTROL_IPS = Object.freeze([
+  "185.199.108.153",
+  "185.199.109.153",
+]);
 const DNS_REBINDING_PRIVATE_TARGETS = Object.freeze([
   { name: "loopback", ip: "127.0.0.1" },
   { name: "unspecified", ip: "0.0.0.0" },
@@ -291,23 +298,20 @@ async function queryDnsBatches(resolver, hostname, count) {
   return collected;
 }
 
-async function discoverPublicRebindingIp() {
-  // ftp.gnu.org resolves directly to a public Free Software Foundation origin
-  // (not a Cloudflare anycast address). Use that address for the rbndr control.
-  const answers = await queryDnsBatches(DNS_REBINDING_RESOLVERS[0], "ftp.gnu.org", 4);
-  const publicIp = answers.map((answer) => answer.ip).find(isPublicIpv4);
-  assert.ok(publicIp, "Google Public DNS must return a public ftp.gnu.org A record.");
-  return publicIp;
-}
-
-async function assertDnsRebindingControl(hostname, publicIp) {
-  const records = await queryDnsBatches(DNS_REBINDING_RESOLVERS[0], hostname, 3);
-  assert.ok(records.length >= 3, "The deterministic rbndr.us control must return DNS A answers.");
-  assert.ok(
-    records.every((record) => record.ip === publicIp && Number.isFinite(record.ttl) && record.ttl <= 5),
-    "The deterministic rbndr.us control must resolve only to the selected public IP: " + JSON.stringify(records),
+async function assertDnsRebindingControl(hostname, expectedPublicIps) {
+  const records = await queryDnsBatches(DNS_REBINDING_RESOLVERS[0], hostname, 12);
+  const expected = [...new Set(expectedPublicIps)].sort();
+  const observed = [...new Set(records.map((record) => record.ip))].sort();
+  assert.deepEqual(
+    observed,
+    expected,
+    "The rbndr.us control must resolve to both distinct documented public IPs only: " + JSON.stringify({ expected, observed, records }),
   );
-  console.log("DNS rebinding public control: " + JSON.stringify({ hostname, publicIp, queries: records.length }));
+  assert.ok(
+    records.every((record) => Number.isFinite(record.ttl) && record.ttl <= 5),
+    "The rbndr.us control must return short-lived DNS A answers: " + JSON.stringify(records),
+  );
+  console.log("DNS rebinding public control: " + JSON.stringify({ hostname, expectedPublicIps: expected, queries: records.length }));
 }
 
 async function assertDnsRebindingAlternates(hostname, publicIp, privateIp) {
@@ -328,19 +332,22 @@ async function assertDnsRebindingAlternates(hostname, publicIp, privateIp) {
 }
 
 async function runDnsRebindingAcceptance(token) {
-  const publicIp = await discoverPublicRebindingIp();
-  assert.ok(isPublicIpv4(publicIp), "The rebinding public control IP must be globally routable.");
+  const [publicIp, controlIp] = DNS_REBINDING_CONTROL_IPS;
+  assert.ok(isPublicIpv4(publicIp) && isPublicIpv4(controlIp) && publicIp !== controlIp,
+    "DNS rebinding control must use two distinct globally routable IPv4 addresses.");
   const publicHex = ipv4ToHex(publicIp);
+  const controlHex = ipv4ToHex(controlIp);
 
   for (const target of DNS_REBINDING_PRIVATE_TARGETS) {
-    const controlHostname = publicHex + "." + publicHex + ".rbndr.us";
+    const controlHostname = publicHex + "." + controlHex + ".rbndr.us";
     const hostname = publicHex + "." + ipv4ToHex(target.ip) + ".rbndr.us";
-    await assertDnsRebindingControl(controlHostname, publicIp);
+    await assertDnsRebindingControl(controlHostname, [publicIp, controlIp]);
     await assertDnsRebindingAlternates(hostname, publicIp, target.ip);
 
     const url = new URL(PLATFORM_URL + "/__acceptance/dns-rebinding-probe");
     url.searchParams.set("public", publicIp);
     url.searchParams.set("private", target.ip);
+    url.searchParams.set("control", controlIp);
     const response = await fetch(url, {
       headers: { authorization: "Bearer " + token, accept: "application/json" },
       signal: AbortSignal.timeout(90_000),
@@ -361,6 +368,7 @@ async function runDnsRebindingAcceptance(token) {
       target: target.name,
       hostname,
       publicIp,
+      controlIp,
       privateIp: target.ip,
       publicResponses: result.body.publicResponses,
       networkErrors: result.body.networkErrors,

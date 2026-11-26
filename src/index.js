@@ -252,15 +252,17 @@ async function cancelProbeResponseBody(response) {
   }
 }
 
-async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = globalThis.fetch, probeIntervalMs = 1_100) {
+async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, controlIp, fetchImpl = globalThis.fetch, probeIntervalMs = 1_100) {
   if (typeof fetchImpl !== "function" ||
       !isPublicRoutableIpv4(publicIp) ||
-      !ACCEPTANCE_DNS_REBINDING_PRIVATE_IPS.has(privateIp)) {
-    return { status: "invalid_target", publicIp, privateIp, probes: [] };
+      !ACCEPTANCE_DNS_REBINDING_PRIVATE_IPS.has(privateIp) ||
+      !isPublicRoutableIpv4(controlIp) ||
+      controlIp === publicIp) {
+    return { status: "invalid_target", publicIp, privateIp, controlIp, probes: [] };
   }
 
   const publicLabel = ipv4ToHex(publicIp);
-  const controlHostname = publicLabel + "." + publicLabel + ".rbndr.us";
+  const controlHostname = publicLabel + "." + ipv4ToHex(controlIp) + ".rbndr.us";
   const hostname = publicLabel + "." + ipv4ToHex(privateIp) + ".rbndr.us";
   const requestInit = {
     method: "HEAD",
@@ -281,9 +283,9 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = g
   const baselineController = new AbortController();
   const baselineTimeout = setTimeout(() => baselineController.abort(), 8_000);
   try {
-    // Both DNS labels encode the same public IP, so this rbndr.us control
-    // hostname is deterministic and uses the same hostname family, origin IP,
-    // port, and Host-header shape as the mixed public/private target below.
+    // rbndr.us rejects identical labels. The control uses two distinct public
+    // GitHub Pages IPs; the mixed hostname below uses the primary public IP
+    // and one private target. The runtime fingerprint must match publicly.
     const response = await fetchImpl(
       "http://" + controlHostname + "/?exportflow_acceptance_control=1",
       { ...requestInit, signal: baselineController.signal },
@@ -297,7 +299,8 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = g
       controlHostname,
       publicIp,
       privateIp,
-      reason: safeDiagnosticField(error?.message, 240) || "Deterministic public DNS control did not return a response.",
+      controlIp,
+      reason: safeDiagnosticField(error?.message, 240) || "Distinct-public-IP DNS control did not return a response.",
       probes: [],
     };
   } finally {
@@ -313,10 +316,11 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = g
       controlHostname,
       publicIp,
       privateIp,
+      controlIp,
       baseline,
       reason: baseline.server?.toLowerCase() === "cloudflare"
-        ? "Deterministic public DNS control returned a Cloudflare edge response; a direct non-Cloudflare public origin is required."
-        : "Deterministic public DNS control must return an HTTP response with a non-empty non-Cloudflare server header.",
+        ? "Distinct-public-IP DNS control returned a Cloudflare edge response; a direct non-Cloudflare public origin is required."
+        : "Distinct-public-IP DNS control must return an HTTP response with a non-empty non-Cloudflare server header.",
       probes: [],
     };
   }
@@ -377,6 +381,7 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = g
     controlHostname,
     publicIp,
     privateIp,
+    controlIp,
     baseline,
     attempts: probes.length,
     publicResponses,
@@ -424,12 +429,17 @@ export function createWorker(options = {}) {
           }
           const publicIp = url.searchParams.get("public");
           const privateIp = url.searchParams.get("private");
+          const controlIp = url.searchParams.get("control");
           if (!isPublicRoutableIpv4(publicIp) || !ACCEPTANCE_DNS_REBINDING_PRIVATE_IPS.has(privateIp)) {
-            return json({ error: { code: "INVALID_DNS_REBINDING_TARGET", message: "Only a public control IP and the fixed private test targets are accepted." } }, 400);
+            return json({ error: { code: "INVALID_DNS_REBINDING_TARGET", message: "A public target IP and one of the fixed private test targets are required." } }, 400);
+          }
+          if (!isPublicRoutableIpv4(controlIp) || controlIp === publicIp) {
+            return json({ error: { code: "INVALID_DNS_REBINDING_CONTROL", message: "The public DNS control must be a distinct globally routable IPv4 address." } }, 400);
           }
           const diagnostics = await runAcceptanceDnsRebindingProbe(
             publicIp,
             privateIp,
+            controlIp,
             options.acceptanceDnsRebindingFetch,
             options.acceptanceDnsRebindingProbeIntervalMs ?? 1_100,
           );
