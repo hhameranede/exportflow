@@ -277,6 +277,9 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
 
   const fingerprint = (response) => ({
     status: response.status,
+    responseUrl: safeDiagnosticField(response.url, 512),
+    redirected: response.redirected === true,
+    location: safeDiagnosticField(response.headers.get("location"), 512),
     server: safeDiagnosticField(response.headers.get("server"), 80),
     contentType: safeDiagnosticField(response.headers.get("content-type"), 120),
     contentLength: safeDiagnosticField(response.headers.get("content-length"), 40),
@@ -286,6 +289,9 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
     cfRay: safeDiagnosticField(response.headers.get("cf-ray"), 120),
     cfCacheStatus: safeDiagnosticField(response.headers.get("cf-cache-status"), 80),
     serverTiming: safeDiagnosticField(response.headers.get("server-timing"), 180),
+    via: safeDiagnosticField(response.headers.get("via"), 160),
+    xCache: safeDiagnosticField(response.headers.get("x-cache"), 160),
+    xServedBy: safeDiagnosticField(response.headers.get("x-served-by"), 160),
   });
 
   let baseline;

@@ -288,6 +288,52 @@ test("Acceptance DNS rebinding probes reject Cloudflare edge baselines and retai
 });
 
 
+test("Acceptance DNS rebinding diagnostics retain HTTP redirect destination and response URL", async () => {
+  const sessionId = "worker-test-redirect";
+  const targetHostname = "make-185.199.108.153-rebindfor2mafter6times-127.0.0.1-rr-" + sessionId + ".1u.ms";
+  const requestUrl = "http://" + targetHostname + "/?exportflow_acceptance_control=1";
+  const redirectLocation = "https://redirect.example.test/cgi-bin/control";
+  const worker = createWorker({
+    acceptanceDnsRebindingProbe: true,
+    acceptanceDnsRebindingFetch: async (input) => {
+      assert.equal(String(input), requestUrl);
+      const response = new Response(null, {
+        status: 302,
+        headers: {
+          server: "cloudflare",
+          "content-type": "application/x-perl",
+          location: redirectLocation,
+          via: "1.1 synthetic-edge",
+          "cf-ray": "acceptance-redirect-test-ray",
+        },
+      });
+      Object.defineProperty(response, "url", { value: requestUrl });
+      return response;
+    },
+  });
+  const env = makeTestEnv();
+  env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
+  try {
+    const request = new Request(
+      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=185.199.108.153&private=127.0.0.1&session=" + sessionId,
+      { headers: { authorization: "Bearer " + TEST_TOKEN } },
+    );
+    const response = await worker.fetch(request, env);
+    const diagnostic = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(diagnostic.status, "inconclusive");
+    assert.deepEqual(diagnostic.probes, []);
+    assert.equal(diagnostic.baseline.status, 302);
+    assert.equal(diagnostic.baseline.location, redirectLocation);
+    assert.equal(diagnostic.baseline.responseUrl, requestUrl);
+    assert.equal(diagnostic.baseline.redirected, false);
+    assert.equal(diagnostic.baseline.via, "1.1 synthetic-edge");
+    assert.equal(diagnostic.baseline.cfRay, "acceptance-redirect-test-ray");
+  } finally {
+    env.__fixture.close();
+  }
+});
+
 test("tenant API authentication fails closed when the dedicated D1 binding is missing or invalid", async () => {
   const worker = createWorker();
   const request = makeTaskRequest({ goal: "Fetch page", url: "https://example.com" });
