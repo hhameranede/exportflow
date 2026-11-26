@@ -321,9 +321,21 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
     clearTimeout(baselineTimeout);
   }
 
+  const expectedCernControlLocation = "https://" + hostname + ".web.cern.ch/" + hostname;
+  const isKnownCernControlRedirect =
+    baseline.status === 302 &&
+    baseline.contentType?.toLowerCase() === "application/x-perl" &&
+    baseline.location === expectedCernControlLocation;
+  const cloudflareServer = baseline.server?.toLowerCase() === "cloudflare";
+  const baselineProfile = isKnownCernControlRedirect
+    ? "known_cern_control_redirect"
+    : cloudflareServer
+      ? "cloudflare_unmatched"
+      : "origin_response";
+
   if (baseline.status < 200 || baseline.status >= 500 ||
       !baseline.server ||
-      baseline.server.toLowerCase() === "cloudflare") {
+      (cloudflareServer && !isKnownCernControlRedirect)) {
     return {
       status: "inconclusive",
       hostname,
@@ -331,9 +343,10 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
       publicIp,
       privateIp,
       baseline,
-      reason: baseline.server?.toLowerCase() === "cloudflare"
-        ? "The first public DNS-rebinding response came from the Cloudflare edge, not the direct public control origin."
-        : "The first public DNS-rebinding response must be an HTTP response with a non-empty non-Cloudflare server header.",
+      baselineProfile,
+      reason: cloudflareServer
+        ? "The Cloudflare Server fingerprint did not match the exact known CERN public-control 302 signature."
+        : "The first public DNS-rebinding response must be an HTTP 2xx–4xx response with a non-empty Server header.",
       probes: [],
     };
   }
@@ -353,7 +366,8 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
         observed.server === baseline.server &&
         observed.contentType === baseline.contentType &&
         observed.contentLength === baseline.contentLength &&
-        observed.etag === baseline.etag;
+        observed.etag === baseline.etag &&
+        observed.location === baseline.location;
       probes.push({
         attempt: attempt + 1,
         outcome: matchesPublicControl ? "public_control_match" : "unexpected_http_response",
@@ -397,6 +411,7 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
     publicIp,
     privateIp,
     baseline,
+    baselineProfile,
     baselinePublicResponses,
     attempts: probes.length,
     publicResponses,

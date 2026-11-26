@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { resolve4 } from "node:dns/promises";
 import { assertSuccessfulFetchTask } from "./fetch-assertions.mjs";
 import { collectDnsRebindingObservations, createStageScopedDnsRebindingSuffix } from "./dns-rebinding-preflight.mjs";
-import { startAuthoritativeDnsLogCapture } from "./authoritative-dns-log.mjs";
+import { hasAuthoritativeAAnswer, startAuthoritativeDnsLogCapture } from "./authoritative-dns-log.mjs";
 
 const FETCH_CANDIDATES = Object.freeze([
   { url: "https://example.com/", expectedContent: "Example Domain", expectedHost: "example.com" },
@@ -387,6 +387,11 @@ async function runDnsRebindingAcceptance(token) {
     // runner-side observation only; it does not change Worker DNS behavior.
     const dnsLogCapture = await dnsLogCaptureSession.finish({ drainMs: 250 });
     const dnsLogPath = persistAuthoritativeDnsLogCapture(dnsLogCapture, index + 1);
+    const privateAAnswerObserved = hasAuthoritativeAAnswer(
+      dnsLogCapture.matchingRecords,
+      expectedHostname,
+      target.ip,
+    );
     console.log("1u.ms authoritative DNS stream capture: " + JSON.stringify({
       target: target.name,
       hostname: expectedHostname,
@@ -396,6 +401,7 @@ async function runDnsRebindingAcceptance(token) {
       contentType: dnsLogCapture.contentType || "",
       streamRecordCount: dnsLogCapture.streamRecordCount ?? null,
       matchingRecordCount: dnsLogCapture.matchingRecordCount ?? null,
+      privateAAnswerObserved,
       matchingRecords: (dnsLogCapture.matchingRecords || []).slice(0, 20).map((record) => record.slice(0, 600)),
       truncated: dnsLogCapture.truncated || false,
       file: dnsLogPath,
@@ -406,6 +412,12 @@ async function runDnsRebindingAcceptance(token) {
         "Isolated Worker DNS-rebinding request failed: " +
         String(requestError?.message || requestError) +
         "; authoritative DNS log saved to " + dnsLogPath,
+      );
+    }
+    if (!privateAAnswerObserved) {
+      throw new Error(
+        "The Worker did not produce an authoritative private A answer for the exact probe hostname; " +
+        "HTTP network errors cannot count as DNS-rebinding protection. DNS log saved to " + dnsLogPath,
       );
     }
     assert.equal(result.response.status, 200, "Isolated Worker DNS rebinding probe must return HTTP 200.");
@@ -426,6 +438,11 @@ async function runDnsRebindingAcceptance(token) {
       privateIp: target.ip,
       baselineStatus: result.body.baseline.status,
       baselineServer: result.body.baseline.server,
+      baselineContentType: result.body.baseline.contentType,
+      baselineLocation: result.body.baseline.location,
+      baselineResponseUrl: result.body.baseline.responseUrl,
+      baselineProfile: result.body.baselineProfile,
+      privateAAnswerObserved,
       baselinePublicResponses: result.body.baselinePublicResponses,
       publicResponses: result.body.publicResponses,
       networkErrors: result.body.networkErrors,

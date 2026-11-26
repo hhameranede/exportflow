@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createAuthoritativeDnsLogUrl,
+  hasAuthoritativeAAnswer,
   startAuthoritativeDnsLogCapture,
 } from "../scripts/acceptance/authoritative-dns-log.mjs";
 
@@ -117,6 +118,21 @@ test("authoritative DNS stream bounds oversized responses", async () => {
   assert.equal(result.status, "captured");
   assert.equal(result.truncated, true);
   assert.equal(result.matchingRecordCount, 1);
+});
+
+test("private DNS evidence requires an exact A question for the exact hostname and answer", () => {
+  const privateIp = "127.0.0.1";
+  const records = [
+    '[2026-11-26 20:52:50.000] 172.70.1.1 A "' + hostname + '." -> &{[188.184.67.127] false}',
+    '[2026-11-26 20:52:51.000] 172.70.1.1 AAAA "' + hostname + '." -> &{[] false}',
+    '[2026-11-26 20:52:52.000] 172.70.1.1 A "unrelated.1u.ms." -> &{[' + privateIp + '] false}',
+  ];
+  assert.equal(hasAuthoritativeAAnswer(records, hostname, privateIp), false);
+  assert.equal(hasAuthoritativeAAnswer([
+    ...records,
+    '[2026-11-26 20:52:53.000] 172.70.1.1 A "' + hostname + '." -> &{[' + privateIp + '] false}',
+  ], hostname, privateIp), true);
+  assert.equal(hasAuthoritativeAAnswer(records, hostname + "-other", privateIp), false);
 });
 
 test("authoritative DNS stream HTTP and transport failures are diagnostics, not false passes", async () => {

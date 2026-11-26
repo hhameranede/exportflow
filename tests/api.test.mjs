@@ -200,6 +200,56 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
 });
 
 
+test("Acceptance DNS rebinding probe recognizes only the exact known CERN control redirect behind a Cloudflare Server header", async () => {
+  const calls = [];
+  const sessionId = "worker-test-cern-control";
+  const targetHostname = "make-185.199.108.153-rebindfor2mafter6times-127.0.0.1-rr-" + sessionId + ".1u.ms";
+  const expectedLocation = "https://" + targetHostname + ".web.cern.ch/" + targetHostname;
+  const worker = createWorker({
+    acceptanceDnsRebindingProbe: true,
+    acceptanceDnsRebindingProbeIntervalMs: 0,
+    acceptanceDnsRebindingFetch: async (input, init) => {
+      calls.push({ url: String(input), init });
+      if (calls.length === 1) {
+        const response = new Response(null, {
+          status: 302,
+          headers: {
+            server: "cloudflare",
+            "content-type": "application/x-perl",
+            location: expectedLocation,
+            "cf-ray": "acceptance-cern-control-ray",
+          },
+        });
+        Object.defineProperty(response, "url", { value: String(input) });
+        return response;
+      }
+      throw new Error("private target connection denied");
+    },
+  });
+  const env = makeTestEnv();
+  env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
+  try {
+    const request = new Request(
+      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=185.199.108.153&private=127.0.0.1&session=" + sessionId,
+      { headers: { authorization: "Bearer " + TEST_TOKEN } },
+    );
+    const response = await worker.fetch(request, env);
+    const diagnostic = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(diagnostic.status, "mixed");
+    assert.equal(diagnostic.baselineProfile, "known_cern_control_redirect");
+    assert.equal(diagnostic.baseline.status, 302);
+    assert.equal(diagnostic.baseline.location, expectedLocation);
+    assert.equal(diagnostic.baselinePublicResponses, 1);
+    assert.equal(diagnostic.networkErrors, 12);
+    assert.equal(diagnostic.unexpectedResponses, 0);
+    assert.equal(calls.length, 13);
+    assert.ok(calls.every(({ init }) => init.method === "HEAD" && init.redirect === "manual" && init.cache === "no-store"));
+  } finally {
+    env.__fixture.close();
+  }
+});
+
 test("Acceptance DNS rebinding probe fails closed when the private target returns a different HTTP fingerprint", async () => {
   const sessionId = "worker-test-different";
   const targetHostname = "make-185.199.108.153-rebindfor2mafter6times-127.0.0.1-rr-" + sessionId + ".1u.ms";
@@ -242,6 +292,47 @@ test("Acceptance DNS rebinding probe fails closed when the private target return
   }
 });
 
+test("Acceptance DNS rebinding probe treats a changed Location as an unexpected HTTP fingerprint", async () => {
+  const sessionId = "worker-test-location-change";
+  const targetHostname = "make-185.199.108.153-rebindfor2mafter6times-127.0.0.1-rr-" + sessionId + ".1u.ms";
+  let calls = 0;
+  const expectedLocation = "https://" + targetHostname + ".web.cern.ch/" + targetHostname;
+  const worker = createWorker({
+    acceptanceDnsRebindingProbe: true,
+    acceptanceDnsRebindingProbeIntervalMs: 0,
+    acceptanceDnsRebindingFetch: async (input) => {
+      assert.equal(new URL(String(input)).hostname, targetHostname);
+      calls += 1;
+      return new Response(null, {
+        status: 302,
+        headers: {
+          server: "apache",
+          "content-type": "application/x-perl",
+          location: calls === 1 ? expectedLocation : "https://unexpected.example.test/private",
+        },
+      });
+    },
+  });
+  const env = makeTestEnv();
+  env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
+  try {
+    const request = new Request(
+      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=185.199.108.153&private=127.0.0.1&session=" + sessionId,
+      { headers: { authorization: "Bearer " + TEST_TOKEN } },
+    );
+    const response = await worker.fetch(request, env);
+    const diagnostic = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(diagnostic.status, "unexpected_http_response");
+    assert.equal(diagnostic.baseline.location, expectedLocation);
+    assert.equal(diagnostic.networkErrors, 0);
+    assert.equal(diagnostic.unexpectedResponses, 12);
+    assert.equal(calls, 13);
+  } finally {
+    env.__fixture.close();
+  }
+});
+
 test("Acceptance DNS rebinding probes reject Cloudflare edge baselines and retain bounded DNS diagnostics", async () => {
   const calls = [];
   const sessionId = "worker-test-cloudflare";
@@ -276,6 +367,7 @@ test("Acceptance DNS rebinding probes reject Cloudflare edge baselines and retai
     assert.equal(diagnostic.status, "inconclusive");
     assert.match(diagnostic.reason, /Cloudflare edge/);
     assert.equal(diagnostic.baseline.status, 530);
+    assert.equal(diagnostic.baselineProfile, "cloudflare_unmatched");
     assert.equal(diagnostic.baseline.cfErrorType, "error=1016");
     assert.equal(diagnostic.baseline.cfErrorOrigin, "dns");
     assert.equal(diagnostic.baseline.cfRay, "acceptance-test-ray");
@@ -324,6 +416,7 @@ test("Acceptance DNS rebinding diagnostics retain HTTP redirect destination and 
     assert.equal(diagnostic.status, "inconclusive");
     assert.deepEqual(diagnostic.probes, []);
     assert.equal(diagnostic.baseline.status, 302);
+    assert.equal(diagnostic.baselineProfile, "cloudflare_unmatched");
     assert.equal(diagnostic.baseline.location, redirectLocation);
     assert.equal(diagnostic.baseline.responseUrl, requestUrl);
     assert.equal(diagnostic.baseline.redirected, false);

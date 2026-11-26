@@ -48,6 +48,25 @@ export function createAuthoritativeDnsLogUrl(hostname, sessionId, endpoint = DEF
   return url;
 }
 
+export function hasAuthoritativeAAnswer(matchingRecords, hostname, address) {
+  if (!Array.isArray(matchingRecords) ||
+      typeof hostname !== "string" ||
+      typeof address !== "string") {
+    return false;
+  }
+
+  return matchingRecords.some((record) => {
+    if (typeof record !== "string") return false;
+    const separator = record.indexOf("->");
+    if (separator < 0) return false;
+    const question = record.slice(0, separator);
+    const answer = record.slice(separator + 2);
+    const query = question.match(/\\bA\\s+"([^"]+)"\\s*$/);
+    if (!query || (query[1] !== hostname && query[1] !== hostname + ".")) return false;
+    return answer.split(/[^0-9.]+/).includes(address);
+  });
+}
+
 export async function startAuthoritativeDnsLogCapture({
   hostname,
   sessionId,
