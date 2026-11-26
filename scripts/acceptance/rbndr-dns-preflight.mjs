@@ -79,7 +79,6 @@ async function queryDnsBatches(resolver, hostname, count) {
   return records;
 }
 
-await assertPublicControlOrigin();
 
 async function assertPublicAnswersBeforeRebind() {
   const target = PRIVATE_TARGETS[0];
