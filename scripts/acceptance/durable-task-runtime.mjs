@@ -292,13 +292,22 @@ async function queryDnsBatches(resolver, hostname, count) {
 }
 
 async function discoverPublicRebindingIp() {
-  // NeverSSL currently uses a direct AWS-hosted HTTP origin. Do not use
-  // example.com here: its A records are Cloudflare-owned edge IPs, and
-  // Workers cannot use those as outbound subrequest destinations.
-  const answers = await queryDnsBatches(DNS_REBINDING_RESOLVERS[0], "neverssl.com", 4);
+  // ftp.gnu.org resolves directly to a public Free Software Foundation origin
+  // (not a Cloudflare anycast address). Use that address for the rbndr control.
+  const answers = await queryDnsBatches(DNS_REBINDING_RESOLVERS[0], "ftp.gnu.org", 4);
   const publicIp = answers.map((answer) => answer.ip).find(isPublicIpv4);
-  assert.ok(publicIp, "Google Public DNS must return a public neverssl.com A record.");
+  assert.ok(publicIp, "Google Public DNS must return a public ftp.gnu.org A record.");
   return publicIp;
+}
+
+async function assertDnsRebindingControl(hostname, publicIp) {
+  const records = await queryDnsBatches(DNS_REBINDING_RESOLVERS[0], hostname, 3);
+  assert.ok(records.length >= 3, "The deterministic rbndr.us control must return DNS A answers.");
+  assert.ok(
+    records.every((record) => record.ip === publicIp && Number.isFinite(record.ttl) && record.ttl <= 5),
+    "The deterministic rbndr.us control must resolve only to the selected public IP: " + JSON.stringify(records),
+  );
+  console.log("DNS rebinding public control: " + JSON.stringify({ hostname, publicIp, queries: records.length }));
 }
 
 async function assertDnsRebindingAlternates(hostname, publicIp, privateIp) {
@@ -324,7 +333,9 @@ async function runDnsRebindingAcceptance(token) {
   const publicHex = ipv4ToHex(publicIp);
 
   for (const target of DNS_REBINDING_PRIVATE_TARGETS) {
+    const controlHostname = publicHex + "." + publicHex + ".rbndr.us";
     const hostname = publicHex + "." + ipv4ToHex(target.ip) + ".rbndr.us";
+    await assertDnsRebindingControl(controlHostname, publicIp);
     await assertDnsRebindingAlternates(hostname, publicIp, target.ip);
 
     const url = new URL(PLATFORM_URL + "/__acceptance/dns-rebinding-probe");
