@@ -16,8 +16,8 @@ const FETCH_CANDIDATES = Object.freeze([
 
 
 const DNS_REBINDING_RESOLVERS = Object.freeze([
-  { name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
-  { name: "GitHub runner system DNS", system: true, required: false },
+  { id: "google-doh", name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
+  { id: "runner-system", name: "GitHub runner system DNS", system: true, required: false },
 ]);
 // GitHub Pages has a stable public HTTP endpoint and is used only as the
 // first, public answer. 1u.ms then rebinds the same hostname to a fixed
@@ -303,9 +303,14 @@ function createDnsRebindingHostname(publicIp, privateIp, suffix) {
   return "make-" + publicIp + "-rebindfor2mafter1times-" + privateIp + "-rr-" + safeSuffix + ".1u.ms";
 }
 
-async function assertDnsRebindingAlternates(hostname, publicIp, privateIp) {
+async function assertDnsRebindingAlternates(hostname, publicIp, privateIp, hostnameSuffix) {
   const observations = await collectDnsRebindingObservations({
     hostname,
+    hostnameForResolver: (resolver) => createDnsRebindingHostname(
+      publicIp,
+      privateIp,
+      hostnameSuffix + "-" + resolver.id,
+    ),
     expectedAddresses: [publicIp, privateIp],
     resolvers: DNS_REBINDING_RESOLVERS,
     queryDnsBatches,
@@ -327,12 +332,13 @@ async function runDnsRebindingAcceptance(token) {
   for (const [index, target] of DNS_REBINDING_PRIVATE_TARGETS.entries()) {
     // Use a disposable hostname for the runner's DoH preflight so its first
     // public answer cannot consume the Cloudflare Worker's independent session.
+    const preflightSuffix = "preflight-" + RUN_ID.slice(-20) + "-" + String(index + 1);
     const preflightHostname = createDnsRebindingHostname(
       publicIp,
       target.ip,
-      "preflight-" + RUN_ID + "-" + String(index + 1),
+      preflightSuffix + "-base",
     );
-    await assertDnsRebindingAlternates(preflightHostname, publicIp, target.ip);
+    await assertDnsRebindingAlternates(preflightHostname, publicIp, target.ip, preflightSuffix);
 
     const sessionId = "worker-" + RUN_ID + "-" + String(index + 1);
     const url = new URL(PLATFORM_URL + "/__acceptance/dns-rebinding-probe");
