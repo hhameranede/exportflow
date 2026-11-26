@@ -19,7 +19,7 @@ const RUN_ID = String(process.env.GITHUB_RUN_ID || process.env.CI_RUN_ID || Date
   .slice(0, 32);
 
 function createHostname(privateIp, suffix) {
-  return "make-" + PUBLIC_IP + "-rebindfor2mafter6times-" + privateIp + "-rr-" + suffix + ".1u.ms";
+  return "make-" + PUBLIC_IP + "-rebindfor2mafter2times-" + privateIp + "-rr-" + suffix + ".1u.ms";
 }
 
 const systemResolver = new Resolver();
@@ -126,7 +126,7 @@ async function assertPublicAnswersBeforeRebind() {
     stage: "ci", runId: RUN_ID, targetIndex: 1, resolverId: "sequence",
   }));
   // Recursive DoH resolvers may issue several authoritative DNS questions per client lookup.
-  // Keep a bounded 12-lookup window so we can observe the private answer after the first public answers.
+  // Keep a bounded 12-lookup window so we can observe the private answer after the first two public answers.
   const answers = await queryDnsBatches(DNS_RESOLVERS[0], hostname, 12);
   const firstTwo = answers.slice(0, 2).map((answer) => answer.ip);
   assert.deepEqual(firstTwo, [PUBLIC_IP, PUBLIC_IP],
@@ -163,7 +163,7 @@ for (const [index, target] of PRIVATE_TARGETS.entries()) {
 assert.equal(verified.length, PRIVATE_TARGETS.length);
 console.log("1u.ms DNS rebinding preflight passed: " + JSON.stringify({
   authority: "1u.ms", publicIp: PUBLIC_IP, publicAnswersBeforeRebind: 2,
-  rebindAfterAuthoritativeQuestions: 6, initialSequenceQueries: 12,
+  rebindAfterAuthoritativeQuestions: 2, initialSequenceQueries: 12,
   rebindingWindow: "2m", queriesPerResolverAndTarget: 12,
   intervalMs: QUERY_INTERVAL_MS, verified,
 }));

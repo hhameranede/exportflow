@@ -63,7 +63,11 @@ export function hasAuthoritativeAAnswer(matchingRecords, hostname, address) {
     const answer = record.slice(separator + 2);
     const query = question.match(/\bA\s+"([^"]+)"\s*$/);
     if (!query || (query[1] !== hostname && query[1] !== hostname + ".")) return false;
-    return answer.split(/[^0-9.]+/).includes(address);
+    // The 1u.ms viewer embeds the entire DNS resource record, including QNAME.
+    // Match only the IPv4 RDATA after "IN A" so an IP in the hostname cannot
+    // masquerade as the returned address.
+    const answerRecord = answer.match(/\\bIN\\s+A\\s+((?:\\d{1,3}\\.){3}\\d{1,3})(?=\\]|\\s|$)/i);
+    return answerRecord?.[1] === address;
   });
 }
 

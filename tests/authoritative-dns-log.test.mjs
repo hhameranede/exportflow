@@ -120,19 +120,24 @@ test("authoritative DNS stream bounds oversized responses", async () => {
   assert.equal(result.matchingRecordCount, 1);
 });
 
-test("private DNS evidence requires an exact A question for the exact hostname and answer", () => {
+test("private DNS evidence parses only the actual A-record RDATA, not an IP embedded in the hostname", () => {
   const privateIp = "127.0.0.1";
-  const records = [
-    '[2026-11-26 20:52:50.000] 172.70.1.1 A "' + hostname + '." -> &{[188.184.67.127] false}',
-    '[2026-11-26 20:52:51.000] 172.70.1.1 AAAA "' + hostname + '." -> &{[] false}',
-    '[2026-11-26 20:52:52.000] 172.70.1.1 A "unrelated.1u.ms." -> &{[' + privateIp + '] false}',
-  ];
-  assert.equal(hasAuthoritativeAAnswer(records, hostname, privateIp), false);
-  assert.equal(hasAuthoritativeAAnswer([
-    ...records,
-    '[2026-11-26 20:52:53.000] 172.70.1.1 A "' + hostname + '." -> &{[' + privateIp + '] false}',
-  ], hostname, privateIp), true);
-  assert.equal(hasAuthoritativeAAnswer(records, hostname + "-other", privateIp), false);
+  const publicAnswer = '[2026-11-26 20:52:50.000] 104.22.73.72:28589 A "' +
+    hostname + '." -> &{[' + hostname + '. 0 IN A 188.184.67.127] false}';
+  const emptyIpv6Answer = '[2026-11-26 20:52:51.000] 104.22.73.72:28589 AAAA "' +
+    hostname + '." -> &{[] false}';
+  const unrelatedPrivateAnswer = '[2026-11-26 20:52:52.000] 104.22.73.72:28589 A "unrelated.1u.ms." -> &{[unrelated.1u.ms. 0 IN A ' +
+    privateIp + '] false}';
+
+  // The hostname itself contains 127.0.0.1, while the returned A RDATA is public.
+  assert.equal(hasAuthoritativeAAnswer([publicAnswer], hostname, privateIp), false);
+  assert.equal(hasAuthoritativeAAnswer([emptyIpv6Answer], hostname, privateIp), false);
+  assert.equal(hasAuthoritativeAAnswer([unrelatedPrivateAnswer], hostname, privateIp), false);
+
+  const actualPrivateAnswer = '[2026-11-26 20:52:53.000] 104.22.73.72:28589 A "' +
+    hostname + '." -> &{[' + hostname + '. 0 IN A ' + privateIp + '] false}';
+  assert.equal(hasAuthoritativeAAnswer([actualPrivateAnswer], hostname, privateIp), true);
+  assert.equal(hasAuthoritativeAAnswer([actualPrivateAnswer], hostname + "-other", privateIp), false);
 });
 
 test("authoritative DNS stream HTTP and transport failures are diagnostics, not false passes", async () => {
