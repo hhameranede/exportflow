@@ -381,16 +381,18 @@ async function runDnsRebindingAcceptance(token) {
       sessionId,
     });
     const dnsLogPath = persistAuthoritativeDnsLogCapture(dnsLogCapture, index + 1);
-    console.log("1u.ms authoritative DNS log capture: " + JSON.stringify({
+    console.log("1u.ms authoritative DNS snapshot: " + JSON.stringify({
       target: target.name,
       hostname: expectedHostname,
       sessionId,
       status: dnsLogCapture.status,
       httpStatus: dnsLogCapture.httpStatus || null,
       contentType: dnsLogCapture.contentType || "",
+      snapshotRecordCount: dnsLogCapture.snapshotRecordCount ?? null,
+      matchingRecordCount: dnsLogCapture.matchingRecordCount ?? null,
+      matchingRecords: (dnsLogCapture.matchingRecords || []).slice(0, 20).map((record) => record.slice(0, 600)),
       truncated: dnsLogCapture.truncated || false,
       file: dnsLogPath,
-      excerpt: dnsLogCapture.body ? dnsLogCapture.body.slice(0, 1800) : "",
       error: dnsLogCapture.error || null,
     }));
     if (requestError) {
