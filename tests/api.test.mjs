@@ -365,7 +365,7 @@ test("Acceptance DNS rebinding probes reject Cloudflare edge baselines and retai
     assert.equal(response.status, 200);
     const diagnostic = await response.json();
     assert.equal(diagnostic.status, "inconclusive");
-    assert.match(diagnostic.reason, /Cloudflare edge/);
+    assert.match(diagnostic.reason, /known CERN public-control 302 signature/);
     assert.equal(diagnostic.baseline.status, 530);
     assert.equal(diagnostic.baselineProfile, "cloudflare_unmatched");
     assert.equal(diagnostic.baseline.cfErrorType, "error=1016");
