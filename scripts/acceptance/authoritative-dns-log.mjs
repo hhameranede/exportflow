@@ -66,7 +66,7 @@ export function hasAuthoritativeAAnswer(matchingRecords, hostname, address) {
     // The 1u.ms viewer embeds the entire DNS resource record, including QNAME.
     // Match only the IPv4 RDATA after "IN A" so an IP in the hostname cannot
     // masquerade as the returned address.
-    const answerRecord = answer.match(/\\bIN\\s+A\\s+((?:\\d{1,3}\\.){3}\\d{1,3})(?=\\]|\\s|$)/i);
+    const answerRecord = answer.match(/\bIN\s+A\s+((?:\d{1,3}\.){3}\d{1,3})(?=\]|\s|$)/i);
     return answerRecord?.[1] === address;
   });
 }
