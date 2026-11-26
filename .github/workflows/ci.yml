@@ -28,6 +28,9 @@ jobs:
    - run: npm install --no-audit --no-fund
    - run: npm test
    - run: npm run check
+   - name: Verify Singularity DNS rebinding preflight (PR #142 only; no Cloudflare changes)
+     if: github.event_name == 'pull_request' && github.event.pull_request.number == 142
+     run: node scripts/acceptance/singularity-dns-preflight.mjs
    - name: Install pinned Playwright and Chromium outside project dependencies
      run: |
       npm install --prefix "$RUNNER_TEMP/ef-browser" --no-save --package-lock=false playwright@1.65.1
