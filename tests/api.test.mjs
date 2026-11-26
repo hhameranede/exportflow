@@ -129,7 +129,7 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
     acceptanceDnsRebindingFetch: async (input, init) => {
       const url = new URL(String(input));
       calls.push({ url: url.href, init });
-      if (url.hostname === "example.com") {
+      if (url.hostname === "neverssl.com") {
         return new Response(null, { status: 200, headers: { server: "acceptance-test" } });
       }
       probeCalls += 1;
@@ -171,6 +171,34 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
       { headers: { authorization: "Bearer " + TEST_TOKEN } },
     ), env);
     assert.equal(rejectedTarget.status, 400);
+  } finally {
+    env.__fixture.close();
+  }
+});
+
+
+test("Acceptance DNS rebinding probes reject a Cloudflare edge as their public control", async () => {
+  const calls = [];
+  const worker = createWorker({
+    acceptanceDnsRebindingProbe: true,
+    acceptanceDnsRebindingFetch: async (input) => {
+      calls.push(String(input));
+      return new Response(null, { status: 409, headers: { server: "cloudflare" } });
+    },
+  });
+  const env = makeTestEnv();
+  env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
+  try {
+    const request = new Request(
+      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=34.223.124.45&private=127.0.0.1",
+      { headers: { authorization: "Bearer " + TEST_TOKEN } },
+    );
+    const response = await worker.fetch(request, env);
+    assert.equal(response.status, 200);
+    const diagnostic = await response.json();
+    assert.equal(diagnostic.status, "inconclusive");
+    assert.match(diagnostic.reason, /non-Cloudflare public origin/);
+    assert.deepEqual(calls, ["http://neverssl.com/"]);
   } finally {
     env.__fixture.close();
   }
