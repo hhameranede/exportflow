@@ -1,5 +1,32 @@
 import assert from "node:assert/strict";
 
+export function createStageScopedDnsRebindingSuffix({ stage, runId, targetIndex, resolverId }) {
+  const safeStage = String(stage || "").toLowerCase();
+  const safeRunId = String(runId || "")
+    .replace(/[^a-zA-Z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(-20);
+  const safeTargetIndex = String(targetIndex);
+  const safeResolverId = String(resolverId || "").toLowerCase();
+
+  if (!["ci", "runtime"].includes(safeStage)) {
+    throw new TypeError("A recognized DNS-rebinding stage namespace is required.");
+  }
+  if (!safeRunId || !/^[1-9]\\d{0,2}$/.test(safeTargetIndex)) {
+    throw new TypeError("A valid run ID and target index are required for the DNS-rebinding hostname.");
+  }
+  if (!/^[a-z0-9-]{1,16}$/.test(safeResolverId)) {
+    throw new TypeError("A valid resolver identifier is required for the DNS-rebinding hostname.");
+  }
+
+  const suffix = safeStage + "-" + safeRunId + "-" + safeTargetIndex + "-" + safeResolverId;
+  if (suffix.length < 8 || suffix.length > 48) {
+    throw new RangeError("The stage-scoped DNS-rebinding hostname suffix must be between 8 and 48 characters.");
+  }
+  return suffix;
+}
+
 function summarizeError(error) {
   const code = typeof error?.code === "string" ? error.code : null;
   const message = typeof error?.message === "string" ? error.message : String(error);
