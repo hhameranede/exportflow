@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, appendFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolve4 } from "node:dns/promises";
 import { assertSuccessfulFetchTask } from "./fetch-assertions.mjs";
 import { collectDnsRebindingObservations, createStageScopedDnsRebindingSuffix } from "./dns-rebinding-preflight.mjs";
+import { captureAuthoritativeDnsLog } from "./authoritative-dns-log.mjs";
 
 const FETCH_CANDIDATES = Object.freeze([
   { url: "https://example.com/", expectedContent: "Example Domain", expectedHost: "example.com" },
@@ -149,6 +150,14 @@ async function readJson(response, label) {
     throw new Error(label + " returned non-JSON HTTP " + response.status + ".");
   }
   return { response, body };
+}
+
+function persistAuthoritativeDnsLogCapture(capture, targetIndex) {
+  const directory = join(process.env.RUNNER_TEMP || tmpdir(), "exportflow-authoritative-dns");
+  mkdirSync(directory, { recursive: true });
+  const path = join(directory, "1u-ms-" + RUN_ID + "-" + targetIndex + ".json");
+  writeFileSync(path, JSON.stringify(capture, null, 2) + "\\n", "utf8");
+  return path;
 }
 
 function taskFromApi(result, label) {
@@ -349,13 +358,49 @@ async function runDnsRebindingAcceptance(token) {
     url.searchParams.set("public", publicIp);
     url.searchParams.set("private", target.ip);
     url.searchParams.set("session", sessionId);
-    const response = await fetch(url, {
-      headers: { authorization: "Bearer " + token, accept: "application/json" },
-      signal: AbortSignal.timeout(90_000),
-      cache: "no-store",
+    let result;
+    let requestError;
+    try {
+      const response = await fetch(url, {
+        headers: { authorization: "Bearer " + token, accept: "application/json" },
+        signal: AbortSignal.timeout(90_000),
+        cache: "no-store",
+        redirect: "manual",
+      });
+      result = await readJson(response, "Acceptance DNS rebinding probe");
+    } catch (error) {
+      requestError = error;
+    }
+
+    // Query the authoritative 1u.ms log after every Worker probe, including
+    // inconclusive edge responses. This is runner-side observation only:
+    // it does not change DNS, influence the Worker resolver, or relax the gate.
+    const expectedHostname = createDnsRebindingHostname(publicIp, target.ip, sessionId);
+    const dnsLogCapture = await captureAuthoritativeDnsLog({
+      hostname: expectedHostname,
+      sessionId,
     });
-    const result = await readJson(response, "Acceptance DNS rebinding probe");
-    assert.equal(response.status, 200, "Isolated Worker DNS rebinding probe must return HTTP 200.");
+    const dnsLogPath = persistAuthoritativeDnsLogCapture(dnsLogCapture, index + 1);
+    console.log("1u.ms authoritative DNS log capture: " + JSON.stringify({
+      target: target.name,
+      hostname: expectedHostname,
+      sessionId,
+      status: dnsLogCapture.status,
+      httpStatus: dnsLogCapture.httpStatus || null,
+      contentType: dnsLogCapture.contentType || "",
+      truncated: dnsLogCapture.truncated || false,
+      file: dnsLogPath,
+      excerpt: dnsLogCapture.body ? dnsLogCapture.body.slice(0, 1800) : "",
+      error: dnsLogCapture.error || null,
+    }));
+    if (requestError) {
+      throw new Error(
+        "Isolated Worker DNS-rebinding request failed: " +
+        String(requestError?.message || requestError) +
+        "; authoritative DNS log saved to " + dnsLogPath,
+      );
+    }
+    assert.equal(result.response.status, 200, "Isolated Worker DNS rebinding probe must return HTTP 200.");
     assert.equal(
       result.body.status,
       "mixed",
