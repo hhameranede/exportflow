@@ -19,10 +19,9 @@ const DNS_REBINDING_RESOLVERS = Object.freeze([
   { id: "google-doh", name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
   { id: "runner-system", name: "GitHub runner system DNS", system: true, required: false },
 ]);
-// Use a public control IP outside Cloudflare's address space. CI independently
-// checks the HTTP origin fingerprint with the exact rebinding Host header before
-// this Worker-runtime probe is allowed to proceed.
-const DNS_REBINDING_PUBLIC_IP = "93.184.216.34";
+// The DNS service returns the public control IP for the first two A queries,
+// then rebinds the same hostname to the fixed private test target.
+const DNS_REBINDING_PUBLIC_IP = "185.199.108.153";
 const DNS_REBINDING_PRIVATE_TARGETS = Object.freeze([
   { name: "loopback", ip: "127.0.0.1" },
   { name: "unspecified", ip: "0.0.0.0" },
@@ -300,7 +299,7 @@ function createDnsRebindingHostname(publicIp, privateIp, suffix) {
   if (!safeSuffix || !/^[a-z0-9-]{8,48}$/.test(safeSuffix)) {
     throw new Error("A unique DNS rebinding hostname suffix is required.");
   }
-  return "make-" + publicIp + "-rebindfor2mafter1times-" + privateIp + "-rr-" + safeSuffix + ".1u.ms";
+  return "make-" + publicIp + "-rebindfor2mafter2times-" + privateIp + "-rr-" + safeSuffix + ".1u.ms";
 }
 
 async function assertDnsRebindingAlternates(hostname, publicIp, privateIp, targetIndex) {
