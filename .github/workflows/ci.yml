@@ -157,6 +157,14 @@ jobs:
    - name: Run real Cloudflare D1 + Worker durable Task acceptance
      if: steps.acceptance-gate.outputs.run == 'true'
      run: node scripts/acceptance/durable-task-runtime.mjs smoke
+   - name: Upload 1u.ms authoritative DNS diagnostics
+     if: always() && steps.acceptance-gate.outputs.run == 'true'
+     uses: actions/upload-artifact@v4
+     with:
+      name: exportflow-1u-ms-dns-log-${{ github.run_id }}
+      path: ${{ runner.temp }}/exportflow-authoritative-dns/
+      if-no-files-found: warn
+      retention-days: 3
    - name: Clean up run-scoped synthetic Acceptance data
      if: always() && steps.acceptance-gate.outputs.run == 'true'
      run: node scripts/acceptance/durable-task-runtime.mjs cleanup
