@@ -268,7 +268,11 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
     method: "HEAD",
     redirect: "manual",
     cache: "no-store",
-    headers: { accept: "*/*" },
+    headers: {
+      accept: "*/*",
+      // Identify this controlled request instead of relying on a generic Worker UA.
+      "user-agent": "ExportFlow-Acceptance/1.0 (+https://exportflow.me)",
+    },
   };
 
   const fingerprint = (response) => ({
