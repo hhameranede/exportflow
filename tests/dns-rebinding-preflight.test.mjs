@@ -5,7 +5,7 @@ import {
   createStageScopedDnsRebindingSuffix,
 } from "../scripts/acceptance/dns-rebinding-preflight.mjs";
 
-const hostname = "make-172.66.147.243-rebindfor2mafter1times-10.0.0.1-rr-test-acceptance.1u.ms";
+const hostname = "make-172.66.147.243-rebindfor2mafter2times-10.0.0.1-rr-test-acceptance.1u.ms";
 const publicIp = "172.66.147.243";
 const privateIp = "10.0.0.1";
 const validRecords = [
