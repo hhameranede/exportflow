@@ -264,8 +264,8 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
     return { status: "invalid_target", publicIp, privateIp, sessionId, probes: [] };
   }
 
-  // With after2times, 1u.ms returns the public IP for the first A question
-  // and the private target for the second A question, for the 2-minute window.
+  // With after2times, 1u.ms returns the public IP for the first two authoritative A questions,
+  // then the private target for the 2-minute window. This is distinct from recursive DoH lookups.
   const hostname = createDnsRebindingHostname(publicIp, privateIp, sessionId);
   const requestInit = {
     // Match the production GET lifecycle, but cancel every body before reading bytes.

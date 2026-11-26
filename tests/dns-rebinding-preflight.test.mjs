@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  assertInitialDnsRebindingSequence,
+  assertObservedDnsRebindingTransition,
   collectDnsRebindingObservations,
   createStageScopedDnsRebindingSuffix,
 } from "../scripts/acceptance/dns-rebinding-preflight.mjs";
@@ -24,40 +24,43 @@ test("CI runner and Worker runtime use separate 1u.ms hostname namespaces", () =
   assert.match(runtimeSuffix, /^runtime-/);
 });
 
-test("1u.ms after2times requires the first A answer to be public and the second to be private", () => {
-  const sequence = assertInitialDnsRebindingSequence({
+test("the resolver-observed transition accepts public then private", () => {
+  const transition = assertObservedDnsRebindingTransition({
     answers: validRecords,
     publicIp,
     privateIp,
   });
 
-  assert.equal(sequence.firstPublicAnswer.ip, publicIp);
-  assert.equal(sequence.secondPrivateAnswer.ip, privateIp);
+  assert.equal(transition.firstPublicAnswer.ip, publicIp);
+  assert.equal(transition.firstPrivateAnswer.ip, privateIp);
+  assert.equal(transition.privateAnswerIndex, 1);
 });
 
-test("the initial sequence rejects two public answers before the private target", () => {
-  assert.throws(
-    () => assertInitialDnsRebindingSequence({
-      answers: [
-        { ip: publicIp, ttl: 1 },
-        { ip: publicIp, ttl: 1 },
-        { ip: privateIp, ttl: 1 },
-      ],
-      publicIp,
-      privateIp,
-    }),
-    /after2times must return the public A answer first, then the private target/,
-  );
+test("the resolver-observed transition also accepts two public responses before private", () => {
+  const transition = assertObservedDnsRebindingTransition({
+    answers: [
+      { ip: publicIp, ttl: 0 },
+      { ip: publicIp, ttl: 0 },
+      { ip: privateIp, ttl: 0 },
+      { ip: privateIp, ttl: 0 },
+    ],
+    publicIp,
+    privateIp,
+  });
+
+  assert.equal(transition.firstPublicAnswer.ip, publicIp);
+  assert.equal(transition.firstPrivateAnswer.ip, privateIp);
+  assert.equal(transition.privateAnswerIndex, 2);
 });
 
-test("the initial sequence rejects a private-first or missing-private A answer", () => {
+test("the resolver-observed transition rejects private-first and missing-private responses", () => {
   for (const answers of [
-    [{ ip: privateIp, ttl: 1 }, { ip: publicIp, ttl: 1 }],
-    [{ ip: publicIp, ttl: 1 }, { ip: publicIp, ttl: 1 }],
+    [{ ip: privateIp, ttl: 0 }, { ip: publicIp, ttl: 0 }],
+    [{ ip: publicIp, ttl: 0 }, { ip: publicIp, ttl: 0 }],
   ]) {
     assert.throws(
-      () => assertInitialDnsRebindingSequence({ answers, publicIp, privateIp }),
-      /after2times must return the public A answer first, then the private target/,
+      () => assertObservedDnsRebindingTransition({ answers, publicIp, privateIp }),
+      /first resolver-observed A response must be the public control IP|private target must appear after the first public/,
     );
   }
 });

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { request as httpRequest } from "node:http";
 import { Resolver } from "node:dns/promises";
-import { assertInitialDnsRebindingSequence, collectDnsRebindingObservations, createStageScopedDnsRebindingSuffix } from "./dns-rebinding-preflight.mjs";
+import { assertObservedDnsRebindingTransition, collectDnsRebindingObservations, createStageScopedDnsRebindingSuffix } from "./dns-rebinding-preflight.mjs";
 
 const DNS_RESOLVERS = Object.freeze([
   { id: "google-doh", name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
@@ -125,18 +125,20 @@ async function assertPublicAnswersBeforeRebind() {
   const hostname = createHostname(target.ip, createStageScopedDnsRebindingSuffix({
     stage: "ci", runId: RUN_ID, targetIndex: 1, resolverId: "sequence",
   }));
-  // Recursive DoH resolvers may issue several authoritative DNS questions per client lookup.
-  // Keep a bounded 12-lookup window so we can observe the private answer after the first two public answers.
+  // A recursive DoH response is not proven to map one-to-one to an authoritative DNS question.
+  // Require a public first response and a later private response within a bounded 12-lookup sample.
+  // The exact authoritative A-question count must come from the 1u.ms authoritative log, not DoH polling.
   const answers = await queryDnsBatches(DNS_RESOLVERS[0], hostname, 12);
-  const sequence = assertInitialDnsRebindingSequence({
+  const transition = assertObservedDnsRebindingTransition({
     answers,
     publicIp: PUBLIC_IP,
     privateIp: target.ip,
   });
-  console.log("1u.ms initial DNS sequence verified: " + JSON.stringify({
+  console.log("1u.ms resolver-observed DNS transition verified: " + JSON.stringify({
     hostname,
-    firstPublicAnswer: sequence.firstPublicAnswer.ip,
-    secondPrivateAnswer: sequence.secondPrivateAnswer.ip,
+    firstObservedPublicAnswer: transition.firstPublicAnswer.ip,
+    firstObservedPrivateAnswer: transition.firstPrivateAnswer.ip,
+    privateAnswerIndex: transition.privateAnswerIndex,
     answers,
   }));
 }
@@ -164,8 +166,8 @@ for (const [index, target] of PRIVATE_TARGETS.entries()) {
 
 assert.equal(verified.length, PRIVATE_TARGETS.length);
 console.log("1u.ms DNS rebinding preflight passed: " + JSON.stringify({
-  authority: "1u.ms", publicIp: PUBLIC_IP, publicAnswersBeforeRebind: 2,
-  rebindAfterAuthoritativeQuestions: 2, initialSequenceQueries: 12,
+  authority: "1u.ms", publicIp: PUBLIC_IP,
+  authoritativePublicAnswersBeforePrivate: 2, runnerDoHLookupsForTransition: 12,
   rebindingWindow: "2m", queriesPerResolverAndTarget: 12,
   intervalMs: QUERY_INTERVAL_MS, verified,
 }));
