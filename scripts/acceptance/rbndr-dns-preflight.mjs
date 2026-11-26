@@ -3,8 +3,8 @@ import { Resolver } from "node:dns/promises";
 import { collectDnsRebindingObservations } from "./dns-rebinding-preflight.mjs";
 
 const DNS_RESOLVERS = Object.freeze([
-  { name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
-  { name: "GitHub runner system DNS", system: true, required: false },
+  { id: "google-doh", name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
+  { id: "runner-system", name: "GitHub runner system DNS", system: true, required: false },
 ]);
 const PUBLIC_IP = "185.199.108.153";
 const PRIVATE_TARGETS = Object.freeze([
@@ -81,19 +81,23 @@ async function queryDnsBatches(resolver, hostname, count) {
 
 const verified = [];
 for (const [index, target] of PRIVATE_TARGETS.entries()) {
-  const suffix = ("preflight-" + RUN_ID + "-" + String(index + 1)).slice(0, 48);
+  const suffix = ("preflight-" + RUN_ID + "-" + String(index + 1) + "-base").slice(0, 63);
   const hostname = createHostname(target.ip, suffix);
   const observations = await collectDnsRebindingObservations({
     hostname,
+    hostnameForResolver: (resolver) => {
+      const resolverSuffix = ("preflight-" + RUN_ID + "-" + String(index + 1) + "-" + resolver.id).slice(0, 63);
+      return createHostname(target.ip, resolverSuffix);
+    },
     expectedAddresses: [PUBLIC_IP, target.ip],
     resolvers: DNS_RESOLVERS,
     queryDnsBatches,
   });
-  verified.push({ target: target.name, hostname, observations });
+  verified.push({ target: target.name, observations });
 }
 
 assert.equal(verified.length, PRIVATE_TARGETS.length);
 console.log("1u.ms DNS rebinding preflight passed: " + JSON.stringify({
   authority: "1u.ms", publicIp: PUBLIC_IP, rebindingWindow: "2m",
-  queriesPerTarget: 12, intervalMs: QUERY_INTERVAL_MS, verified,
+  queriesPerResolverAndTarget: 12, intervalMs: QUERY_INTERVAL_MS, verified,
 }));
