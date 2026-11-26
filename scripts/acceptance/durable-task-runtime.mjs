@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { resolve4 } from "node:dns/promises";
 import { assertSuccessfulFetchTask } from "./fetch-assertions.mjs";
 import { collectDnsRebindingObservations, createStageScopedDnsRebindingSuffix } from "./dns-rebinding-preflight.mjs";
-import { captureAuthoritativeDnsLog } from "./authoritative-dns-log.mjs";
+import { startAuthoritativeDnsLogCapture } from "./authoritative-dns-log.mjs";
 
 const FETCH_CANDIDATES = Object.freeze([
   { url: "https://example.com/", expectedContent: "Example Domain", expectedHost: "example.com" },
@@ -354,6 +354,17 @@ async function runDnsRebindingAcceptance(token) {
     await assertDnsRebindingAlternates(preflightHostname, publicIp, target.ip, targetIndex);
 
     const sessionId = "worker-" + RUN_ID + "-" + String(index + 1);
+    const expectedHostname = createDnsRebindingHostname(publicIp, target.ip, sessionId);
+
+    // Open the filtered 1u.ms stream BEFORE the Worker request. Its initial
+    // snapshot plus live events captures this session without racing the
+    // global /last ring buffer or retaining unrelated users' DNS records.
+    const dnsLogCaptureSession = await startAuthoritativeDnsLogCapture({
+      hostname: expectedHostname,
+      sessionId,
+      timeoutMs: 5_000,
+    });
+
     const url = new URL(PLATFORM_URL + "/__acceptance/dns-rebinding-probe");
     url.searchParams.set("public", publicIp);
     url.searchParams.set("private", target.ip);
@@ -372,23 +383,18 @@ async function runDnsRebindingAcceptance(token) {
       requestError = error;
     }
 
-    // Query the authoritative 1u.ms log after every Worker probe, including
-    // inconclusive edge responses. This is runner-side observation only:
-    // it does not change DNS, influence the Worker resolver, or relax the gate.
-    const expectedHostname = createDnsRebindingHostname(publicIp, target.ip, sessionId);
-    const dnsLogCapture = await captureAuthoritativeDnsLog({
-      hostname: expectedHostname,
-      sessionId,
-    });
+    // Briefly drain in-flight log delivery, then close the stream. This is
+    // runner-side observation only; it does not change Worker DNS behavior.
+    const dnsLogCapture = await dnsLogCaptureSession.finish({ drainMs: 250 });
     const dnsLogPath = persistAuthoritativeDnsLogCapture(dnsLogCapture, index + 1);
-    console.log("1u.ms authoritative DNS snapshot: " + JSON.stringify({
+    console.log("1u.ms authoritative DNS stream capture: " + JSON.stringify({
       target: target.name,
       hostname: expectedHostname,
       sessionId,
       status: dnsLogCapture.status,
       httpStatus: dnsLogCapture.httpStatus || null,
       contentType: dnsLogCapture.contentType || "",
-      snapshotRecordCount: dnsLogCapture.snapshotRecordCount ?? null,
+      streamRecordCount: dnsLogCapture.streamRecordCount ?? null,
       matchingRecordCount: dnsLogCapture.matchingRecordCount ?? null,
       matchingRecords: (dnsLogCapture.matchingRecords || []).slice(0, 20).map((record) => record.slice(0, 600)),
       truncated: dnsLogCapture.truncated || false,
