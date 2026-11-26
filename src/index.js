@@ -271,7 +271,7 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = g
   const baselineController = new AbortController();
   const baselineTimeout = setTimeout(() => baselineController.abort(), 8_000);
   try {
-    const response = await fetchImpl("http://example.com/", {
+    const response = await fetchImpl("http://neverssl.com/", {
       ...requestInit,
       signal: baselineController.signal,
     });
@@ -293,14 +293,18 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = g
     clearTimeout(baselineTimeout);
   }
 
-  if (baseline.status < 200 || baseline.status >= 500) {
+  if (baseline.status < 200 || baseline.status >= 300 ||
+      !baseline.server ||
+      baseline.server.toLowerCase() === "cloudflare") {
     return {
       status: "inconclusive",
       hostname,
       publicIp,
       privateIp,
       baseline,
-      reason: "Public HTTP control returned an unusable status.",
+      reason: baseline.server?.toLowerCase() === "cloudflare"
+        ? "Public HTTP control resolved to a Cloudflare edge; a non-Cloudflare public origin is required."
+        : "Public HTTP control must return a successful response with a non-empty non-Cloudflare server header.",
       probes: [],
     };
   }
