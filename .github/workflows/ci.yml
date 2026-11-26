@@ -111,7 +111,7 @@ jobs:
    - uses: actions/checkout@v4
      with:
       ref: ${{ github.event.pull_request.head.sha || github.sha }}
-   # One-time user-approved trigger: the commit subject must start with "acceptance: run isolated P0 Stage 1 acceptance".
+   # One-time user-approved trigger (2026-11-26; isolated Acceptance D1 and Task Workers only): commit subject must start with "acceptance: run isolated P0 Stage 1 acceptance".
    - name: Gate the one-time approved Acceptance run
      id: acceptance-gate
      env:
