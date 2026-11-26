@@ -19,10 +19,10 @@ const DNS_REBINDING_RESOLVERS = Object.freeze([
   { id: "google-doh", name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
   { id: "runner-system", name: "GitHub runner system DNS", system: true, required: false },
 ]);
-// GitHub Pages has a stable public HTTP endpoint and is used only as the
-// first, public answer. 1u.ms then rebinds the same hostname to a fixed
-// private test target during its zero-TTL, five-second window.
-const DNS_REBINDING_PUBLIC_IP = "185.199.108.153";
+// Use a public control IP outside Cloudflare's address space. CI independently
+// checks the HTTP origin fingerprint with the exact rebinding Host header before
+// this Worker-runtime probe is allowed to proceed.
+const DNS_REBINDING_PUBLIC_IP = "93.184.216.34";
 const DNS_REBINDING_PRIVATE_TARGETS = Object.freeze([
   { name: "loopback", ip: "127.0.0.1" },
   { name: "unspecified", ip: "0.0.0.0" },
