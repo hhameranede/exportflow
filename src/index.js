@@ -244,7 +244,7 @@ async function cancelProbeResponseBody(response) {
   try {
     await response.body.cancel();
   } catch {
-    // HEAD responses normally have no body; cancellation is best-effort.
+    // Responses without a body need no cancellation; otherwise cancellation is best-effort.
   }
 }
 
@@ -403,7 +403,7 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
         outcome: "network_error",
         error: {
           name: safeDiagnosticField(error?.name, 80) || "Error",
-          message: safeDiagnosticField(error?.message, 240) || "Worker HEAD request failed.",
+          message: safeDiagnosticField(error?.message, 240) || "Worker probe request failed.",
         },
       });
     } finally {
