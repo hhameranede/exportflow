@@ -440,18 +440,16 @@ async function checkAuthAndContactPages(browser) {
         }
       }
     }
-    if (path === "/account") {
-      // Account settings are private. The local auth client redirects signed-out visitors
-      // after its session check; wait for that client-side navigation before asserting.
+    if (path === "/account" || path === "/workspace") {
+      // Both routes are private. Wait for the client-side session check and redirect
+      // before inspecting the DOM; otherwise navigation can detach the first heading.
       await page.waitForURL((url) => url.pathname.endsWith("/signin"), { timeout: 12000 });
       const redirect = new URL(page.url());
-      assert.equal(redirect.searchParams.get("next"), "/account",
-        "Signed-out account access must preserve /account as the post-sign-in destination");
+      assert.equal(redirect.searchParams.get("next"), path,
+        "Signed-out " + path + " access must preserve its post-sign-in destination");
+      await page.locator('[data-auth-form="signin"]').waitFor({ state: "visible", timeout: 10000 });
       assert.equal(await page.locator('[data-auth-form="signin"]').count(), 1,
-        "Signed-out account access must finish on the sign-in form");
-    }
-    if (path === "/workspace") {
-      assert.ok(await page.locator("[data-workspace-root], [data-workspace-shell], main").count(), "Workspace shell is missing");
+        "Signed-out " + path + " access must finish on the sign-in form");
     }
   }
 
