@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { collectDnsRebindingObservations } from "../scripts/acceptance/dns-rebinding-preflight.mjs";
+import {
+  collectDnsRebindingObservations,
+  createStageScopedDnsRebindingSuffix,
+} from "../scripts/acceptance/dns-rebinding-preflight.mjs";
 
 const hostname = "make-172.66.147.243-rebindfor2mafter1times-10.0.0.1-rr-test-acceptance.1u.ms";
 const publicIp = "172.66.147.243";
@@ -9,6 +12,16 @@ const validRecords = [
   { ip: publicIp, ttl: 1 },
   { ip: privateIp, ttl: 1 },
 ];
+
+test("CI runner and Worker runtime use separate 1u.ms hostname namespaces", () => {
+  const shared = { runId: "45850198837", targetIndex: 1, resolverId: "google-doh" };
+  const ciSuffix = createStageScopedDnsRebindingSuffix({ ...shared, stage: "ci" });
+  const runtimeSuffix = createStageScopedDnsRebindingSuffix({ ...shared, stage: "runtime" });
+
+  assert.notEqual(ciSuffix, runtimeSuffix);
+  assert.match(ciSuffix, /^ci-/);
+  assert.match(runtimeSuffix, /^runtime-/);
+});
 
 test("the required DoH resolver must observe both configured DNS answers", async () => {
   const observations = await collectDnsRebindingObservations({
