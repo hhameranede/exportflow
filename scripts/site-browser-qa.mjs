@@ -443,7 +443,7 @@ async function checkAuthAndContactPages(browser) {
     if (path === "/account") {
       // Account settings are private. The local auth client redirects signed-out visitors
       // after its session check; wait for that client-side navigation before asserting.
-      await page.waitForURL((url) => url.pathname.replace(/\\/$/, "") === "/signin", { timeout: 12000 });
+      await page.waitForURL((url) => url.pathname.endsWith("/signin"), { timeout: 12000 });
       const redirect = new URL(page.url());
       assert.equal(redirect.searchParams.get("next"), "/account",
         "Signed-out account access must preserve /account as the post-sign-in destination");
