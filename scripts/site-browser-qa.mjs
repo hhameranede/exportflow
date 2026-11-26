@@ -441,7 +441,14 @@ async function checkAuthAndContactPages(browser) {
       }
     }
     if (path === "/account") {
-      assert.equal(await page.locator("[data-account-workspace]").count(), 1, "Account workspace shell is missing");
+      // Account settings are private. The local auth client redirects signed-out visitors
+      // after its session check; wait for that client-side navigation before asserting.
+      await page.waitForURL((url) => url.pathname.replace(/\\/$/, "") === "/signin", { timeout: 12000 });
+      const redirect = new URL(page.url());
+      assert.equal(redirect.searchParams.get("next"), "/account",
+        "Signed-out account access must preserve /account as the post-sign-in destination");
+      assert.equal(await page.locator('[data-auth-form="signin"]').count(), 1,
+        "Signed-out account access must finish on the sign-in form");
     }
     if (path === "/workspace") {
       assert.ok(await page.locator("[data-workspace-root], [data-workspace-shell], main").count(), "Workspace shell is missing");
@@ -754,7 +761,7 @@ async function verifyInternalLinks(links) {
       } finally {
         completed += 1;
         if (completed % 50 === 0 || completed === hrefs.length) {
-          process.stdout.write("Verified same-origin links: " + completed + "/" + hrefs.length + "\\n");
+          process.stdout.write("Verified same-origin links: " + completed + "/" + hrefs.length + "\n");
         }
       }
     }

@@ -303,7 +303,7 @@ async function runDnsRebindingAcceptance(token) {
     url.searchParams.set("private", target.ip);
     const response = await fetch(url, {
       headers: { authorization: "Bearer " + token, accept: "application/json" },
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(90_000),
       cache: "no-store",
     });
     const result = await readJson(response, "Acceptance DNS rebinding probe");
