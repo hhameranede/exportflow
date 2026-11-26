@@ -13,7 +13,7 @@ export function createStageScopedDnsRebindingSuffix({ stage, runId, targetIndex,
   if (!["ci", "runtime"].includes(safeStage)) {
     throw new TypeError("A recognized DNS-rebinding stage namespace is required.");
   }
-  if (!safeRunId || !/^[1-9]\\d{0,2}$/.test(safeTargetIndex)) {
+  if (!safeRunId || !/^[1-9][0-9]{0,2}$/.test(safeTargetIndex)) {
     throw new TypeError("A valid run ID and target index are required for the DNS-rebinding hostname.");
   }
   if (!/^[a-z0-9-]{1,16}$/.test(safeResolverId)) {
