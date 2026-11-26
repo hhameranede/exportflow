@@ -120,6 +120,7 @@ for (const [index, target] of PRIVATE_TARGETS.entries()) {
 
 assert.equal(verified.length, PRIVATE_TARGETS.length);
 console.log("1u.ms DNS rebinding preflight passed: " + JSON.stringify({
-  authority: "1u.ms", publicIp: PUBLIC_IP, rebindingWindow: "2m",
-  queriesPerResolverAndTarget: 12, intervalMs: QUERY_INTERVAL_MS, verified,
+  authority: "1u.ms", publicIp: PUBLIC_IP, publicAnswersBeforeRebind: 2,
+  rebindingWindow: "2m", queriesPerResolverAndTarget: 12,
+  intervalMs: QUERY_INTERVAL_MS, verified,
 }));
