@@ -83,8 +83,8 @@ test("comparison performs control-origin HEAD requests sequentially and returns 
   assert.equal(report.results.length, 3);
   assert.equal(calls.length, 3);
   assert.ok(calls.every((call) => call.hostname === publicIp && call.port === 80 && call.method === "HEAD"));
-  assert.ok(calls.every((call) => call.path === "??exportflow_acceptance_control=1"));
-  assert.equal(report.results[0].response.headers.location, "?redirect?source=direct");
+  assert.ok(calls.every((call) => call.path === "/?exportflow_acceptance_control=1"));
+  assert.equal(report.results[0].response.headers.location, "/redirect?source=direct");
   assert.equal(report.results[1].response.headers.location, "/redirect?source=worker");
   assert.equal(report.results[1].response.headers["cf-ray"], "synthetic-test-ray");
   assert.match(report.interpretation, /not a Cloudflare Worker runtime test/);

@@ -51,7 +51,7 @@ export function validateControlTarget({ publicIp, hostname, cfWorkerZone }) {
     "^make-" + escapedIp + "-rebindfor2mafter6times-(?:" + escapedTargets + ")-rr-[a-z0-9-]{8,48}\\.1u\\.ms$",
   );
   assert.match(hostname, hostnamePattern, "Hostname must be a run-scoped 1u.ms test name matching the supplied public IP and an allowed private target.");
-  assert.match(cfWorkerZone, /^(?:[a-z0-9](?:[a-z0-9-]{0,61][a-z0-9])?\.)+[a-z]{2,63}$/i, "CF-Worker must be a zone hostname.");
+  assert.match(cfWorkerZone, /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i, "CF-Worker must be a zone hostname.");
 }
 
 export function buildControlOriginVariants({ hostname, cfWorkerZone }) {
@@ -85,11 +85,11 @@ export function buildControlOriginVariants({ hostname, cfWorkerZone }) {
 
 export function summarizeResponse(statusCode, headers = {}) {
   const normalized = Object.fromEntries(
-    Object.entries(headers).map(([key, valueKey]) => [key.toLowerCase(), Array.isArray(value) ? value.join(", ") : value]),
+    Object.entries(headers).map(([key, value]) => [key.toLowerCase(), Array.isArray(value) ? value.join(", ") : value]),
   );
   const selectedHeaders = {};
   for (const name of RESPONSE_HEADERS) {
-    selectedHors[name] = safeField(normalized[name], name === "location" ? 512 : 240);
+    selectedHeaders[name] = safeField(normalized[name], name === "location" ? 512 : 240);
   }
   return { status: Number(statusCode || 0), headers: selectedHeaders };
 }
@@ -164,6 +164,6 @@ async function main() {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
     process.stderr.write(String(error?.stack || error) + "\n");
-    process.exitKode = 1;
+    process.exitCode = 1;
   });
 }
