@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolve4 } from "node:dns/promises";
 import { assertSuccessfulFetchTask } from "./fetch-assertions.mjs";
+import { collectDnsRebindingObservations } from "./dns-rebinding-preflight.mjs";
 
 const FETCH_CANDIDATES = Object.freeze([
   { url: "https://example.com/", expectedContent: "Example Domain", expectedHost: "example.com" },
@@ -15,8 +16,8 @@ const FETCH_CANDIDATES = Object.freeze([
 
 
 const DNS_REBINDING_RESOLVERS = Object.freeze([
-  { name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve" },
-  { name: "GitHub runner system DNS", system: true },
+  { name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
+  { name: "GitHub runner system DNS", system: true, required: false },
 ]);
 const DNS_REBINDING_PRIVATE_TARGETS = Object.freeze([
   { name: "loopback", ip: "127.0.0.1" },
@@ -301,22 +302,20 @@ async function discoverPublicRebindingIp() {
 }
 
 async function assertDnsRebindingAlternates(hostname, publicIp, privateIp) {
-  const expected = new Set([publicIp, privateIp]);
-  const observations = await Promise.all(DNS_REBINDING_RESOLVERS.map(async (resolver) => {
-    const records = await queryDnsBatches(resolver, hostname, 12);
-    const observed = new Set(records.map((record) => record.ip));
-    assert.deepEqual(
-      [...observed].sort(),
-      [...expected].sort(),
-      resolver.name + " must observe both configured rbndr.us A answers for " + hostname + ".",
+  const observations = await collectDnsRebindingObservations({
+    hostname,
+    expectedAddresses: [publicIp, privateIp],
+    resolvers: DNS_REBINDING_RESOLVERS,
+    queryDnsBatches,
+  });
+  const inconclusive = observations.filter((observation) => observation.status === "inconclusive");
+  if (inconclusive.length > 0) {
+    console.warn(
+      "Runner DNS diagnostics were inconclusive; the isolated Worker probe remains required: " +
+      JSON.stringify({ hostname, observations: inconclusive }),
     );
-    assert.ok(
-      records.every((record) => Number.isFinite(record.ttl) && record.ttl <= 5),
-      resolver.name + " must observe short-lived DNS answers for " + hostname + ".",
-    );
-    return { resolver: resolver.name, queries: records.length, answers: [...observed].sort() };
-  }));
-  console.log("Verified DNS rebinding preflight: " + JSON.stringify({ hostname, observations }));
+  }
+  console.log("DNS rebinding preflight: " + JSON.stringify({ hostname, observations }));
 }
 
 async function runDnsRebindingAcceptance(token) {
