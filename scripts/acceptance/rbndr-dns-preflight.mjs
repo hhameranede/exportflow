@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { Resolver } from "node:dns/promises";
-import { collectDnsRebindingObservations } from "./dns-rebinding-preflight.mjs";
+import { collectDnsRebindingObservations, createStageScopedDnsRebindingSuffix } from "./dns-rebinding-preflight.mjs";
 
 const DNS_RESOLVERS = Object.freeze([
   { id: "google-doh", name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
@@ -81,14 +81,15 @@ async function queryDnsBatches(resolver, hostname, count) {
 
 const verified = [];
 for (const [index, target] of PRIVATE_TARGETS.entries()) {
-  const suffix = ("preflight-" + RUN_ID + "-" + String(index + 1) + "-base").slice(0, 63);
-  const hostname = createHostname(target.ip, suffix);
+  const targetIndex = index + 1;
+  const hostname = createHostname(target.ip, createStageScopedDnsRebindingSuffix({
+    stage: "ci", runId: RUN_ID, targetIndex, resolverId: "base",
+  }));
   const observations = await collectDnsRebindingObservations({
     hostname,
-    hostnameForResolver: (resolver) => {
-      const resolverSuffix = ("preflight-" + RUN_ID + "-" + String(index + 1) + "-" + resolver.id).slice(0, 63);
-      return createHostname(target.ip, resolverSuffix);
-    },
+    hostnameForResolver: (resolver) => createHostname(target.ip, createStageScopedDnsRebindingSuffix({
+      stage: "ci", runId: RUN_ID, targetIndex, resolverId: resolver.id,
+    })),
     expectedAddresses: [PUBLIC_IP, target.ip],
     resolvers: DNS_RESOLVERS,
     queryDnsBatches,
