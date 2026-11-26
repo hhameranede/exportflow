@@ -120,7 +120,7 @@ test("Acceptance network diagnostics require tasks:fetch and use only fixed boun
 });
 
 
-test("Acceptance DNS rebinding probes are isolated, authenticated, GET-based, body-cancelled, and bounded", async () => {
+test("Acceptance DNS rebinding probes are isolated, authenticated, GET-based, non-blocking body-cancelled, and bounded", { timeout: 2000 }, async () => {
   const calls = [];
   let bodyReads = 0;
   let bodyCancellations = 0;
@@ -141,6 +141,8 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, GET-based, bo
           },
           cancel() {
             bodyCancellations += 1;
+            // Simulate a stalled upstream cancel callback. Production Fetch must not await it.
+            return new Promise(() => {});
           },
         }, { highWaterMark: 0 });
         return new Response(unreadBody, {
