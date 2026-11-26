@@ -88,7 +88,7 @@ jobs:
       retention-days: 3
       include-hidden-files: true
 
-   # Verify the DNS service returns two public A answers before it rebinds; this is a runner-only DNS test and makes no Cloudflare changes.
+   # Verify 1u.ms returns public on the first A answer and private on the second; runner-only, no Cloudflare changes.
    - name: Verify 1u.ms DNS rebinding preflight (PR #142 and isolated DNS-fix branches only; no Cloudflare changes)
      if: github.event_name == 'pull_request' && (github.event.pull_request.number == 142 || startsWith(github.event.pull_request.head.ref, 'fix/dns-rebinding-resolver-isolation-'))
      run: node scripts/acceptance/rbndr-dns-preflight.mjs
@@ -97,7 +97,7 @@ jobs:
      if: github.event_name == 'pull_request' && startsWith(github.event.pull_request.head.ref, 'fix/dns-rebinding-resolver-isolation-')
      env:
       DNS_REBINDING_PUBLIC_IP: 188.184.67.127
-      DNS_REBINDING_HOSTNAME: make-188.184.67.127-rebindfor2mafter6times-127.0.0.1-rr-ci-http-${{ github.run_id }}-${{ github.run_attempt }}.1u.ms
+      DNS_REBINDING_HOSTNAME: make-188.184.67.127-rebindfor2mafter2times-127.0.0.1-rr-ci-http-${{ github.run_id }}-${{ github.run_attempt }}.1u.ms
       CF_WORKER_ZONE: exportflow.me
      run: node scripts/acceptance/control-origin-http-comparison.mjs
 

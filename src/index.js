@@ -264,8 +264,8 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
     return { status: "invalid_target", publicIp, privateIp, sessionId, probes: [] };
   }
 
-  // 1u.ms keeps the public IP for the first two authoritative DNS questions
-  // for this hostname/record type, then serves the private target for 2 minutes.
+  // With after2times, 1u.ms returns the public IP for the first A question
+  // and the private target for the second A question, for the 2-minute window.
   const hostname = createDnsRebindingHostname(publicIp, privateIp, sessionId);
   const requestInit = {
     // Match the production GET lifecycle, but cancel every body before reading bytes.

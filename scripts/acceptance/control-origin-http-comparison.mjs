@@ -48,7 +48,7 @@ export function validateControlTarget({ publicIp, hostname, cfWorkerZone }) {
   const escapedIp = publicIp.replaceAll(".", "\\.");
   const escapedTargets = [...PRIVATE_TARGETS].map((ip) => ip.replaceAll(".", "\\.")).join("|");
   const hostnamePattern = new RegExp(
-    "^make-" + escapedIp + "-rebindfor2mafter6times-(?:" + escapedTargets + ")-rr-[a-z0-9-]{8,48}\\.1u\\.ms$",
+    "^make-" + escapedIp + "-rebindfor2mafter2times-(?:" + escapedTargets + ")-rr-[a-z0-9-]{8,48}\\.1u\\.ms$",
   );
   assert.match(hostname, hostnamePattern, "Hostname must be a run-scoped 1u.ms test name matching the supplied public IP and an allowed private target.");
   assert.match(cfWorkerZone, /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i, "CF-Worker must be a zone hostname.");

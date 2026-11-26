@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { request as httpRequest } from "node:http";
 import { Resolver } from "node:dns/promises";
-import { collectDnsRebindingObservations, createStageScopedDnsRebindingSuffix } from "./dns-rebinding-preflight.mjs";
+import { assertInitialDnsRebindingSequence, collectDnsRebindingObservations, createStageScopedDnsRebindingSuffix } from "./dns-rebinding-preflight.mjs";
 
 const DNS_RESOLVERS = Object.freeze([
   { id: "google-doh", name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
@@ -128,13 +128,15 @@ async function assertPublicAnswersBeforeRebind() {
   // Recursive DoH resolvers may issue several authoritative DNS questions per client lookup.
   // Keep a bounded 12-lookup window so we can observe the private answer after the first two public answers.
   const answers = await queryDnsBatches(DNS_RESOLVERS[0], hostname, 12);
-  const firstTwo = answers.slice(0, 2).map((answer) => answer.ip);
-  assert.deepEqual(firstTwo, [PUBLIC_IP, PUBLIC_IP],
-    "1u.ms must return at least two public control answers before rebinding: " + JSON.stringify(answers));
-  assert.ok(answers.slice(2).some((answer) => answer.ip === target.ip),
-    "1u.ms must return the private target within the bounded 12-lookup window: " + JSON.stringify(answers));
+  const sequence = assertInitialDnsRebindingSequence({
+    answers,
+    publicIp: PUBLIC_IP,
+    privateIp: target.ip,
+  });
   console.log("1u.ms initial DNS sequence verified: " + JSON.stringify({
-    hostname, firstTwoPublicAnswers: firstTwo, laterPrivateAnswer: target.ip,
+    hostname,
+    firstPublicAnswer: sequence.firstPublicAnswer.ip,
+    secondPrivateAnswer: sequence.secondPrivateAnswer.ip,
     answers,
   }));
 }

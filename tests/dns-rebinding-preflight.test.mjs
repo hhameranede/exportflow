@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  assertInitialDnsRebindingSequence,
   collectDnsRebindingObservations,
   createStageScopedDnsRebindingSuffix,
 } from "../scripts/acceptance/dns-rebinding-preflight.mjs";
@@ -21,6 +22,44 @@ test("CI runner and Worker runtime use separate 1u.ms hostname namespaces", () =
   assert.notEqual(ciSuffix, runtimeSuffix);
   assert.match(ciSuffix, /^ci-/);
   assert.match(runtimeSuffix, /^runtime-/);
+});
+
+test("1u.ms after2times requires the first A answer to be public and the second to be private", () => {
+  const sequence = assertInitialDnsRebindingSequence({
+    answers: validRecords,
+    publicIp,
+    privateIp,
+  });
+
+  assert.equal(sequence.firstPublicAnswer.ip, publicIp);
+  assert.equal(sequence.secondPrivateAnswer.ip, privateIp);
+});
+
+test("the initial sequence rejects two public answers before the private target", () => {
+  assert.throws(
+    () => assertInitialDnsRebindingSequence({
+      answers: [
+        { ip: publicIp, ttl: 1 },
+        { ip: publicIp, ttl: 1 },
+        { ip: privateIp, ttl: 1 },
+      ],
+      publicIp,
+      privateIp,
+    }),
+    /after2times must return the public A answer first, then the private target/,
+  );
+});
+
+test("the initial sequence rejects a private-first or missing-private A answer", () => {
+  for (const answers of [
+    [{ ip: privateIp, ttl: 1 }, { ip: publicIp, ttl: 1 }],
+    [{ ip: publicIp, ttl: 1 }, { ip: publicIp, ttl: 1 }],
+  ]) {
+    assert.throws(
+      () => assertInitialDnsRebindingSequence({ answers, publicIp, privateIp }),
+      /after2times must return the public A answer first, then the private target/,
+    );
+  }
 });
 
 test("the required DoH resolver must observe both configured DNS answers", async () => {

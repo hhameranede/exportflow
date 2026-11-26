@@ -9,7 +9,7 @@ import {
 } from "../scripts/acceptance/control-origin-http-comparison.mjs";
 
 const publicIp = "188.184.67.127";
-const hostname = "make-188.184.67.127-rebindfor2mafter6times-127.0.0.1-rr-diagnostic-20261126.1u.ms";
+const hostname = "make-188.184.67.127-rebindfor2mafter2times-127.0.0.1-rr-diagnostic-20261126.1u.ms";
 
 test("direct-origin diagnostic accepts only a public IP and a run-scoped 1u.ms origin hostname", () => {
   assert.equal(isPublicIPv4(publicIp), true);
@@ -19,6 +19,11 @@ test("direct-origin diagnostic accepts only a public IP and a run-scoped 1u.ms o
   assert.doesNotThrow(() => validateControlTarget({ publicIp, hostname, cfWorkerZone: "exportflow.me" }));
   assert.throws(() => validateControlTarget({ publicIp: "127.0.0.1", hostname, cfWorkerZone: "exportflow.me" }));
   assert.throws(() => validateControlTarget({ publicIp, hostname: "example.com", cfWorkerZone: "exportflow.me" }));
+  assert.throws(() => validateControlTarget({
+    publicIp,
+    hostname: hostname.replace("after2times", "after6times"),
+    cfWorkerZone: "exportflow.me",
+  }));
 });
 
 test("request variants isolate CF-Worker and explicit cache-header differences", () => {

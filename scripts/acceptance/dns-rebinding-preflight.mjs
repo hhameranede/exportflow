@@ -27,6 +27,22 @@ export function createStageScopedDnsRebindingSuffix({ stage, runId, targetIndex,
   return suffix;
 }
 
+export function assertInitialDnsRebindingSequence({ answers, publicIp, privateIp }) {
+  if (!Array.isArray(answers) || answers.length < 2) {
+    throw new TypeError("At least two ordered A-record answers are required for the initial rebinding sequence.");
+  }
+  if (typeof publicIp !== "string" || !publicIp || typeof privateIp !== "string" || !privateIp || publicIp === privateIp) {
+    throw new TypeError("Distinct public and private IPv4 answers are required.");
+  }
+  const firstTwo = answers.slice(0, 2).map((answer) => answer?.ip);
+  assert.deepEqual(
+    firstTwo,
+    [publicIp, privateIp],
+    "1u.ms after2times must return the public A answer first, then the private target: " + JSON.stringify(answers.slice(0, 4)),
+  );
+  return { firstPublicAnswer: answers[0], secondPrivateAnswer: answers[1] };
+}
+
 function summarizeError(error) {
   const code = typeof error?.code === "string" ? error.code : null;
   const message = typeof error?.message === "string" ? error.message : String(error);
