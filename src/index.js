@@ -259,7 +259,9 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = g
     return { status: "invalid_target", publicIp, privateIp, probes: [] };
   }
 
-  const hostname = ipv4ToHex(publicIp) + "." + ipv4ToHex(privateIp) + ".rbndr.us";
+  const publicLabel = ipv4ToHex(publicIp);
+  const controlHostname = publicLabel + "." + publicLabel + ".rbndr.us";
+  const hostname = publicLabel + "." + ipv4ToHex(privateIp) + ".rbndr.us";
   const requestInit = {
     method: "HEAD",
     redirect: "manual",
@@ -267,44 +269,54 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = g
     headers: { accept: "*/*" },
   };
 
+  const fingerprint = (response) => ({
+    status: response.status,
+    server: safeDiagnosticField(response.headers.get("server"), 80),
+    contentType: safeDiagnosticField(response.headers.get("content-type"), 120),
+    contentLength: safeDiagnosticField(response.headers.get("content-length"), 40),
+    etag: safeDiagnosticField(response.headers.get("etag"), 120),
+  });
+
   let baseline;
   const baselineController = new AbortController();
   const baselineTimeout = setTimeout(() => baselineController.abort(), 8_000);
   try {
-    const response = await fetchImpl("http://neverssl.com/", {
-      ...requestInit,
-      signal: baselineController.signal,
-    });
-    baseline = {
-      status: response.status,
-      server: safeDiagnosticField(response.headers.get("server"), 80),
-    };
+    // Both DNS labels encode the same public IP, so this rbndr.us control
+    // hostname is deterministic and uses the same hostname family, origin IP,
+    // port, and Host-header shape as the mixed public/private target below.
+    const response = await fetchImpl(
+      "http://" + controlHostname + "/?exportflow_acceptance_control=1",
+      { ...requestInit, signal: baselineController.signal },
+    );
+    baseline = fingerprint(response);
     await cancelProbeResponseBody(response);
   } catch (error) {
     return {
       status: "inconclusive",
       hostname,
+      controlHostname,
       publicIp,
       privateIp,
-      reason: safeDiagnosticField(error?.message, 240) || "Public HTTP control did not return a response.",
+      reason: safeDiagnosticField(error?.message, 240) || "Deterministic public DNS control did not return a response.",
       probes: [],
     };
   } finally {
     clearTimeout(baselineTimeout);
   }
 
-  if (baseline.status < 200 || baseline.status >= 300 ||
+  if (baseline.status < 200 || baseline.status >= 500 ||
       !baseline.server ||
       baseline.server.toLowerCase() === "cloudflare") {
     return {
       status: "inconclusive",
       hostname,
+      controlHostname,
       publicIp,
       privateIp,
       baseline,
       reason: baseline.server?.toLowerCase() === "cloudflare"
-        ? "Public HTTP control resolved to a Cloudflare edge; a non-Cloudflare public origin is required."
-        : "Public HTTP control must return a successful response with a non-empty non-Cloudflare server header.",
+        ? "Deterministic public DNS control returned a Cloudflare edge response; a direct non-Cloudflare public origin is required."
+        : "Deterministic public DNS control must return an HTTP response with a non-empty non-Cloudflare server header.",
       probes: [],
     };
   }
@@ -318,13 +330,17 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = g
         "http://" + hostname + "/?exportflow_acceptance_probe=" + attempt,
         { ...requestInit, signal: controller.signal },
       );
-      const server = safeDiagnosticField(response.headers.get("server"), 80);
-      const matchesPublicControl = response.status >= 200 && response.status < 500 && server === baseline.server;
+      const observed = fingerprint(response);
+      const matchesPublicControl =
+        observed.status === baseline.status &&
+        observed.server === baseline.server &&
+        observed.contentType === baseline.contentType &&
+        observed.contentLength === baseline.contentLength &&
+        observed.etag === baseline.etag;
       probes.push({
         attempt: attempt + 1,
         outcome: matchesPublicControl ? "public_control_match" : "unexpected_http_response",
-        status: response.status,
-        server,
+        ...observed,
       });
       await cancelProbeResponseBody(response);
     } catch (error) {
@@ -358,6 +374,7 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = g
   return {
     status,
     hostname,
+    controlHostname,
     publicIp,
     privateIp,
     baseline,
