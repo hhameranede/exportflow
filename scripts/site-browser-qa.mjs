@@ -729,15 +729,38 @@ async function checkApiAndPublicAssets() {
 }
 
 async function verifyInternalLinks(links) {
+  const hrefs = [...links].sort();
   const failures = [];
-  for (const href of [...links].sort()) {
-    try {
-      const response = await fetch(baseUrl + href, { redirect: "manual" });
-      if (response.status >= 400) failures.push({ href, status: response.status });
-    } catch (error) {
-      failures.push({ href, error: error.message || String(error) });
+  const concurrency = Math.min(12, hrefs.length);
+  let cursor = 0;
+  let completed = 0;
+
+  async function verifyNext() {
+    while (true) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= hrefs.length) return;
+
+      const href = hrefs[index];
+      try {
+        const response = await fetch(baseUrl + href, {
+          redirect: "manual",
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (response.status >= 400) failures.push({ href, status: response.status });
+        if (response.body) await response.body.cancel().catch(() => {});
+      } catch (error) {
+        failures.push({ href, error: error.message || String(error) });
+      } finally {
+        completed += 1;
+        if (completed % 50 === 0 || completed === hrefs.length) {
+          process.stdout.write("Verified same-origin links: " + completed + "/" + hrefs.length + "\\n");
+        }
+      }
     }
   }
+
+  await Promise.all(Array.from({ length: concurrency }, () => verifyNext()));
   assert.deepEqual(failures, [], "Broken same-origin navigation targets: " + JSON.stringify(failures));
 }
 
