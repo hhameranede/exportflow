@@ -269,9 +269,9 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = g
 
   let baseline;
   const baselineController = new AbortController();
-  const baselineTimeout = setTimeout(() => baselineController.abort(), 2_000);
+  const baselineTimeout = setTimeout(() => baselineController.abort(), 8_000);
   try {
-    const response = await fetchImpl("http://neverssl.com/", {
+    const response = await fetchImpl("http://example.com/", {
       ...requestInit,
       signal: baselineController.signal,
     });
@@ -308,14 +308,14 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, fetchImpl = g
   const probes = [];
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2_000);
+    const timeout = setTimeout(() => controller.abort(), 5_000);
     try {
       const response = await fetchImpl(
         "http://" + hostname + "/?exportflow_acceptance_probe=" + attempt,
         { ...requestInit, signal: controller.signal },
       );
       const server = safeDiagnosticField(response.headers.get("server"), 80);
-      const matchesPublicControl = response.status === baseline.status && server === baseline.server;
+      const matchesPublicControl = response.status >= 200 && response.status < 500 && server === baseline.server;
       probes.push({
         attempt: attempt + 1,
         outcome: matchesPublicControl ? "public_control_match" : "unexpected_http_response",

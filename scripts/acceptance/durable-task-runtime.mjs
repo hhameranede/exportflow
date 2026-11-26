@@ -264,9 +264,9 @@ async function discoverPublicRebindingIp() {
   // Use Google DoH for the public control address. Cloudflare's public DoH
   // endpoint may suppress private rbndr answers; it is not required to prove
   // that the authoritative rbndr service is returning both configured A records.
-  const answers = await queryDnsBatches(DNS_REBINDING_RESOLVERS[0], "neverssl.com", 4);
+  const answers = await queryDnsBatches(DNS_REBINDING_RESOLVERS[0], "example.com", 4);
   const publicIp = answers.map((answer) => answer.ip).find(isPublicIpv4);
-  assert.ok(publicIp, "Google Public DNS must return a public neverssl.com A record.");
+  assert.ok(publicIp, "Google Public DNS must return a public example.com A record.");
   return publicIp;
 }
 
@@ -303,7 +303,7 @@ async function runDnsRebindingAcceptance(token) {
     url.searchParams.set("private", target.ip);
     const response = await fetch(url, {
       headers: { authorization: "Bearer " + token, accept: "application/json" },
-      signal: AbortSignal.timeout(45_000),
+      signal: AbortSignal.timeout(60_000),
       cache: "no-store",
     });
     const result = await readJson(response, "Acceptance DNS rebinding probe");

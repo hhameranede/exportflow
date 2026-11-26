@@ -129,7 +129,7 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
     acceptanceDnsRebindingFetch: async (input, init) => {
       const url = new URL(String(input));
       calls.push({ url: url.href, init });
-      if (url.hostname === "neverssl.com") {
+      if (url.hostname === "example.com") {
         return new Response(null, { status: 200, headers: { server: "acceptance-test" } });
       }
       probeCalls += 1;
