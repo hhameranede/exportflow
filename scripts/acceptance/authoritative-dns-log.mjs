@@ -61,7 +61,7 @@ export function hasAuthoritativeAAnswer(matchingRecords, hostname, address) {
     if (separator < 0) return false;
     const question = record.slice(0, separator);
     const answer = record.slice(separator + 2);
-    const query = question.match(/\\bA\\s+"([^"]+)"\\s*$/);
+    const query = question.match(/\bA\s+"([^"]+)"\s*$/);
     if (!query || (query[1] !== hostname && query[1] !== hostname + ".")) return false;
     return answer.split(/[^0-9.]+/).includes(address);
   });
