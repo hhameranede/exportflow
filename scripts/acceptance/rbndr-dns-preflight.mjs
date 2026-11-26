@@ -117,7 +117,7 @@ async function assertDirectPublicControlOrigin() {
     "The control origin must identify as the expected Apache origin: " + JSON.stringify(response));
   assert.doesNotMatch(response.server, /cloudflare/i,
     "The control origin must not be served by Cloudflare Edge: " + JSON.stringify(response));
-  assert.match(response.contentType, /text\\/html/i,
+  assert.match(response.contentType, /text\/html/i,
     "The control origin must return HTML: " + JSON.stringify(response));
   console.log("Direct public control origin verified: " + JSON.stringify({ hostname, publicIp: PUBLIC_IP, response }));
 }
