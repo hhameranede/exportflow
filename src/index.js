@@ -265,7 +265,10 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
   // for this hostname/record type, then serves the private target for 2 minutes.
   const hostname = createDnsRebindingHostname(publicIp, privateIp, sessionId);
   const requestInit = {
-    method: "HEAD",
+    // Match the production GET lifecycle, but cancel every body before reading bytes.
+    // Cancellation can encourage the runtime to discard a connection; it does not
+    // guarantee a new TCP connection or a fresh DNS resolution.
+    method: "GET",
     redirect: "manual",
     cache: "no-store",
     headers: {
@@ -295,6 +298,9 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
   });
 
   let baseline;
+  const baselineStartedAt = new Date().toISOString();
+  const baselineStartedAtMs = Date.now();
+  let baselineElapsedMs = null;
   const baselineController = new AbortController();
   const baselineTimeout = setTimeout(() => baselineController.abort(), 8_000);
   try {
@@ -305,11 +311,16 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
       "http://" + hostname + "/?exportflow_acceptance_control=1",
       { ...requestInit, signal: baselineController.signal },
     );
+    baselineElapsedMs = Date.now() - baselineStartedAtMs;
     baseline = fingerprint(response);
     await cancelProbeResponseBody(response);
   } catch (error) {
     return {
       status: "inconclusive",
+      requestMethod: requestInit.method,
+      responseBodyPolicy: "cancel-before-read",
+      baselineStartedAt,
+      baselineElapsedMs: Date.now() - baselineStartedAtMs,
       hostname,
       sessionId,
       publicIp,
@@ -338,6 +349,10 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
       (cloudflareServer && !isKnownCernControlRedirect)) {
     return {
       status: "inconclusive",
+      requestMethod: requestInit.method,
+      responseBodyPolicy: "cancel-before-read",
+      baselineStartedAt,
+      baselineElapsedMs,
       hostname,
       sessionId,
       publicIp,
@@ -353,6 +368,8 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
 
   const probes = [];
   for (let attempt = 0; attempt < 12; attempt += 1) {
+    const startedAt = new Date().toISOString();
+    const startedAtMs = Date.now();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5_000);
     try {
@@ -361,6 +378,7 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
         { ...requestInit, signal: controller.signal },
       );
       const observed = fingerprint(response);
+      const elapsedMs = Date.now() - startedAtMs;
       const matchesPublicControl =
         observed.status === baseline.status &&
         observed.server === baseline.server &&
@@ -368,15 +386,20 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
         observed.contentLength === baseline.contentLength &&
         observed.etag === baseline.etag &&
         observed.location === baseline.location;
+      // Header fingerprints are sufficient; never consume an upstream response body.
+      await cancelProbeResponseBody(response);
       probes.push({
         attempt: attempt + 1,
+        startedAt,
+        elapsedMs,
         outcome: matchesPublicControl ? "public_control_match" : "unexpected_http_response",
         ...observed,
       });
-      await cancelProbeResponseBody(response);
     } catch (error) {
       probes.push({
         attempt: attempt + 1,
+        startedAt,
+        elapsedMs: Date.now() - startedAtMs,
         outcome: "network_error",
         error: {
           name: safeDiagnosticField(error?.name, 80) || "Error",
@@ -406,6 +429,10 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
 
   return {
     status,
+    requestMethod: requestInit.method,
+    responseBodyPolicy: "cancel-before-read",
+    baselineStartedAt,
+    baselineElapsedMs,
     hostname,
     sessionId,
     publicIp,
