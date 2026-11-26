@@ -88,8 +88,8 @@ jobs:
       retention-days: 3
       include-hidden-files: true
 
-   - name: Verify 1u.ms DNS rebinding preflight (PR #142 only; no Cloudflare changes)
-     if: github.event_name == 'pull_request' && github.event.pull_request.number == 142
+   - name: Verify 1u.ms DNS rebinding preflight (PR #142 and isolated DNS-fix branches only; no Cloudflare changes)
+     if: github.event_name == 'pull_request' && (github.event.pull_request.number == 142 || startsWith(github.event.pull_request.head.ref, 'fix/dns-rebinding-resolver-isolation-'))
      run: node scripts/acceptance/rbndr-dns-preflight.mjs
 
  deploy-acceptance:
