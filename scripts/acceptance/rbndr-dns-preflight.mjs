@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { request as httpRequest } from "node:http";
 import { Resolver } from "node:dns/promises";
 import { collectDnsRebindingObservations, createStageScopedDnsRebindingSuffix } from "./dns-rebinding-preflight.mjs";
 
@@ -6,7 +7,7 @@ const DNS_RESOLVERS = Object.freeze([
   { id: "google-doh", name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
   { id: "runner-system", name: "GitHub runner system DNS", system: true, required: false },
 ]);
-const PUBLIC_IP = "185.199.108.153";
+const PUBLIC_IP = "34.223.124.45";
 const PRIVATE_TARGETS = Object.freeze([
   { name: "loopback", ip: "127.0.0.1" },
   { name: "unspecified", ip: "0.0.0.0" },
@@ -80,6 +81,47 @@ async function queryDnsBatches(resolver, hostname, count) {
 }
 
 
+function requestDirectControlOrigin(hostname) {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest({
+      hostname: PUBLIC_IP,
+      port: 80,
+      method: "HEAD",
+      path: "/",
+      headers: { host: hostname, accept: "*/*", connection: "close" },
+    }, (response) => {
+      const headers = response.headers;
+      const fingerprint = {
+        status: Number(response.statusCode || 0),
+        server: typeof headers.server === "string" ? headers.server : "",
+        contentType: typeof headers["content-type"] === "string" ? headers["content-type"] : "",
+        contentLength: typeof headers["content-length"] === "string" ? headers["content-length"] : "",
+      };
+      response.resume();
+      resolve(fingerprint);
+    });
+    request.setTimeout(8_000, () => request.destroy(new Error("Direct control-origin HEAD request timed out.")));
+    request.on("error", reject);
+    request.end();
+  });
+}
+
+async function assertDirectPublicControlOrigin() {
+  const hostname = createHostname(PRIVATE_TARGETS[0].ip, createStageScopedDnsRebindingSuffix({
+    stage: "ci", runId: RUN_ID, targetIndex: 1, resolverId: "control",
+  }));
+  const response = await requestDirectControlOrigin(hostname);
+  assert.equal(response.status, 200,
+    "The direct public control origin must return HTTP 200 to HEAD: " + JSON.stringify(response));
+  assert.match(response.server, /apache/i,
+    "The control origin must identify as the expected Apache origin: " + JSON.stringify(response));
+  assert.doesNotMatch(response.server, /cloudflare/i,
+    "The control origin must not be served by Cloudflare Edge: " + JSON.stringify(response));
+  assert.match(response.contentType, /text\\/html/i,
+    "The control origin must return HTML: " + JSON.stringify(response));
+  console.log("Direct public control origin verified: " + JSON.stringify({ hostname, publicIp: PUBLIC_IP, response }));
+}
+
 async function assertPublicAnswersBeforeRebind() {
   const target = PRIVATE_TARGETS[0];
   const hostname = createHostname(target.ip, createStageScopedDnsRebindingSuffix({
@@ -97,6 +139,7 @@ async function assertPublicAnswersBeforeRebind() {
   }));
 }
 
+await assertDirectPublicControlOrigin();
 await assertPublicAnswersBeforeRebind();
 
 const verified = [];
