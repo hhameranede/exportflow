@@ -21,7 +21,7 @@ const DNS_REBINDING_RESOLVERS = Object.freeze([
 ]);
 // The DNS service returns the public control IP for the first two A queries,
 // then rebinds the same hostname to the fixed private test target.
-const DNS_REBINDING_PUBLIC_IP = "185.199.108.153";
+const DNS_REBINDING_PUBLIC_IP = "34.223.124.45";
 const DNS_REBINDING_PRIVATE_TARGETS = Object.freeze([
   { name: "loopback", ip: "127.0.0.1" },
   { name: "unspecified", ip: "0.0.0.0" },
