@@ -249,7 +249,7 @@ async function cancelProbeResponseBody(response) {
 }
 
 function createDnsRebindingHostname(publicIp, privateIp, sessionId) {
-  return "make-" + publicIp + "-rebindfor2mafter1times-" + privateIp + "-rr-" + sessionId + ".1u.ms";
+  return "make-" + publicIp + "-rebindfor2mafter2times-" + privateIp + "-rr-" + sessionId + ".1u.ms";
 }
 
 async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fetchImpl = globalThis.fetch, probeIntervalMs = 1_100) {
