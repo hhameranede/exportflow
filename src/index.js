@@ -261,8 +261,8 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
     return { status: "invalid_target", publicIp, privateIp, sessionId, probes: [] };
   }
 
-  // 1u.ms returns the public IP once, then the private test target while
-  // requests continue within the configured two-minute rebinding window.
+  // 1u.ms returns the public IP for the first two DNS queries, then the
+  // private test target while requests continue within the two-minute window.
   const hostname = createDnsRebindingHostname(publicIp, privateIp, sessionId);
   const requestInit = {
     method: "HEAD",
