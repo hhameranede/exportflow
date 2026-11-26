@@ -168,7 +168,10 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
     assert.equal(calls[0].url, "http://" + targetHostname + "/?exportflow_acceptance_control=1");
     assert.ok(calls.slice(1).every(({ url }) => url.startsWith("http://" + targetHostname + "/?")));
     assert.ok(calls.every(({ init }) =>
-      init.method === "HEAD" && init.redirect === "manual" && init.cache === "no-store"
+      init.method === "HEAD" &&
+      init.redirect === "manual" &&
+      init.cache === "no-store" &&
+      init.headers?.["user-agent"] === "ExportFlow-Acceptance/1.0 (+https://exportflow.me)"
     ));
     assert.ok(calls.every(({ init }) => !init.body && !init.headers?.authorization));
     assert.equal(diagnostic.probes.some((probe) => "body" in probe), false);
