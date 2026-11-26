@@ -299,7 +299,7 @@ function createDnsRebindingHostname(publicIp, privateIp, suffix) {
   if (!safeSuffix || !/^[a-z0-9-]{8,48}$/.test(safeSuffix)) {
     throw new Error("A unique DNS rebinding hostname suffix is required.");
   }
-  return "make-" + publicIp + "-rebindfor2mafter2times-" + privateIp + "-rr-" + safeSuffix + ".1u.ms";
+  return "make-" + publicIp + "-rebindfor2mafter6times-" + privateIp + "-rr-" + safeSuffix + ".1u.ms";
 }
 
 async function assertDnsRebindingAlternates(hostname, publicIp, privateIp, targetIndex) {

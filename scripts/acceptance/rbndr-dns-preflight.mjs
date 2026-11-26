@@ -19,7 +19,7 @@ const RUN_ID = String(process.env.GITHUB_RUN_ID || process.env.CI_RUN_ID || Date
   .slice(0, 32);
 
 function createHostname(privateIp, suffix) {
-  return "make-" + PUBLIC_IP + "-rebindfor2mafter2times-" + privateIp + "-rr-" + suffix + ".1u.ms";
+  return "make-" + PUBLIC_IP + "-rebindfor2mafter6times-" + privateIp + "-rr-" + suffix + ".1u.ms";
 }
 
 const systemResolver = new Resolver();
@@ -125,12 +125,14 @@ async function assertPublicAnswersBeforeRebind() {
   const hostname = createHostname(target.ip, createStageScopedDnsRebindingSuffix({
     stage: "ci", runId: RUN_ID, targetIndex: 1, resolverId: "sequence",
   }));
-  const answers = await queryDnsBatches(DNS_RESOLVERS[0], hostname, 4);
+  // Recursive DoH resolvers may issue several authoritative DNS questions per client lookup.
+  // Keep a bounded 12-lookup window so we can observe the private answer after the first public answers.
+  const answers = await queryDnsBatches(DNS_RESOLVERS[0], hostname, 12);
   const firstTwo = answers.slice(0, 2).map((answer) => answer.ip);
   assert.deepEqual(firstTwo, [PUBLIC_IP, PUBLIC_IP],
-    "1u.ms must return the public control IP twice before rebinding: " + JSON.stringify(answers));
+    "1u.ms must return at least two public control answers before rebinding: " + JSON.stringify(answers));
   assert.ok(answers.slice(2).some((answer) => answer.ip === target.ip),
-    "1u.ms must return the private target after the two public answers: " + JSON.stringify(answers));
+    "1u.ms must return the private target within the bounded 12-lookup window: " + JSON.stringify(answers));
   console.log("1u.ms initial DNS sequence verified: " + JSON.stringify({
     hostname, firstTwoPublicAnswers: firstTwo, laterPrivateAnswer: target.ip,
     answers,
@@ -161,6 +163,7 @@ for (const [index, target] of PRIVATE_TARGETS.entries()) {
 assert.equal(verified.length, PRIVATE_TARGETS.length);
 console.log("1u.ms DNS rebinding preflight passed: " + JSON.stringify({
   authority: "1u.ms", publicIp: PUBLIC_IP, publicAnswersBeforeRebind: 2,
+  rebindAfterAuthoritativeQuestions: 6, initialSequenceQueries: 12,
   rebindingWindow: "2m", queriesPerResolverAndTarget: 12,
   intervalMs: QUERY_INTERVAL_MS, verified,
 }));

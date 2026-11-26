@@ -123,7 +123,7 @@ test("Acceptance network diagnostics require tasks:fetch and use only fixed boun
 test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, and bounded", async () => {
   const calls = [];
   const sessionId = "worker-test-session";
-  const targetHostname = "make-185.199.108.153-rebindfor2mafter2times-127.0.0.1-rr-" + sessionId + ".1u.ms";
+  const targetHostname = "make-185.199.108.153-rebindfor2mafter6times-127.0.0.1-rr-" + sessionId + ".1u.ms";
   const worker = createWorker({
     acceptanceDnsRebindingProbe: true,
     acceptanceDnsRebindingProbeIntervalMs: 0,
@@ -202,7 +202,7 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
 
 test("Acceptance DNS rebinding probe fails closed when the private target returns a different HTTP fingerprint", async () => {
   const sessionId = "worker-test-different";
-  const targetHostname = "make-185.199.108.153-rebindfor2mafter2times-127.0.0.1-rr-" + sessionId + ".1u.ms";
+  const targetHostname = "make-185.199.108.153-rebindfor2mafter6times-127.0.0.1-rr-" + sessionId + ".1u.ms";
   let calls = 0;
   const worker = createWorker({
     acceptanceDnsRebindingProbe: true,
@@ -245,7 +245,7 @@ test("Acceptance DNS rebinding probe fails closed when the private target return
 test("Acceptance DNS rebinding probes reject Cloudflare edge baselines and retain bounded DNS diagnostics", async () => {
   const calls = [];
   const sessionId = "worker-test-cloudflare";
-  const targetHostname = "make-185.199.108.153-rebindfor2mafter2times-127.0.0.1-rr-" + sessionId + ".1u.ms";
+  const targetHostname = "make-185.199.108.153-rebindfor2mafter6times-127.0.0.1-rr-" + sessionId + ".1u.ms";
   const worker = createWorker({
     acceptanceDnsRebindingProbe: true,
     acceptanceDnsRebindingFetch: async (input) => {
