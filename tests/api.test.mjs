@@ -1189,3 +1189,159 @@ test("REST Map is enabled only with tasks:map and uses the bounded static mapper
   assert.ok(task.result.data.urls.some((item) => item.url === "https://example.com/about"));
   assert.ok(calls.some((url) => url.endsWith("/robots.txt")));
 });
+
+
+test("Acceptance DNS resolve-then-fetch probe resolves first and performs exactly one native GET", async () => {
+  const sessionId = "worker-test-resolve";
+  const targetHostname = "make-185.199.108.153-rebindfor0times-127.0.0.1-rr-" + sessionId + ".1u.ms";
+  const order = [];
+  const worker = createWorker({
+    acceptanceDnsResolveFetchProbe: true,
+    acceptanceDnsResolve4: async (hostname) => {
+      order.push("resolve4");
+      assert.equal(hostname, targetHostname);
+      return ["185.199.108.153"];
+    },
+    acceptanceDnsResolveFetch: async (input, init) => {
+      order.push("fetch");
+      assert.equal(String(input), "http://" + targetHostname + "/?exportflow_acceptance_single_fetch=1");
+      assert.equal(init.method, "GET");
+      assert.equal(init.redirect, "manual");
+      assert.equal(init.cache, "no-store");
+      assert.ok(init.signal instanceof AbortSignal);
+      assert.equal(init.body, undefined);
+      throw new TypeError("private destination connection rejected");
+    },
+  });
+  const env = makeTestEnv();
+  env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
+  try {
+    const request = new Request(
+      "https://api.exportflow.local/__acceptance/dns-resolve-fetch-probe?public=185.199.108.153&private=127.0.0.1&session=" + sessionId,
+      { headers: { authorization: "Bearer " + TEST_TOKEN } },
+    );
+    const response = await worker.fetch(request, env);
+    const diagnostic = await response.json();
+    assert.equal(response.status, 200);
+    assert.deepEqual(order, ["resolve4", "fetch"]);
+    assert.equal(diagnostic.status, "network_error");
+    assert.deepEqual(diagnostic.resolve4Addresses, ["185.199.108.153"]);
+    assert.equal(diagnostic.fetchAttempts, 1);
+    assert.equal(diagnostic.requestMethod, "GET");
+    assert.equal(diagnostic.responseBodyPolicy, "cancel-before-read");
+    assert.equal(diagnostic.hostname, targetHostname);
+    assert.ok(Number.isFinite(diagnostic.dnsResolveElapsedMs));
+    assert.ok(Number.isFinite(diagnostic.fetchElapsedMs));
+  } finally {
+    env.__fixture.close();
+  }
+});
+
+test("Acceptance DNS resolve-then-fetch probe never fetches after resolve4 returns a private address", async () => {
+  let fetchCalls = 0;
+  const sessionId = "worker-test-private-resolve";
+  const worker = createWorker({
+    acceptanceDnsResolveFetchProbe: true,
+    acceptanceDnsResolve4: async () => ["127.0.0.1"],
+    acceptanceDnsResolveFetch: async () => {
+      fetchCalls += 1;
+      throw new Error("must not be called");
+    },
+  });
+  const env = makeTestEnv();
+  env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
+  try {
+    const request = new Request(
+      "https://api.exportflow.local/__acceptance/dns-resolve-fetch-probe?public=185.199.108.153&private=127.0.0.1&session=" + sessionId,
+      { headers: { authorization: "Bearer " + TEST_TOKEN } },
+    );
+    const response = await worker.fetch(request, env);
+    const diagnostic = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(diagnostic.status, "inconclusive");
+    assert.deepEqual(diagnostic.resolve4Addresses, ["127.0.0.1"]);
+    assert.equal(diagnostic.fetchAttempts, 0);
+    assert.equal(fetchCalls, 0);
+  } finally {
+    env.__fixture.close();
+  }
+});
+
+test("Acceptance DNS resolve-then-fetch probe treats every HTTP response as unverified and cancels its body", async () => {
+  let bodyReads = 0;
+  let bodyCancellations = 0;
+  const sessionId = "worker-test-http-response";
+  const targetHostname = "make-185.199.108.153-rebindfor0times-127.0.0.1-rr-" + sessionId + ".1u.ms";
+  const body = new ReadableStream({
+    pull(controller) {
+      bodyReads += 1;
+      controller.enqueue(new Uint8Array([1, 2, 3]));
+    },
+    cancel() {
+      bodyCancellations += 1;
+    },
+  }, { highWaterMark: 0 });
+  const worker = createWorker({
+    acceptanceDnsResolveFetchProbe: true,
+    acceptanceDnsResolve4: async () => ["185.199.108.153"],
+    acceptanceDnsResolveFetch: async () => new Response(body, {
+      status: 302,
+      headers: {
+        server: "apache",
+        location: "https://control.example.test/",
+        "content-type": "application/x-perl",
+      },
+    }),
+  });
+  const env = makeTestEnv();
+  env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
+  try {
+    const request = new Request(
+      "https://api.exportflow.local/__acceptance/dns-resolve-fetch-probe?public=185.199.108.153&private=127.0.0.1&session=" + sessionId,
+      { headers: { authorization: "Bearer " + TEST_TOKEN } },
+    );
+    const response = await worker.fetch(request, env);
+    const diagnostic = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(diagnostic.status, "http_response");
+    assert.equal(diagnostic.response.status, 302);
+    assert.equal(diagnostic.fetchAttempts, 1);
+    assert.equal(bodyReads, 0);
+    assert.equal(bodyCancellations, 1);
+  } finally {
+    env.__fixture.close();
+  }
+});
+
+test("Acceptance DNS resolve-then-fetch route stays disabled by default and requires authenticated isolated-run access", async () => {
+  const sessionId = "worker-test-gated";
+  const target = "https://api.exportflow.local/__acceptance/dns-resolve-fetch-probe?public=185.199.108.153&private=127.0.0.1&session=" + sessionId;
+  const env = makeTestEnv();
+  env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
+  try {
+    assert.equal((await createWorker().fetch(new Request(target), env)).status, 404);
+
+    const disabledMarker = await createWorker({ acceptanceDnsResolveFetchProbe: true }).fetch(
+      new Request(target, { headers: { authorization: "Bearer " + TEST_TOKEN } }),
+      { ...env, EXPORTFLOW_ACCEPTANCE_RUN: "wrong-run" },
+    );
+    assert.equal(disabledMarker.status, 404);
+
+    const worker = createWorker({
+      acceptanceDnsResolveFetchProbe: true,
+      acceptanceDnsResolve4: async () => ["185.199.108.153"],
+      acceptanceDnsResolveFetch: async () => { throw new Error("network failure"); },
+    });
+    const unauthenticated = await worker.fetch(new Request(target), env);
+    assert.equal(unauthenticated.status, 401);
+
+    const invalidTarget = await worker.fetch(new Request(
+      "https://api.exportflow.local/__acceptance/dns-resolve-fetch-probe?public=127.0.0.1&private=127.0.0.1&session=" + sessionId,
+      { headers: { authorization: "Bearer " + TEST_TOKEN } },
+    ), env);
+    assert.equal(invalidTarget.status, 400);
+    assert.equal((await invalidTarget.json()).error.code, "INVALID_DNS_REBINDING_TARGET");
+  } finally {
+    env.__fixture.close();
+  }
+});

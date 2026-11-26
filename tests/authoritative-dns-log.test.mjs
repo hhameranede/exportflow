@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createAuthoritativeDnsLogUrl,
+  getAuthoritativeAAnswers,
   hasAuthoritativeAAnswer,
   startAuthoritativeDnsLogCapture,
 } from "../scripts/acceptance/authoritative-dns-log.mjs";
@@ -158,4 +159,19 @@ test("authoritative DNS stream HTTP and transport failures are diagnostics, not 
   const unavailableResult = await unavailable.finish();
   assert.equal(unavailableResult.status, "unavailable");
   assert.equal(unavailableResult.error.message, "stream endpoint unavailable");
+});
+
+
+test("authoritative A-answer sequence preserves exact QNAME RDATA order and excludes AAAA or other hostnames", () => {
+  const otherHostname = "make-188.184.67.127-rebindfor0times-127.0.0.1-rr-worker-other.1u.ms";
+  const records = [
+    '[2026-11-27 12:00:00.000] 104.22.73.72:28589 A "' + hostname + '." -> &{[' +
+      hostname + '. 0 IN A 188.184.67.127] false}',
+    '[2026-11-27 12:00:00.100] 104.22.73.72:28589 AAAA "' + hostname + '." -> &{[] false}',
+    '[2026-11-27 12:00:00.200] 104.22.73.72:28589 A "' + otherHostname + '." -> &{[' +
+      otherHostname + '. 0 IN A 127.0.0.1] false}',
+    '[2026-11-27 12:00:00.300] 104.22.73.72:28589 A "' + hostname + '." -> &{[' +
+      hostname + '. 0 IN A 127.0.0.1] false}',
+  ];
+  assert.deepEqual(getAuthoritativeAAnswers(records, hostname), ["188.184.67.127", "127.0.0.1"]);
 });

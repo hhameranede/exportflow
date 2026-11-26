@@ -255,6 +255,136 @@ function createDnsRebindingHostname(publicIp, privateIp, sessionId) {
   return "make-" + publicIp + "-rebindfor2mafter2times-" + privateIp + "-rr-" + sessionId + ".1u.ms";
 }
 
+function createDnsResolveFetchHostname(publicIp, privateIp, sessionId) {
+  return "make-" + publicIp + "-rebindfor0times-" + privateIp + "-rr-" + sessionId + ".1u.ms";
+}
+
+async function runAcceptanceDnsResolveFetchProbe(publicIp, privateIp, sessionId, resolve4Impl, fetchImpl = globalThis.fetch) {
+  if (!isPublicRoutableIpv4(publicIp) ||
+      !ACCEPTANCE_DNS_REBINDING_PRIVATE_IPS.has(privateIp) ||
+      typeof sessionId !== "string" ||
+      !/^[a-z0-9-]{8,48}$/.test(sessionId)) {
+    return { status: "invalid_target", publicIp, privateIp, sessionId };
+  }
+  if (typeof resolve4Impl !== "function" || typeof fetchImpl !== "function") {
+    return { status: "unavailable", reason: "Worker DNS resolve4() and native fetch() must both be available." };
+  }
+
+  const hostname = createDnsResolveFetchHostname(publicIp, privateIp, sessionId);
+  const dnsResolveStartedAt = new Date().toISOString();
+  const dnsResolveStartedAtMs = Date.now();
+  let addresses;
+  try {
+    addresses = await resolve4Impl(hostname);
+  } catch (error) {
+    return {
+      status: "dns_error",
+      hostname,
+      sessionId,
+      publicIp,
+      privateIp,
+      dnsResolveStartedAt,
+      dnsResolveElapsedMs: Date.now() - dnsResolveStartedAtMs,
+      reason: safeDiagnosticField(error?.message, 240) || "Worker resolve4() failed.",
+      fetchAttempts: 0,
+    };
+  }
+
+  const dnsResolveElapsedMs = Date.now() - dnsResolveStartedAtMs;
+  const resolve4Addresses = Array.isArray(addresses)
+    ? addresses.filter((address) => typeof address === "string").slice(0, 16)
+    : [];
+
+  // Never call fetch if the DNS-only phase already returned a private or unexpected
+  // address. Such a run cannot isolate the resolver-to-fetch transition.
+  if (resolve4Addresses.length === 0 ||
+      resolve4Addresses.some((address) => address !== publicIp)) {
+    return {
+      status: "inconclusive",
+      hostname,
+      sessionId,
+      publicIp,
+      privateIp,
+      dnsResolveStartedAt,
+      dnsResolveElapsedMs,
+      resolve4Addresses,
+      fetchAttempts: 0,
+      reason: "Worker resolve4() did not return only the public control IP; native fetch was not attempted.",
+    };
+  }
+
+  const fetchStartedAt = new Date().toISOString();
+  const fetchStartedAtMs = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8_000);
+  const requestUrl = "http://" + hostname + "/?exportflow_acceptance_single_fetch=1";
+  const requestInit = {
+    method: "GET",
+    redirect: "manual",
+    cache: "no-store",
+    signal: controller.signal,
+    headers: {
+      accept: "*/*",
+      "user-agent": "ExportFlow-Acceptance/1.0 (+https://exportflow.me)",
+    },
+  };
+
+  try {
+    const response = await fetchImpl(requestUrl, requestInit);
+    const observed = {
+      status: response.status,
+      responseUrl: safeDiagnosticField(response.url, 512),
+      redirected: response.redirected === true,
+      location: safeDiagnosticField(response.headers.get("location"), 512),
+      server: safeDiagnosticField(response.headers.get("server"), 80),
+      contentType: safeDiagnosticField(response.headers.get("content-type"), 120),
+      cfRay: safeDiagnosticField(response.headers.get("cf-ray"), 120),
+      cfErrorType: safeDiagnosticField(response.headers.get("cf-error-type"), 120),
+      cfErrorOrigin: safeDiagnosticField(response.headers.get("cf-error-origin"), 120),
+    };
+    // Any HTTP response remains unverified. Never inspect its body.
+    cancelProbeResponseBody(response);
+    return {
+      status: "http_response",
+      hostname,
+      sessionId,
+      publicIp,
+      privateIp,
+      dnsResolveStartedAt,
+      dnsResolveElapsedMs,
+      resolve4Addresses,
+      fetchStartedAt,
+      fetchElapsedMs: Date.now() - fetchStartedAtMs,
+      fetchAttempts: 1,
+      requestMethod: requestInit.method,
+      responseBodyPolicy: "cancel-before-read",
+      response: observed,
+    };
+  } catch (error) {
+    return {
+      status: "network_error",
+      hostname,
+      sessionId,
+      publicIp,
+      privateIp,
+      dnsResolveStartedAt,
+      dnsResolveElapsedMs,
+      resolve4Addresses,
+      fetchStartedAt,
+      fetchElapsedMs: Date.now() - fetchStartedAtMs,
+      fetchAttempts: 1,
+      requestMethod: requestInit.method,
+      responseBodyPolicy: "cancel-before-read",
+      error: {
+        name: safeDiagnosticField(error?.name, 80) || "Error",
+        message: safeDiagnosticField(error?.message, 240) || "Worker native fetch failed.",
+      },
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fetchImpl = globalThis.fetch, probeIntervalMs = 1_100) {
   if (typeof fetchImpl !== "function" ||
       !isPublicRoutableIpv4(publicIp) ||
@@ -479,6 +609,33 @@ export function createWorker(options = {}) {
 
         const workspaceResponse = await handleWorkspaceRequest(request, env, options);
         if (workspaceResponse) return workspaceResponse;
+
+        if (options.acceptanceDnsResolveFetchProbe === true &&
+            env?.EXPORTFLOW_ACCEPTANCE_RUN === "durable-task-20261124" &&
+            url.pathname === "/__acceptance/dns-resolve-fetch-probe") {
+          if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405, { allow: "GET" });
+          const auth = await tenantTaskGateway.authenticate(request, env, { requiredScope: "tasks:fetch" });
+          if (!auth.ok) {
+            return json({ error: { code: auth.code, message: auth.message } }, auth.httpStatus);
+          }
+          const publicIp = url.searchParams.get("public");
+          const privateIp = url.searchParams.get("private");
+          const sessionId = url.searchParams.get("session");
+          if (!isPublicRoutableIpv4(publicIp) || !ACCEPTANCE_DNS_REBINDING_PRIVATE_IPS.has(privateIp)) {
+            return json({ error: { code: "INVALID_DNS_REBINDING_TARGET", message: "A public origin IP and one of the fixed private test targets are required." } }, 400);
+          }
+          if (typeof sessionId !== "string" || !/^[a-z0-9-]{8,48}$/.test(sessionId)) {
+            return json({ error: { code: "INVALID_DNS_REBINDING_SESSION", message: "A unique lowercase alphanumeric DNS-rebinding session identifier is required." } }, 400);
+          }
+          const diagnostics = await runAcceptanceDnsResolveFetchProbe(
+            publicIp,
+            privateIp,
+            sessionId,
+            options.acceptanceDnsResolve4,
+            options.acceptanceDnsResolveFetch,
+          );
+          return json(diagnostics, 200, { "cache-control": "no-store" });
+        }
 
         if (options.acceptanceDnsRebindingProbe === true &&
             env?.EXPORTFLOW_ACCEPTANCE_RUN === "durable-task-20261124" &&

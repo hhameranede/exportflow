@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { resolve4 } from "node:dns/promises";
 import { assertSuccessfulFetchTask } from "./fetch-assertions.mjs";
 import { collectDnsRebindingObservations, createStageScopedDnsRebindingSuffix } from "./dns-rebinding-preflight.mjs";
-import { hasAuthoritativeAAnswer, startAuthoritativeDnsLogCapture } from "./authoritative-dns-log.mjs";
+import { getAuthoritativeAAnswers, startAuthoritativeDnsLogCapture } from "./authoritative-dns-log.mjs";
 
 const FETCH_CANDIDATES = Object.freeze([
   { url: "https://example.com/", expectedContent: "Example Domain", expectedHost: "example.com" },
@@ -303,12 +303,13 @@ async function queryDnsBatches(resolver, hostname, count) {
   return collected;
 }
 
-function createDnsRebindingHostname(publicIp, privateIp, suffix) {
+function createDnsRebindingHostname(publicIp, privateIp, suffix, afterTimes = 2) {
   const safeSuffix = String(suffix).toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
-  if (!safeSuffix || !/^[a-z0-9-]{8,48}$/.test(safeSuffix)) {
-    throw new Error("A unique DNS rebinding hostname suffix is required.");
+  if (!safeSuffix || !/^[a-z0-9-]{8,48}$/.test(safeSuffix) ||
+      !Number.isInteger(afterTimes) || afterTimes < 0 || afterTimes > 2) {
+    throw new Error("A unique DNS rebinding hostname suffix and supported public-answer count are required.");
   }
-  return "make-" + publicIp + "-rebindfor2mafter2times-" + privateIp + "-rr-" + safeSuffix + ".1u.ms";
+  return "make-" + publicIp + "-rebindfor" + afterTimes + "times-" + privateIp + "-rr-" + safeSuffix + ".1u.ms";
 }
 
 async function assertDnsRebindingAlternates(hostname, publicIp, privateIp, targetIndex) {
@@ -340,10 +341,8 @@ async function runDnsRebindingAcceptance(token) {
   assert.ok(isPublicIpv4(publicIp), "DNS rebinding control must use a globally routable IPv4 address.");
 
   for (const [index, target] of DNS_REBINDING_PRIVATE_TARGETS.entries()) {
-    // Use a disposable hostname for the runner's DoH preflight so its first
-    // public answer cannot consume the Cloudflare Worker's independent session.
+    // Keep runner-side resolver checks isolated from the Worker's own 1.1.1.1 resolve4() call.
     const targetIndex = index + 1;
-    // Keep Worker-runtime DNS checks in a separate 1u.ms namespace from the CI runner preflight.
     const preflightHostname = createDnsRebindingHostname(
       publicIp,
       target.ip,
@@ -353,19 +352,17 @@ async function runDnsRebindingAcceptance(token) {
     );
     await assertDnsRebindingAlternates(preflightHostname, publicIp, target.ip, targetIndex);
 
+    // after0times returns public for the first authoritative A question, then private.
+    // The Worker performs resolve4() first and exactly one native fetch to this same hostname.
     const sessionId = "worker-" + RUN_ID + "-" + String(index + 1);
-    const expectedHostname = createDnsRebindingHostname(publicIp, target.ip, sessionId);
-
-    // Open the filtered 1u.ms stream BEFORE the Worker request. Its initial
-    // snapshot plus live events captures this session without racing the
-    // global /last ring buffer or retaining unrelated users' DNS records.
+    const expectedHostname = createDnsRebindingHostname(publicIp, target.ip, sessionId, 0);
     const dnsLogCaptureSession = await startAuthoritativeDnsLogCapture({
       hostname: expectedHostname,
       sessionId,
       timeoutMs: 5_000,
     });
 
-    const url = new URL(PLATFORM_URL + "/__acceptance/dns-rebinding-probe");
+    const url = new URL(PLATFORM_URL + "/__acceptance/dns-resolve-fetch-probe");
     url.searchParams.set("public", publicIp);
     url.searchParams.set("private", target.ip);
     url.searchParams.set("session", sessionId);
@@ -374,82 +371,88 @@ async function runDnsRebindingAcceptance(token) {
     try {
       const response = await fetch(url, {
         headers: { authorization: "Bearer " + token, accept: "application/json" },
-        signal: AbortSignal.timeout(90_000),
+        signal: AbortSignal.timeout(30_000),
         cache: "no-store",
         redirect: "manual",
       });
-      result = await readJson(response, "Acceptance DNS rebinding probe");
+      result = await readJson(response, "Acceptance DNS resolve-then-fetch probe");
     } catch (error) {
       requestError = error;
     }
 
-    // Briefly drain in-flight log delivery, then close the stream. This is
-    // runner-side observation only; it does not change Worker DNS behavior.
     const dnsLogCapture = await dnsLogCaptureSession.finish({ drainMs: 250 });
     const dnsLogPath = persistAuthoritativeDnsLogCapture(dnsLogCapture, index + 1);
-    const privateAAnswerObserved = hasAuthoritativeAAnswer(
-      dnsLogCapture.matchingRecords,
-      expectedHostname,
-      target.ip,
+    const authoritativeAAnswers = getAuthoritativeAAnswers(dnsLogCapture.matchingRecords, expectedHostname);
+    const privateAnswerIndex = authoritativeAAnswers.findIndex(
+      (address, answerIndex) => answerIndex > 0 && address === target.ip,
     );
-    console.log("1u.ms authoritative DNS stream capture: " + JSON.stringify({
+    console.log("1u.ms authoritative A sequence for single Worker fetch: " + JSON.stringify({
       target: target.name,
       hostname: expectedHostname,
       sessionId,
       status: dnsLogCapture.status,
       httpStatus: dnsLogCapture.httpStatus || null,
-      contentType: dnsLogCapture.contentType || "",
       streamRecordCount: dnsLogCapture.streamRecordCount ?? null,
       matchingRecordCount: dnsLogCapture.matchingRecordCount ?? null,
-      privateAAnswerObserved,
-      matchingRecords: (dnsLogCapture.matchingRecords || []).slice(0, 20).map((record) => record.slice(0, 600)),
+      authoritativeAAnswers,
+      privateAnswerIndex,
       truncated: dnsLogCapture.truncated || false,
       file: dnsLogPath,
       error: dnsLogCapture.error || null,
+      workerDiagnostic: result?.body || null,
+      workerRequestError: requestError ? String(requestError?.message || requestError).slice(0, 500) : null,
     }));
+
     if (requestError) {
       throw new Error(
-        "Isolated Worker DNS-rebinding request failed: " +
+        "Isolated Worker DNS resolve-then-fetch request failed: " +
         String(requestError?.message || requestError) +
         "; authoritative DNS log saved to " + dnsLogPath,
       );
     }
-    if (!privateAAnswerObserved) {
-      throw new Error(
-        "The Worker did not produce an authoritative private A answer for the exact probe hostname; " +
-        "HTTP network errors cannot count as DNS-rebinding protection. DNS log saved to " + dnsLogPath,
-      );
-    }
-    assert.equal(result.response.status, 200, "Isolated Worker DNS rebinding probe must return HTTP 200.");
+    assert.equal(result.response.status, 200, "Isolated Worker DNS resolve-then-fetch endpoint must return HTTP 200.");
+    assert.equal(dnsLogCapture.status, "captured", "The exact run-scoped authoritative DNS stream must be captured completely.");
+    assert.equal(dnsLogCapture.truncated, false, "The authoritative DNS evidence must not be truncated.");
+    assert.deepEqual(
+      result.body.resolve4Addresses,
+      [publicIp],
+      "Worker resolve4() must observe only the public control IP before native fetch: " + JSON.stringify(result.body),
+    );
+    assert.equal(result.body.fetchAttempts, 1, "The Worker must issue exactly one native fetch.");
+    assert.equal(result.body.requestMethod, "GET");
+    assert.equal(result.body.responseBodyPolicy, "cancel-before-read");
+    assert.equal(
+      authoritativeAAnswers[0],
+      publicIp,
+      "The first authoritative A answer for the exact Worker hostname must be the public control IP: " + JSON.stringify(authoritativeAAnswers),
+    );
+    assert.ok(
+      privateAnswerIndex > 0,
+      "A later authoritative A answer for the exact Worker hostname must be the selected private target; an HTTP/network error alone is not evidence: " +
+        JSON.stringify(authoritativeAAnswers) + "; log saved to " + dnsLogPath,
+    );
+    assert.ok(
+      authoritativeAAnswers.slice(1).every((address) => address === target.ip),
+      "All authoritative A answers after the first public answer must be the selected private target: " + JSON.stringify(authoritativeAAnswers),
+    );
     assert.equal(
       result.body.status,
-      "mixed",
-      "The first public answer and later rejected private-target attempts must be observed without any private response: " +
+      "network_error",
+      "The single native Worker fetch must fail without returning any HTTP response after the authoritative private A answer: " +
         JSON.stringify(result.body),
     );
-    assert.equal(result.body.baselinePublicResponses, 1);
-    assert.ok(result.body.publicResponses >= 1);
-    assert.ok(result.body.networkErrors > 0);
-    assert.equal(result.body.unexpectedResponses, 0);
-    console.log("DNS rebinding verified: " + JSON.stringify({
+    console.log("DNS resolve4 -> one native fetch rejected the private target: " + JSON.stringify({
       target: target.name,
       hostname: result.body.hostname,
       publicIp,
       privateIp: target.ip,
-      baselineStatus: result.body.baseline.status,
-      baselineServer: result.body.baseline.server,
-      baselineContentType: result.body.baseline.contentType,
-      baselineLocation: result.body.baseline.location,
-      baselineResponseUrl: result.body.baseline.responseUrl,
-      baselineProfile: result.body.baselineProfile,
-      privateAAnswerObserved,
-      baselinePublicResponses: result.body.baselinePublicResponses,
-      publicResponses: result.body.publicResponses,
-      networkErrors: result.body.networkErrors,
-      unexpectedResponses: result.body.unexpectedResponses,
+      resolve4Addresses: result.body.resolve4Addresses,
+      authoritativeAAnswers,
+      fetchElapsedMs: result.body.fetchElapsedMs,
+      outcome: result.body.status,
     }));
   }
-  console.log("DNS rebinding preflight and isolated Worker probes passed for loopback, 0.0.0.0 and 10.0.0.1.");
+  console.log("Worker DNS resolve4 -> single native fetch acceptance passed for loopback, 0.0.0.0 and 10.0.0.1.");
 }
 async function runNetworkDiagnostics(token) {
   const response = await fetch(PLATFORM_URL + "/__acceptance/network-probe", {
