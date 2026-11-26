@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import { Resolver } from "node:dns/promises";
-import { request as httpRequest } from "node:http";
 import { collectDnsRebindingObservations, createStageScopedDnsRebindingSuffix } from "./dns-rebinding-preflight.mjs";
 
 const DNS_RESOLVERS = Object.freeze([
   { id: "google-doh", name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
   { id: "runner-system", name: "GitHub runner system DNS", system: true, required: false },
 ]);
-const PUBLIC_IP = "93.184.216.34";
+const PUBLIC_IP = "185.199.108.153";
 const PRIVATE_TARGETS = Object.freeze([
   { name: "loopback", ip: "127.0.0.1" },
   { name: "unspecified", ip: "0.0.0.0" },
@@ -19,55 +18,10 @@ const RUN_ID = String(process.env.GITHUB_RUN_ID || process.env.CI_RUN_ID || Date
   .slice(0, 32);
 
 function createHostname(privateIp, suffix) {
-  return "make-" + PUBLIC_IP + "-rebindfor2mafter1times-" + privateIp + "-rr-" + suffix + ".1u.ms";
+  return "make-" + PUBLIC_IP + "-rebindfor2mafter2times-" + privateIp + "-rr-" + suffix + ".1u.ms";
 }
 
 const systemResolver = new Resolver();
-
-function verifyPublicControlOrigin(hostname) {
-  return new Promise((resolve, reject) => {
-    const request = httpRequest({
-      hostname: PUBLIC_IP,
-      port: 80,
-      method: "HEAD",
-      path: "/?exportflow_acceptance_control=1",
-      headers: {
-        host: hostname,
-        accept: "*/*",
-        "user-agent": "ExportFlow-Acceptance/1.0 (+https://exportflow.me)",
-        connection: "close",
-      },
-      signal: AbortSignal.timeout(8_000),
-    }, (response) => {
-      const fingerprint = {
-        status: response.statusCode || 0,
-        server: response.headers.server || null,
-        contentType: response.headers["content-type"] || null,
-        contentLength: response.headers["content-length"] || null,
-        etag: response.headers.etag || null,
-        cfRay: response.headers["cf-ray"] || null,
-      };
-      response.resume();
-      response.once("end", () => resolve(fingerprint));
-    });
-    request.once("error", reject);
-    request.end();
-  });
-}
-
-async function assertPublicControlOrigin() {
-  const hostname = createHostname(PRIVATE_TARGETS[0].ip, createStageScopedDnsRebindingSuffix({
-    stage: "ci", runId: RUN_ID, targetIndex: 1, resolverId: "public-control",
-  }));
-  const fingerprint = await verifyPublicControlOrigin(hostname);
-  assert.ok(fingerprint.status >= 200 && fingerprint.status < 500,
-    "The direct public control origin must return an HTTP response below 500: " + JSON.stringify(fingerprint));
-  assert.ok(typeof fingerprint.server === "string" && fingerprint.server.length > 0,
-    "The direct public control origin must expose a Server fingerprint: " + JSON.stringify(fingerprint));
-  assert.notEqual(fingerprint.server.toLowerCase(), "cloudflare",
-    "The direct public control origin must not be served by Cloudflare: " + JSON.stringify(fingerprint));
-  console.log("Direct public control origin verified (fixed IP + rebinding Host header): " + JSON.stringify(fingerprint));
-}
 
 async function queryDnsA(resolver, hostname) {
   if (resolver.system === true) {
@@ -126,6 +80,25 @@ async function queryDnsBatches(resolver, hostname, count) {
 }
 
 await assertPublicControlOrigin();
+
+async function assertPublicAnswersBeforeRebind() {
+  const target = PRIVATE_TARGETS[0];
+  const hostname = createHostname(target.ip, createStageScopedDnsRebindingSuffix({
+    stage: "ci", runId: RUN_ID, targetIndex: 1, resolverId: "sequence",
+  }));
+  const answers = await queryDnsBatches(DNS_RESOLVERS[0], hostname, 4);
+  const firstTwo = answers.slice(0, 2).map((answer) => answer.ip);
+  assert.deepEqual(firstTwo, [PUBLIC_IP, PUBLIC_IP],
+    "1u.ms must return the public control IP twice before rebinding: " + JSON.stringify(answers));
+  assert.ok(answers.slice(2).some((answer) => answer.ip === target.ip),
+    "1u.ms must return the private target after the two public answers: " + JSON.stringify(answers));
+  console.log("1u.ms initial DNS sequence verified: " + JSON.stringify({
+    hostname, firstTwoPublicAnswers: firstTwo, laterPrivateAnswer: target.ip,
+    answers,
+  }));
+}
+
+await assertPublicAnswersBeforeRebind();
 
 const verified = [];
 for (const [index, target] of PRIVATE_TARGETS.entries()) {
