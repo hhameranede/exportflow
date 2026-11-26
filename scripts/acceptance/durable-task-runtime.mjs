@@ -251,7 +251,7 @@ function isRetryableDnsError(error) {
   const code = String(error?.code || "").toUpperCase();
   return ["ESERVFAIL", "ETIMEOUT", "EAI_AGAIN", "ECONNREFUSED", "EDNS"].includes(code) ||
     ["AbortError", "TimeoutError"].includes(error?.name) ||
-    /DNS status 2\\b|SERVFAIL|temporarily unavailable/i.test(String(error?.message || ""));
+    /DNS status 2|SERVFAIL|temporarily unavailable/i.test(String(error?.message || ""));
 }
 
 async function queryDnsAWithRetry(resolver, hostname) {
