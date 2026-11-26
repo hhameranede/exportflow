@@ -156,7 +156,7 @@ function persistAuthoritativeDnsLogCapture(capture, targetIndex) {
   const directory = join(process.env.RUNNER_TEMP || tmpdir(), "exportflow-authoritative-dns");
   mkdirSync(directory, { recursive: true });
   const path = join(directory, "1u-ms-" + RUN_ID + "-" + targetIndex + ".json");
-  writeFileSync(path, JSON.stringify(capture, null, 2) + "\\n", "utf8");
+  writeFileSync(path, JSON.stringify(capture, null, 2) + "\n", "utf8");
   return path;
 }
 
