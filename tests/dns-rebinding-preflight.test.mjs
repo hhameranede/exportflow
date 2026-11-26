@@ -23,17 +23,22 @@ test("the required DoH resolver must observe both configured DNS answers", async
 
   assert.equal(observations[0].status, "verified");
   assert.deepEqual(observations[0].answers, [privateIp, publicIp]);
+  assert.equal(observations[0].hostname, hostname);
 });
 
-test("runner system DNS SERVFAIL is diagnostic and does not block the Worker probe", async () => {
+test("multiple resolvers use independent hostnames so the first public answer cannot be consumed by another resolver", async () => {
+  const requestedHostnames = [];
   const observations = await collectDnsRebindingObservations({
     hostname,
+    hostnameForResolver: (resolver) => hostname + (resolver.system ? "-system" : "-google-doh"),
     expectedAddresses: [publicIp, privateIp],
     resolvers: [
       { name: "Google Public DNS DoH", required: true },
       { name: "GitHub runner system DNS", system: true, required: false },
     ],
-    queryDnsBatches: async (resolver) => {
+    queryDnsBatches: async (resolver, resolverHostname, count) => {
+      assert.equal(count, 12);
+      requestedHostnames.push(resolverHostname);
       if (resolver.system) {
         const error = new Error("queryA ESERVFAIL for rebinding test name");
         error.code = "ESERVFAIL";
@@ -43,8 +48,41 @@ test("runner system DNS SERVFAIL is diagnostic and does not block the Worker pro
     },
   });
 
+  assert.equal(new Set(requestedHostnames).size, 2);
   assert.deepEqual(observations.map((item) => item.status), ["verified", "inconclusive"]);
+  assert.notEqual(observations[0].hostname, observations[1].hostname);
   assert.match(observations[1].error, /ESERVFAIL/);
+});
+
+test("multiple resolvers cannot share the first-answer rebinding hostname", async () => {
+  await assert.rejects(
+    collectDnsRebindingObservations({
+      hostname,
+      expectedAddresses: [publicIp, privateIp],
+      resolvers: [
+        { name: "Google Public DNS DoH", required: true },
+        { name: "runner DNS", required: false },
+      ],
+      queryDnsBatches: async () => validRecords,
+    }),
+    /resolver-specific DNS-rebinding hostname factory is required/i,
+  );
+});
+
+test("the preflight fails closed when different resolvers are assigned the same hostname", async () => {
+  await assert.rejects(
+    collectDnsRebindingObservations({
+      hostname,
+      hostnameForResolver: () => hostname,
+      expectedAddresses: [publicIp, privateIp],
+      resolvers: [
+        { name: "Google Public DNS DoH", required: true },
+        { name: "runner DNS", required: false },
+      ],
+      queryDnsBatches: async () => validRecords,
+    }),
+    /must receive a unique rebinding hostname/i,
+  );
 });
 
 test("the preflight fails closed when the required resolver misses one address", async () => {
