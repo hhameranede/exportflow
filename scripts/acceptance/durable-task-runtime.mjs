@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolve4 } from "node:dns/promises";
 import { assertSuccessfulFetchTask } from "./fetch-assertions.mjs";
-import { collectDnsRebindingObservations } from "./dns-rebinding-preflight.mjs";
+import { collectDnsRebindingObservations, createStageScopedDnsRebindingSuffix } from "./dns-rebinding-preflight.mjs";
 
 const FETCH_CANDIDATES = Object.freeze([
   { url: "https://example.com/", expectedContent: "Example Domain", expectedHost: "example.com" },
@@ -303,13 +303,15 @@ function createDnsRebindingHostname(publicIp, privateIp, suffix) {
   return "make-" + publicIp + "-rebindfor2mafter1times-" + privateIp + "-rr-" + safeSuffix + ".1u.ms";
 }
 
-async function assertDnsRebindingAlternates(hostname, publicIp, privateIp, hostnameSuffix) {
+async function assertDnsRebindingAlternates(hostname, publicIp, privateIp, targetIndex) {
   const observations = await collectDnsRebindingObservations({
     hostname,
     hostnameForResolver: (resolver) => createDnsRebindingHostname(
       publicIp,
       privateIp,
-      hostnameSuffix + "-" + resolver.id,
+      createStageScopedDnsRebindingSuffix({
+        stage: "runtime", runId: RUN_ID, targetIndex, resolverId: resolver.id,
+      }),
     ),
     expectedAddresses: [publicIp, privateIp],
     resolvers: DNS_REBINDING_RESOLVERS,
@@ -332,13 +334,16 @@ async function runDnsRebindingAcceptance(token) {
   for (const [index, target] of DNS_REBINDING_PRIVATE_TARGETS.entries()) {
     // Use a disposable hostname for the runner's DoH preflight so its first
     // public answer cannot consume the Cloudflare Worker's independent session.
-    const preflightSuffix = "preflight-" + RUN_ID.slice(-20) + "-" + String(index + 1);
+    const targetIndex = index + 1;
+    // Keep Worker-runtime DNS checks in a separate 1u.ms namespace from the CI runner preflight.
     const preflightHostname = createDnsRebindingHostname(
       publicIp,
       target.ip,
-      preflightSuffix + "-base",
+      createStageScopedDnsRebindingSuffix({
+        stage: "runtime", runId: RUN_ID, targetIndex, resolverId: "base",
+      }),
     );
-    await assertDnsRebindingAlternates(preflightHostname, publicIp, target.ip, preflightSuffix);
+    await assertDnsRebindingAlternates(preflightHostname, publicIp, target.ip, targetIndex);
 
     const sessionId = "worker-" + RUN_ID + "-" + String(index + 1);
     const url = new URL(PLATFORM_URL + "/__acceptance/dns-rebinding-probe");
