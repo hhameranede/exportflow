@@ -239,10 +239,6 @@ function isPublicRoutableIpv4(value) {
   return true;
 }
 
-function ipv4ToHex(value) {
-  return parseIpv4Octets(value).map((octet) => octet.toString(16).padStart(2, "0")).join("");
-}
-
 async function cancelProbeResponseBody(response) {
   if (!response?.body) return;
   try {
@@ -252,18 +248,22 @@ async function cancelProbeResponseBody(response) {
   }
 }
 
-async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, controlIp, fetchImpl = globalThis.fetch, probeIntervalMs = 1_100) {
+function createDnsRebindingHostname(publicIp, privateIp, sessionId) {
+  return "make-" + publicIp + "-rebindfor5safter1times-" + privateIp + "-rr-" + sessionId + ".1u.ms";
+}
+
+async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fetchImpl = globalThis.fetch, probeIntervalMs = 1_100) {
   if (typeof fetchImpl !== "function" ||
       !isPublicRoutableIpv4(publicIp) ||
       !ACCEPTANCE_DNS_REBINDING_PRIVATE_IPS.has(privateIp) ||
-      !isPublicRoutableIpv4(controlIp) ||
-      controlIp === publicIp) {
-    return { status: "invalid_target", publicIp, privateIp, controlIp, probes: [] };
+      typeof sessionId !== "string" ||
+      !/^[a-z0-9-]{8,48}$/.test(sessionId)) {
+    return { status: "invalid_target", publicIp, privateIp, sessionId, probes: [] };
   }
 
-  const publicLabel = ipv4ToHex(publicIp);
-  const controlHostname = publicLabel + "." + ipv4ToHex(controlIp) + ".rbndr.us";
-  const hostname = publicLabel + "." + ipv4ToHex(privateIp) + ".rbndr.us";
+  // 1u.ms returns the public IP once, then the private test target while
+  // requests continue within the configured five-second rebinding window.
+  const hostname = createDnsRebindingHostname(publicIp, privateIp, sessionId);
   const requestInit = {
     method: "HEAD",
     redirect: "manual",
@@ -288,11 +288,11 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, controlIp, fe
   const baselineController = new AbortController();
   const baselineTimeout = setTimeout(() => baselineController.abort(), 8_000);
   try {
-    // rbndr.us rejects identical labels. The control uses two distinct public
-    // GitHub Pages IPs; the mixed hostname below uses the primary public IP
-    // and one private target. The runtime fingerprint must match publicly.
+    // The first lookup for this unique hostname must reach the public control
+    // origin. Every subsequent lookup during the rebinding window targets the
+    // fixed private address. No private response body is read.
     const response = await fetchImpl(
-      "http://" + controlHostname + "/?exportflow_acceptance_control=1",
+      "http://" + hostname + "/?exportflow_acceptance_control=1",
       { ...requestInit, signal: baselineController.signal },
     );
     baseline = fingerprint(response);
@@ -301,11 +301,10 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, controlIp, fe
     return {
       status: "inconclusive",
       hostname,
-      controlHostname,
+      sessionId,
       publicIp,
       privateIp,
-      controlIp,
-      reason: safeDiagnosticField(error?.message, 240) || "Distinct-public-IP DNS control did not return a response.",
+      reason: safeDiagnosticField(error?.message, 240) || "The first public DNS-rebinding response did not return an HTTP response.",
       probes: [],
     };
   } finally {
@@ -318,14 +317,13 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, controlIp, fe
     return {
       status: "inconclusive",
       hostname,
-      controlHostname,
+      sessionId,
       publicIp,
       privateIp,
-      controlIp,
       baseline,
       reason: baseline.server?.toLowerCase() === "cloudflare"
-        ? "Distinct-public-IP DNS control returned a Cloudflare edge response; a direct non-Cloudflare public origin is required."
-        : "Distinct-public-IP DNS control must return an HTTP response with a non-empty non-Cloudflare server header.",
+        ? "The first public DNS-rebinding response came from the Cloudflare edge, not the direct public control origin."
+        : "The first public DNS-rebinding response must be an HTTP response with a non-empty non-Cloudflare server header.",
       probes: [],
     };
   }
@@ -364,14 +362,16 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, controlIp, fe
     } finally {
       clearTimeout(timeout);
     }
-    // rbndr.us publishes a one-second TTL. Wait beyond it so the Worker resolver
-    // has a chance to observe the alternate address on the next request.
+    // 1u.ms uses zero-TTL answers. Keep consecutive probes inside its
+    // rebinding window so DNS is re-resolved to the private test target.
     if (attempt < 11 && probeIntervalMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, probeIntervalMs));
     }
   }
 
-  const publicResponses = probes.filter((probe) => probe.outcome === "public_control_match").length;
+  const probePublicResponses = probes.filter((probe) => probe.outcome === "public_control_match").length;
+  const baselinePublicResponses = 1;
+  const publicResponses = baselinePublicResponses + probePublicResponses;
   const networkErrors = probes.filter((probe) => probe.outcome === "network_error").length;
   const unexpectedResponses = probes.filter((probe) => probe.outcome === "unexpected_http_response").length;
   const status = unexpectedResponses > 0
@@ -383,13 +383,14 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, controlIp, fe
   return {
     status,
     hostname,
-    controlHostname,
+    sessionId,
     publicIp,
     privateIp,
-    controlIp,
     baseline,
+    baselinePublicResponses,
     attempts: probes.length,
     publicResponses,
+    probePublicResponses,
     networkErrors,
     unexpectedResponses,
     probes,
@@ -434,17 +435,17 @@ export function createWorker(options = {}) {
           }
           const publicIp = url.searchParams.get("public");
           const privateIp = url.searchParams.get("private");
-          const controlIp = url.searchParams.get("control");
+          const sessionId = url.searchParams.get("session");
           if (!isPublicRoutableIpv4(publicIp) || !ACCEPTANCE_DNS_REBINDING_PRIVATE_IPS.has(privateIp)) {
-            return json({ error: { code: "INVALID_DNS_REBINDING_TARGET", message: "A public target IP and one of the fixed private test targets are required." } }, 400);
+            return json({ error: { code: "INVALID_DNS_REBINDING_TARGET", message: "A public origin IP and one of the fixed private test targets are required." } }, 400);
           }
-          if (!isPublicRoutableIpv4(controlIp) || controlIp === publicIp) {
-            return json({ error: { code: "INVALID_DNS_REBINDING_CONTROL", message: "The public DNS control must be a distinct globally routable IPv4 address." } }, 400);
+          if (typeof sessionId !== "string" || !/^[a-z0-9-]{8,48}$/.test(sessionId)) {
+            return json({ error: { code: "INVALID_DNS_REBINDING_SESSION", message: "A unique lowercase alphanumeric DNS-rebinding session identifier is required." } }, 400);
           }
           const diagnostics = await runAcceptanceDnsRebindingProbe(
             publicIp,
             privateIp,
-            controlIp,
+            sessionId,
             options.acceptanceDnsRebindingFetch,
             options.acceptanceDnsRebindingProbeIntervalMs ?? 1_100,
           );

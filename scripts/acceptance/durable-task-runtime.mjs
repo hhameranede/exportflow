@@ -19,13 +19,10 @@ const DNS_REBINDING_RESOLVERS = Object.freeze([
   { name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
   { name: "GitHub runner system DNS", system: true, required: false },
 ]);
-// Official GitHub Pages A records, documented for custom-domain configuration:
-// https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site
-// rbndr.us requires distinct public-IP labels for its DNS control hostname.
-const DNS_REBINDING_CONTROL_IPS = Object.freeze([
-  "185.199.108.153",
-  "185.199.109.153",
-]);
+// GitHub Pages has a stable public HTTP endpoint and is used only as the
+// first, public answer. 1u.ms then rebinds the same hostname to a fixed
+// private test target during its zero-TTL, five-second window.
+const DNS_REBINDING_PUBLIC_IP = "185.199.108.153";
 const DNS_REBINDING_PRIVATE_TARGETS = Object.freeze([
   { name: "loopback", ip: "127.0.0.1" },
   { name: "unspecified", ip: "0.0.0.0" },
@@ -288,7 +285,7 @@ async function queryDnsAWithRetry(resolver, hostname) {
 async function queryDnsBatches(resolver, hostname, count) {
   const collected = [];
   for (let offset = 0; offset < count; offset += 1) {
-    // rbndr.us uses a one-second TTL; serialized queries spaced beyond that TTL
+    // 1u.ms uses zero-TTL answers; serialize queries to observe each rotation
     // avoid observing the same recursive-resolver cache entry in one burst.
     collected.push(...await queryDnsAWithRetry(resolver, hostname));
     if (offset + 1 < count) {
@@ -298,20 +295,12 @@ async function queryDnsBatches(resolver, hostname, count) {
   return collected;
 }
 
-async function assertDnsRebindingControl(hostname, expectedPublicIps) {
-  const records = await queryDnsBatches(DNS_REBINDING_RESOLVERS[0], hostname, 12);
-  const expected = [...new Set(expectedPublicIps)].sort();
-  const observed = [...new Set(records.map((record) => record.ip))].sort();
-  assert.deepEqual(
-    observed,
-    expected,
-    "The rbndr.us control must resolve to both distinct documented public IPs only: " + JSON.stringify({ expected, observed, records }),
-  );
-  assert.ok(
-    records.every((record) => Number.isFinite(record.ttl) && record.ttl <= 5),
-    "The rbndr.us control must return short-lived DNS A answers: " + JSON.stringify(records),
-  );
-  console.log("DNS rebinding public control: " + JSON.stringify({ hostname, expectedPublicIps: expected, queries: records.length }));
+function createDnsRebindingHostname(publicIp, privateIp, suffix) {
+  const safeSuffix = String(suffix).toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
+  if (!safeSuffix || !/^[a-z0-9-]{8,48}$/.test(safeSuffix)) {
+    throw new Error("A unique DNS rebinding hostname suffix is required.");
+  }
+  return "make-" + publicIp + "-rebindfor5safter1times-" + privateIp + "-rr-" + safeSuffix + ".1u.ms";
 }
 
 async function assertDnsRebindingAlternates(hostname, publicIp, privateIp) {
@@ -324,7 +313,7 @@ async function assertDnsRebindingAlternates(hostname, publicIp, privateIp) {
   const inconclusive = observations.filter((observation) => observation.status === "inconclusive");
   if (inconclusive.length > 0) {
     console.warn(
-      "Runner DNS diagnostics were inconclusive; the isolated Worker probe remains required: " +
+      "Optional runner DNS diagnostics were inconclusive; the Cloudflare Worker probe remains required: " +
       JSON.stringify({ hostname, observations: inconclusive }),
     );
   }
@@ -332,22 +321,24 @@ async function assertDnsRebindingAlternates(hostname, publicIp, privateIp) {
 }
 
 async function runDnsRebindingAcceptance(token) {
-  const [publicIp, controlIp] = DNS_REBINDING_CONTROL_IPS;
-  assert.ok(isPublicIpv4(publicIp) && isPublicIpv4(controlIp) && publicIp !== controlIp,
-    "DNS rebinding control must use two distinct globally routable IPv4 addresses.");
-  const publicHex = ipv4ToHex(publicIp);
-  const controlHex = ipv4ToHex(controlIp);
+  const publicIp = DNS_REBINDING_PUBLIC_IP;
+  assert.ok(isPublicIpv4(publicIp), "DNS rebinding control must use a globally routable IPv4 address.");
 
-  for (const target of DNS_REBINDING_PRIVATE_TARGETS) {
-    const controlHostname = publicHex + "." + controlHex + ".rbndr.us";
-    const hostname = publicHex + "." + ipv4ToHex(target.ip) + ".rbndr.us";
-    await assertDnsRebindingControl(controlHostname, [publicIp, controlIp]);
-    await assertDnsRebindingAlternates(hostname, publicIp, target.ip);
+  for (const [index, target] of DNS_REBINDING_PRIVATE_TARGETS.entries()) {
+    // Use a disposable hostname for the runner's DoH preflight so its first
+    // public answer cannot consume the Cloudflare Worker's independent session.
+    const preflightHostname = createDnsRebindingHostname(
+      publicIp,
+      target.ip,
+      "preflight-" + RUN_ID + "-" + String(index + 1),
+    );
+    await assertDnsRebindingAlternates(preflightHostname, publicIp, target.ip);
 
+    const sessionId = "worker-" + RUN_ID + "-" + String(index + 1);
     const url = new URL(PLATFORM_URL + "/__acceptance/dns-rebinding-probe");
     url.searchParams.set("public", publicIp);
     url.searchParams.set("private", target.ip);
-    url.searchParams.set("control", controlIp);
+    url.searchParams.set("session", sessionId);
     const response = await fetch(url, {
       headers: { authorization: "Bearer " + token, accept: "application/json" },
       signal: AbortSignal.timeout(90_000),
@@ -358,26 +349,28 @@ async function runDnsRebindingAcceptance(token) {
     assert.equal(
       result.body.status,
       "mixed",
-      "Worker HEAD probes must show both the public control response and failed private-target attempts: " +
+      "The first public answer and later rejected private-target attempts must be observed without any private response: " +
         JSON.stringify(result.body),
     );
-    assert.ok(result.body.publicResponses > 0);
+    assert.equal(result.body.baselinePublicResponses, 1);
+    assert.ok(result.body.publicResponses >= 1);
     assert.ok(result.body.networkErrors > 0);
     assert.equal(result.body.unexpectedResponses, 0);
     console.log("DNS rebinding verified: " + JSON.stringify({
       target: target.name,
-      hostname,
+      hostname: result.body.hostname,
       publicIp,
-      controlIp,
       privateIp: target.ip,
+      baselineStatus: result.body.baseline.status,
+      baselineServer: result.body.baseline.server,
+      baselinePublicResponses: result.body.baselinePublicResponses,
       publicResponses: result.body.publicResponses,
       networkErrors: result.body.networkErrors,
       unexpectedResponses: result.body.unexpectedResponses,
     }));
   }
-  console.log("DNS rebinding preflight and isolated Worker HEAD probes passed for loopback, 0.0.0.0 and 10.0.0.1.");
+  console.log("DNS rebinding preflight and isolated Worker probes passed for loopback, 0.0.0.0 and 10.0.0.1.");
 }
-
 async function runNetworkDiagnostics(token) {
   const response = await fetch(PLATFORM_URL + "/__acceptance/network-probe", {
     headers: { authorization: "Bearer " + token, accept: "application/json" },

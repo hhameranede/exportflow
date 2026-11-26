@@ -123,18 +123,16 @@ test("Acceptance network diagnostics require tasks:fetch and use only fixed boun
 test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, and bounded", async () => {
   const calls = [];
   let probeCalls = 0;
-  const publicLabel = "b9c76c99";
-  const controlLabel = "b9c76d99";
-  const privateLabel = "7f000001";
-  const controlHostname = publicLabel + "." + controlLabel + ".rbndr.us";
-  const targetHostname = publicLabel + "." + privateLabel + ".rbndr.us";
+  const sessionId = "worker-test-session";
+  const targetHostname = "make-185.199.108.153-rebindfor5safter1times-127.0.0.1-rr-" + sessionId + ".1u.ms";
   const worker = createWorker({
     acceptanceDnsRebindingProbe: true,
     acceptanceDnsRebindingProbeIntervalMs: 0,
     acceptanceDnsRebindingFetch: async (input, init) => {
       const url = new URL(String(input));
       calls.push({ url: url.href, init });
-      if (url.hostname === controlHostname) {
+      assert.equal(url.hostname, targetHostname);
+      if (calls.length === 1) {
         return new Response(null, {
           status: 200,
           headers: {
@@ -145,9 +143,8 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
           },
         });
       }
-      assert.equal(url.hostname, targetHostname);
       probeCalls += 1;
-      if (probeCalls % 2 === 1) {
+      if (probeCalls % 2 === 0) {
         return new Response(null, {
           status: 200,
           headers: {
@@ -165,7 +162,7 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
   env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
   try {
     const request = new Request(
-      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=185.199.108.153&private=127.0.0.1&control=185.199.109.153",
+      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=185.199.108.153&private=127.0.0.1&session=" + sessionId,
       { headers: { authorization: "Bearer " + TEST_TOKEN } },
     );
     const response = await worker.fetch(request, env);
@@ -173,13 +170,15 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
     const diagnostic = await response.json();
     assert.equal(diagnostic.status, "mixed");
     assert.equal(diagnostic.attempts, 12);
-    assert.equal(diagnostic.publicResponses, 6);
+    assert.equal(diagnostic.baselinePublicResponses, 1);
+    assert.equal(diagnostic.probePublicResponses, 6);
+    assert.equal(diagnostic.publicResponses, 7);
     assert.equal(diagnostic.networkErrors, 6);
     assert.equal(diagnostic.unexpectedResponses, 0);
-    assert.equal(diagnostic.controlHostname, controlHostname);
+    assert.equal(diagnostic.sessionId, sessionId);
     assert.equal(diagnostic.hostname, targetHostname);
     assert.equal(calls.length, 13);
-    assert.equal(calls[0].url, "http://" + controlHostname + "/?exportflow_acceptance_control=1");
+    assert.equal(calls[0].url, "http://" + targetHostname + "/?exportflow_acceptance_control=1");
     assert.ok(calls.slice(1).every(({ url }) => url.startsWith("http://" + targetHostname + "/?")));
     assert.ok(calls.every(({ init }) =>
       init.method === "HEAD" && init.redirect === "manual" && init.cache === "no-store"
@@ -188,35 +187,40 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
     assert.equal(diagnostic.probes.some((probe) => "body" in probe), false);
 
     const unauthenticated = await worker.fetch(new Request(
-      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=185.199.108.153&private=127.0.0.1&control=185.199.109.153",
+      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=185.199.108.153&private=127.0.0.1&session=" + sessionId,
     ), env);
     assert.equal(unauthenticated.status, 401);
 
     const rejectedTarget = await worker.fetch(new Request(
-      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=127.0.0.1&private=127.0.0.1&control=185.199.109.153",
+      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=127.0.0.1&private=127.0.0.1&session=" + sessionId,
       { headers: { authorization: "Bearer " + TEST_TOKEN } },
     ), env);
     assert.equal(rejectedTarget.status, 400);
+    assert.equal((await rejectedTarget.json()).error.code, "INVALID_DNS_REBINDING_TARGET");
 
-    const rejectedControl = await worker.fetch(new Request(
-      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=185.199.108.153&private=127.0.0.1&control=185.199.108.153",
+    const rejectedSession = await worker.fetch(new Request(
+      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=185.199.108.153&private=127.0.0.1&session=bad%20session",
       { headers: { authorization: "Bearer " + TEST_TOKEN } },
     ), env);
-    assert.equal(rejectedControl.status, 400);
-    assert.equal((await rejectedControl.json()).error.code, "INVALID_DNS_REBINDING_CONTROL");
+    assert.equal(rejectedSession.status, 400);
+    assert.equal((await rejectedSession.json()).error.code, "INVALID_DNS_REBINDING_SESSION");
   } finally {
     env.__fixture.close();
   }
 });
 
 
-test("Acceptance DNS rebinding probe fails closed when the mixed hostname returns a different HTTP fingerprint", async () => {
+test("Acceptance DNS rebinding probe fails closed when the private target returns a different HTTP fingerprint", async () => {
+  const sessionId = "worker-test-different";
+  const targetHostname = "make-185.199.108.153-rebindfor5safter1times-127.0.0.1-rr-" + sessionId + ".1u.ms";
+  let calls = 0;
   const worker = createWorker({
     acceptanceDnsRebindingProbe: true,
     acceptanceDnsRebindingProbeIntervalMs: 0,
     acceptanceDnsRebindingFetch: async (input) => {
-      const hostname = new URL(String(input)).hostname;
-      if (hostname === "b9c76c99.b9c76d99.rbndr.us") {
+      assert.equal(new URL(String(input)).hostname, targetHostname);
+      calls += 1;
+      if (calls === 1) {
         return new Response(null, {
           status: 200,
           headers: { server: "acceptance-test", "content-type": "text/html", "content-length": "128" },
@@ -232,14 +236,15 @@ test("Acceptance DNS rebinding probe fails closed when the mixed hostname return
   env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
   try {
     const request = new Request(
-      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=185.199.108.153&private=127.0.0.1&control=185.199.109.153",
+      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=185.199.108.153&private=127.0.0.1&session=" + sessionId,
       { headers: { authorization: "Bearer " + TEST_TOKEN } },
     );
     const response = await worker.fetch(request, env);
     const diagnostic = await response.json();
     assert.equal(response.status, 200);
     assert.equal(diagnostic.status, "unexpected_http_response");
-    assert.equal(diagnostic.publicResponses, 0);
+    assert.equal(diagnostic.baselinePublicResponses, 1);
+    assert.equal(diagnostic.probePublicResponses, 0);
     assert.equal(diagnostic.networkErrors, 0);
     assert.equal(diagnostic.unexpectedResponses, 12);
   } finally {
@@ -247,8 +252,10 @@ test("Acceptance DNS rebinding probe fails closed when the mixed hostname return
   }
 });
 
-test("Acceptance DNS rebinding probes reject Cloudflare edge controls and retain bounded DNS diagnostics", async () => {
+test("Acceptance DNS rebinding probes reject Cloudflare edge baselines and retain bounded DNS diagnostics", async () => {
   const calls = [];
+  const sessionId = "worker-test-cloudflare";
+  const targetHostname = "make-185.199.108.153-rebindfor5safter1times-127.0.0.1-rr-" + sessionId + ".1u.ms";
   const worker = createWorker({
     acceptanceDnsRebindingProbe: true,
     acceptanceDnsRebindingFetch: async (input) => {
@@ -270,25 +277,26 @@ test("Acceptance DNS rebinding probes reject Cloudflare edge controls and retain
   env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
   try {
     const request = new Request(
-      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=185.199.108.153&private=127.0.0.1&control=185.199.109.153",
+      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=185.199.108.153&private=127.0.0.1&session=" + sessionId,
       { headers: { authorization: "Bearer " + TEST_TOKEN } },
     );
     const response = await worker.fetch(request, env);
     assert.equal(response.status, 200);
     const diagnostic = await response.json();
     assert.equal(diagnostic.status, "inconclusive");
-    assert.match(diagnostic.reason, /Cloudflare edge response/);
+    assert.match(diagnostic.reason, /Cloudflare edge/);
     assert.equal(diagnostic.baseline.status, 530);
     assert.equal(diagnostic.baseline.cfErrorType, "error=1016");
     assert.equal(diagnostic.baseline.cfErrorOrigin, "dns");
     assert.equal(diagnostic.baseline.cfRay, "acceptance-test-ray");
     assert.equal(diagnostic.baseline.cfCacheStatus, "DYNAMIC");
     assert.equal(diagnostic.baseline.serverTiming, "cfOrigin;dur=0");
-    assert.deepEqual(calls, ["http://b9c76c99.b9c76d99.rbndr.us/?exportflow_acceptance_control=1"]);
+    assert.deepEqual(calls, ["http://" + targetHostname + "/?exportflow_acceptance_control=1"]);
   } finally {
     env.__fixture.close();
   }
 });
+
 
 test("tenant API authentication fails closed when the dedicated D1 binding is missing or invalid", async () => {
   const worker = createWorker();
