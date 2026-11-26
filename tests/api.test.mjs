@@ -120,8 +120,10 @@ test("Acceptance network diagnostics require tasks:fetch and use only fixed boun
 });
 
 
-test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, and bounded", async () => {
+test("Acceptance DNS rebinding probes are isolated, authenticated, GET-based, body-cancelled, and bounded", async () => {
   const calls = [];
+  let bodyReads = 0;
+  let bodyCancellations = 0;
   const sessionId = "worker-test-session";
   const targetHostname = "make-185.199.108.153-rebindfor2mafter2times-127.0.0.1-rr-" + sessionId + ".1u.ms";
   const worker = createWorker({
@@ -132,7 +134,16 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
       calls.push({ url: url.href, init });
       assert.equal(url.hostname, targetHostname);
       if (calls.length === 1) {
-        return new Response(null, {
+        const unreadBody = new ReadableStream({
+          pull(controller) {
+            bodyReads += 1;
+            controller.enqueue(new Uint8Array([1, 2, 3]));
+          },
+          cancel() {
+            bodyCancellations += 1;
+          },
+        }, { highWaterMark: 0 });
+        return new Response(unreadBody, {
           status: 200,
           headers: {
             server: "acceptance-test",
@@ -162,18 +173,24 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
     assert.equal(diagnostic.publicResponses, 1);
     assert.equal(diagnostic.networkErrors, 12);
     assert.equal(diagnostic.unexpectedResponses, 0);
+    assert.equal(diagnostic.requestMethod, "GET");
+    assert.equal(diagnostic.responseBodyPolicy, "cancel-before-read");
+    assert.equal(diagnostic.baselineStartedAt.length > 0, true);
+    assert.ok(Number.isFinite(diagnostic.baselineElapsedMs));
     assert.equal(diagnostic.sessionId, sessionId);
     assert.equal(diagnostic.hostname, targetHostname);
     assert.equal(calls.length, 13);
     assert.equal(calls[0].url, "http://" + targetHostname + "/?exportflow_acceptance_control=1");
     assert.ok(calls.slice(1).every(({ url }) => url.startsWith("http://" + targetHostname + "/?")));
     assert.ok(calls.every(({ init }) =>
-      init.method === "HEAD" &&
+      init.method === "GET" &&
       init.redirect === "manual" &&
       init.cache === "no-store" &&
       init.headers?.["user-agent"] === "ExportFlow-Acceptance/1.0 (+https://exportflow.me)"
     ));
     assert.ok(calls.every(({ init }) => !init.body && !init.headers?.authorization));
+    assert.equal(bodyReads, 0, "The probe must not read even one byte of the upstream response body.");
+    assert.equal(bodyCancellations, 1, "The public baseline response body must be cancelled without reading it.");
     assert.equal(diagnostic.probes.some((probe) => "body" in probe), false);
 
     const unauthenticated = await worker.fetch(new Request(
@@ -244,7 +261,8 @@ test("Acceptance DNS rebinding probe recognizes only the exact known CERN contro
     assert.equal(diagnostic.networkErrors, 12);
     assert.equal(diagnostic.unexpectedResponses, 0);
     assert.equal(calls.length, 13);
-    assert.ok(calls.every(({ init }) => init.method === "HEAD" && init.redirect === "manual" && init.cache === "no-store"));
+    assert.equal(diagnostic.requestMethod, "GET");
+    assert.ok(calls.every(({ init }) => init.method === "GET" && init.redirect === "manual" && init.cache === "no-store"));
   } finally {
     env.__fixture.close();
   }
