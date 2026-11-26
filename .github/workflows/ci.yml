@@ -28,9 +28,6 @@ jobs:
    - run: npm install --no-audit --no-fund
    - run: npm test
    - run: npm run check
-   - name: Verify whonow DNS rebinding preflight (PR #142 only; no Cloudflare changes)
-     if: github.event_name == 'pull_request' && github.event.pull_request.number == 142
-     run: node scripts/acceptance/whonow-dns-preflight.mjs
    - name: Install pinned Playwright and Chromium outside project dependencies
      run: |
       npm install --prefix "$RUNNER_TEMP/ef-browser" --no-save --package-lock=false playwright@1.65.1
@@ -90,6 +87,10 @@ jobs:
       if-no-files-found: error
       retention-days: 3
       include-hidden-files: true
+
+   - name: Verify rbndr.us DNS rebinding preflight (PR #142 only; no Cloudflare changes)
+     if: github.event_name == 'pull_request' && github.event.pull_request.number == 142
+     run: node scripts/acceptance/rbndr-dns-preflight.mjs
 
  deploy-acceptance:
   needs: test
