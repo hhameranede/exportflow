@@ -292,12 +292,12 @@ async function queryDnsBatches(resolver, hostname, count) {
 }
 
 async function discoverPublicRebindingIp() {
-  // Use Google DoH for the public control address. Cloudflare's public DoH
-  // endpoint may suppress private rbndr answers; it is not required to prove
-  // that the authoritative rbndr service is returning both configured A records.
-  const answers = await queryDnsBatches(DNS_REBINDING_RESOLVERS[0], "example.com", 4);
+  // NeverSSL currently uses a direct AWS-hosted HTTP origin. Do not use
+  // example.com here: its A records are Cloudflare-owned edge IPs, and
+  // Workers cannot use those as outbound subrequest destinations.
+  const answers = await queryDnsBatches(DNS_REBINDING_RESOLVERS[0], "neverssl.com", 4);
   const publicIp = answers.map((answer) => answer.ip).find(isPublicIpv4);
-  assert.ok(publicIp, "Google Public DNS must return a public example.com A record.");
+  assert.ok(publicIp, "Google Public DNS must return a public neverssl.com A record.");
   return publicIp;
 }
 
