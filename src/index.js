@@ -249,7 +249,7 @@ async function cancelProbeResponseBody(response) {
 }
 
 function createDnsRebindingHostname(publicIp, privateIp, sessionId) {
-  return "make-" + publicIp + "-rebindfor30safter1times-" + privateIp + "-rr-" + sessionId + ".1u.ms";
+  return "make-" + publicIp + "-rebindfor2mafter1times-" + privateIp + "-rr-" + sessionId + ".1u.ms";
 }
 
 async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fetchImpl = globalThis.fetch, probeIntervalMs = 1_100) {
@@ -262,7 +262,7 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
   }
 
   // 1u.ms returns the public IP once, then the private test target while
-  // requests continue within the configured 30-second rebinding window.
+  // requests continue within the configured two-minute rebinding window.
   const hostname = createDnsRebindingHostname(publicIp, privateIp, sessionId);
   const requestInit = {
     method: "HEAD",

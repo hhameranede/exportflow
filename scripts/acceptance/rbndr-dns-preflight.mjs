@@ -18,7 +18,7 @@ const RUN_ID = String(process.env.GITHUB_RUN_ID || process.env.CI_RUN_ID || Date
   .slice(0, 32);
 
 function createHostname(privateIp, suffix) {
-  return "make-" + PUBLIC_IP + "-rebindfor30safter1times-" + privateIp + "-rr-" + suffix + ".1u.ms";
+  return "make-" + PUBLIC_IP + "-rebindfor2mafter1times-" + privateIp + "-rr-" + suffix + ".1u.ms";
 }
 
 const systemResolver = new Resolver();
@@ -94,6 +94,6 @@ for (const [index, target] of PRIVATE_TARGETS.entries()) {
 
 assert.equal(verified.length, PRIVATE_TARGETS.length);
 console.log("1u.ms DNS rebinding preflight passed: " + JSON.stringify({
-  authority: "1u.ms", publicIp: PUBLIC_IP, rebindingWindow: "30s",
+  authority: "1u.ms", publicIp: PUBLIC_IP, rebindingWindow: "2m",
   queriesPerTarget: 12, intervalMs: QUERY_INTERVAL_MS, verified,
 }));
