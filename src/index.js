@@ -239,12 +239,15 @@ function isPublicRoutableIpv4(value) {
   return true;
 }
 
-async function cancelProbeResponseBody(response) {
+function cancelProbeResponseBody(response) {
   if (!response?.body) return;
   try {
-    await response.body.cancel();
+    const cancellation = response.body.cancel();
+    if (cancellation && typeof cancellation.catch === "function") {
+      void cancellation.catch(() => {});
+    }
   } catch {
-    // Responses without a body need no cancellation; otherwise cancellation is best-effort.
+    // Match production Fetch: cancellation is best-effort and must never hold the task open.
   }
 }
 
@@ -313,7 +316,7 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
     );
     baselineElapsedMs = Date.now() - baselineStartedAtMs;
     baseline = fingerprint(response);
-    await cancelProbeResponseBody(response);
+    cancelProbeResponseBody(response);
   } catch (error) {
     return {
       status: "inconclusive",
@@ -387,7 +390,7 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
         observed.etag === baseline.etag &&
         observed.location === baseline.location;
       // Header fingerprints are sufficient; never consume an upstream response body.
-      await cancelProbeResponseBody(response);
+      cancelProbeResponseBody(response);
       probes.push({
         attempt: attempt + 1,
         startedAt,
