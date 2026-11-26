@@ -36,7 +36,7 @@ export async function collectDnsRebindingObservations({
       assert.deepEqual(
         observed,
         expected,
-        resolver.name + " must observe both configured rbndr.us A answers for " + hostname + ".",
+        resolver.name + " must observe both configured DNS-rebinding A answers for " + hostname + ".",
       );
       assert.ok(
         records.every((record) => Number.isFinite(record.ttl) && record.ttl <= 5),

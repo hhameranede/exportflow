@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { collectDnsRebindingObservations } from "../scripts/acceptance/dns-rebinding-preflight.mjs";
 
-const hostname = "ac4293f3.0a000001.rbndr.us";
+const hostname = "make-172.66.147.243-rebindfor30safter1times-10.0.0.1-rr-test-acceptance.1u.ms";
 const publicIp = "172.66.147.243";
 const privateIp = "10.0.0.1";
 const validRecords = [
@@ -55,7 +55,7 @@ test("the preflight fails closed when the required resolver misses one address",
       resolvers: [{ name: "Google Public DNS DoH", required: true }],
       queryDnsBatches: async () => [{ ip: publicIp, ttl: 1 }],
     }),
-    /must observe both configured rbndr\.us A answers/,
+    /must observe both configured DNS-rebinding A answers/,
   );
 });
 
