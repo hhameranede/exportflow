@@ -420,6 +420,7 @@ export async function fetchPublicResource(input, options = {}) {
       if (timedOut) {
         throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
       }
+      const body = responseMode === "text" ? decoder.decode(bodyBytes) : undefined;
       const retrievedAt = new Date().toISOString();
       emitReceipt("response");
 
@@ -428,9 +429,7 @@ export async function fetchPublicResource(input, options = {}) {
         status: response.status,
         contentType,
         cacheStatus: normalizeCacheStatus(response.headers.get("cf-cache-status")),
-        ...(responseMode === "bytes"
-          ? { bodyBytes }
-          : { body: decoder.decode(bodyBytes) }),
+        ...(responseMode === "bytes" ? { bodyBytes } : { body }),
         bytes,
         originalUrl: initialUrl.href,
         finalUrl: currentUrl.href,
