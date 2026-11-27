@@ -18,6 +18,15 @@ class RequestBodyError extends Error {
   }
 }
 
+function cancelReaderBestEffort(reader) {
+  try {
+    const result = reader.cancel();
+    if (result && typeof result.catch === "function") void result.catch(() => {});
+  } catch {
+    // A stream may already be closed or errored.
+  }
+}
+
 async function readBoundedBody(request, maxBytes) {
   const declaredLength = request.headers.get("content-length");
   if (declaredLength !== null) {
@@ -40,14 +49,14 @@ async function readBoundedBody(request, maxBytes) {
       if (done) break;
       chunkCount += 1;
       if (chunkCount > 1024 || value.byteLength > maxBytes - totalBytes) {
-        void reader.cancel().catch(() => {});
+        cancelReaderBestEffort(reader);
         throw new RequestBodyError("PDF_TOO_LARGE", "PDF request body exceeds a bounded stream limit.", 413);
       }
       totalBytes += value.byteLength;
       chunks.push(value);
     }
   } catch (error) {
-    void reader.cancel().catch(() => {});
+    cancelReaderBestEffort(reader);
     if (error instanceof RequestBodyError) throw error;
     throw new RequestBodyError("INVALID_BODY", "Could not read the PDF request body.", 400);
   } finally {
