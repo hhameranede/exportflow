@@ -26,7 +26,7 @@ The WPT Live host may be unavailable or rate-limited from a Worker region. Such 
 
 ## How to run the isolated live Acceptance
 
-From a reviewed checkout of this branch, use Node 22+ and an authenticated Wrangler session with access to the ExportFlow Cloudflare account. Also provide `CLOUDFLARE_API_TOKEN` (or `CF_API_TOKEN`) in the process environment with Workers Scripts Read permission; the value is used only for read-only version inventory and is never printed.
+From a reviewed checkout of this branch, use Node 22+ and an authenticated Wrangler CLI session with access to the ExportFlow Cloudflare account. Provide `CLOUDFLARE_API_TOKEN` (or `CF_API_TOKEN`) in the process environment. The token needs **Workers Scripts Read** for the read-only version preflight and **D1 Write** for the run-scoped remote `INSERT`/`DELETE` statements executed by Wrangler. Restrict its D1 write access to the dedicated Acceptance database `1f94eee0-219e-4a41-86ce-49c29067ef06` wherever token resource scoping permits; it must not need Production D1 write access. The token is never printed.
 
 ```sh
 node scripts/acceptance/stage1-fetch-corpus.mjs
