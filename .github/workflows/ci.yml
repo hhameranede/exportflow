@@ -63,11 +63,13 @@ jobs:
      run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/task-platform-acceptance" --config cloudflare/task-acceptance/platform.wrangler.toml
    - name: Build Task MCP Acceptance bundle (dry-run only)
      run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/task-mcp-acceptance" --config cloudflare/task-acceptance/mcp.wrangler.toml
+   - name: Build isolated open-source parser compatibility bundle (dry-run only)
+     run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/parser-compat" --config cloudflare/parser-compat/wrangler.toml
    - name: Assert and inventory all nine Wrangler bundles
      shell: bash
      run: |
       set -euo pipefail
-      for mapping in auth-lab/index.js platform/index.js mcp-preview/index.js tenant-platform-acceptance/tenant-platform.js tenant-mcp-acceptance/tenant-mcp.js auth-acceptance/index.js mcp-acceptance/index.js task-platform-acceptance/platform.js task-mcp-acceptance/mcp.js; do
+      for mapping in auth-lab/index.js platform/index.js mcp-preview/index.js tenant-platform-acceptance/tenant-platform.js tenant-mcp-acceptance/tenant-mcp.js auth-acceptance/index.js mcp-acceptance/index.js task-platform-acceptance/platform.js task-mcp-acceptance/mcp.js parser-compat/worker.js; do
        bundle="${mapping%%/*}"
        entrypoint="${mapping#*/}"
        output="$GITHUB_WORKSPACE/dist/$bundle/$entrypoint"
@@ -79,7 +81,9 @@ jobs:
        echo "$bundle/$entrypoint: $(stat -c '%s bytes' "$output")"
       done
       find "$GITHUB_WORKSPACE/dist" -maxdepth 4 -type f -printf "%p %s bytes\n" | sort
-   - name: Upload all nine Worker bundle artifacts
+   - name: Run parser compatibility in local Workers runtime
+     run: node scripts/test-open-source-parsers-worker.mjs
+   - name: Upload all ten Worker bundle artifacts
      uses: actions/upload-artifact@v4
      with:
       name: exportflow-worker-bundles-${{ github.sha }}
