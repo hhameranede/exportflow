@@ -25,19 +25,26 @@ export function createSyntheticPdf(pages = ["ExportFlow synthetic PDF fixture"])
   for (let index = 0; index < pages.length; index += 1) {
     const pageId = pageIds[index];
     const contentId = pageId + 1;
-    // Keep individual PDF string tokens modest so a large synthetic page
-    // exercises streamed text accumulation rather than PDF.js token edge cases.
+    // Flow long synthetic text across visible lines so the fixture exercises
+    // parser output limits rather than clipping at the page's right edge.
     const pageText = String(pages[index]);
-    const textOperators = [];
-    for (let offset = 0; offset < pageText.length; offset += 2_048) {
-      textOperators.push("(" + escapePdfText(pageText.slice(offset, offset + 2_048)) + ") Tj");
+    const lineLength = 60;
+    const lineLeading = 8;
+    const textLines = [];
+    for (let offset = 0; offset < pageText.length; offset += lineLength) {
+      textLines.push(pageText.slice(offset, offset + lineLength));
     }
-    if (textOperators.length === 0) textOperators.push("() Tj");
-    const stream = "BT\n/F1 12 Tf\n72 720 Td\n" + textOperators.join("\n") + "\nET\n";
+    if (textLines.length === 0) textLines.push("");
+    const pageHeight = Math.max(792, 144 + textLines.length * lineLeading);
+    const textOperators = textLines.map((line, lineIndex) => {
+      const move = lineIndex === 0 ? "" : "0 -" + lineLeading + " Td\n";
+      return move + "(" + escapePdfText(line) + ") Tj";
+    });
+    const stream = "BT\n/F1 6 Tf\n72 " + (pageHeight - 72) + " Td\n" + textOperators.join("\n") + "\nET\n";
     const streamLength = Buffer.byteLength(stream, "ascii");
 
     objects.push(
-      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 " +
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 " + pageHeight + "] /Resources << /Font << /F1 " +
         fontId + " 0 R >> >> /Contents " + contentId + " 0 R >>",
     );
     objects.push("<< /Length " + streamLength + " >>\nstream\n" + stream + "endstream");
