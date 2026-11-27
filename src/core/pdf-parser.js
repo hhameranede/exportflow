@@ -2,6 +2,7 @@ export const PDF_PARSE_LIMITS = Object.freeze({
   maxInputBytes: 1_048_576,
   maxPages: 10,
   maxOutputCharacters: 65_536,
+  maxTextItems: 100_000,
   maxImageSize: 16_777_216,
   maxParseTimeMs: 5_000,
 });
@@ -55,6 +56,15 @@ export function hasPdfSignature(input) {
   return false;
 }
 
+function cancelReaderBestEffort(reader) {
+  try {
+    const cancellation = reader.cancel();
+    if (cancellation && typeof cancellation.catch === "function") void cancellation.catch(() => {});
+  } catch {
+    // A stream may already be closed, errored, or locked by the runtime.
+  }
+}
+
 /**
  * Run one PDF.js operation under a bounded wall-clock deadline.
  * onTimeout is used to release a document proxy if one has already loaded.
@@ -89,8 +99,9 @@ export function withPdfParserTimeout(operation, timeoutMs = PDF_PARSE_LIMITS.max
 /**
  * Extract text from already-fetched PDF bytes.
  *
- * This function never accepts a URL and never configures CMaps, standard-font
- * URLs, WASM URLs, or worker fetches. Parsing stays inside the current Worker.
+ * Text is consumed from PDF.js' per-page ReadableStream and stopped at the
+ * output/item ceilings. This avoids retaining every page's text at once.
+ * The parser never accepts a URL or initiates secondary requests.
  */
 export async function extractPdfText(input, options = {}) {
   const bytes = toByteArray(input);
@@ -129,7 +140,7 @@ export async function extractPdfText(input, options = {}) {
         503,
       );
     }
-    const { extractText, getDocumentProxy } = await import("unpdf");
+    const { getDocumentProxy } = await import("unpdf");
 
     // PDF.js takes ownership of its input buffer. Pass a copy so callers retain
     // their bounded Fetch buffer for accounting and downstream provenance.
@@ -171,15 +182,86 @@ export async function extractPdfText(input, options = {}) {
       );
     }
 
-    const extracted = await withPdfParserTimeout(
-      () => extractText(document, { mergePages: true }),
-      remainingTimeMs(),
-      () => { parseTimedOut = true; },
-    );
-    const rawText = Array.isArray(extracted.text) ? extracted.text.join("\n\n") : extracted.text;
-    const boundedText = boundPdfText(rawText);
+    let text = "";
+    let itemCount = 0;
+    let truncated = false;
 
-    if (!boundedText.text) {
+    for (let pageNumber = 1; pageNumber <= document.numPages && !truncated; pageNumber += 1) {
+      const page = await withPdfParserTimeout(
+        () => document.getPage(pageNumber),
+        remainingTimeMs(),
+        () => { parseTimedOut = true; },
+      );
+
+      if (typeof page.streamTextContent !== "function") {
+        throw new PdfParserError(
+          "PDF_RUNTIME_UNSUPPORTED",
+          "The PDF.js runtime does not expose streaming text extraction.",
+          503,
+        );
+      }
+
+      const reader = page.streamTextContent().getReader();
+      try {
+        while (true) {
+          const chunk = await withPdfParserTimeout(
+            () => reader.read(),
+            remainingTimeMs(),
+            () => {
+              parseTimedOut = true;
+              cancelReaderBestEffort(reader);
+            },
+          );
+          if (chunk.done) break;
+
+          const items = Array.isArray(chunk.value?.items) ? chunk.value.items : [];
+          for (const item of items) {
+            itemCount += 1;
+            if (itemCount > PDF_PARSE_LIMITS.maxTextItems) {
+              truncated = true;
+              break;
+            }
+            if (typeof item?.str !== "string" || item.str.length === 0) continue;
+
+            const addition = item.str + (item.hasEOL ? "\n" : "");
+            const remaining = PDF_PARSE_LIMITS.maxOutputCharacters - text.length;
+            if (addition.length > remaining) {
+              text += addition.slice(0, remaining);
+              truncated = true;
+              break;
+            }
+            text += addition;
+          }
+          if (truncated) {
+            cancelReaderBestEffort(reader);
+            break;
+          }
+        }
+      } finally {
+        try {
+          reader.releaseLock();
+        } catch {
+          // Timeout/cancellation may already have released the reader.
+        }
+        try {
+          page.cleanup?.();
+        } catch {
+          // Page cleanup is best-effort and must not replace the parse result.
+        }
+      }
+
+      if (pageNumber < document.numPages && text.length > 0 && !truncated) {
+        const remaining = PDF_PARSE_LIMITS.maxOutputCharacters - text.length;
+        if (remaining > 0) text += "\n".slice(0, remaining);
+      }
+    }
+
+    const normalizedText = text
+      .replace(/\u0000/g, "")
+      .replace(/\r\n?/g, "\n")
+      .trim();
+
+    if (!normalizedText) {
       throw new PdfParserError(
         "PDF_NO_TEXT_LAYER",
         "No extractable text layer was found. Scanned-PDF OCR is not supported.",
@@ -191,9 +273,9 @@ export async function extractPdfText(input, options = {}) {
       format: "pdf",
       parser: "unpdf",
       parserVersion: "2.2.3",
-      totalPages: extracted.totalPages,
-      text: boundedText.text,
-      truncated: boundedText.truncated,
+      totalPages: document.numPages,
+      text: normalizedText,
+      truncated,
     });
   } catch (error) {
     if (error instanceof PdfParserError) throw error;
