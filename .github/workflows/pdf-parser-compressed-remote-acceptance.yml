@@ -39,7 +39,7 @@ jobs:
           test "$(git log -1 --format=%s)" = "acceptance: run isolated compressed PDF parser Acceptance"
           test "$(git merge-base HEAD "$BASE_SHA")" = "$BASE_SHA"
           changed="$(git diff --name-only "$BASE_SHA"..HEAD | sort)"
-          expected="$(printf '%s\\n' ".github/workflows/pdf-parser-compressed-remote-acceptance.yml" "scripts/acceptance/pdf-parser-compressed-remote-smoke.mjs")"
+          expected="$(printf '%s\n' ".github/workflows/pdf-parser-compressed-remote-acceptance.yml" "scripts/acceptance/pdf-parser-compressed-remote-smoke.mjs")"
           if [[ "$changed" != "$expected" ]]; then
             echo "::error::Unexpected files outside the isolated compressed PDF Acceptance harness."
             exit 1
