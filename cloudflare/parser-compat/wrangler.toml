@@ -1,6 +1,11 @@
+# Dedicated synthetic-only parser compatibility Worker.
+# No production routes, bindings, secrets, D1, Durable Objects, or external fetches.
 name = "exportflow-parser-compat"
 main = "worker.js"
 compatibility_date = "2026-11-17"
 compatibility_flags = ["global_fetch_strictly_public"]
-workers_dev = false
+workers_dev = true
 preview_urls = false
+
+[observability]
+enabled = false
