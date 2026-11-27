@@ -15,10 +15,7 @@ permissions:
 
 jobs:
   oauth-acceptance:
-    if: >-
-      ${{ github.event_name == 'push' &&
-          github.ref == 'refs/heads/fix/oauth-acceptance-reconciled-20261123' &&
-          contains(github.event.head_commit.added, '.github/acceptance/oauth-acceptance.approved') }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/oauth-acceptance-reconciled-20261123' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     concurrency:
@@ -33,6 +30,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 2
+      - name: Verify one-shot approval marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .github/acceptance/oauth-acceptance.approved
+          grep -Fx 'One-shot OAuth Acceptance approved by the project owner on 2026-11-23.' .github/acceptance/oauth-acceptance.approved
+          git diff-tree --no-commit-id --name-only --diff-filter=A -r HEAD | grep -Fx '.github/acceptance/oauth-acceptance.approved'
       - uses: actions/setup-node@v4
         with:
           node-version: 24
