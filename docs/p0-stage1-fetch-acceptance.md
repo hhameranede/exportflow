@@ -37,7 +37,7 @@ The runner first verifies both checked-in Wrangler configs against the dedicated
 It then:
 
 1. Creates a unique plan, tenant and run-scoped API key in the dedicated Acceptance D1 only after the read-only Worker preflight passes.
-2. Exercises the live corpus through both REST and MCP. MCP calls are spaced by at least 2.5 seconds, polling uses bounded backoff, and explicit MCP IP-rate-limit responses receive bounded retries.
+2. Exercises the live corpus through both REST and MCP. Authenticated REST submissions/status calls and MCP tool/status calls are each spaced by at least 2.5 seconds to stay below the shared tenant burst limiter; MCP polling uses bounded backoff, and explicit MCP IP-rate-limit responses receive bounded retries.
 3. Checks HTTP status, task state, body snippets, content type, declared response charset (when expected), final URL, redirect count and source provenance. The three WPT charset targets also list their pinned `.headers` files as evidence for the expected upstream charset.
 4. Verifies a direct loopback URL is rejected before task creation and a public redirect to loopback is rejected before a second Fetch.
 5. Deletes only the run-scoped Tasks, usage, API key, tenant and plan in a `finally` cleanup once seeding has been attempted. If a read-only preflight fails before seeding, no D1 cleanup/write is issued.

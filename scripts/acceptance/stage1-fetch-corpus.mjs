@@ -61,9 +61,25 @@ export const ACCEPTANCE_WORKER_PINS = Object.freeze({
     }),
   }),
 });
+const REST_MIN_REQUEST_INTERVAL_MS = 2_500;
 const MCP_MIN_REQUEST_INTERVAL_MS = 2_500;
 const MCP_RATE_LIMIT_RETRY_DELAYS_MS = [20_000, 40_000];
+let lastRestRequestAt = 0;
 let lastMcpRequestAt = 0;
+
+export function getRequestIntervalWaitMs(lastRequestAt, now, minimumIntervalMs) {
+  return Math.max(0, minimumIntervalMs - (now - lastRequestAt));
+}
+
+async function waitForRestRequestSlot() {
+  const waitMs = getRequestIntervalWaitMs(
+    lastRestRequestAt,
+    Date.now(),
+    REST_MIN_REQUEST_INTERVAL_MS,
+  );
+  if (waitMs > 0) await sleep(waitMs);
+  lastRestRequestAt = Date.now();
+}
 
 function sleep(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -279,6 +295,7 @@ async function assertPinnedAcceptanceWorkerVersions() {
 }
 
 async function restPost(url, idempotencyKey) {
+  await waitForRestRequestSlot();
   return readJson(await fetch(PLATFORM_URL + "/api/v1/tasks", {
     method: "POST",
     headers: {
@@ -297,6 +314,7 @@ async function restPost(url, idempotencyKey) {
 }
 
 async function restGet(taskId) {
+  await waitForRestRequestSlot();
   return readJson(await fetch(PLATFORM_URL + "/api/v1/tasks/" + encodeURIComponent(taskId), {
     headers: { authorization: "Bearer " + API_TOKEN, accept: "application/json" },
     signal: AbortSignal.timeout(20_000),

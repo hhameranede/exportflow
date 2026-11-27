@@ -9,6 +9,7 @@ import {
   assertPinnedAcceptanceConfigs,
   assertPinnedAcceptanceWorkerState,
   isMcpRateLimitedResponse,
+  getRequestIntervalWaitMs,
 } from "../scripts/acceptance/stage1-fetch-corpus.mjs";
 
 const corpus = JSON.parse(readFileSync(new URL("./fixtures/stage1-fetch-corpus.v1.json", import.meta.url), "utf8"));
@@ -93,6 +94,12 @@ test("live legacy charset assertions require an exact declared response charset"
     () => assertExpectedResponseCharset("text/html", "euc-kr", "EUC-KR"),
     /did not declare/,
   );
+});
+
+test("REST request pacing respects the shared tenant burst interval", () => {
+  assert.equal(getRequestIntervalWaitMs(1_000, 1_500, 2_500), 2_000);
+  assert.equal(getRequestIntervalWaitMs(1_000, 3_500, 2_500), 0);
+  assert.equal(getRequestIntervalWaitMs(1_000, 1_000, 2_500), 2_500);
 });
 
 test("MCP rate-limit responses are distinguished from task errors", () => {
