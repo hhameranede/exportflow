@@ -74,13 +74,24 @@ jobs:
             exit 1
           fi
           echo "Required credential names are available; values are not printed."
+      - name: Verify token trailing-whitespace normalization
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          const normalize = (value) => value.replace(/\s+$/u, "");
+          assert.equal(normalize("synthetic-token-value   "), "synthetic-token-value");
+          assert.equal(normalize("synthetic-token-value\t\r\n"), "synthetic-token-value");
+          assert.equal(normalize("synthetic-token-value"), "synthetic-token-value");
+          assert.equal(normalize("   "), "");
+          console.log("Token normalization handles spaces, tabs, CRLF and empty results.");
+          NODE
       - name: Normalize PDF smoke token for Cloudflare upload and HTTP tests
         env:
           PDF_PARSER_SMOKE_TOKEN_INPUT: ${{ secrets.PDF_PARSER_SMOKE_TOKEN2 }}
         shell: bash
         run: |
           set -euo pipefail
-          token="$(node --input-type=module -e 'const value = process.env.PDF_PARSER_SMOKE_TOKEN_INPUT ?? ""; process.stdout.write(value.replace(/\\s+$/u, ""));')"
+          token="$(node --input-type=module -e 'const value = process.env.PDF_PARSER_SMOKE_TOKEN_INPUT ?? ""; process.stdout.write(value.replace(/\s+$/u, ""));')"
           if (( ${#token} < 32 )); then
             echo "::error::Normalized PDF_PARSER_SMOKE_TOKEN2 is missing or too short."
             exit 1
