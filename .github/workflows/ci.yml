@@ -26,9 +26,27 @@ jobs:
    - uses: actions/setup-node@v4
      with:
       node-version: 24
-   - run: npm install --no-audit --no-fund
+   - name: Install from deterministic dependency lock
+     run: |
+      if [[ -f package-lock.json ]]; then
+       npm ci --no-audit --no-fund
+      else
+       npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+       npm ci --no-audit --no-fund
+      fi
    - name: Audit production dependency tree (high severity and above)
      run: npm audit --omit=dev --audit-level=high
+   - name: Inventory transitive licenses for parser dependencies
+     run: node scripts/audit-parser-dependency-licenses.mjs "$RUNNER_TEMP/parser-runtime-licenses.json"
+   - name: Upload deterministic dependency lock and license inventory
+     uses: actions/upload-artifact@v4
+     with:
+      name: exportflow-parser-dependency-audit-${{ github.sha }}
+      path: |
+       package-lock.json
+       ${{ runner.temp }}/parser-runtime-licenses.json
+      if-no-files-found: error
+      retention-days: 7
    - run: npm test
    - run: npm run check
    - name: Install pinned Playwright and Chromium outside project dependencies
