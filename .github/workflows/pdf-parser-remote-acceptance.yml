@@ -20,8 +20,6 @@ jobs:
     timeout-minutes: 20
     env:
       CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
-      PDF_PARSER_SMOKE_TOKEN: ${{ secrets.PDF_PARSER_SMOKE_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,14 +49,28 @@ jobs:
             echo "::error::PDF Acceptance config must remain workers.dev-only with no custom routes."
             exit 1
           fi
+          echo "Preflight passed: exact branch, one-shot marker and isolated Worker target."
+      - name: Check remote Acceptance harness syntax before any deployment
+        run: node --check scripts/acceptance/pdf-parser-remote-smoke.mjs
+      - name: Verify required GitHub Actions credentials are available
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+          PDF_PARSER_SMOKE_TOKEN: ${{ secrets.PDF_PARSER_SMOKE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           token_length="${#PDF_PARSER_SMOKE_TOKEN}"
           if (( token_length < 32 )); then
             echo "::error::PDF_PARSER_SMOKE_TOKEN GitHub Actions secret is missing or too short."
             exit 1
           fi
-          echo "Preflight passed: exact branch, one-shot marker, isolated Worker target and required secret names."
+          echo "Required credential names are available; values are not printed."
       - name: Deploy candidate source to isolated PDF Acceptance Worker only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
         run: npx --yes wrangler@4 deploy --config cloudflare/pdf-parser-compat/wrangler.toml
       - name: Run authenticated remote PDF Acceptance using synthetic fixtures only
+        env:
+          PDF_PARSER_SMOKE_TOKEN: ${{ secrets.PDF_PARSER_SMOKE_TOKEN }}
         run: node scripts/acceptance/pdf-parser-remote-smoke.mjs
