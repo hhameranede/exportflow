@@ -73,7 +73,7 @@ async function readBoundedBody(request, maxBytes) {
 }
 
 export default {
-  async fetch(request) {
+  async fetch(request, env = {}) {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health") {
       return json({
@@ -87,6 +87,22 @@ export default {
 
     if (request.method !== "POST" || url.pathname !== "/parse") {
       return json({ error: { code: "NOT_FOUND", message: "Not found." } }, 404);
+    }
+
+    // Fail closed: a remotely deployed compatibility Worker must have its own
+    // secret configured. Never commit a reusable token or accept open parsing.
+    const expectedToken = typeof env.PDF_PARSER_SMOKE_TOKEN === "string"
+      ? env.PDF_PARSER_SMOKE_TOKEN
+      : "";
+    if (expectedToken.length < 32) {
+      return json({
+        error: { code: "PARSER_AUTH_NOT_CONFIGURED", message: "PDF parser smoke authentication is not configured." },
+      }, 503);
+    }
+    if (request.headers.get("authorization") !== "Bearer " + expectedToken) {
+      return json({
+        error: { code: "UNAUTHORIZED", message: "A valid bearer token is required." },
+      }, 401);
     }
 
     const contentType = String(request.headers.get("content-type") || "")
