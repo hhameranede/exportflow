@@ -8,7 +8,7 @@ import {
   PdfParserError,
   withPdfParserTimeout,
 } from "../src/core/pdf-parser.js";
-import { createSyntheticPdf } from "./fixtures/synthetic-pdf.mjs";
+import { createDeflatedSyntheticPdf, createSyntheticPdf } from "./fixtures/synthetic-pdf.mjs";
 
 const pdfRuntimeSupported = typeof globalThis.Iterator === "function";
 const parserTestOptions = { skip: !pdfRuntimeSupported };
@@ -89,6 +89,23 @@ test("streams large PDF text and stops at the output ceiling", parserTestOptions
 
   assert.equal(result.text.length, PDF_PARSE_LIMITS.maxOutputCharacters);
   assert.equal(result.truncated, true);
+});
+
+test("bounds extracted text from a compressed content stream with large expansion", parserTestOptions, async () => {
+  const expandedCharacters = 4 * 1024 * 1024;
+  const bytes = createDeflatedSyntheticPdf("B".repeat(expandedCharacters));
+  assert.ok(bytes.byteLength < PDF_PARSE_LIMITS.maxInputBytes);
+  assert.ok(expandedCharacters / bytes.byteLength > 20, "fixture should exercise meaningful stream expansion");
+
+  const startedAt = performance.now();
+  const result = await extractPdfText(bytes);
+  const wallTimeMs = performance.now() - startedAt;
+
+  assert.equal(result.totalPages, 1);
+  assert.equal(result.text.length, PDF_PARSE_LIMITS.maxOutputCharacters);
+  assert.equal(result.truncated, true);
+  assert.ok(result.text.startsWith("B"));
+  assert.ok(Number.isFinite(wallTimeMs) && wallTimeMs > 0);
 });
 
 test("repeatedly cancels large PDF text streams without late async failures", parserTestOptions, async () => {
