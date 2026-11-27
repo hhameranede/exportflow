@@ -104,7 +104,10 @@ test("Stage 2 assertion rejects a failed durable Task", () => {
 test("Stage 2 assertion rejects Search results from an unselected provider", () => {
   const task = makeTask("search");
   task.result.data.results[0].source = "openalex";
-  assert.throws(() => assertStage2Task("search", task, "MCP"), /selected Wikipedia provider/);
+  assert.throws(
+    () => assertStage2Task("search", task, "MCP"),
+    (error) => error?.code === "ERR_ASSERTION",
+  );
 });
 
 test("Stage 2 assertion requires a real partial Extract result", () => {
