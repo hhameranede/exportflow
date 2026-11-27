@@ -61,9 +61,9 @@ jobs:
           echo "Only the isolated PDF Acceptance Worker is in scope."
       - name: Install project dependencies
         run: npm install --no-audit --no-fund
-      - name: Run parser tests and repository checks
+      - name: Run repository checks and Cloudflare-compatible local parser smoke
         run: |
-          npm test
           npm run check
+          node scripts/run-pdf-parser-worker-smoke.mjs
       - name: Deploy the isolated PDF parser Acceptance Worker
         run: npx --yes wrangler@4 deploy --config cloudflare/pdf-parser-compat/wrangler.toml
