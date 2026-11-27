@@ -63,14 +63,14 @@ jobs:
       - name: Verify required GitHub Actions credentials are available
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
-          PDF_PARSER_SMOKE_TOKEN: ${{ secrets.PDF_PARSER_SMOKE_TOKEN }}
+          PDF_PARSER_SMOKE_TOKEN: ${{ secrets.PDF_PARSER_SMOKE_TOKEN2 }}
         shell: bash
         run: |
           set -euo pipefail
           test -n "$CLOUDFLARE_API_TOKEN"
           token_length="${#PDF_PARSER_SMOKE_TOKEN}"
           if (( token_length < 32 )); then
-            echo "::error::PDF_PARSER_SMOKE_TOKEN GitHub Actions secret is missing or too short."
+            echo "::error::GitHub Actions secret PDF_PARSER_SMOKE_TOKEN2 is missing or too short."
             exit 1
           fi
           echo "Required credential names are available; values are not printed."
@@ -83,13 +83,21 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
         run: npx --yes wrangler@4 deploy --config cloudflare/pdf-parser-compat/wrangler.toml
+      - name: Upload GitHub Actions token to isolated Worker secret binding
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+          PDF_PARSER_SMOKE_TOKEN: ${{ secrets.PDF_PARSER_SMOKE_TOKEN2 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$PDF_PARSER_SMOKE_TOKEN" | npx --yes wrangler@4 secret put PDF_PARSER_SMOKE_TOKEN --config cloudflare/pdf-parser-compat/wrangler.toml
       - name: Run existing synthetic remote Acceptance suite
         env:
-          PDF_PARSER_SMOKE_TOKEN: ${{ secrets.PDF_PARSER_SMOKE_TOKEN }}
+          PDF_PARSER_SMOKE_TOKEN: ${{ secrets.PDF_PARSER_SMOKE_TOKEN2 }}
         run: node scripts/acceptance/pdf-parser-remote-smoke.mjs
       - name: Run authenticated compressed expansion Acceptance
         env:
-          PDF_PARSER_SMOKE_TOKEN: ${{ secrets.PDF_PARSER_SMOKE_TOKEN }}
+          PDF_PARSER_SMOKE_TOKEN: ${{ secrets.PDF_PARSER_SMOKE_TOKEN2 }}
         run: node scripts/acceptance/pdf-parser-compressed-remote-smoke.mjs
       - name: Query Cloudflare Worker CPU analytics (optional, non-gating)
         continue-on-error: true
