@@ -136,6 +136,27 @@ try {
   assert.match(parsed.text, /Cloudflare Workerd PDF smoke/);
   assert.equal("bodyBytes" in parsed, false);
 
+  const largePdf = createSyntheticPdf([
+    "A".repeat(65_536 + 1_024),
+  ]);
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const largeResponse = await fetchWithTimeout("/parse", {
+      method: "POST",
+      headers: {
+        "content-type": "application/pdf",
+        authorization,
+      },
+      body: largePdf,
+    });
+    assert.equal(largeResponse.status, 200);
+    const largeResult = await readJsonWithTimeout(largeResponse, "large PDF parse " + attempt);
+    assert.equal(largeResult.ok, true);
+    assert.equal(largeResult.text.length, 65_536);
+    assert.equal(largeResult.truncated, true);
+    process.stdout.write("PASS large PDF cancellation regression " + attempt + "/3.\\n");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
   const wrongMime = await fetchWithTimeout("/parse", {
     method: "POST",
     headers: {
