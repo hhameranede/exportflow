@@ -49,13 +49,11 @@ jobs:
             test "$PR_HEAD_REF" = "ops/acceptance-pdf-parser-worker-20261127"
             test "$PR_BASE_REF" = "feat/p0-pdf-parser-smoke-20261127"
             test "$(git rev-parse HEAD)" = "$PR_HEAD_SHA"
-            test "$(git merge-base HEAD f9537f9606503719514a4d82bd2941acc0a675d9)" = "f9537f9606503719514a4d82bd2941acc0a675d9"
-            changed="$(git diff --name-only f9537f9606503719514a4d82bd2941acc0a675d9..HEAD)"
           else
             test "$GITHUB_REF" = "refs/heads/ops/acceptance-pdf-parser-worker-20261127"
-            test "$(git rev-parse HEAD^)" = "f9537f9606503719514a4d82bd2941acc0a675d9"
-            changed="$(git diff-tree --no-commit-id --name-only -r HEAD)"
           fi
+          test "$(git merge-base HEAD f9537f9606503719514a4d82bd2941acc0a675d9)" = "f9537f9606503719514a4d82bd2941acc0a675d9"
+          changed="$(git diff --name-only f9537f9606503719514a4d82bd2941acc0a675d9..HEAD)"
           test "$changed" = ".github/workflows/pdf-parser-acceptance.yml"
           grep -q '^name = "exportflow-pdf-parser-compat"$' cloudflare/pdf-parser-compat/wrangler.toml
           test -z "$(grep -E '^(route|routes|workers_dev[[:space:]]*=[[:space:]]*false)' cloudflare/pdf-parser-compat/wrangler.toml || true)"
