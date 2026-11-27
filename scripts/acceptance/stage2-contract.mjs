@@ -18,6 +18,18 @@ const RESEARCH_SCHEMA = Object.freeze({
 
 export const STAGE2_CASES = Object.freeze([
   Object.freeze({
+    operation: "research",
+    tool: "web_research",
+    input: Object.freeze({
+      query: "Ada Lovelace",
+      source: "wikipedia",
+      limit: 3,
+      candidateLimit: 1,
+      schema: RESEARCH_SCHEMA,
+    }),
+    goal: "Stage 2 bounded Search-Fetch-Extract Research acceptance",
+  }),
+  Object.freeze({
     operation: "fetch",
     tool: "web_fetch",
     input: Object.freeze({ url: EXAMPLE_URL }),
@@ -46,18 +58,6 @@ export const STAGE2_CASES = Object.freeze([
     tool: "web_search",
     input: Object.freeze({ query: "Ada Lovelace", source: "wikipedia", limit: 3 }),
     goal: "Stage 2 selected Wikipedia Search acceptance",
-  }),
-  Object.freeze({
-    operation: "research",
-    tool: "web_research",
-    input: Object.freeze({
-      query: "Ada Lovelace",
-      source: "wikipedia",
-      limit: 3,
-      candidateLimit: 1,
-      schema: RESEARCH_SCHEMA,
-    }),
-    goal: "Stage 2 bounded Search-Fetch-Extract Research acceptance",
   }),
 ]);
 
