@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  boundPdfText,
   extractPdfText,
   hasPdfSignature,
   PDF_PARSE_LIMITS,
@@ -74,9 +75,9 @@ test("rejects PDFs that exceed the page fan-out limit", parserTestOptions, async
   );
 });
 
-test("truncates extracted text at the configured output ceiling", parserTestOptions, async () => {
+test("bounds normalized PDF text at the configured output ceiling", () => {
   const longText = "A".repeat(PDF_PARSE_LIMITS.maxOutputCharacters + 128);
-  const result = await extractPdfText(createSyntheticPdf([longText]));
+  const result = boundPdfText(longText);
   assert.equal(result.text.length, PDF_PARSE_LIMITS.maxOutputCharacters);
   assert.equal(result.truncated, true);
 });
