@@ -51,7 +51,7 @@ test("Readability refuses non-HTTP source URLs and oversized HTML", () => {
 
 test("PapaParse rejects reserved __proto__ headers rather than dropping their values", () => {
   assert.throws(
-    () => parseCsvText("name,__proto__\nAda,record\\n"),
+    () => parseCsvText("name,__proto__\nAda,record"),
     (error) => error instanceof OpenSourceParserError && error.code === "UNSAFE_CSV_HEADER"
   );
 });
