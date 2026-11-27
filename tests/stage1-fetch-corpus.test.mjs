@@ -32,7 +32,7 @@ test("WPT IDNA subset matches WHATWG host processing", () => {
 
 test("WPT legacy encoding byte samples decode to their recorded code points", () => {
   for (const entry of corpus.legacyCharsetFixtures) {
-    const bytes = Uint8Array.from(entry.bytesHex.split(/\\s+/).map((value) => Number.parseInt(value, 16)));
+    const bytes = Uint8Array.from(entry.bytesHex.split(" ").map((value) => Number.parseInt(value, 16)));
     assert.equal(new TextDecoder(entry.encoding).decode(bytes), entry.expectedText, entry.id);
   }
 });

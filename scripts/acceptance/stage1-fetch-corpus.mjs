@@ -59,8 +59,8 @@ export function assertPinnedAcceptanceConfigs() {
   }
   assert.ok(platformConfig.includes('name = "' + PLATFORM_WORKER + '"'));
   assert.ok(mcpConfig.includes('name = "' + MCP_WORKER + '"'));
-  assert.ok(platformConfig.includes('name = "EXPORTFLOW_AUTH_DB"'));
-  assert.ok(mcpConfig.includes('name = "EXPORTFLOW_AUTH_DB"'));
+  assert.ok(platformConfig.includes('binding = "EXPORTFLOW_AUTH_DB"'));
+  assert.ok(mcpConfig.includes('binding = "EXPORTFLOW_AUTH_DB"'));
   return true;
 }
 
