@@ -33,6 +33,30 @@ let output = "";
 child.stdout.setEncoding("utf8").on("data", (chunk) => { output += chunk; });
 child.stderr.setEncoding("utf8").on("data", (chunk) => { output += chunk; });
 
+const watchdogId = setTimeout(() => {
+  process.stderr.write("PDF parser smoke exceeded its 90-second overall deadline.\\n" + output);
+  try { child.kill("SIGKILL"); } catch {}
+  process.exit(1);
+}, 90_000);
+watchdogId.unref();
+
+async function readJsonWithTimeout(response, stage, timeoutMs = 15_000) {
+  let timeoutId;
+  try {
+    return await Promise.race([
+      response.json(),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(stage + " response body timed out after " + timeoutMs + "ms")), timeoutMs);
+      }),
+    ]);
+  } catch (error) {
+    try { await response.body?.cancel(); } catch {}
+    throw error;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 async function waitForServer() {
   const deadline = Date.now() + 45_000;
   while (Date.now() < deadline) {
@@ -51,13 +75,18 @@ async function waitForServer() {
 }
 
 try {
+  process.stdout.write("Starting local Workerd PDF parser Worker...\\n");
   await waitForServer();
+  process.stdout.write("PASS local Workerd health endpoint is responding.\\n");
 
-  const health = await fetchWithTimeout("/health").then((response) => response.json());
+  const healthResponse = await fetchWithTimeout("/health");
+  const health = await readJsonWithTimeout(healthResponse, "health");
+
   assert.equal(health.status, "ok");
   assert.equal(health.parser, "unpdf");
   assert.equal(health.parserVersion, "2.2.3");
 
+  process.stdout.write("Sending valid synthetic PDF...\\n");
   const validPdf = createSyntheticPdf(["Cloudflare Workerd PDF smoke"]);
   const parsedResponse = await fetchWithTimeout("/parse", {
     method: "POST",
@@ -65,7 +94,8 @@ try {
     body: validPdf,
   });
   assert.equal(parsedResponse.status, 200);
-  const parsed = await parsedResponse.json();
+  const parsed = await readJsonWithTimeout(parsedResponse, "valid PDF parse");
+  process.stdout.write("PASS valid PDF text extraction returned.\\n");
   assert.equal(parsed.ok, true);
   assert.equal(parsed.totalPages, 1);
   assert.match(parsed.text, /Cloudflare Workerd PDF smoke/);
@@ -77,7 +107,8 @@ try {
     body: validPdf,
   });
   assert.equal(wrongMime.status, 415);
-  const wrongMimeBody = await wrongMime.json();
+  const wrongMimeBody = await readJsonWithTimeout(wrongMime, "wrong MIME rejection");
+  process.stdout.write("PASS wrong MIME rejection returned.\\n");
   assert.equal(wrongMimeBody.error.code, "UNSUPPORTED_CONTENT_TYPE");
 
   const wrongSignature = await fetchWithTimeout("/parse", {
@@ -86,7 +117,8 @@ try {
     body: new Uint8Array([0x50, 0x4b, 0x03, 0x04]),
   });
   assert.equal(wrongSignature.status, 415);
-  const wrongSignatureBody = await wrongSignature.json();
+  const wrongSignatureBody = await readJsonWithTimeout(wrongSignature, "wrong signature rejection");
+  process.stdout.write("PASS wrong PDF signature rejection returned.\\n");
   assert.equal(wrongSignatureBody.error.code, "PDF_INVALID_SIGNATURE");
 
   process.stdout.write("PASS local Workerd PDF parser smoke: valid PDF text, MIME rejection, signature rejection.\n");
@@ -94,6 +126,7 @@ try {
   process.stderr.write((error?.stack || String(error)) + "\n" + output);
   process.exitCode = 1;
 } finally {
+  clearTimeout(watchdogId);
   if (child.exitCode === null && child.signalCode === null) {
     child.kill("SIGTERM");
     await new Promise((resolve) => {
