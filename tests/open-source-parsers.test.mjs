@@ -49,6 +49,13 @@ test("Readability refuses non-HTTP source URLs and oversized HTML", () => {
   );
 });
 
+test("PapaParse rejects reserved __proto__ headers rather than dropping their values", () => {
+  assert.throws(
+    () => parseCsvText("name,__proto__\\nAda,record\\n"),
+    (error) => error instanceof OpenSourceParserError && error.code === "UNSAFE_CSV_HEADER"
+  );
+});
+
 test("PapaParse handles quoted commas and embedded newlines without type coercion", () => {
   const csv = "name,notes,quantity\n" +
     '"Ada","hello, world",0012\n' +

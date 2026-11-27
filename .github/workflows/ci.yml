@@ -26,6 +26,8 @@ jobs:
      with:
       node-version: 24
    - run: npm install --no-audit --no-fund
+   - name: Audit production dependency tree (high severity and above)
+     run: npm audit --omit=dev --audit-level=high
    - run: npm test
    - run: npm run check
    - name: Install pinned Playwright and Chromium outside project dependencies
@@ -65,7 +67,7 @@ jobs:
      run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/task-mcp-acceptance" --config cloudflare/task-acceptance/mcp.wrangler.toml
    - name: Build isolated open-source parser compatibility bundle (dry-run only)
      run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/parser-compat" --config cloudflare/parser-compat/wrangler.toml
-   - name: Assert and inventory all nine Wrangler bundles
+   - name: Assert and inventory all ten Wrangler bundles
      shell: bash
      run: |
       set -euo pipefail

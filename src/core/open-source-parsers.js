@@ -199,6 +199,16 @@ export function parseCsvText(csv, options = {}) {
   if (headers.length === 0) {
     throw new OpenSourceParserError("CSV_HEADER_REQUIRED", "CSV must contain a header row.", 422);
   }
+  // PapaParse's header mode currently assigns into ordinary objects. A
+  // "__proto__" header can therefore be silently discarded by JavaScript
+  // property semantics. Reject it explicitly rather than losing source data.
+  if (headers.includes("__proto__")) {
+    throw new OpenSourceParserError(
+      "UNSAFE_CSV_HEADER",
+      'CSV headers must not use the reserved "__proto__" key.',
+      422
+    );
+  }
   if (headers.length > maxColumns) {
     throw new OpenSourceParserError("CSV_TOO_MANY_COLUMNS", "CSV exceeds the configured column limit.", 413);
   }
