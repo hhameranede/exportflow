@@ -24,7 +24,7 @@ The authenticated REST Task API and MCP surface define six bounded operations:
 | Fetch | Public HTTP(S) GET with response normalization and provenance | 1 MiB body, 8 s upstream timeout, up to 3 redirects |
 | Map | Same-origin discovery from robots.txt, sitemaps, and static page links | Bounded URL count; no JavaScript execution |
 | Crawl | Bounded same-origin static-page crawl | Public MCP contract: up to 3 pages and depth 1 |
-| Extract | Deterministic HTML/JSON metadata and JSON-LD extraction | Schema and body limits; no remote JSON-LD context loading |
+| Extract | Deterministic HTML/JSON metadata and JSON-LD extraction; optional Readability article text with `includeArticle: true` | Schema and body limits; optional article output capped at 20,000 characters; no remote JSON-LD context loading |
 | Search | Explicitly selected public datasets | Wikipedia, OpenAlex, or Crossref; not general whole-web search |
 | Research | Search → bounded Fetch → deterministic Extract | Up to 3 candidate URLs; static HTTP only |
 
@@ -52,7 +52,7 @@ The application policy is paired with Cloudflare Workers' native outbound Fetch 
 
 ## Extraction boundary
 
-Structured extraction is deterministic and currently limited to supported HTML/JSON sources, metadata, JSON-LD, and declared schema paths. PDF, DOCX, XLSX, OCR, audio/video, and other document parsers require separate implementation and acceptance matrices before being advertised.
+Structured extraction remains deterministic and schema-driven for supported HTML/JSON sources, metadata, JSON-LD, and declared schema paths. An explicit `includeArticle: true` option adds a separate, bounded Readability article result without changing default structured fields or their field-level evidence. The internal PapaParse helper is bounded and tested, but CSV is not exposed through REST/MCP until its request/response contract and column-provenance model are specified. PDF, DOCX, XLSX, OCR, audio/video, and other document parsers require separate implementation and acceptance matrices before being advertised.
 
 ## Development
 

@@ -1065,3 +1065,44 @@ test("REST Map is enabled only with tasks:map and uses the bounded static mapper
   assert.ok(task.result.data.urls.some((item) => item.url === "https://example.com/about"));
   assert.ok(calls.some((url) => url.endsWith("/robots.txt")));
 });
+
+
+test("validateTaskRequest accepts includeArticle only as a boolean on Extract", () => {
+  const schema = { type: "object", properties: { title: { type: "string" } } };
+  const valid = validateTaskRequest({
+    goal: "Extract article text",
+    operation: "extract",
+    url: "https://example.com/article",
+    schema,
+    includeArticle: true,
+  });
+  assert.equal(valid.includeArticle, true);
+  assert.deepEqual(valid.schema, schema);
+
+  const defaulted = validateTaskRequest({
+    goal: "Extract structured fields",
+    operation: "extract",
+    url: "https://example.com/article",
+    schema,
+  });
+  assert.equal(Object.hasOwn(defaulted, "includeArticle"), false);
+
+  assert.throws(
+    () => validateTaskRequest({
+      goal: "Fetch",
+      url: "https://example.com/",
+      includeArticle: true,
+    }),
+    (error) => error instanceof TaskContractError && error.code === "INVALID_TASK",
+  );
+  assert.throws(
+    () => validateTaskRequest({
+      goal: "Extract",
+      operation: "extract",
+      url: "https://example.com/",
+      schema,
+      includeArticle: "true",
+    }),
+    (error) => error instanceof TaskContractError && error.code === "INVALID_INCLUDE_ARTICLE",
+  );
+});
