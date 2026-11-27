@@ -374,14 +374,14 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
   const publicResponses = baselinePublicResponses + probePublicResponses;
   const networkErrors = probes.filter((probe) => probe.outcome === "network_error").length;
   const unexpectedResponses = probes.filter((probe) => probe.outcome === "unexpected_http_response").length;
-  const status = unexpectedResponses > 0
-    ? "unexpected_http_response"
-    : publicResponses > 0 && networkErrors > 0
-      ? "mixed"
-      : "inconclusive";
+  const status = unexpectedResponses > 0 ? "unexpected_http_response" : "inconclusive";
+  const reason = unexpectedResponses > 0
+    ? "A later HTTP response differed from the public-control fingerprint; the destination IP is not observable, so this requires investigation and is not proof of a private connection."
+    : "Worker Fetch network failures do not identify the connected IP or prove that a private DNS answer was blocked.";
 
   return {
     status,
+    reason,
     hostname,
     sessionId,
     publicIp,
