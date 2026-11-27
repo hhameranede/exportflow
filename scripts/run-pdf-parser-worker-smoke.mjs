@@ -5,6 +5,14 @@ import { createSyntheticPdf } from "../tests/fixtures/synthetic-pdf.mjs";
 const host = "127.0.0.1";
 const port = Number(process.env.PDF_PARSER_SMOKE_PORT || 8791);
 const baseUrl = "http://" + host + ":" + port;
+
+async function fetchWithTimeout(path, options = {}, timeoutMs = 15_000) {
+  return fetch(baseUrl + path, {
+    ...options,
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+}
+
 const child = spawn("npx", [
   "--yes",
   "wrangler@4",
@@ -32,7 +40,7 @@ async function waitForServer() {
       throw new Error("Local Workerd PDF parser Worker exited early.\n" + output);
     }
     try {
-      const response = await fetch(baseUrl + "/health", { signal: AbortSignal.timeout(1500) });
+      const response = await fetchWithTimeout("/health", {}, 1_500);
       if (response.ok) return;
     } catch {
       // Wrangler may still be compiling the Worker.
@@ -45,13 +53,13 @@ async function waitForServer() {
 try {
   await waitForServer();
 
-  const health = await fetch(baseUrl + "/health").then((response) => response.json());
+  const health = await fetchWithTimeout("/health").then((response) => response.json());
   assert.equal(health.status, "ok");
   assert.equal(health.parser, "unpdf");
   assert.equal(health.parserVersion, "2.2.3");
 
   const validPdf = createSyntheticPdf(["Cloudflare Workerd PDF smoke"]);
-  const parsedResponse = await fetch(baseUrl + "/parse", {
+  const parsedResponse = await fetchWithTimeout("/parse", {
     method: "POST",
     headers: { "content-type": "application/pdf" },
     body: validPdf,
