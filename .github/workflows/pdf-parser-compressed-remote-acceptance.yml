@@ -1,0 +1,129 @@
+# One-shot approval marker commit; no runtime behavior change.
+name: Isolated PDF Parser Compressed Expansion Acceptance
+
+on:
+  push:
+    branches:
+      - acceptance/p0-pdf-compressed-remote-20261127
+
+permissions:
+  contents: read
+
+jobs:
+  compressed-pdf-acceptance:
+    if: >-
+      ${{
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/acceptance/p0-pdf-compressed-remote-20261127' &&
+        github.event.head_commit.message == 'acceptance: run isolated compressed PDF parser Acceptance'
+      }}
+    runs-on: ubuntu-latest
+    # Load scoped credentials from the dedicated preview environment.
+    environment:
+      name: exportflow-preview
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify explicit approval commit marker and isolated target
+        shell: bash
+        env:
+          BASE_SHA: 3f93a0a8c1b9194bf539c579530909bfaa5f8a50
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/acceptance/p0-pdf-compressed-remote-20261127"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git log -1 --format=%s)" = "acceptance: run isolated compressed PDF parser Acceptance"
+          test "$(git merge-base HEAD "$BASE_SHA")" = "$BASE_SHA"
+          changed="$(git diff --name-only "$BASE_SHA"..HEAD | sort)"
+          expected="$(printf '%s\n' ".github/workflows/pdf-parser-compressed-remote-acceptance.yml" "package.json" "scripts/acceptance/pdf-parser-compressed-remote-smoke.mjs" "scripts/acceptance/query-pdf-worker-analytics.mjs" "scripts/site-browser-qa.mjs")"
+          if [[ "$changed" != "$expected" ]]; then
+            echo "::error::Unexpected files outside the isolated compressed PDF Acceptance harness."
+            exit 1
+          fi
+          grep -Fxq 'name = "exportflow-pdf-parser-compat"' cloudflare/pdf-parser-compat/wrangler.toml
+          grep -Fxq 'workers_dev = true' cloudflare/pdf-parser-compat/wrangler.toml
+          if grep -Eq '^(route|routes|workers_dev[[:space:]]*=[[:space:]]*false)' cloudflare/pdf-parser-compat/wrangler.toml; then
+            echo "::error::PDF Acceptance config must remain workers.dev-only with no custom routes."
+            exit 1
+          fi
+          echo "Preflight passed: exact branch, one-shot marker and isolated Worker target."
+      - name: Check fixture and remote smoke syntax before any deployment
+        run: |
+          node --check tests/fixtures/synthetic-pdf.mjs
+          node --check scripts/acceptance/pdf-parser-remote-smoke.mjs
+          node --check scripts/acceptance/pdf-parser-compressed-remote-smoke.mjs
+          node --check scripts/acceptance/query-pdf-worker-analytics.mjs
+      - name: Verify required GitHub Actions credentials are available
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+          PDF_PARSER_SMOKE_TOKEN_INPUT: ${{ secrets.PDF_PARSER_SMOKE_TOKEN2 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          token_length="${#PDF_PARSER_SMOKE_TOKEN_INPUT}"
+          if (( token_length < 32 )); then
+            echo "::error::GitHub Actions secret PDF_PARSER_SMOKE_TOKEN2 is missing or too short."
+            exit 1
+          fi
+          echo "Required credential names are available; values are not printed."
+      - name: Verify token trailing-whitespace normalization
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          const normalize = (value) => value.replace(/\s+$/u, "");
+          assert.equal(normalize("synthetic-token-value   "), "synthetic-token-value");
+          assert.equal(normalize("synthetic-token-value\t\r\n"), "synthetic-token-value");
+          assert.equal(normalize("synthetic-token-value"), "synthetic-token-value");
+          assert.equal(normalize("   "), "");
+          console.log("Token normalization handles spaces, tabs, CRLF and empty results.");
+          NODE
+      - name: Normalize PDF smoke token for Cloudflare upload and HTTP tests
+        env:
+          PDF_PARSER_SMOKE_TOKEN_INPUT: ${{ secrets.PDF_PARSER_SMOKE_TOKEN2 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          token="$(node --input-type=module -e 'const value = process.env.PDF_PARSER_SMOKE_TOKEN_INPUT ?? ""; process.stdout.write(value.replace(/\s+$/u, ""));')"
+          if (( ${#token} < 32 )); then
+            echo "::error::Normalized PDF_PARSER_SMOKE_TOKEN2 is missing or too short."
+            exit 1
+          fi
+          if [[ "$token" != "$PDF_PARSER_SMOKE_TOKEN_INPUT" ]]; then
+            echo "::notice::Trailing whitespace was removed before secret upload and authenticated requests."
+          fi
+          echo "::add-mask::$token"
+          printf 'PDF_PARSER_SMOKE_TOKEN=%s\n' "$token" >> "$GITHUB_ENV"
+      - name: Record the remote Acceptance analytics window start
+        shell: bash
+        run: echo "ACCEPTANCE_START_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+      - name: Install Worker build dependencies
+        run: npm install --no-audit --no-fund
+      - name: Deploy candidate source to isolated PDF Acceptance Worker only
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+        run: npx --yes wrangler@4 deploy --config cloudflare/pdf-parser-compat/wrangler.toml
+      - name: Upload GitHub Actions token to isolated Worker secret binding
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$PDF_PARSER_SMOKE_TOKEN" | npx --yes wrangler@4 secret put PDF_PARSER_SMOKE_TOKEN --config cloudflare/pdf-parser-compat/wrangler.toml
+      - name: Run existing synthetic remote Acceptance suite
+        run: node scripts/acceptance/pdf-parser-remote-smoke.mjs
+      - name: Run authenticated compressed expansion Acceptance
+        run: node scripts/acceptance/pdf-parser-compressed-remote-smoke.mjs
+      - name: Query Cloudflare Worker CPU analytics (optional, non-gating)
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+        run: node scripts/acceptance/query-pdf-worker-analytics.mjs
