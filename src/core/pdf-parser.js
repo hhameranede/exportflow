@@ -30,7 +30,7 @@ function normalizeMime(value) {
 
 export function hasPdfSignature(input) {
   const bytes = toByteArray(input);
-  const limit = Math.min(bytes.byteLength - 4, 1024);
+  const limit = Math.min(bytes.byteLength - 5, 1023);
   for (let index = 0; index <= limit; index += 1) {
     if (
       bytes[index] === 0x25 &&
