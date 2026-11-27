@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { resolve4 } from "node:dns/promises";
 import { assertSuccessfulFetchTask } from "./fetch-assertions.mjs";
 import { collectDnsRebindingObservations, createStageScopedDnsRebindingSuffix } from "./dns-rebinding-preflight.mjs";
+import { createDnsRebindingHostname } from "./dns-rebinding-hostname.mjs";
 import { getAuthoritativeAAnswers, startAuthoritativeDnsLogCapture } from "./authoritative-dns-log.mjs";
 
 const FETCH_CANDIDATES = Object.freeze([
@@ -303,15 +304,6 @@ async function queryDnsBatches(resolver, hostname, count) {
     }
   }
   return collected;
-}
-
-function createDnsRebindingHostname(publicIp, privateIp, suffix, afterTimes = 2) {
-  const safeSuffix = String(suffix).toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
-  if (!safeSuffix || !/^[a-z0-9-]{8,48}$/.test(safeSuffix) ||
-      !Number.isInteger(afterTimes) || afterTimes < 0 || afterTimes > 2) {
-    throw new Error("A unique DNS rebinding hostname suffix and supported public-answer count are required.");
-  }
-  return "make-" + publicIp + "-rebindfor" + afterTimes + "times-" + privateIp + "-rr-" + safeSuffix + ".1u.ms";
 }
 
 async function assertDnsRebindingAlternates(hostname, publicIp, privateIp, targetIndex) {
