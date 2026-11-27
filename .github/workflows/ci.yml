@@ -14,7 +14,7 @@ on:
     required: true
     default: false
  push:
-  branches: [main, feat/durable-task-lifecycle-v1-20261124]
+  branches: [main, feat/durable-task-lifecycle-v1-20261124, feat/p0-stage2-six-operation-acceptance-20261127]
  pull_request:
 
 jobs:
