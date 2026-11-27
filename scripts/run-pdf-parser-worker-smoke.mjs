@@ -5,6 +5,9 @@ import { createSyntheticPdf } from "../tests/fixtures/synthetic-pdf.mjs";
 const host = "127.0.0.1";
 const port = Number(process.env.PDF_PARSER_SMOKE_PORT || 8791);
 const baseUrl = "http://" + host + ":" + port;
+// Local-only fixture token. Remote Acceptance must provision a different secret.
+const localSmokeToken = "local-only-pdf-parser-smoke-token-2026";
+const authorization = "Bearer " + localSmokeToken;
 
 async function fetchWithTimeout(path, options = {}, timeoutMs = 15_000) {
   return fetch(baseUrl + path, {
@@ -24,6 +27,8 @@ const child = spawn("npx", [
   String(port),
   "--config",
   "cloudflare/pdf-parser-compat/wrangler.toml",
+  "--var",
+  "PDF_PARSER_SMOKE_TOKEN:" + localSmokeToken,
 ], {
   stdio: ["ignore", "pipe", "pipe"],
   detached: process.platform !== "win32",
@@ -78,7 +83,7 @@ async function waitForServer() {
   const deadline = Date.now() + 45_000;
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
-      throw new Error("Local Workerd PDF parser Worker exited early.\n" + output);
+      throw new Error("Local Workerd PDF parser Worker exited early.\\n" + output);
     }
     try {
       const response = await fetchWithTimeout("/health", {}, 1_500);
@@ -88,7 +93,7 @@ async function waitForServer() {
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  throw new Error("Timed out waiting for the local Workerd PDF parser Worker.\n" + output);
+  throw new Error("Timed out waiting for the local Workerd PDF parser Worker.\\n" + output);
 }
 
 try {
@@ -103,11 +108,24 @@ try {
   assert.equal(health.parser, "unpdf");
   assert.equal(health.parserVersion, "2.2.3");
 
-  process.stdout.write("Sending valid synthetic PDF...\\n");
   const validPdf = createSyntheticPdf(["Cloudflare Workerd PDF smoke"]);
-  const parsedResponse = await fetchWithTimeout("/parse", {
+  const unauthorizedResponse = await fetchWithTimeout("/parse", {
     method: "POST",
     headers: { "content-type": "application/pdf" },
+    body: validPdf,
+  });
+  assert.equal(unauthorizedResponse.status, 401);
+  const unauthorizedBody = await readJsonWithTimeout(unauthorizedResponse, "unauthorized rejection");
+  assert.equal(unauthorizedBody.error.code, "UNAUTHORIZED");
+  process.stdout.write("PASS unauthenticated parse requests are rejected.\\n");
+
+  process.stdout.write("Sending valid synthetic PDF...\\n");
+  const parsedResponse = await fetchWithTimeout("/parse", {
+    method: "POST",
+    headers: {
+      "content-type": "application/pdf",
+      authorization,
+    },
     body: validPdf,
   });
   assert.equal(parsedResponse.status, 200);
@@ -120,7 +138,10 @@ try {
 
   const wrongMime = await fetchWithTimeout("/parse", {
     method: "POST",
-    headers: { "content-type": "text/html" },
+    headers: {
+      "content-type": "text/html",
+      authorization,
+    },
     body: validPdf,
   });
   assert.equal(wrongMime.status, 415);
@@ -130,7 +151,10 @@ try {
 
   const wrongSignature = await fetchWithTimeout("/parse", {
     method: "POST",
-    headers: { "content-type": "application/octet-stream" },
+    headers: {
+      "content-type": "application/octet-stream",
+      authorization,
+    },
     body: new Uint8Array([0x50, 0x4b, 0x03, 0x04]),
   });
   assert.equal(wrongSignature.status, 415);
@@ -138,9 +162,9 @@ try {
   process.stdout.write("PASS wrong PDF signature rejection returned.\\n");
   assert.equal(wrongSignatureBody.error.code, "PDF_INVALID_SIGNATURE");
 
-  process.stdout.write("PASS local Workerd PDF parser smoke: valid PDF text, MIME rejection, signature rejection.\n");
+  process.stdout.write("PASS local Workerd PDF parser smoke: auth gate, valid PDF text, MIME rejection, signature rejection.\\n");
 } catch (error) {
-  process.stderr.write((error?.stack || String(error)) + "\n" + output);
+  process.stderr.write((error?.stack || String(error)) + "\\n" + output);
   process.exitCode = 1;
 } finally {
   clearTimeout(watchdogId);
