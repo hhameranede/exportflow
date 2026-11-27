@@ -423,6 +423,18 @@ async function checkAuthAndContactPages(browser) {
       assert.ok(new URL(page.url()).pathname.endsWith("/signin"),
         "Unauthenticated " + path + " navigation must finish at /signin.");
     }
+    if (path === "/account" || path === "/workspace") {
+      // Both routes are private. Wait for the client-side session check and redirect
+      // before inspecting the DOM; otherwise navigation can detach the first heading.
+      await page.waitForURL((url) => url.pathname.endsWith("/signin"), { timeout: 12000 });
+      const redirect = new URL(page.url());
+      assert.equal(redirect.searchParams.get("next"), path,
+        "Signed-out " + path + " access must preserve its post-sign-in destination");
+      await page.locator('[data-auth-form="signin"]').waitFor({ state: "visible", timeout: 10000 });
+      assert.equal(await page.locator('[data-auth-form="signin"]').count(), 1,
+        "Signed-out " + path + " access must finish on the sign-in form");
+    }
+
     await page.locator("main h1").waitFor({ state: "visible", timeout: 8000 });
     assert.equal(await page.locator("main h1").count(), 1, "Auth route heading missing: " + path);
     if (["/signin", "/signup", "/reset-password"].includes(path)) {
@@ -440,17 +452,7 @@ async function checkAuthAndContactPages(browser) {
         }
       }
     }
-    if (path === "/account" || path === "/workspace") {
-      // Both routes are private. Wait for the client-side session check and redirect
-      // before inspecting the DOM; otherwise navigation can detach the first heading.
-      await page.waitForURL((url) => url.pathname.endsWith("/signin"), { timeout: 12000 });
-      const redirect = new URL(page.url());
-      assert.equal(redirect.searchParams.get("next"), path,
-        "Signed-out " + path + " access must preserve its post-sign-in destination");
-      await page.locator('[data-auth-form="signin"]').waitFor({ state: "visible", timeout: 10000 });
-      assert.equal(await page.locator('[data-auth-form="signin"]').count(), 1,
-        "Signed-out " + path + " access must finish on the sign-in form");
-    }
+
   }
 
   await page.goto(baseUrl + "/contact", { waitUntil: "domcontentloaded" });
