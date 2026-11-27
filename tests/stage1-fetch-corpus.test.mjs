@@ -155,5 +155,20 @@ test("Acceptance runtime preflight pins active version, script ETag, public Fetc
       }),
       /100%/,
     );
+
+    assert.throws(
+      () => assertPinnedAcceptanceWorkerState({
+        workerName,
+        deployments,
+        version: {
+          ...version,
+          resources: {
+            ...version.resources,
+            bindings: [...bindings, { name: "UNREVIEWED_BINDING", type: "plain_text", text: "unexpected" }],
+          },
+        },
+      }),
+      /binding inventory differs/,
+    );
   }
 });

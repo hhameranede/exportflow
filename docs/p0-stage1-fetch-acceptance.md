@@ -32,7 +32,7 @@ From a reviewed checkout of this branch, use Node 22+ and an authenticated Wrang
 node scripts/acceptance/stage1-fetch-corpus.mjs
 ```
 
-The runner first verifies both checked-in Wrangler configs against the dedicated Acceptance Worker names and D1 ID, then performs a read-only Cloudflare API preflight. The preflight requires the current Platform and MCP deployments to match the reviewed Version 35 IDs, script ETags, 100% traffic allocation, public-only Fetch flag, exact D1 ID and exact binding inventory. It fails closed before any D1 write if either Worker has drifted. These pins must be deliberately re-reviewed and updated with a new read-only inventory after an approved Acceptance Worker deployment.
+The runner first verifies both checked-in Wrangler configs against the dedicated Acceptance Worker names and D1 ID, then performs a read-only Cloudflare API preflight. The preflight requires the current Platform and MCP deployments to match the reviewed Version 35 IDs, script ETags, 100% traffic allocation, public-only Fetch flag, exact D1 ID and exact binding inventory. The Platform Worker's `EXPORTFLOW_ACCEPTANCE_RUN` plain-text variable is explicitly pinned to `durable-task-20261124`; unexpected or additional bindings are rejected. It fails closed before any D1 write if either Worker has drifted. These pins must be deliberately re-reviewed and updated with a new read-only inventory after an approved Acceptance Worker deployment.
 
 It then:
 

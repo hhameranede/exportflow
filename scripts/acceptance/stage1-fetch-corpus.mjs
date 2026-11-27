@@ -33,6 +33,7 @@ export const ACCEPTANCE_WORKER_PINS = Object.freeze({
     versionNumber: 35,
     scriptEtag: "61f9b00fdd0a886209549a68a0abaffb536e8b7e892b7114ca079d12b7ffdb76",
     bindings: Object.freeze({
+      EXPORTFLOW_ACCEPTANCE_RUN: Object.freeze({ type: "plain_text", text: "durable-task-20261124" }),
       EXPORTFLOW_AUTH_DB: Object.freeze({ type: "d1", database_id: DATABASE_ID }),
       TENANT_BURST_LIMITER: Object.freeze({
         type: "durable_object_namespace",
