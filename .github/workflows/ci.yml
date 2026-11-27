@@ -13,11 +13,6 @@ on:
     type: boolean
     required: true
     default: false
-   run_stage2_acceptance:
-    description: "Run bounded six-operation REST/MCP tests against existing isolated Acceptance Workers (no migration or deployment)"
-    type: boolean
-    required: true
-    default: false
  push:
   branches: [main, feat/durable-task-lifecycle-v1-20261124]
  pull_request:
@@ -169,7 +164,7 @@ jobs:
   needs: test
   if: >-
    ${{ github.event_name == 'workflow_dispatch' &&
-        inputs.run_stage2_acceptance == true &&
+        inputs.run_acceptance == true &&
         github.ref == 'refs/heads/feat/p0-stage2-six-operation-acceptance-20261127' }}
   runs-on: ubuntu-latest
   timeout-minutes: 20
