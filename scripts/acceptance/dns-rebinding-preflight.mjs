@@ -68,6 +68,7 @@ export async function collectDnsRebindingObservations({
   expectedAddresses,
   resolvers,
   queryDnsBatches,
+  allowAllOptionalResolvers = false,
 }) {
   if (typeof hostname !== "string" || !hostname) {
     throw new TypeError("A DNS-rebinding hostname is required.");
@@ -78,8 +79,11 @@ export async function collectDnsRebindingObservations({
   if (!Array.isArray(resolvers) || resolvers.length === 0) {
     throw new TypeError("At least one DNS resolver is required.");
   }
-  if (!resolvers.some((resolver) => resolver.required !== false)) {
+  if (!allowAllOptionalResolvers && !resolvers.some((resolver) => resolver.required !== false)) {
     throw new TypeError("At least one authoritative DNS preflight resolver must be required.");
+  }
+  if (allowAllOptionalResolvers && resolvers.some((resolver) => resolver.required !== false)) {
+    throw new TypeError("The all-optional diagnostic mode requires every DNS resolver to be marked optional.");
   }
   if (typeof queryDnsBatches !== "function") {
     throw new TypeError("A DNS batch query function is required.");

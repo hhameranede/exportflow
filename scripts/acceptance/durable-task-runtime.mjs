@@ -16,8 +16,10 @@ const FETCH_CANDIDATES = Object.freeze([
 ]);
 
 
+// Runner-side recursive DNS observations are supplementary diagnostics only.
+// The real Worker resolve4() and authoritative-log assertions below remain required.
 const DNS_REBINDING_RESOLVERS = Object.freeze([
-  { id: "google-doh", name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
+  { id: "google-doh", name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: false },
   { id: "runner-system", name: "GitHub runner system DNS", system: true, required: false },
 ]);
 // The DNS service returns the public control IP for the first two A queries,
@@ -325,6 +327,8 @@ async function assertDnsRebindingAlternates(hostname, publicIp, privateIp, targe
     expectedAddresses: [publicIp, privateIp],
     resolvers: DNS_REBINDING_RESOLVERS,
     queryDnsBatches,
+    // A recursive DoH miss must not prevent the real Worker probe from running.
+    allowAllOptionalResolvers: true,
   });
   const inconclusive = observations.filter((observation) => observation.status === "inconclusive");
   if (inconclusive.length > 0) {

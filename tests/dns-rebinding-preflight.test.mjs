@@ -167,6 +167,32 @@ test("the preflight fails closed when required DNS answers have an excessive TTL
   );
 });
 
+test("explicit runner-diagnostic mode records a missing DNS answer as inconclusive", async () => {
+  const observations = await collectDnsRebindingObservations({
+    hostname,
+    expectedAddresses: [publicIp, privateIp],
+    resolvers: [{ name: "Google Public DNS DoH", required: false }],
+    queryDnsBatches: async () => [{ ip: publicIp, ttl: 0 }],
+    allowAllOptionalResolvers: true,
+  });
+
+  assert.deepEqual(observations.map((item) => item.status), ["inconclusive"]);
+  assert.match(observations[0].error, /must observe both configured DNS-rebinding A answers/);
+});
+
+test("all-optional runner-diagnostic mode cannot contain a required resolver", async () => {
+  await assert.rejects(
+    collectDnsRebindingObservations({
+      hostname,
+      expectedAddresses: [publicIp, privateIp],
+      resolvers: [{ name: "Google Public DNS DoH", required: true }],
+      queryDnsBatches: async () => validRecords,
+      allowAllOptionalResolvers: true,
+    }),
+    /all-optional diagnostic mode requires every DNS resolver to be marked optional/i,
+  );
+});
+
 test("at least one required resolver must remain configured", async () => {
   await assert.rejects(
     collectDnsRebindingObservations({
