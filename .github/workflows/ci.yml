@@ -27,6 +27,8 @@ jobs:
      with:
       node-version: 24
    - run: npm install --no-audit --no-fund
+   - name: Inspect PDF.js bundle locations from the previous diagnostic trace
+     run: node scripts/diagnostics/inspect-pdfjs-bundle-stack.mjs
    - name: Run unit tests with PDF parser async rejection stack tracing
      env:
       NODE_OPTIONS: --require=./scripts/diagnostics/trace-unhandled-rejections.cjs
