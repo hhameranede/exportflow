@@ -1106,6 +1106,3 @@ test("validateTaskRequest accepts includeArticle only as a boolean on Extract", 
     (error) => error instanceof TaskContractError && error.code === "INVALID_INCLUDE_ARTICLE",
   );
 });
-
-
-);
