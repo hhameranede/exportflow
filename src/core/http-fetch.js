@@ -83,6 +83,16 @@ function isTextContentType(contentType) {
     mime.endsWith("+xml");
 }
 
+function isSupportedBinaryContentType(contentType) {
+  const mime = String(contentType || "").split(";")[0].trim().toLowerCase();
+  return [
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/octet-stream",
+  ].includes(mime);
+}
+
 function createResponseTextDecoder(contentType) {
   const value = String(contentType || "");
   const match = /(?:^|;)\s*charset\s*=\s*(?:"([^"]+)"|'([^']+)'|([^;\s]+))/i.exec(value);
@@ -119,7 +129,7 @@ function cancelReader(reader) {
   cancelBestEffort(() => reader.cancel());
 }
 
-async function readTextBody(response, maxBytes, signal, getAbortCode, onBytesRead, decoder) {
+async function readBoundedBody(response, maxBytes, signal, getAbortCode, onBytesRead) {
   const declaredLength = response.headers.get("content-length");
   if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxBytes) {
     cancelBody(response);
@@ -127,7 +137,7 @@ async function readTextBody(response, maxBytes, signal, getAbortCode, onBytesRea
   }
 
   if (!response.body) {
-    return { text: "", bytes: 0 };
+    return { bodyBytes: new Uint8Array(0), bytes: 0 };
   }
 
   const reader = response.body.getReader();
@@ -179,13 +189,13 @@ async function readTextBody(response, maxBytes, signal, getAbortCode, onBytesRea
   }
 
   return {
-    text: decoder.decode(merged),
+    bodyBytes: merged,
     bytes: totalBytes,
   };
 }
 
 /**
- * Bounded, unauthenticated GET of public text resources.
+ * Bounded, unauthenticated GET of public text resources, with an internal opt-in document-byte mode.
  * The caller must enforce its own API authentication and tenant quotas.
  */
 export async function fetchPublicResource(input, options = {}) {
@@ -197,6 +207,10 @@ export async function fetchPublicResource(input, options = {}) {
   const cacheMode = options.cacheMode ?? "default";
   if (!["default", "bypass"].includes(cacheMode)) {
     throw new FetchAdapterError("INVALID_LIMIT", "Cache mode must be 'default' or 'bypass'.", 400);
+  }
+  const responseMode = options.responseMode ?? "text";
+  if (!["text", "bytes"].includes(responseMode)) {
+    throw new FetchAdapterError("INVALID_LIMIT", "Response mode must be 'text' or 'bytes'.", 400);
   }
   let attemptsStarted = 0;
   let allowedOrigin = null;
@@ -304,7 +318,9 @@ export async function fetchPublicResource(input, options = {}) {
           // Deliberately do not set cacheEverything or force a cache TTL.
           signal: controller.signal,
           headers: {
-            accept: "text/html,application/xhtml+xml,application/json,application/xml,text/plain;q=0.9",
+            accept: responseMode === "bytes"
+              ? "application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/octet-stream;q=0.8"
+              : "text/html,application/xhtml+xml,application/json,application/xml,text/plain;q=0.9",
             ...(typeof options.userAgent === "string" && options.userAgent.length <= 200
               ? { "user-agent": options.userAgent }
               : {}),
@@ -370,25 +386,33 @@ export async function fetchPublicResource(input, options = {}) {
       }
 
       const contentType = response.headers.get("content-type") || "";
-      if (response.body && !isTextContentType(contentType)) {
+      let decoder = null;
+      if (responseMode === "text") {
+        if (response.body && !isTextContentType(contentType)) {
+          cancelBody(response);
+          throw new FetchAdapterError("UNSUPPORTED_CONTENT_TYPE", "Only text, HTML, JSON, and XML responses are supported.", 415);
+        }
+        try {
+          decoder = createResponseTextDecoder(contentType);
+        } catch (error) {
+          cancelBody(response);
+          throw error;
+        }
+      } else if (!isSupportedBinaryContentType(contentType)) {
         cancelBody(response);
-        throw new FetchAdapterError("UNSUPPORTED_CONTENT_TYPE", "Only text, HTML, JSON, and XML responses are supported.", 415);
+        throw new FetchAdapterError(
+          "UNSUPPORTED_CONTENT_TYPE",
+          "Byte mode supports PDF, DOCX, XLSX, or application/octet-stream responses only.",
+          415,
+        );
       }
 
-      let decoder;
-      try {
-        decoder = createResponseTextDecoder(contentType);
-      } catch (error) {
-        cancelBody(response);
-        throw error;
-      }
-      const { text, bytes } = await readTextBody(
+      const { bodyBytes, bytes } = await readBoundedBody(
         response,
         maxBytes,
         controller.signal,
         () => callerCancelled ? "TASK_CANCELLED" : timedOut ? "UPSTREAM_TIMEOUT" : null,
         (bytes) => { responseBodyBytesRead = bytes; },
-        decoder,
       );
       if (callerCancelled) {
         throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
@@ -396,6 +420,7 @@ export async function fetchPublicResource(input, options = {}) {
       if (timedOut) {
         throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
       }
+      const body = responseMode === "text" ? decoder.decode(bodyBytes) : undefined;
       const retrievedAt = new Date().toISOString();
       emitReceipt("response");
 
@@ -404,7 +429,7 @@ export async function fetchPublicResource(input, options = {}) {
         status: response.status,
         contentType,
         cacheStatus: normalizeCacheStatus(response.headers.get("cf-cache-status")),
-        body: text,
+        ...(responseMode === "bytes" ? { bodyBytes } : { body }),
         bytes,
         originalUrl: initialUrl.href,
         finalUrl: currentUrl.href,

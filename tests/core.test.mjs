@@ -539,6 +539,96 @@ test("fetch rejects binary response types", async () => {
   );
 });
 
+test("fetch returns bounded document bytes only when explicitly requested", async () => {
+  const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37, 0x0a]);
+  const receipts = [];
+  let accept;
+  const result = await fetchPublicResource("https://example.com/report.pdf", {
+    responseMode: "bytes",
+    onUsageReceipt: (receipt) => receipts.push(receipt),
+    fetchImpl: async (_url, init) => {
+      accept = init.headers.accept;
+      return response(pdfBytes, {
+        headers: {
+          "content-type": "application/pdf",
+          "content-length": String(pdfBytes.byteLength),
+        },
+      });
+    },
+  });
+
+  assert.equal(accept.includes("application/pdf"), true);
+  assert.equal(result.body, undefined);
+  assert.ok(result.bodyBytes instanceof Uint8Array);
+  assert.deepEqual([...result.bodyBytes], [...pdfBytes]);
+  assert.equal(result.bytes, pdfBytes.byteLength);
+  assert.equal(receipts.length, 1);
+  assert.equal(receipts[0].responseBodyBytesRead, pdfBytes.byteLength);
+  assert.equal("bodyBytes" in receipts[0], false);
+});
+
+test("fetch byte mode allows generic octet-stream for later signature validation, not arbitrary binary MIME", async () => {
+  const payload = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]);
+  const result = await fetchPublicResource("https://example.com/unknown.bin", {
+    responseMode: "bytes",
+    fetchImpl: async () => response(payload, {
+      headers: { "content-type": "application/octet-stream" },
+    }),
+  });
+  assert.deepEqual([...result.bodyBytes], [...payload]);
+
+  await assert.rejects(
+    fetchPublicResource("https://example.com/archive.zip", {
+      responseMode: "bytes",
+      fetchImpl: async () => response(payload, {
+        headers: { "content-type": "application/zip" },
+      }),
+    }),
+    (error) => error instanceof FetchAdapterError &&
+      error.code === "UNSUPPORTED_CONTENT_TYPE" &&
+      error.httpStatus === 415,
+  );
+});
+
+test("fetch validates byte response mode before opening a network request", async () => {
+  let fetchCalls = 0;
+  await assert.rejects(
+    fetchPublicResource("https://example.com/file.pdf", {
+      responseMode: "binary",
+      fetchImpl: async () => { fetchCalls += 1; return response(null); },
+    }),
+    (error) => error instanceof FetchAdapterError &&
+      error.code === "INVALID_LIMIT" &&
+      error.httpStatus === 400,
+  );
+  assert.equal(fetchCalls, 0);
+});
+
+test("fetch byte mode enforces declared and streamed response size limits", async () => {
+  const tooLarge = new Uint8Array([1, 2, 3, 4, 5]);
+  await assert.rejects(
+    fetchPublicResource("https://example.com/declared.pdf", {
+      responseMode: "bytes",
+      maxBytes: 4,
+      fetchImpl: async () => response(tooLarge, {
+        headers: { "content-type": "application/pdf", "content-length": "5" },
+      }),
+    }),
+    (error) => error instanceof FetchAdapterError && error.code === "RESPONSE_TOO_LARGE",
+  );
+
+  await assert.rejects(
+    fetchPublicResource("https://example.com/stream.pdf", {
+      responseMode: "bytes",
+      maxBytes: 4,
+      fetchImpl: async () => response(tooLarge, {
+        headers: { "content-type": "application/pdf" },
+      }),
+    }),
+    (error) => error instanceof FetchAdapterError && error.code === "RESPONSE_TOO_LARGE",
+  );
+});
+
 test("fetch enforces both declared and streamed response size limits", async () => {
   await assert.rejects(
     fetchPublicResource("https://example.com/large", {
