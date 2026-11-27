@@ -381,7 +381,7 @@ async function runDnsRebindingAcceptance(token) {
       unexpectedResponses: result.body.unexpectedResponses ?? 0,
     }));
   }
-  console.log("DNS rebinding preflight and isolated Worker probes passed for loopback, 0.0.0.0 and 10.0.0.1.");
+  console.log("DNS-rebinding resolver and Worker probes completed as diagnostics only; no connection-time private-IP enforcement verdict was established.");
 }
 async function runNetworkDiagnostics(token) {
   const response = await fetch(PLATFORM_URL + "/__acceptance/network-probe", {
