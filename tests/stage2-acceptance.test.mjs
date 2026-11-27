@@ -218,5 +218,5 @@ test("Stage 2 authenticated request pacing respects the shared tenant burst inte
   now += 1_000;
   await waitForSlot();
   await waitForSlot();
-  assert.deepEqual(waits, [1_500]);
+  assert.deepEqual(waits, [1_500, 2_500]);
 });
