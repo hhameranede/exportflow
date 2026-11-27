@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { STAGE2_CASES, assertStage2Task } from "./stage2-contract.mjs";
+import { STAGE2_CASES, assertStage2Task, summarizeStage2Failure } from "./stage2-contract.mjs";
 
 const DATABASE = "exportflow-tenant-acceptance-20261122";
 const CONFIG = "cloudflare/task-acceptance/platform.wrangler.toml";
@@ -116,6 +116,15 @@ async function readJson(response, label) {
 
 function terminal(state) {
   return ["succeeded", "partial", "failed", "cancelled", "expired", "unsupported"].includes(state);
+}
+
+function verifyStage2Task(operation, task, transport) {
+  if (!["succeeded", "partial"].includes(task?.state) ||
+      !["succeeded", "partial"].includes(task?.result?.status)) {
+    console.error(transport + " Stage 2 failure diagnostics: " +
+      JSON.stringify(summarizeStage2Failure(operation, task, transport)));
+  }
+  return assertStage2Task(operation, task, transport);
 }
 
 async function restGet(token, taskId) {
@@ -255,7 +264,7 @@ async function smoke() {
   for (const [index, spec] of STAGE2_CASES.entries()) {
     const submitted = await restSubmit(token, spec);
     const task = await waitForTask(token, submitted.id, "REST " + spec.operation);
-    proofs.push(assertStage2Task(spec.operation, task, "REST"));
+    proofs.push(verifyStage2Task(spec.operation, task, "REST"));
     restTasks.set(spec.operation, task);
     console.log("REST Stage 2 proof: " + JSON.stringify(proofs[proofs.length - 1]));
   }
@@ -274,7 +283,7 @@ async function smoke() {
     const task = result.body.result?.structuredContent;
     assert.ok(task && typeof task.id === "string", "MCP " + spec.operation + " must return a durable Task.");
     const finalTask = await waitForTask(token, task.id, "MCP " + spec.operation);
-    proofs.push(assertStage2Task(spec.operation, finalTask, "MCP"));
+    proofs.push(verifyStage2Task(spec.operation, finalTask, "MCP"));
     lastMcpTask = finalTask;
     console.log("MCP Stage 2 proof: " + JSON.stringify(proofs[proofs.length - 1]));
   }
