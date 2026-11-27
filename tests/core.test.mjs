@@ -1568,3 +1568,137 @@ test("default research pipeline performs search, static fetch and deterministic 
   assert.equal(calls.length, 2);
   assert.deepEqual(calls.map((call) => call.cache), ["no-store", "no-store"]);
 });
+
+
+test("structured extraction keeps its existing response unchanged by default", async () => {
+  const result = await extractStructuredData(
+    {
+      url: "https://example.com/article",
+      schema: { type: "object", properties: { title: { type: "string", "x-source": "page:title" } } },
+    },
+    {
+      fetchResource: async (url) => ({
+        status: 200,
+        finalUrl: url,
+        contentType: "text/html; charset=utf-8",
+        body: "<html><head><title>Existing contract</title></head><body><article><p>" + "Static content. ".repeat(40) + "</p></article></body></html>",
+        bytes: 500,
+        retrievedAt: "2026-11-27T00:00:00.000Z",
+      }),
+    },
+  );
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.data.fields.title, "Existing contract");
+  assert.equal(Object.hasOwn(result.data, "article"), false);
+  assert.equal(result.sources[0].evidence.some((item) => item.type === "article_text"), false);
+});
+
+test("structured extraction adds optional Readability article text without changing field evidence", async () => {
+  const articleText = "ExportFlow retrieves public web resources through bounded HTTP requests. ".repeat(30);
+  const result = await extractStructuredData(
+    {
+      url: "https://example.com/news/story",
+      includeArticle: true,
+      schema: { type: "object", properties: { title: { type: "string", "x-source": "page:title" } } },
+    },
+    {
+      fetchResource: async (url) => ({
+        status: 200,
+        finalUrl: url,
+        contentType: "text/html; charset=utf-8",
+        body: "<html lang='en'><head><title>Article contract</title><meta property='og:site_name' content='Example News'></head><body><article><h1>Article contract</h1><p>" + articleText + "</p><p>" + articleText + "</p></article></body></html>",
+        bytes: 1_200,
+        retrievedAt: "2026-11-27T00:00:00.000Z",
+      }),
+    },
+  );
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.data.fields.title, "Article contract");
+  assert.equal(result.data.article.status, "succeeded");
+  assert.equal(result.data.article.method, "mozilla-readability");
+  assert.match(result.data.article.textContent, /bounded HTTP requests/);
+  assert.ok(result.data.article.textContent.length <= 20_000);
+  assert.equal(result.sources[0].evidence.some((item) => item.type === "article_text"), true);
+  assert.equal(result.sources[0].evidence.some((item) => item.type === "extracted_field"), true);
+});
+
+test("optional article parsing degrades without failing structured fields when HTML exceeds the parser cap", async () => {
+  const result = await extractStructuredData(
+    {
+      url: "https://example.com/large",
+      includeArticle: true,
+      schema: { type: "object", properties: { title: { type: "string", "x-source": "page:title" } } },
+    },
+    {
+      fetchResource: async (url) => ({
+        status: 200,
+        finalUrl: url,
+        contentType: "text/html; charset=utf-8",
+        body: "<html><head><title>Still extractable</title></head><body>" + "x".repeat(270_000) + "</body></html>",
+        bytes: 270_100,
+        retrievedAt: "2026-11-27T00:00:00.000Z",
+      }),
+    },
+  );
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.data.fields.title, "Still extractable");
+  assert.equal(result.data.article.status, "unavailable");
+  assert.equal(result.data.article.code, "INPUT_TOO_LARGE");
+  assert.ok(result.warnings.some((warning) => warning.includes("Article text was unavailable")));
+});
+
+test("article mode is not applicable to JSON and invalid includeArticle fails before retrieval", async () => {
+  const jsonResult = await extractStructuredData(
+    {
+      url: "https://api.example.com/item",
+      includeArticle: true,
+      schema: { type: "object", properties: { sku: { type: "string" } } },
+    },
+    {
+      fetchResource: async (url) => ({
+        status: 200,
+        finalUrl: url,
+        contentType: "application/json",
+        body: '{"sku":"SKU-123"}',
+        bytes: 15,
+        retrievedAt: "2026-11-27T00:00:00.000Z",
+      }),
+    },
+  );
+  assert.equal(jsonResult.status, "succeeded");
+  assert.deepEqual(jsonResult.data.article, { status: "not_applicable", method: "mozilla-readability" });
+
+  let calls = 0;
+  await assert.rejects(
+    extractStructuredData({
+      url: "https://example.com/",
+      includeArticle: "yes",
+      schema: { type: "object", properties: { title: { type: "string" } } },
+    }, { fetchResource: async () => { calls += 1; return {}; } }),
+    (error) => error instanceof ExtractionError && error.code === "INVALID_INCLUDE_ARTICLE",
+  );
+  assert.equal(calls, 0);
+});
+
+test("task executor passes the explicit article option only to Extract", async () => {
+  let received;
+  const schema = { type: "object", properties: { title: { type: "string" } } };
+  const task = await executeWebTask(
+    { goal: "Extract article", url: "https://example.com/article", operation: "extract", schema, includeArticle: true },
+    {
+      idFactory: () => "task-extract-article",
+      executeAdapter: async (_id, input) => {
+        received = input;
+        return { status: "succeeded", data: { fields: { title: "Example" }, article: { status: "succeeded" } }, sources: [], warnings: [] };
+      },
+    },
+  );
+  assert.equal(task.state, "succeeded");
+  assert.equal(received.includeArticle, true);
+
+  const invalid = await executeWebTask(
+    { goal: "Fetch", url: "https://example.com/", operation: "fetch", includeArticle: true },
+    { idFactory: () => "task-invalid-article", executeAdapter: async () => { throw new Error("must not execute"); } },
+  );
+  assert.equal(invalid.errors[0].code, "INVALID_TASK");
+});
