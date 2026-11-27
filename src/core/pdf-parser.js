@@ -3,6 +3,7 @@ export const PDF_PARSE_LIMITS = Object.freeze({
   maxPages: 10,
   maxOutputCharacters: 65_536,
   maxImageSize: 16_777_216,
+  maxParseTimeMs: 5_000,
 });
 
 const PDF_MIME_TYPES = new Set(["application/pdf", "application/octet-stream"]);
@@ -55,6 +56,37 @@ export function hasPdfSignature(input) {
 }
 
 /**
+ * Run one PDF.js operation under a bounded wall-clock deadline.
+ * onTimeout is used to release a document proxy if one has already loaded.
+ */
+export function withPdfParserTimeout(operation, timeoutMs = PDF_PARSE_LIMITS.maxParseTimeMs, onTimeout) {
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > PDF_PARSE_LIMITS.maxParseTimeMs) {
+    throw new PdfParserError("PDF_INVALID_TIMEOUT", "PDF parser timeout is outside the supported range.", 400);
+  }
+
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      try {
+        onTimeout?.();
+      } catch {
+        // Timeout reporting must not suppress the typed timeout error.
+      }
+      reject(new PdfParserError(
+        "PDF_PARSE_TIMEOUT",
+        "PDF extraction exceeded the 5-second processing deadline.",
+        504,
+      ));
+    }, timeoutMs);
+  });
+
+  return Promise.race([
+    Promise.resolve().then(() => (typeof operation === "function" ? operation() : operation)),
+    timeout,
+  ]).finally(() => clearTimeout(timeoutId));
+}
+
+/**
  * Extract text from already-fetched PDF bytes.
  *
  * This function never accepts a URL and never configures CMaps, standard-font
@@ -85,6 +117,10 @@ export async function extractPdfText(input, options = {}) {
   }
 
   let document;
+  let parseTimedOut = false;
+  const deadline = Date.now() + PDF_PARSE_LIMITS.maxParseTimeMs;
+  const remainingTimeMs = () => Math.max(1, deadline - Date.now());
+
   try {
     if (typeof globalThis.Iterator !== "function") {
       throw new PdfParserError(
@@ -97,13 +133,31 @@ export async function extractPdfText(input, options = {}) {
 
     // PDF.js takes ownership of its input buffer. Pass a copy so callers retain
     // their bounded Fetch buffer for accounting and downstream provenance.
-    document = await getDocumentProxy(bytes.slice(), {
+    const loadingPromise = getDocumentProxy(bytes.slice(), {
       isEvalSupported: false,
       enableXfa: false,
       useSystemFonts: true,
       useWorkerFetch: false,
       maxImageSize: PDF_PARSE_LIMITS.maxImageSize,
     });
+
+    // If loading finishes after the deadline, the late proxy still needs cleanup.
+    loadingPromise.then((lateDocument) => {
+      if (parseTimedOut && lateDocument !== document) {
+        try {
+          const cleanup = lateDocument?.loadingTask?.destroy();
+          if (cleanup && typeof cleanup.catch === "function") void cleanup.catch(() => {});
+        } catch {
+          // Late cleanup is best-effort after the caller has already timed out.
+        }
+      }
+    }).catch(() => {});
+
+    document = await withPdfParserTimeout(
+      loadingPromise,
+      remainingTimeMs(),
+      () => { parseTimedOut = true; },
+    );
 
     if (!Number.isInteger(document.numPages) || document.numPages < 1) {
       throw new PdfParserError("PDF_INVALID_DOCUMENT", "PDF does not contain a readable page tree.", 422);
@@ -117,7 +171,11 @@ export async function extractPdfText(input, options = {}) {
       );
     }
 
-    const extracted = await extractText(document, { mergePages: true });
+    const extracted = await withPdfParserTimeout(
+      () => extractText(document, { mergePages: true }),
+      remainingTimeMs(),
+      () => { parseTimedOut = true; },
+    );
     const rawText = Array.isArray(extracted.text) ? extracted.text.join("\n\n") : extracted.text;
     const boundedText = boundPdfText(rawText);
 
