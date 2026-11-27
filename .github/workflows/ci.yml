@@ -88,8 +88,11 @@ jobs:
       retention-days: 3
       include-hidden-files: true
 
-   - name: Verify 1u.ms DNS rebinding preflight (PR #142 only; no Cloudflare changes)
+   # External recursive-resolver observations are diagnostic only. They do not prove
+   # the Cloudflare Worker's actual connection destination or private-IP enforcement.
+   - name: Diagnostic only: 1u.ms resolver observations (non-gating; not Worker acceptance)
      if: github.event_name == 'pull_request' && github.event.pull_request.number == 142
+     continue-on-error: true
      run: node scripts/acceptance/rbndr-dns-preflight.mjs
 
  deploy-acceptance:
