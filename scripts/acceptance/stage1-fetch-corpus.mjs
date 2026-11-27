@@ -480,10 +480,21 @@ async function assertPrivateRedirectRejected() {
   const submission = await restPost(target.url, "stage1-" + RUN_ID + "-redirect-loopback");
   const accepted = taskFromRestSubmission(submission, "Redirect-to-loopback REST");
   const task = await waitForRestTask(accepted.id);
-  const codes = (task.errors || []).map((error) => error.code);
-  assert.equal(task.state, "failed", "Redirect to loopback must fail closed.");
-  assert.ok(codes.includes(target.expectedTaskErrorCode) || task.result?.data?.errorCode === target.expectedTaskErrorCode,
-    "Redirect rejection did not report REDIRECT_NOT_ALLOWED.");
+  const codes = (task.errors || []).map((error) => error.code).filter((code) => typeof code === "string");
+  const diagnostic = {
+    state: task.state,
+    errorCodes: codes,
+    resultErrorCode: task.result?.data?.errorCode || null,
+    resultStatus: task.result?.status || null,
+    upstreamStatus: task.result?.data?.httpStatus || task.result?.data?.status || null,
+    eventTypes: (task.events || []).map((entry) => entry.type).filter((type) => typeof type === "string"),
+    eventReasons: (task.events || []).map((entry) => entry.reason).filter((reason) => typeof reason === "string"),
+  };
+  assert.equal(task.state, "failed", "Redirect to loopback must fail closed: " + JSON.stringify(diagnostic));
+  assert.ok(
+    codes.includes(target.expectedTaskErrorCode) || task.result?.data?.errorCode === target.expectedTaskErrorCode,
+    "Redirect rejection did not report " + target.expectedTaskErrorCode + "; observed " + JSON.stringify(diagnostic),
+  );
   return {
     id: target.id,
     rejected: true,
