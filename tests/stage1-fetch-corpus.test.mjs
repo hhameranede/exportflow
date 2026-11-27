@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import test from "node:test";
 import { readFileSync } from "node:fs";
 import { HTTP_FETCH_LIMITS, validatePublicHttpUrl } from "../src/core/http-fetch.js";
 import { assertAcceptanceEndpointsArePinned, assertPinnedAcceptanceConfigs } from "../scripts/acceptance/stage1-fetch-corpus.mjs";
