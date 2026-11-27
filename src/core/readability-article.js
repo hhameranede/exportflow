@@ -76,7 +76,11 @@ export function extractReadableArticle(html, options = {}) {
     throw new OpenSourceParserError("READABILITY_FAILED", "Article extraction failed for this document.", 422);
   }
 
-  if (!parsed) {
+  const rawText = String(parsed?.textContent || "").trim();
+  // The configured article threshold is 200 characters. Readability may still
+  // return a navigation fragment shorter than that threshold, so enforce it
+  // explicitly rather than treating a menu label as an article.
+  if (!parsed || rawText.length < 200) {
     return {
       status: "no_article",
       method: "mozilla-readability",
@@ -92,8 +96,6 @@ export function extractReadableArticle(html, options = {}) {
       truncated: false,
     };
   }
-
-  const rawText = String(parsed.textContent || "").trim();
   return {
     status: "succeeded",
     method: "mozilla-readability",
