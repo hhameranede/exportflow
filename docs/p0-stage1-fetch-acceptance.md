@@ -34,7 +34,7 @@ node scripts/acceptance/stage1-fetch-corpus.mjs
 
 The runner first verifies both checked-in Wrangler configs against the dedicated Acceptance Worker names and D1 ID. It then:
 
-1. Creates a unique plan, tenant and short-lived API key in `exportflow-tenant-acceptance-20261122`.
+1. Creates a unique plan, tenant and run-scoped API key in `exportflow-tenant-acceptance-20261122`.
 2. Exercises the live corpus through both REST and MCP.
 3. Checks HTTP status, task state, body snippets, content type, final URL, redirect count and source provenance.
 4. Verifies a direct loopback URL is rejected before task creation and a public redirect to loopback is rejected before a second Fetch.

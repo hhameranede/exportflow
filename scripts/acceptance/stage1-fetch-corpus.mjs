@@ -316,9 +316,10 @@ async function runLiveAcceptance() {
 
   const results = [];
   for (const target of CORPUS.liveFetch) {
-    results.push(await runRestTarget(target));
-    results.push(await runMcpTarget(target));
-    console.log("Stage 1 target: " + JSON.stringify(results.slice(-2)));
+    const targetResults = [await runRestTarget(target)];
+    if (target.mcp !== false) targetResults.push(await runMcpTarget(target));
+    results.push(...targetResults);
+    console.log("Stage 1 target: " + JSON.stringify(targetResults));
   }
 
   const security = [];

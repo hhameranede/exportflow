@@ -23,7 +23,9 @@
       "id": "whatwg-encoding",
       "repository": "whatwg/encoding",
       "commit": "7d2e3e08e11f57ba1b080390b490d53648c6f69c",
-      "paths": ["encodings.json"],
+      "paths": [
+        "encodings.json"
+      ],
       "license": "WHATWG Standard source; normative standard linked in corpus documentation"
     },
     {
@@ -217,7 +219,8 @@
       "url": "https://httpbingo.org/status/404",
       "expectedHost": "httpbingo.org",
       "expectedHttpStatus": 404,
-      "expectedTaskState": "failed"
+      "expectedTaskState": "failed",
+      "mcp": false
     },
     {
       "id": "wpt-live-shift-jis",
