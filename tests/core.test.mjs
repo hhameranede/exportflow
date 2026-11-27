@@ -1580,7 +1580,7 @@ test("fetch sends ExportFlow's descriptive User-Agent when no override is suppli
     },
   });
   assert.equal(observedUserAgent, HTTP_FETCH_USER_AGENT);
-  assert.match(observedUserAgent, /^ExportFlow\\/0\\.6 /);
+  assert.ok(observedUserAgent.startsWith("ExportFlow/0.6 "));
   assert.ok(observedUserAgent.includes("mailto:hhameranede@gmail.com"));
 });
 
