@@ -25,7 +25,15 @@ export function createSyntheticPdf(pages = ["ExportFlow synthetic PDF fixture"])
   for (let index = 0; index < pages.length; index += 1) {
     const pageId = pageIds[index];
     const contentId = pageId + 1;
-    const stream = "BT\n/F1 12 Tf\n72 720 Td\n(" + escapePdfText(pages[index]) + ") Tj\nET\n";
+    // Keep individual PDF string tokens modest so a large synthetic page
+    // exercises streamed text accumulation rather than PDF.js token edge cases.
+    const pageText = String(pages[index]);
+    const textOperators = [];
+    for (let offset = 0; offset < pageText.length; offset += 2_048) {
+      textOperators.push("(" + escapePdfText(pageText.slice(offset, offset + 2_048)) + ") Tj");
+    }
+    if (textOperators.length === 0) textOperators.push("() Tj");
+    const stream = "BT\n/F1 12 Tf\n72 720 Td\n" + textOperators.join("\n") + "\nET\n";
     const streamLength = Buffer.byteLength(stream, "ascii");
 
     objects.push(
