@@ -32,8 +32,8 @@ function readManifest(packageJsonPath) {
 
 function findLicenseFiles(packageDirectory) {
   const candidates = [
-    "LICENSE", "LICENSE.md", "LICENSE.txt", "LICENCE", "LICENCE.md",
-    "COPYING", "COPYING.md", "NOTICE", "NOTICE.md",
+    "LICENSE", "LICENSE.md", "LICENSE.txt", "LICENCE", "LICENCE.md", "LICENCE.txt",
+    "COPYING", "COPYING.md", "COPYING.txt", "NOTICE", "NOTICE.md", "NOTICE.txt",
   ];
   return candidates.filter((name) => existsSync(join(packageDirectory, name)));
 }
@@ -42,6 +42,7 @@ const visited = new Set();
 const packages = new Map();
 const missingRequiredDependencies = [];
 const missingLicenseMetadata = [];
+const missingLicenseFiles = [];
 const missingExplicitLicenseFiles = [];
 
 function visit(name, fromDirectory, parent, required = true) {
@@ -84,6 +85,13 @@ function visit(name, fromDirectory, parent, required = true) {
       package: key,
       license,
       missingFile: explicitLicenseFile,
+    });
+  }
+  if (licenseFiles.length === 0 && (!explicitLicenseFile || !existsSync(join(packageDirectory, explicitLicenseFile)))) {
+    missingLicenseFiles.push({
+      package: key,
+      license,
+      packageJson: packageJsonPath,
     });
   }
 
@@ -133,6 +141,7 @@ const report = {
   ),
   missingRequiredDependencies,
   missingLicenseMetadata,
+  missingLicenseFiles,
   missingExplicitLicenseFiles,
 };
 
@@ -141,7 +150,8 @@ writeFileSync(outputPath, JSON.stringify(report, null, 2) + "\n");
 console.log("Parser transitive license inventory: " + report.packageCount + " packages");
 console.log("Missing required dependencies: " + missingRequiredDependencies.length);
 console.log("Missing license metadata: " + missingLicenseMetadata.length);
+console.log("Missing license files: " + missingLicenseFiles.length);
 console.log("Missing SEE LICENSE IN files: " + missingExplicitLicenseFiles.length);
-if (missingRequiredDependencies.length || missingLicenseMetadata.length || missingExplicitLicenseFiles.length) {
+if (missingRequiredDependencies.length || missingLicenseMetadata.length || missingLicenseFiles.length || missingExplicitLicenseFiles.length) {
   process.exitCode = 1;
 }
