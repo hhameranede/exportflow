@@ -91,6 +91,20 @@ test("streams large PDF text and stops at the output ceiling", parserTestOptions
   assert.equal(result.truncated, true);
 });
 
+test("repeatedly cancels large PDF text streams without late async failures", parserTestOptions, async () => {
+  const bytes = createSyntheticPdf(["A".repeat(PDF_PARSE_LIMITS.maxOutputCharacters + 1_024)]);
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await extractPdfText(bytes);
+    assert.equal(result.text.length, PDF_PARSE_LIMITS.maxOutputCharacters);
+    assert.equal(result.truncated, true);
+  }
+
+  // Allow PDF.js worker messages and stream cancellation cleanup to settle
+  // before this test completes, so late asynchronous failures remain visible.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+});
+
 test("PDF parser deadline returns a typed timeout for unresolved work", async () => {
   await assert.rejects(
     withPdfParserTimeout(() => new Promise(() => {}), 1),
