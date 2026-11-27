@@ -243,11 +243,10 @@ export async function extractPdfText(input, options = {}) {
         } catch {
           // Timeout/cancellation may already have released the reader.
         }
-        try {
-          page.cleanup?.();
-        } catch {
-          // Page cleanup is best-effort and must not replace the parse result.
-        }
+        // The document loading task is destroyed in the outer finally after
+        // releasing this reader. Avoid page.cleanup() against an exhausted
+        // PDF.js ReadableStream; some runtimes can emit a late closed-controller
+        // rejection when page and document cleanup race.
       }
 
       if (pageNumber < document.numPages && text.length > 0 && !truncated) {
