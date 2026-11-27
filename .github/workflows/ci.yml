@@ -14,7 +14,7 @@ on:
     required: true
     default: false
  push:
-  branches: [main, feat/durable-task-lifecycle-v1-20261124]
+  branches: [main, feat/durable-task-lifecycle-v1-20261124, feat/p0-stage2-six-operation-acceptance-20261127]
  pull_request:
 
 jobs:
@@ -163,9 +163,9 @@ jobs:
  stage2-acceptance:
   needs: test
   if: >-
-   ${{ github.event_name == 'workflow_dispatch' &&
-        inputs.run_acceptance == true &&
-        github.ref == 'refs/heads/feat/p0-stage2-six-operation-acceptance-20261127' }}
+   ${{ github.event_name == 'push' &&
+        github.ref == 'refs/heads/feat/p0-stage2-six-operation-acceptance-20261127' &&
+        github.event.head_commit.message == 'acceptance: run isolated P0 Stage 2 six-operation acceptance' }}
   runs-on: ubuntu-latest
   timeout-minutes: 20
   env:
