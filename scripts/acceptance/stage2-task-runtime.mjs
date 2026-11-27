@@ -5,6 +5,7 @@ import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STAGE2_CASES, assertStage2Task, summarizeStage2Failure } from "./stage2-contract.mjs";
+import { createRequestPacer } from "./request-pacing.mjs";
 
 const DATABASE = "exportflow-tenant-acceptance-20261122";
 const CONFIG = "cloudflare/task-acceptance/platform.wrangler.toml";
@@ -18,6 +19,18 @@ const TENANT_ID = "qa_s2_tenant_" + RUN_ID;
 const KEY_ID_LENGTH = 16;
 const DAILY_QUOTA = 20;
 const EXPECTED_TASKS = STAGE2_CASES.length * 2;
+const waitForRestRequestSlot = createRequestPacer();
+const waitForMcpRequestSlot = createRequestPacer();
+const MCP_RATE_LIMIT_RETRY_DELAYS_MS = [20_000, 40_000];
+
+function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function isMcpRateLimitedResponse(body) {
+  return body?.result?.isError === true &&
+    body.result?.structuredContent?.error === "rate_limited";
+}
 
 function requireRunId() {
   assert.ok(/^\d+_\d+$/.test(RUN_ID), "GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT are required.");
@@ -128,6 +141,7 @@ function verifyStage2Task(operation, task, transport) {
 }
 
 async function restGet(token, taskId) {
+  await waitForRestRequestSlot();
   const response = await fetch(PLATFORM_URL + "/api/v1/tasks/" + encodeURIComponent(taskId), {
     headers: { authorization: "Bearer " + token, accept: "application/json" },
     signal: AbortSignal.timeout(20_000),
@@ -150,6 +164,7 @@ async function waitForTask(token, taskId, label) {
 }
 
 async function restSubmit(token, spec) {
+  await waitForRestRequestSlot();
   const idempotencyKey = "s2-rest-" + RUN_ID.slice(-32) + "-" + spec.operation;
   const response = await fetch(PLATFORM_URL + "/api/v1/tasks", {
     method: "POST",
@@ -175,25 +190,35 @@ async function restSubmit(token, spec) {
 }
 
 async function mcpCall(token, id, name, args = {}) {
-  const response = await fetch(MCP_URL, {
-    method: "POST",
-    headers: {
-      authorization: "Bearer " + token,
-      "content-type": "application/json",
-      accept: "application/json, text/event-stream",
-      "mcp-protocol-version": "2025-11-25",
-    },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id,
-      method: "tools/call",
-      params: { name, arguments: args },
-    }),
-    signal: AbortSignal.timeout(45_000),
-  });
-  return readJson(response, "MCP " + name);
+  for (let attempt = 0; attempt <= MCP_RATE_LIMIT_RETRY_DELAYS_MS.length; attempt += 1) {
+    await waitForMcpRequestSlot();
+    const response = await fetch(MCP_URL, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer " + token,
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        "mcp-protocol-version": "2025-11-25",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id,
+        method: "tools/call",
+        params: { name, arguments: args },
+      }),
+      signal: AbortSignal.timeout(45_000),
+    });
+    const result = await readJson(response, "MCP " + name);
+    if (!isMcpRateLimitedResponse(result.body)) return result;
+    if (attempt === MCP_RATE_LIMIT_RETRY_DELAYS_MS.length) {
+      throw new Error("MCP rate limit persisted after bounded retries for " + name + ".");
+    }
+    const delay = MCP_RATE_LIMIT_RETRY_DELAYS_MS[attempt];
+    console.warn("MCP rate limit reached for " + name + "; retrying after " + delay + " ms.");
+    await sleep(delay);
+  }
+  throw new Error("MCP request retry loop ended unexpectedly.");
 }
-
 async function assertMcpReady() {
   const health = await fetch(MCP_URL.replace(/\/mcp$/, "/health"), {
     signal: AbortSignal.timeout(15_000),

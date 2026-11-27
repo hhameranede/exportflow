@@ -14,11 +14,12 @@ on:
     required: true
     default: false
  push:
-  branches: [main, feat/durable-task-lifecycle-v1-20261124, feat/p0-stage2-six-operation-acceptance-20261127]
+  branches: [main, feat/durable-task-lifecycle-v1-20261124, feat/p0-stage1-fetch-corpus-20261127, feat/p0-stage2-six-operation-acceptance-20261127]
  pull_request:
 
 jobs:
  test:
+  if: ${{ !(github.event_name == 'push' && github.ref == 'refs/heads/feat/p0-stage1-fetch-corpus-20261127') }}
   runs-on: ubuntu-latest
   steps:
    - uses: actions/checkout@v4
@@ -94,6 +95,66 @@ jobs:
      if: github.event_name == 'pull_request' && github.event.pull_request.number == 142
      continue-on-error: true
      run: node scripts/acceptance/rbndr-dns-preflight.mjs
+
+ run-stage1-fetch-corpus:
+  if: >-
+   ${{ (github.event_name == 'push' &&
+        github.ref == 'refs/heads/feat/p0-stage1-fetch-corpus-20261127' &&
+        startsWith(github.event.head_commit.message, 'acceptance: run isolated P0 Stage 1 Fetch corpus')) ||
+       (github.event_name == 'workflow_dispatch' &&
+        inputs.run_acceptance == true &&
+        github.ref == 'refs/heads/feat/p0-stage1-fetch-corpus-20261127') }}
+  runs-on: ubuntu-latest
+  timeout-minutes: 45
+  permissions:
+   contents: read
+  env:
+   CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+  steps:
+   - uses: actions/checkout@v4
+     with:
+      ref: ${{ github.sha }}
+   - uses: actions/setup-node@v4
+     with:
+      node-version: 24
+   - name: Verify Stage 1 branch gate and Cloudflare Acceptance credentials
+     env:
+      EVENT_NAME: ${{ github.event_name }}
+      RUN_ACCEPTANCE: ${{ inputs.run_acceptance }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+     run: |
+      set -euo pipefail
+      if [[ "$GITHUB_REF" != "refs/heads/feat/p0-stage1-fetch-corpus-20261127" ]]; then
+       echo "::error::Stage 1 runner is restricted to its reviewed feature branch."
+       exit 1
+      fi
+      if [[ "$EVENT_NAME" == "push" ]]; then
+       subject="$(git log -1 --format=%s)"
+       case "$subject" in
+        "acceptance: run isolated P0 Stage 1 Fetch corpus"*) ;;
+        *)
+         echo "::error::Missing the one-time Stage 1 acceptance commit marker."
+         exit 1
+         ;;
+       esac
+      elif [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+       if [[ "$RUN_ACCEPTANCE" != "true" ]]; then
+        echo "::error::Set run_acceptance=true to opt in to the isolated Stage 1 runner."
+        exit 1
+       fi
+      else
+       echo "::error::Unsupported Stage 1 trigger."
+       exit 1
+      fi
+      if [[ -z "$CLOUDFLARE_API_TOKEN" ]]; then
+       echo "::error::Missing CLOUDFLARE_API_TOKEN (or CF_API_TOKEN) GitHub Actions secret."
+       exit 1
+      fi
+      echo "Stage 1 run is gated to the isolated Acceptance branch and target."
+   - name: Run real REST + MCP Fetch corpus and run-scoped cleanup
+     env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+     run: node scripts/acceptance/stage1-fetch-corpus.mjs
 
  deploy-acceptance:
   needs: test
@@ -192,6 +253,12 @@ jobs:
       set -euo pipefail
       grep -Fx 'name = "exportflow-task-platform-acceptance-20261124"' cloudflare/task-acceptance/platform.wrangler.toml
       grep -Fx 'name = "exportflow-task-mcp-acceptance-20261124"' cloudflare/task-acceptance/mcp.wrangler.toml
+      grep -Fx 'database_name = "exportflow-tenant-acceptance-20261122"' cloudflare/task-acceptance/platform.wrangler.toml
+      grep -Fx 'database_name = "exportflow-tenant-acceptance-20261122"' cloudflare/task-acceptance/mcp.wrangler.toml
+      grep -Fx 'database_id = "1f94eee0-219e-4a41-86ce-49c29067ef06"' cloudflare/task-acceptance/platform.wrangler.toml
+      grep -Fx 'database_id = "1f94eee0-219e-4a41-86ce-49c29067ef06"' cloudflare/task-acceptance/mcp.wrangler.toml
+      grep -Fx 'compatibility_flags = ["global_fetch_strictly_public"]' cloudflare/task-acceptance/platform.wrangler.toml
+      grep -Fx 'compatibility_flags = ["global_fetch_strictly_public"]' cloudflare/task-acceptance/mcp.wrangler.toml
       test ! -e migrations/0006_stage2_acceptance.sql
    - name: Deploy isolated Task Platform Acceptance Worker only
      run: npx --yes wrangler@4 deploy --config cloudflare/task-acceptance/platform.wrangler.toml

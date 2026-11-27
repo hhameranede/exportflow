@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { STAGE2_CASES, assertStage2Task, summarizeStage2Failure } from "../scripts/acceptance/stage2-contract.mjs";
+import { createRequestPacer, getRequestIntervalWaitMs } from "../scripts/acceptance/request-pacing.mjs";
 
 const timestamp = "2026-11-27T14:00:00.000Z";
 
@@ -196,4 +197,26 @@ test("Stage 2 probes Research first so a Research failure stops before other ope
     STAGE2_CASES.map((item) => item.operation).sort(),
     ["crawl", "extract", "fetch", "map", "research", "search"],
   );
+});
+
+test("Stage 2 authenticated request pacing respects the shared tenant burst interval", async () => {
+  assert.equal(getRequestIntervalWaitMs(1_000, 1_500, 2_500), 2_000);
+  assert.equal(getRequestIntervalWaitMs(1_000, 3_500, 2_500), 0);
+
+  let now = 10_000;
+  const waits = [];
+  const waitForSlot = createRequestPacer({
+    minimumIntervalMs: 2_500,
+    now: () => now,
+    sleep: async (milliseconds) => {
+      waits.push(milliseconds);
+      now += milliseconds;
+    },
+  });
+
+  await waitForSlot();
+  now += 1_000;
+  await waitForSlot();
+  await waitForSlot();
+  assert.deepEqual(waits, [1_500]);
 });
