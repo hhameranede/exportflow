@@ -1,5 +1,5 @@
 import { fetchPublicResource } from "./http-fetch.js";
-import { extractReadableArticle } from "./open-source-parsers.js";
+
 import { normalizeResult } from "./result.js";
 
 export const EXTRACTION_LIMITS = Object.freeze({
@@ -549,6 +549,7 @@ export async function extractStructuredData(input, options = {}) {
   if (includeArticle) {
     if (mime === "text/html" || mime === "application/xhtml+xml") {
       try {
+        const { extractReadableArticle } = await import("./readability-article.js");
         const parsedArticle = extractReadableArticle(response.body, {
           url: response.finalUrl || url,
           maxTextCharacters: 20_000,
