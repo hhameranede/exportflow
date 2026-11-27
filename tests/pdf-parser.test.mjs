@@ -83,6 +83,14 @@ test("bounds normalized PDF text at the configured output ceiling", () => {
   assert.equal(result.truncated, true);
 });
 
+test("streams large PDF text and stops at the output ceiling", parserTestOptions, async () => {
+  const bytes = createSyntheticPdf(["A".repeat(PDF_PARSE_LIMITS.maxOutputCharacters + 1_024)]);
+  const result = await extractPdfText(bytes);
+
+  assert.equal(result.text.length, PDF_PARSE_LIMITS.maxOutputCharacters);
+  assert.equal(result.truncated, true);
+});
+
 test("PDF parser deadline returns a typed timeout for unresolved work", async () => {
   await assert.rejects(
     withPdfParserTimeout(() => new Promise(() => {}), 1),
