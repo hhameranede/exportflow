@@ -13,6 +13,11 @@ on:
     type: boolean
     required: true
     default: false
+   run_stage2_acceptance:
+    description: "Run bounded six-operation REST/MCP tests against existing isolated Acceptance Workers (no migration or deployment)"
+    type: boolean
+    required: true
+    default: false
  push:
   branches: [main, feat/durable-task-lifecycle-v1-20261124]
  pull_request:
@@ -160,6 +165,40 @@ jobs:
    - name: Clean up run-scoped synthetic Acceptance data
      if: always() && steps.acceptance-gate.outputs.run == 'true'
      run: node scripts/acceptance/durable-task-runtime.mjs cleanup
+ deploy-stage2-acceptance:
+  needs: test
+  if: >-
+   ${{ github.event_name == 'workflow_dispatch' &&
+        inputs.run_stage2_acceptance == true &&
+        github.ref == 'refs/heads/feat/p0-stage2-six-operation-acceptance-20261127' }}
+  runs-on: ubuntu-latest
+  timeout-minutes: 20
+  env:
+   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+   CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+  steps:
+   - uses: actions/checkout@v4
+     with:
+      ref: ${{ github.sha }}
+   - uses: actions/setup-node@v4
+     with:
+      node-version: 24
+   - name: Verify isolated Acceptance D1 credentials
+     run: |
+      if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+       echo "::error::Missing CLOUDFLARE_API_TOKEN (or CF_API_TOKEN) GitHub Actions secret."
+       exit 1
+      fi
+   - name: Seed one run-scoped synthetic Stage 2 tenant and API key
+     id: stage2-seed
+     run: node scripts/acceptance/stage2-task-runtime.mjs seed
+   - name: Run all six operations over REST and MCP on existing Acceptance Workers
+     if: steps.stage2-seed.outcome == 'success'
+     run: node scripts/acceptance/stage2-task-runtime.mjs smoke
+   - name: Clean only this run's Stage 2 Acceptance data
+     if: always() && steps.stage2-seed.outcome != 'skipped'
+     run: node scripts/acceptance/stage2-task-runtime.mjs cleanup
+
  deploy-production:
   needs: test
   if: >-
