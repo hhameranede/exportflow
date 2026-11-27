@@ -108,7 +108,7 @@ test("untrusted URL-fetch Workers do not bind VPC private networks", () => {
   for (const [name, config] of configurations) {
     assert.doesNotMatch(
       config,
-      /^\\s*\\[\\[(?:vpc_networks|vpc_services)\\]\\]\\s*(?:#.*)?$/m,
+      /^\s*\[\[(?:vpc_networks|vpc_services)\]\]\s*(?:#.*)?$/m,
       `${name} must not grant the untrusted URL-fetch path a private VPC Network or VPC Service binding.`,
     );
   }
@@ -117,17 +117,17 @@ test("untrusted URL-fetch Workers do not bind VPC private networks", () => {
 test("Production Platform and MCP use the default global Fetch network", () => {
   assert.match(
     platformEntrypoint,
-    /export default createWorker\\(\\);/,
+    /export default createWorker\(\);/,
     "Platform must not inject a custom fetch transport into the deployed Worker.",
   );
   assert.match(
     mcpEntrypoint,
-    /export default createExportFlowPreviewWorker\\(/,
+    /export default createExportFlowPreviewWorker\(/,
     "MCP must use the standard preview-worker factory.",
   );
   assert.doesNotMatch(
     mcpEntrypoint,
-    /\\bfetchImpl\\b/,
+    /\bfetchImpl\b/,
     "MCP must not inject a custom fetch transport into untrusted URL retrieval.",
   );
 });
