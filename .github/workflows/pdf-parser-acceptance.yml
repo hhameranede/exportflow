@@ -4,12 +4,24 @@ on:
   push:
     branches:
       - ops/acceptance-pdf-parser-worker-20261127
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - feat/p0-pdf-parser-smoke-20261127
 
 permissions:
   contents: read
 
 jobs:
   deploy-pdf-parser-acceptance:
+    if: >-
+      ${{
+        (github.event_name == 'push' &&
+         github.ref == 'refs/heads/ops/acceptance-pdf-parser-worker-20261127') ||
+        (github.event_name == 'pull_request' &&
+         github.event.pull_request.head.ref == 'ops/acceptance-pdf-parser-worker-20261127' &&
+         github.event.pull_request.base.ref == 'feat/p0-pdf-parser-smoke-20261127')
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -17,16 +29,34 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
       - name: Verify isolated branch and exact parser source base
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "f9537f9606503719514a4d82bd2941acc0a675d9"
-          changed="$(git diff-tree --no-commit-id --name-only -r HEAD)"
+          test "$GITHUB_REF" != "refs/heads/main"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            test "$PR_HEAD_REF" = "ops/acceptance-pdf-parser-worker-20261127"
+            test "$PR_BASE_REF" = "feat/p0-pdf-parser-smoke-20261127"
+            test "$(git rev-parse HEAD)" = "$PR_HEAD_SHA"
+            test "$(git merge-base HEAD f9537f9606503719514a4d82bd2941acc0a675d9)" = "f9537f9606503719514a4d82bd2941acc0a675d9"
+            changed="$(git diff --name-only f9537f9606503719514a4d82bd2941acc0a675d9..HEAD)"
+          else
+            test "$GITHUB_REF" = "refs/heads/ops/acceptance-pdf-parser-worker-20261127"
+            test "$(git rev-parse HEAD^)" = "f9537f9606503719514a4d82bd2941acc0a675d9"
+            changed="$(git diff-tree --no-commit-id --name-only -r HEAD)"
+          fi
           test "$changed" = ".github/workflows/pdf-parser-acceptance.yml"
+          grep -q '^name = "exportflow-pdf-parser-compat"$' cloudflare/pdf-parser-compat/wrangler.toml
           test -z "$(grep -E '^(route|routes|workers_dev[[:space:]]*=[[:space:]]*false)' cloudflare/pdf-parser-compat/wrangler.toml || true)"
           test -n "$CLOUDFLARE_API_TOKEN"
           echo "Only the isolated PDF Acceptance Worker is in scope."
