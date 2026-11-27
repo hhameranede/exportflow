@@ -311,7 +311,7 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
     clearTimeout(baselineTimeout);
   }
 
-  if (baseline.status < 200 || baseline.status >= 500 ||
+  if ((baseline.status !== 200 && baseline.status !== 204) ||
       !baseline.server ||
       baseline.server.toLowerCase() === "cloudflare") {
     return {
@@ -323,7 +323,7 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
       baseline,
       reason: baseline.server?.toLowerCase() === "cloudflare"
         ? "The first public DNS-rebinding response came from the Cloudflare edge, not the direct public control origin."
-        : "The first public DNS-rebinding response must be an HTTP response with a non-empty non-Cloudflare server header.",
+        : "The public control must return a stable HTTP 200 or 204 without redirects; other statuses, including 302, are not a valid canary.",
       probes: [],
     };
   }
