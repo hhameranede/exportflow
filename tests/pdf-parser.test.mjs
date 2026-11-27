@@ -6,6 +6,7 @@ import {
   hasPdfSignature,
   PDF_PARSE_LIMITS,
   PdfParserError,
+  withPdfParserTimeout,
 } from "../src/core/pdf-parser.js";
 import { createSyntheticPdf } from "./fixtures/synthetic-pdf.mjs";
 
@@ -80,6 +81,22 @@ test("bounds normalized PDF text at the configured output ceiling", () => {
   const result = boundPdfText(longText);
   assert.equal(result.text.length, PDF_PARSE_LIMITS.maxOutputCharacters);
   assert.equal(result.truncated, true);
+});
+
+test("PDF parser deadline returns a typed timeout for unresolved work", async () => {
+  await assert.rejects(
+    withPdfParserTimeout(() => new Promise(() => {}), 1),
+    (error) => error instanceof PdfParserError &&
+      error.code === "PDF_PARSE_TIMEOUT" &&
+      error.httpStatus === 504,
+  );
+});
+
+test("PDF parser deadline preserves successful work", async () => {
+  assert.equal(
+    await withPdfParserTimeout(() => Promise.resolve("parsed"), 100),
+    "parsed",
+  );
 });
 
 test("reports a PDF without extractable text instead of claiming OCR support", parserTestOptions, async () => {
