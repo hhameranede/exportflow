@@ -17,7 +17,7 @@ A test of Node's `URL` or `TextDecoder` is not evidence that the Worker fetched 
 The initial live set contains:
 
 - Example Domain and the IANA reserved-domain reference page for static HTML.
-- HTTPBingo XML, gzip, deflate, redirect-chain and HTTP 404 endpoints.
+- HTTPBingo XML, gzip, deflate, same-origin redirect-chain and HTTP 404 endpoints. The redirect-to-loopback negative case uses HTTP Toolkit Testserver's `/redirect-to` endpoint, whose pinned implementation returns the supplied `Location` value directly with the requested 3xx status instead of connecting to that destination.
 - WPT Live Shift_JIS, EUC-JP and EUC-KR pages whose WPT `.headers` fixtures explicitly declare the legacy charset.
 
 The three WPT legacy pages are bounded below ExportFlow's 1 MiB response ceiling based on their pinned upstream blobs. The runtime runner still checks the actual response bytes and does not treat those historical file sizes as live measurements.
@@ -39,7 +39,7 @@ It then:
 1. Creates a unique plan, tenant and run-scoped API key in the dedicated Acceptance D1 only after the read-only Worker preflight passes.
 2. Exercises the live corpus through both REST and MCP. Authenticated REST submissions/status calls and MCP tool/status calls are each spaced by at least 2.5 seconds to stay below the shared tenant burst limiter; MCP polling uses bounded backoff, and explicit MCP IP-rate-limit responses receive bounded retries.
 3. Checks HTTP status, task state, body snippets, content type, declared response charset (when expected), final URL, redirect count and source provenance. The three WPT charset targets also list their pinned `.headers` files as evidence for the expected upstream charset.
-4. Verifies a direct loopback URL is rejected before task creation and a public redirect to loopback is rejected before a second Fetch.
+4. Verifies a direct loopback URL is rejected before task creation and a genuine public HTTP 302 with `Location: http://127.0.0.1/` is rejected before a second Fetch. The negative redirect source is `https://testserver.host/redirect-to`; its endpoint implementation is reviewed in `httptoolkit/testserver` commit `43f052dcea8df08dbfdd36026bd4380e4c979edb` (`src/endpoints/http/redirect.ts`), which writes the supplied value into the `Location` header without fetching the destination.
 5. Deletes only the run-scoped Tasks, usage, API key, tenant and plan in a `finally` cleanup once seeding has been attempted. If a read-only preflight fails before seeding, no D1 cleanup/write is issued.
 
 The script has fixed Acceptance endpoints. It refuses overridden endpoints and rejects any Production URL or Production D1 identifier. It does not deploy Workers, run migrations, change bindings, secrets, routes, DNS, permissions, or traffic. A successful live run is still Acceptance evidence only; it does not authorize merge or Production release.
