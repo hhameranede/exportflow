@@ -34,8 +34,11 @@
       "commit": "6f48032a9675c1d4cd53124d9fb36ccd8d6bd354",
       "paths": [
         "encoding/legacy-mb-japanese/shift_jis/sjis_chars-shift-jis.html",
+        "encoding/legacy-mb-japanese/shift_jis/sjis_chars-shift-jis.html.headers",
         "encoding/legacy-mb-japanese/euc-jp/eucjp_chars.html",
-        "encoding/legacy-mb-korean/euc-kr/euckr_chars.html"
+        "encoding/legacy-mb-japanese/euc-jp/eucjp_chars.html.headers",
+        "encoding/legacy-mb-korean/euc-kr/euckr_chars.html",
+        "encoding/legacy-mb-korean/euc-kr/euckr_chars.html.headers"
       ],
       "license": "BSD-3-Clause",
       "licenseFile": "LICENSE.md"

@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { HTTP_FETCH_LIMITS, validatePublicHttpUrl } from "../src/core/http-fetch.js";
-import { assertAcceptanceEndpointsArePinned, assertPinnedAcceptanceConfigs } from "../scripts/acceptance/stage1-fetch-corpus.mjs";
+import {
+  ACCEPTANCE_WORKER_PINS,
+  assertAcceptanceEndpointsArePinned,
+  assertExpectedResponseCharset,
+  assertPinnedAcceptanceConfigs,
+  assertPinnedAcceptanceWorkerState,
+  isMcpRateLimitedResponse,
+} from "../scripts/acceptance/stage1-fetch-corpus.mjs";
 
 const corpus = JSON.parse(readFileSync(new URL("./fixtures/stage1-fetch-corpus.v1.json", import.meta.url), "utf8"));
 
@@ -66,4 +73,80 @@ test("the Stage 1 live runner is pinned to dedicated Acceptance Workers only", (
     platformUrl: "https://exportflow.me",
     mcpUrl: "https://mcp.exportflow.me/mcp",
   }));
+});
+
+
+test("live legacy charset assertions require an exact declared response charset", () => {
+  assert.equal(
+    assertExpectedResponseCharset("text/html; charset=shift-jis", "shift-jis", "Shift_JIS"),
+    "shift-jis",
+  );
+  assert.equal(
+    assertExpectedResponseCharset('text/html; charset="EUC-JP"', "euc-jp", "EUC-JP"),
+    "EUC-JP",
+  );
+  assert.throws(
+    () => assertExpectedResponseCharset("text/html; charset=utf-8", "shift-jis", "Shift_JIS"),
+    /expected shift-jis/,
+  );
+  assert.throws(
+    () => assertExpectedResponseCharset("text/html", "euc-kr", "EUC-KR"),
+    /did not declare/,
+  );
+});
+
+test("MCP rate-limit responses are distinguished from task errors", () => {
+  assert.equal(isMcpRateLimitedResponse({
+    result: { isError: true, structuredContent: { error: "rate_limited" } },
+  }), true);
+  assert.equal(isMcpRateLimitedResponse({
+    result: { isError: true, structuredContent: { error: "TASK_NOT_FOUND" } },
+  }), false);
+  assert.equal(isMcpRateLimitedResponse({
+    result: { isError: false, structuredContent: { state: "succeeded" } },
+  }), false);
+});
+
+test("Acceptance runtime preflight pins active version, script ETag, public Fetch and exact bindings", () => {
+  for (const workerName of Object.keys(ACCEPTANCE_WORKER_PINS)) {
+    const pin = ACCEPTANCE_WORKER_PINS[workerName];
+    const deployments = [{
+      created_on: "2026-11-27T14:44:40.000Z",
+      strategy: "percentage",
+      versions: [{ version_id: pin.versionId, percentage: 100 }],
+    }];
+    const bindings = Object.entries(pin.bindings).map(([name, value]) => ({ name, ...value }));
+    const version = {
+      id: pin.versionId,
+      number: pin.versionNumber,
+      resources: {
+        script: { etag: pin.scriptEtag },
+        script_runtime: { compatibility_flags: ["global_fetch_strictly_public"] },
+        bindings,
+      },
+    };
+    const result = assertPinnedAcceptanceWorkerState({ workerName, deployments, version });
+    assert.equal(result.trafficPercent, 100);
+    assert.equal(result.databaseId, pin.bindings.EXPORTFLOW_AUTH_DB.database_id);
+
+    assert.throws(
+      () => assertPinnedAcceptanceWorkerState({
+        workerName,
+        deployments,
+        version: { ...version, id: "unreviewed-version" },
+      }),
+      /does not match the reviewed pin/,
+    );
+    assert.throws(
+      () => assertPinnedAcceptanceWorkerState({
+        workerName,
+        deployments: [{
+          ...deployments[0],
+          versions: [{ version_id: pin.versionId, percentage: 50 }],
+        }],
+        version,
+      }),
+      /100%/,
+    );
+  }
 });

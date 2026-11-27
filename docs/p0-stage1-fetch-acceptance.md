@@ -22,23 +22,26 @@ The initial live set contains:
 
 The three WPT legacy pages are bounded below ExportFlow's 1 MiB response ceiling based on their pinned upstream blobs. The runtime runner still checks the actual response bytes and does not treat those historical file sizes as live measurements.
 
-The WPT Live host may be unavailable or rate-limited from a Worker region. Such a result is reported as a failed probe and must not be replaced with an unverified claim. The site-specific URLs and expected snippets can be revised only with new source/charset evidence.
+The WPT Live host may be unavailable or rate-limited from a Worker region. Such a result is reported as a failed probe and must not be replaced with an unverified claim. The runner requires each live page's actual `Content-Type` charset to match its expected `shift-jis`, `euc-jp` or `euc-kr` label before reporting the decoded snippet as verified. The site-specific URLs and expected snippets can be revised only with new source/charset evidence.
 
 ## How to run the isolated live Acceptance
 
-From a reviewed checkout of this branch, use Node 22+ and an authenticated Wrangler session with access to the ExportFlow Cloudflare account:
+From a reviewed checkout of this branch, use Node 22+ and an authenticated Wrangler session with access to the ExportFlow Cloudflare account. Also provide `CLOUDFLARE_API_TOKEN` (or `CF_API_TOKEN`) in the process environment with Workers Scripts Read permission; the value is used only for read-only version inventory and is never printed.
 
 ```sh
 node scripts/acceptance/stage1-fetch-corpus.mjs
 ```
 
-The runner first verifies both checked-in Wrangler configs against the dedicated Acceptance Worker names and D1 ID. It then:
+The runner first verifies both checked-in Wrangler configs against the dedicated Acceptance Worker names and D1 ID, then performs a read-only Cloudflare API preflight. The preflight requires the current Platform and MCP deployments to match the reviewed Version 35 IDs, script ETags, 100% traffic allocation, public-only Fetch flag, exact D1 ID and exact binding inventory. It fails closed before any D1 write if either Worker has drifted. These pins must be deliberately re-reviewed and updated with a new read-only inventory after an approved Acceptance Worker deployment.
+
+It then:
 
 1. Creates a unique plan, tenant and run-scoped API key in `exportflow-tenant-acceptance-20261122`.
-2. Exercises the live corpus through both REST and MCP.
-3. Checks HTTP status, task state, body snippets, content type, final URL, redirect count and source provenance.
-4. Verifies a direct loopback URL is rejected before task creation and a public redirect to loopback is rejected before a second Fetch.
-5. Deletes only the run-scoped Tasks, usage, API key, tenant and plan in a `finally` cleanup.
+2. Creates a unique plan, tenant and run-scoped API key in the dedicated Acceptance D1 only after the read-only Worker preflight passes.
+3. Exercises the live corpus through both REST and MCP. MCP calls are spaced by at least 2.5 seconds, polling uses bounded backoff, and explicit MCP IP-rate-limit responses receive bounded retries.
+4. Checks HTTP status, task state, body snippets, content type, declared response charset (when expected), final URL, redirect count and source provenance. The three WPT charset targets also list their pinned `.headers` files as evidence for the expected upstream charset.
+5. Verifies a direct loopback URL is rejected before task creation and a public redirect to loopback is rejected before a second Fetch.
+6. Deletes only the run-scoped Tasks, usage, API key, tenant and plan in a `finally` cleanup once seeding has been attempted. If a read-only preflight fails before seeding, no D1 cleanup/write is issued.
 
 The script has fixed Acceptance endpoints. It refuses overridden endpoints and rejects any Production URL or Production D1 identifier. It does not deploy Workers, run migrations, change bindings, secrets, routes, DNS, permissions, or traffic. A successful live run is still Acceptance evidence only; it does not authorize merge or Production release.
 
@@ -55,7 +58,7 @@ DNS-rebinding observations remain diagnostic/inconclusive where the connected IP
 The selected WPT URL, IDNA and legacy-encoding samples are derived from:
 
 - `web-platform-tests/wpt` commit `6f48032a9675c1d4cd53124d9fb36ccd8d6bd354`.
-- `url/resources/urltestdata.json`, `url/resources/IdnaTestV2.json`, and the listed legacy charset fixtures.
+- `url/resources/urltestdata.json`, `url/resources/IdnaTestV2.json`, the listed legacy charset HTML fixtures, and their corresponding `.headers` files.
 
 WPT's `LICENSE.md` declares the 3-Clause BSD License. The source notice is retained here:
 
