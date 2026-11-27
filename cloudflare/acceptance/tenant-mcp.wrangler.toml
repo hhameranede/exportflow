@@ -1,6 +1,7 @@
 name = "exportflow-tenant-mcp-acceptance-20261122"
 main = "tenant-mcp.js"
 compatibility_date = "2026-11-22"
+compatibility_flags = ["global_fetch_strictly_public"]
 workers_dev = true
 preview_urls = false
 keep_vars = true

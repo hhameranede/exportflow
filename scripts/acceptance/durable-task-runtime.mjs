@@ -4,12 +4,29 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { resolve4 } from "node:dns/promises";
 import { assertSuccessfulFetchTask } from "./fetch-assertions.mjs";
+import { collectDnsRebindingObservations } from "./dns-rebinding-preflight.mjs";
 
 const FETCH_CANDIDATES = Object.freeze([
   { url: "https://example.com/", expectedContent: "Example Domain", expectedHost: "example.com" },
   { url: "https://www.iana.org/domains/reserved", expectedContent: "IANA", expectedHost: "iana.org" },
   { url: "https://www.cloudflare.com/robots.txt", expectedContent: "User-agent: *", expectedHost: "cloudflare.com" },
+]);
+
+
+const DNS_REBINDING_RESOLVERS = Object.freeze([
+  { name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
+  { name: "GitHub runner system DNS", system: true, required: false },
+]);
+// GitHub Pages has a stable public HTTP endpoint and is used only as the
+// first, public answer. 1u.ms then rebinds the same hostname to a fixed
+// private test target during its zero-TTL, five-second window.
+const DNS_REBINDING_PUBLIC_IP = "185.199.108.153";
+const DNS_REBINDING_PRIVATE_TARGETS = Object.freeze([
+  { name: "loopback", ip: "127.0.0.1" },
+  { name: "unspecified", ip: "0.0.0.0" },
+  { name: "private-10", ip: "10.0.0.1" },
 ]);
 
 const DATABASE = "exportflow-tenant-acceptance-20261122";
@@ -179,6 +196,193 @@ async function waitForRestTask(token, taskId) {
   throw new Error("Durable Task did not reach a terminal state within the Acceptance deadline.");
 }
 
+
+function isPublicIpv4(value) {
+  if (typeof value !== "string") return false;
+  const parts = value.split(".");
+  if (parts.length !== 4 || parts.some((part) => !/^(0|[1-9]\d{0,2})$/.test(part))) return false;
+  const [a, b, c, d] = parts.map(Number);
+  if ([a, b, c, d].some((octet) => octet < 0 || octet > 255)) return false;
+  return !(
+    a === 0 || a === 10 || a === 127 || a >= 224 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && (b === 0 || b === 2 || b === 168)) ||
+    (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
+    (a === 203 && b === 0 && c === 113)
+  );
+}
+
+function ipv4ToHex(value) {
+  return value.split(".").map((octet) => Number(octet).toString(16).padStart(2, "0")).join("");
+}
+
+async function queryDnsA(resolver, hostname) {
+  if (resolver.system === true) {
+    const answers = await resolve4(hostname, { ttl: true });
+    return answers.map((answer) => ({
+      ip: answer.address,
+      ttl: Number(answer.ttl),
+    }));
+  }
+
+  const url = new URL(resolver.endpoint);
+  url.searchParams.set("name", hostname);
+  url.searchParams.set("type", "A");
+  const response = await fetch(url, {
+    headers: { accept: "application/dns-json" },
+    cache: "no-store",
+    signal: AbortSignal.timeout(5_000),
+  });
+  if (!response.ok) throw new Error(resolver.name + " returned HTTP " + response.status + " for " + hostname + ".");
+  const payload = await response.json();
+  if (Number(payload.Status) !== 0 || !Array.isArray(payload.Answer)) {
+    throw new Error(
+      resolver.name + " returned DNS status " + String(payload.Status) +
+      " with no A-answer array for " + hostname + ".",
+    );
+  }
+  const answers = payload.Answer
+    .filter((answer) => answer.type === 1 && typeof answer.data === "string")
+    .map((answer) => ({ ip: answer.data, ttl: Number(answer.TTL) }));
+  if (answers.length === 0) {
+    throw new Error(resolver.name + " returned no A records for " + hostname + ".");
+  }
+  return answers;
+}
+
+function isRetryableDnsError(error) {
+  const code = String(error?.code || "").toUpperCase();
+  return ["ESERVFAIL", "ETIMEOUT", "EAI_AGAIN", "ECONNREFUSED", "EDNS"].includes(code) ||
+    ["AbortError", "TimeoutError"].includes(error?.name) ||
+    /DNS status 2|SERVFAIL|temporarily unavailable/i.test(String(error?.message || ""));
+}
+
+async function queryDnsAWithRetry(resolver, hostname) {
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await queryDnsA(resolver, hostname);
+    } catch (error) {
+      if (!isRetryableDnsError(error) || attempt === maxAttempts) {
+        throw new Error(
+          resolver.name + " failed to resolve " + hostname + " after " + attempt +
+          " attempt(s): " + String(error?.code || error?.message || error),
+          { cause: error },
+        );
+      }
+      console.warn(
+        "Retrying transient DNS resolver failure: " +
+        JSON.stringify({ resolver: resolver.name, hostname, attempt, code: error?.code || error?.name || "DNS_ERROR" }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+    }
+  }
+  throw new Error(resolver.name + " exhausted DNS retries for " + hostname + ".");
+}
+
+async function queryDnsBatches(resolver, hostname, count) {
+  const collected = [];
+  for (let offset = 0; offset < count; offset += 1) {
+    // 1u.ms uses zero-TTL answers; serialize queries to observe each rotation
+    // avoid observing the same recursive-resolver cache entry in one burst.
+    collected.push(...await queryDnsAWithRetry(resolver, hostname));
+    if (offset + 1 < count) {
+      await new Promise((resolve) => setTimeout(resolve, 1_100));
+    }
+  }
+  return collected;
+}
+
+function createDnsRebindingHostname(publicIp, privateIp, suffix) {
+  const safeSuffix = String(suffix).toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
+  if (!safeSuffix || !/^[a-z0-9-]{8,48}$/.test(safeSuffix)) {
+    throw new Error("A unique DNS rebinding hostname suffix is required.");
+  }
+  return "make-" + publicIp + "-rebindfor2mafter1times-" + privateIp + "-rr-" + safeSuffix + ".1u.ms";
+}
+
+async function assertDnsRebindingAlternates(hostname, publicIp, privateIp) {
+  let observations;
+  try {
+    observations = await collectDnsRebindingObservations({
+      hostname,
+      expectedAddresses: [publicIp, privateIp],
+      resolvers: DNS_REBINDING_RESOLVERS,
+      queryDnsBatches,
+    });
+  } catch (error) {
+    const diagnostic = String(error?.message || "Resolver observations were incomplete.")
+      .replace(/[\\r\\n\\t]/g, " ")
+      .slice(0, 800);
+    console.warn(
+      "Runner DNS-rebinding observations are inconclusive; this is not Worker-runtime evidence: " +
+      JSON.stringify({ hostname, error: diagnostic }),
+    );
+    return { status: "inconclusive", hostname, error: diagnostic };
+  }
+  const inconclusive = observations.filter((observation) => observation.status === "inconclusive");
+  if (inconclusive.length > 0) {
+    console.warn(
+      "Runner DNS-rebinding observations are incomplete; this is not Worker-runtime evidence: " +
+      JSON.stringify({ hostname, observations: inconclusive }),
+    );
+  }
+  const status = observations.some((observation) => observation.status === "verified")
+    ? "resolver_transition_observed"
+    : "inconclusive";
+  console.log("Runner DNS diagnostic only: " + JSON.stringify({ hostname, status, observations }));
+  return { status, hostname, observations };
+}
+
+async function runDnsRebindingAcceptance(token) {
+  const publicIp = DNS_REBINDING_PUBLIC_IP;
+  assert.ok(isPublicIpv4(publicIp), "DNS rebinding control must use a globally routable IPv4 address.");
+
+  for (const [index, target] of DNS_REBINDING_PRIVATE_TARGETS.entries()) {
+    // Use a disposable hostname for the runner's DoH preflight so its first
+    // public answer cannot consume the Cloudflare Worker's independent session.
+    const preflightHostname = createDnsRebindingHostname(
+      publicIp,
+      target.ip,
+      "preflight-" + RUN_ID + "-" + String(index + 1),
+    );
+    await assertDnsRebindingAlternates(preflightHostname, publicIp, target.ip);
+
+    const sessionId = "worker-" + RUN_ID + "-" + String(index + 1);
+    const url = new URL(PLATFORM_URL + "/__acceptance/dns-rebinding-probe");
+    url.searchParams.set("public", publicIp);
+    url.searchParams.set("private", target.ip);
+    url.searchParams.set("session", sessionId);
+    const response = await fetch(url, {
+      headers: { authorization: "Bearer " + token, accept: "application/json" },
+      signal: AbortSignal.timeout(90_000),
+      cache: "no-store",
+    });
+    const result = await readJson(response, "Acceptance DNS rebinding probe");
+    assert.equal(response.status, 200, "Isolated Worker DNS rebinding probe must return HTTP 200.");
+    if (result.body.status !== "inconclusive") {
+      throw new Error(
+        "The DNS-rebinding probe returned an unexpected HTTP response. Its destination IP is not observable, " +
+        "so this requires investigation and must not be classified as a private-IP bypass: " +
+        JSON.stringify(result.body),
+      );
+    }
+    console.warn("Worker DNS-rebinding diagnostic is inconclusive (not a protection verdict): " + JSON.stringify({
+      target: target.name,
+      hostname: result.body.hostname,
+      publicIp,
+      privateIp: target.ip,
+      reason: result.body.reason,
+      baseline: result.body.baseline || null,
+      attempts: result.body.attempts ?? 0,
+      networkErrors: result.body.networkErrors ?? 0,
+      unexpectedResponses: result.body.unexpectedResponses ?? 0,
+    }));
+  }
+  console.log("DNS-rebinding resolver and Worker probes completed as diagnostics only; no connection-time private-IP enforcement verdict was established.");
+}
 async function runNetworkDiagnostics(token) {
   const response = await fetch(PLATFORM_URL + "/__acceptance/network-probe", {
     headers: { authorization: "Bearer " + token, accept: "application/json" },
@@ -249,6 +453,9 @@ async function smoke() {
   // Capture raw native Worker fetch failures before testing the adapter/task path.
   const networkDiagnostics = await runNetworkDiagnostics(probe);
   assert.equal(networkDiagnostics.status, "reachable", "Raw native Worker fetch must reach at least one fixed public source before Task acceptance can proceed.");
+
+  // Prove the DNS rebinding test service actually alternates before any runtime probe.
+  await runDnsRebindingAcceptance(probe);
 
   // Find one genuinely reachable public source before testing cross-transport replay.
   // Probe attempts use a separate synthetic tenant and separate quota policy.

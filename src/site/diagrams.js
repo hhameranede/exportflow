@@ -86,19 +86,19 @@ export function renderHeroArchitectureGraphic() {
     <rect x="24" y="142" width="592" height="76" rx="8" fill="#FFFFFF" stroke="rgba(15,23,42,0.16)"/>
     <text x="42" y="165" fill="#1D4ED8" font-family="ui-monospace, monospace" font-size="11" font-weight="600">03 · VALIDATION, EGRESS &amp; ROUTER</text>
     <text x="42" y="187" fill="#0B1220" font-family="Plus Jakarta Sans, system-ui, sans-serif" font-size="15" font-weight="600">Policy checks URL safety and routes to lightest path</text>
-    <text x="42" y="205" fill="#475569" font-family="ui-monospace, monospace" font-size="11">egress-guard (no private/IP targets) -&gt; chooseExecutionPath() -&gt; http | browser</text>
+    <text x="42" y="205" fill="#475569" font-family="ui-monospace, monospace" font-size="11">egress-guard (no private/IP targets) -&gt; chooseExecutionPath() -&gt; bounded HTTP request</text>
 
     <path d="M482 98V120H320V136" fill="none" stroke="#1D4ED8" stroke-width="1.6" marker-end="url(#ef-arrow)"/>
 
     <!-- Step 4: Execution Engines -->
     <rect x="24" y="258" width="184" height="84" rx="8" fill="#ECFDF5" stroke="#059669" stroke-width="1.3"/>
-    <text x="38" y="280" fill="#047857" font-family="ui-monospace, monospace" font-size="10.5" font-weight="600">04 · ENGINE (ACTIVE LOCAL)</text>
+    <text x="38" y="280" fill="#047857" font-family="ui-monospace, monospace" font-size="10.5" font-weight="600">04 · HTTP REQUEST (ACTIVE)</text>
     <text x="38" y="302" fill="#0B1220" font-family="Plus Jakarta Sans, system-ui, sans-serif" font-size="14" font-weight="600">http.fetch.v1</text>
     <text x="38" y="320" fill="#475569" font-family="Plus Jakarta Sans, system-ui, sans-serif" font-size="11">Bounded GET · 1 MiB cap</text>
     <text x="38" y="334" fill="#475569" font-family="Plus Jakarta Sans, system-ui, sans-serif" font-size="11">3 redirects max · 8s max</text>
 
     <rect x="224" y="258" width="184" height="84" rx="8" fill="#F8FAFC" stroke="rgba(15,23,42,0.18)" stroke-dasharray="4 3"/>
-    <text x="238" y="280" fill="#64748B" font-family="ui-monospace, monospace" font-size="10.5">PROTOTYPE ADAPTERS</text>
+    <text x="238" y="280" fill="#64748B" font-family="ui-monospace, monospace" font-size="10.5">INTERNAL ADAPTERS</text>
     <text x="238" y="302" fill="#334155" font-family="Plus Jakarta Sans, system-ui, sans-serif" font-size="14" font-weight="600">Extract / Crawl / Search</text>
     <text x="238" y="320" fill="#64748B" font-family="Plus Jakarta Sans, system-ui, sans-serif" font-size="11">Internal Core modules</text>
     <text x="238" y="334" fill="#64748B" font-family="Plus Jakarta Sans, system-ui, sans-serif" font-size="11">501 until phase enabled</text>

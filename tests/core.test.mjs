@@ -20,9 +20,10 @@ function response(body, { status = 200, headers = { "content-type": "text/plain;
   return new Response(body, { status, headers });
 }
 
-test("static tasks use direct HTTP", () => {
-  assert.equal(chooseExecutionPath({}).path, "http");
-  assert.equal(chooseExecutionPath({ requiresJavascript: false }).path, "http");
+test("all supported tasks use the bounded HTTP request route", () => {
+  const route = chooseExecutionPath();
+  assert.equal(route.path, "http");
+  assert.equal(route.escalationAllowed, false);
 });
 
 test("normalizes sources and warnings", () => {
@@ -201,6 +202,16 @@ test("egress guard rejects legacy IP literals, credentials, and non-default port
   }
 });
 
+test("egress guard blocks the entire account-owned workers.dev namespace", () => {
+  for (const value of [
+    "https://hhameranede.workers.dev/",
+    "https://future-worker.hhameranede.workers.dev/",
+    "https://nested.preview.future-worker.hhameranede.workers.dev/",
+  ]) {
+    assert.throws(() => validateEgressTarget(value), EgressPolicyError, value);
+  }
+});
+
 test("egress guard normalizes trailing dots and strips URL fragments", () => {
   const url = validateEgressTarget("https://EXAMPLE.COM./path?q=1#fragment");
   assert.equal(url.hostname, "example.com");
@@ -233,6 +244,49 @@ test("fetch returns bounded text and leaves Cloudflare default cache policy unse
   assert.equal(result.finalUrl, "https://example.com/page");
   assert.equal(result.cacheStatus, "HIT");
   assert.equal(receipts[0].cacheStatus, "HIT");
+});
+
+test("fetch accepts the supported public text media types", async () => {
+  const contentTypes = [
+    "text/html; charset=utf-8",
+    "application/xhtml+xml; charset=utf-8",
+    "application/json; charset=utf-8",
+    "application/ld+json; charset=utf-8",
+    "application/xml; charset=utf-8",
+    "application/atom+xml; charset=utf-8",
+    "text/plain; charset=utf-8",
+  ];
+  for (const contentType of contentTypes) {
+    const result = await fetchPublicResource("https://example.com/resource", {
+      fetchImpl: async () => response("<root>ok</root>", { headers: { "content-type": contentType } }),
+    });
+    assert.equal(result.ok, true, contentType);
+    assert.equal(result.body, "<root>ok</root>", contentType);
+  }
+});
+
+test("fetch decodes response text with its declared charset", async () => {
+  const legacyBytes = new Uint8Array([0x63, 0x61, 0x66, 0xe9]);
+  const result = await fetchPublicResource("https://example.com/legacy", {
+    fetchImpl: async () => response(legacyBytes, {
+      headers: { "content-type": "text/plain; charset=windows-1252" },
+    }),
+  });
+  assert.equal(result.body, "café");
+  assert.equal(result.bytes, 4);
+});
+
+test("fetch rejects a declared charset unsupported by the runtime", async () => {
+  await assert.rejects(
+    fetchPublicResource("https://example.com/unknown-charset", {
+      fetchImpl: async () => response("body", {
+        headers: { "content-type": "text/plain; charset=x-exportflow-unknown" },
+      }),
+    }),
+    (error) => error instanceof FetchAdapterError &&
+      error.code === "UNSUPPORTED_CHARSET" &&
+      error.httpStatus === 415,
+  );
 });
 
 test("fetch cache mode can explicitly bypass edge cache without changing outbound safety", async () => {
@@ -582,10 +636,10 @@ test("internal task executor sanitizes upstream failures and does not expose exc
   }
 });
 
-test("internal task executor fails closed for removed browser requirements", async () => {
-  for (const flags of [{ requiresJavascript: true }, { requiresInteraction: true }]) {
-    const task = await executeWebTask({ goal: "Read page", url: "https://example.com/", ...flags },
-      { idFactory: () => "task-browser-removed" });
+test("internal task executor rejects properties outside the task contract", async () => {
+  for (const extra of [{ scriptMode: "client" }, { runtime: "unsupported" }]) {
+    const task = await executeWebTask({ goal: "Read page", url: "https://example.com/", ...extra },
+      { idFactory: () => "task-extra-field" });
     assert.equal(task.state, "failed");
     assert.equal(task.errors[0].code, "INVALID_TASK");
   }

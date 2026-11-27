@@ -6,6 +6,10 @@ import { createResearchPipeline } from "./research.js";
 
 const TASK_ID_PATTERN = /^[a-zA-Z0-9_-]{8,64}$/;
 const MAX_GOAL_LENGTH = 2_000;
+const ALLOWED_TASK_INPUT_KEYS = new Set([
+  "goal", "url", "operation", "query", "source", "limit", "candidateLimit",
+  "schema", "maxUrls", "maxPages", "maxDepth", "cacheMode", "limits",
+]);
 
 function createId() {
   const id = globalThis.crypto?.randomUUID?.();
@@ -26,6 +30,7 @@ const SAFE_ERROR_MESSAGES = Object.freeze({
   URL_NOT_ALLOWED: "Destination URL is not allowed by the egress policy.",
   RESPONSE_TOO_LARGE: "Upstream response exceeded the maximum allowed byte limit.",
   UNSUPPORTED_CONTENT_TYPE: "Upstream returned an unsupported content type.",
+  UNSUPPORTED_CHARSET: "Upstream declared an unsupported character encoding.",
   UPSTREAM_TIMEOUT: "Upstream request timed out.",
   UPSTREAM_FETCH_FAILED: "Could not retrieve the upstream resource.",
   TOO_MANY_REDIRECTS: "Upstream exceeded the redirect limit.",
@@ -162,8 +167,7 @@ function buildTask({
  *
  * This is an internal Core primitive, not an HTTP/MCP endpoint. It keeps no
  * durable state and accepts no caller-supplied credentials or headers.
- * All operations use bounded static HTTP; browser rendering and interaction
- * are not part of the supported execution surface.
+ * All operations use bounded HTTP requests; page scripts are never executed.
  */
 export async function executeWebTask(input, options = {}) {
   const now = options.now || (() => new Date().toISOString());
@@ -186,6 +190,12 @@ export async function executeWebTask(input, options = {}) {
       throw Object.assign(new TypeError("Task input must be an object."), { code: "INVALID_TASK" });
     }
 
+    for (const key of Object.keys(input)) {
+      if (!ALLOWED_TASK_INPUT_KEYS.has(key)) {
+        throw Object.assign(new TypeError("Unsupported task property: " + key), { code: "INVALID_TASK" });
+      }
+    }
+
     if (typeof input.goal !== "string" || !input.goal.trim() || input.goal.length > MAX_GOAL_LENGTH) {
       throw Object.assign(new TypeError("Task goal is missing or too long."), { code: "INVALID_GOAL" });
     }
@@ -198,9 +208,6 @@ export async function executeWebTask(input, options = {}) {
       throw Object.assign(new TypeError("Unsupported task operation."), { code: "UNSUPPORTED_OPERATION" });
     }
     const queryOperation = operation === "search" || operation === "research";
-    if (input.requiresJavascript === true || input.requiresInteraction === true) {
-      throw Object.assign(new TypeError("Dynamic rendering and browser interaction are not supported."), { code: "INVALID_TASK" });
-    }
     const url = queryOperation ? null : validatePublicHttpUrl(input.url);
     requestedUrl = url ? url.href : null;
     if (queryOperation && (typeof input.query !== "string" || !input.query.trim() || input.query.length > 1024)) {

@@ -411,15 +411,17 @@ async function checkAuthAndContactPages(browser) {
     try {
       await page.goto(baseUrl + path, { waitUntil: "domcontentloaded" });
     } catch (error) {
-      const expectedSignedOutWorkspaceRedirect = path === "/workspace" &&
-        /ERR_ABORTED/.test(error?.message || String(error));
-      if (!expectedSignedOutWorkspaceRedirect) throw error;
+      const abortedNavigation = /ERR_ABORTED/.test(error?.message || String(error));
+      const expectedSignedOutRedirect = abortedNavigation &&
+        (path === "/workspace" || path.startsWith("/oauth/"));
+      if (!expectedSignedOutRedirect) throw error;
       const redirectDeadline = Date.now() + 8000;
       while (Date.now() < redirectDeadline && !new URL(page.url()).pathname.endsWith("/signin")) {
+        await page.waitForLoadState("domcontentloaded").catch(() => {});
         await page.waitForTimeout(100);
       }
       assert.ok(new URL(page.url()).pathname.endsWith("/signin"),
-        "Unauthenticated workspace navigation must finish at /signin.");
+        "Unauthenticated " + path + " navigation must finish at /signin.");
     }
     await page.locator("main h1").waitFor({ state: "visible", timeout: 8000 });
     assert.equal(await page.locator("main h1").count(), 1, "Auth route heading missing: " + path);
@@ -438,11 +440,16 @@ async function checkAuthAndContactPages(browser) {
         }
       }
     }
-    if (path === "/account") {
-      assert.equal(await page.locator("[data-account-workspace]").count(), 1, "Account workspace shell is missing");
-    }
-    if (path === "/workspace") {
-      assert.ok(await page.locator("[data-workspace-root], [data-workspace-shell], main").count(), "Workspace shell is missing");
+    if (path === "/account" || path === "/workspace") {
+      // Both routes are private. Wait for the client-side session check and redirect
+      // before inspecting the DOM; otherwise navigation can detach the first heading.
+      await page.waitForURL((url) => url.pathname.endsWith("/signin"), { timeout: 12000 });
+      const redirect = new URL(page.url());
+      assert.equal(redirect.searchParams.get("next"), path,
+        "Signed-out " + path + " access must preserve its post-sign-in destination");
+      await page.locator('[data-auth-form="signin"]').waitFor({ state: "visible", timeout: 10000 });
+      assert.equal(await page.locator('[data-auth-form="signin"]').count(), 1,
+        "Signed-out " + path + " access must finish on the sign-in form");
     }
   }
 
@@ -727,15 +734,38 @@ async function checkApiAndPublicAssets() {
 }
 
 async function verifyInternalLinks(links) {
+  const hrefs = [...links].sort();
   const failures = [];
-  for (const href of [...links].sort()) {
-    try {
-      const response = await fetch(baseUrl + href, { redirect: "manual" });
-      if (response.status >= 400) failures.push({ href, status: response.status });
-    } catch (error) {
-      failures.push({ href, error: error.message || String(error) });
+  const concurrency = Math.min(12, hrefs.length);
+  let cursor = 0;
+  let completed = 0;
+
+  async function verifyNext() {
+    while (true) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= hrefs.length) return;
+
+      const href = hrefs[index];
+      try {
+        const response = await fetch(baseUrl + href, {
+          redirect: "manual",
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (response.status >= 400) failures.push({ href, status: response.status });
+        if (response.body) await response.body.cancel().catch(() => {});
+      } catch (error) {
+        failures.push({ href, error: error.message || String(error) });
+      } finally {
+        completed += 1;
+        if (completed % 50 === 0 || completed === hrefs.length) {
+          process.stdout.write("Verified same-origin links: " + completed + "/" + hrefs.length + "\n");
+        }
+      }
     }
   }
+
+  await Promise.all(Array.from({ length: concurrency }, () => verifyNext()));
   assert.deepEqual(failures, [], "Broken same-origin navigation targets: " + JSON.stringify(failures));
 }
 

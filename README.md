@@ -1,106 +1,81 @@
 # ExportFlow
 
-ExportFlow is a model-agnostic agentic web infrastructure platform for AI agents.
+**Agent Execution Infrastructure — the request-first execution layer for AI.**
 
-## Product foundation
-- **Web data plane:** search, map, direct HTTP fetch, bounded crawl, and structured extraction.
-- **Browser execution plane:** render dynamic pages and perform explicitly user-directed interactions.
-- **Shared runtime:** adaptive routing, ExportFlow-owned adapter contracts, normalized results, provenance, bounded execution, and task lifecycle primitives.
-- **Developer surface:** remote MCP first, then a versioned REST API and SDKs.
+ExportFlow gives AI agents one bounded REST/MCP interface for public-web requests and structured results with source evidence.
 
-## Current implementation status
-The Cloudflare Worker provides the public homepage, health/platform endpoints, and routing preview. The Core includes an internal `http.fetch.v1` adapter for bounded direct HTTP retrieval and an internal `executeWebTask()` primitive. Neither is exposed as a public API endpoint.
+## Execution model
 
-## Bounded map and crawl
-- `web.map.v1` discovers same-origin URLs from `robots.txt` sitemap declarations, a bounded sitemap fetch, and links from the requested start page.
-- `web.crawl.v1` crawls at most five pages and depth two, with per-page and total byte limits.
-- The crawler identifies itself as `ExportFlowBot/0.1`, applies RFC 9309 user-agent groups and longest-match Allow/Disallow rules, and stops on robots network errors, 401/403/429, and 5xx responses.
-- The HTTP fetch layer pins redirects to the requested origin during mapping/crawling, so an off-origin redirect is rejected before its destination request.
-- It does not traverse off-origin links, carry credentials, or attempt access to authenticated pages.
-- Cloudflare Workers use the runtime `HTMLRewriter` parser; Node tests use a deterministic fallback parser.
+- **Request-first:** outbound work uses the Cloudflare Workers native `fetch()` API over eligible public HTTP(S) destinations.
+- **Bounded:** GET-only upstream retrieval, manual redirect validation, response-byte ceilings, timeouts, quotas, and normalized errors.
+- **Evidence-backed:** outputs preserve requested/final URLs, HTTP status, retrieval time, byte counts, redirect history, and per-field evidence where available.
+- **Model-agnostic:** REST and MCP expose the same ExportFlow-owned task contracts.
 
-## Schema-based extraction
+ExportFlow does not launch remote or user-owned browser sessions, execute website JavaScript, or offer browser-session interaction. Public HTML, text, JSON and XML resources can be retrieved as ordinary HTTP responses when they pass egress policy. JavaScript files are data, never executed. If a site only reveals its content after client-side JavaScript execution and exposes no usable public HTTP endpoint, that task is unsupported. ExportFlow has no browser-service fallback.
 
-- `web.extract.v1` accepts a bounded JSON Schema object and extracts declared fields from JSON-LD, OpenGraph/meta tags, page title, canonical URL, or explicit `x-source` paths.
-- Returns only values that match the requested field types, `missingFields`, `missingRequired`, and field-level source evidence.
-- Uses deterministic parsing only: no LLM inference, remote `@context` loading, page-script execution, or arbitrary selectors.
-- Supports HTML and JSON sources only; JSON-LD graph traversal, metadata fallbacks, and invalid-block warnings are bounded.
-- Schema limits: 16 KiB, 20 properties, up to 8 source paths per field; JSON-LD limits are 20 blocks, 128 KiB per block, and 100 nodes.
-- The extractor does not fetch remote JSON-LD contexts and never executes page scripts.
+Playwright is used only by GitHub Actions for ExportFlow's own website QA. It is not part of customer task execution.
 
-## Browser rendering adapter
-- The Core contains a factory for a Cloudflare Browser Run session adapter. It uses an injected Browser binding and Puppeteer-compatible client; the current Worker has no Browser Run binding configured, so this adapter is not registered or available to live tasks.
-- Render-only navigation is limited to the exact requested hostname using Browser Run session guardrails, same-origin request interception, robots rules, a 15-second navigation budget, 30 browser requests, and a 512 KiB HTML output cap.
-- User-directed click/type workflows remain unsupported. The session closes after each render.
-- Browser Run Free allowance is 10 minutes/day; do not enable a binding or run live browser sessions until the private-destination/DNS-rebinding boundary is separately verified and the binding configuration is explicitly authorized.
+## Current operations
 
-## Search adapter
+The authenticated REST Task API and MCP surface define six bounded operations:
 
-- The Core contains a factory for Cloudflare Web Search API via an injected Worker AI binding and AI Gateway. It does not require a provider-specific API key when using AI Gateway credits.
-- Default provider: Ceramic.ai, with a documented price of $0.25 per 1,000 requests and Zero Data Retention. Search runs through AI Gateway and consumes its credits; this is not a free/no-cost search source.
-- Requests are capped at 10 results, the provider is fixed when the adapter is created, and results are revalidated, deduplicated, ranked, and returned with source provenance.
-- Cloudflare Web Search API is in open beta, supports Ceramic.ai, Exa, and Linkup, and does not paginate. The factory is not registered or live because no AI binding or AI Gateway credits have been configured for this Worker.
+| Operation | Current behavior | Important limits |
+| --- | --- | --- |
+| Fetch | Public HTTP(S) GET with response normalization and provenance | 1 MiB body, 8 s upstream timeout, up to 3 redirects |
+| Map | Same-origin discovery from robots.txt, sitemaps, and static page links | Bounded URL count; no JavaScript execution |
+| Crawl | Bounded same-origin static-page crawl | Public MCP contract: up to 3 pages and depth 1 |
+| Extract | Deterministic HTML/JSON metadata and JSON-LD extraction | Schema and body limits; no remote JSON-LD context loading |
+| Search | Explicitly selected public datasets | Wikipedia, OpenAlex, or Crossref; not general whole-web search |
+| Research | Search → bounded Fetch → deterministic Extract | Up to 3 candidate URLs; static HTTP only |
 
-## Research pipeline
+A capability being present in Core or exposed through REST/MCP does not mean every upstream behavior is Production-verified. See the P0 capability matrix and acceptance evidence before making coverage claims.
 
-- `web.research.v1` is an internal orchestration factory for Search → Fetch → Extract.
-- It searches once, considers at most three ranked candidate URLs, revalidates each URL, and retrieves pages through the bounded HTTP adapter. Browser escalation is limited to one attempt after comparing static candidates.
-- Deterministic schema extraction returns field-level evidence. Missing required fields can trigger Browser rendering only when a separately injected Browser adapter is present; otherwise the result stays partial/failed with an explicit warning.
-- Search snippets are never treated as instructions or as verified page content. Source pages are fetched before their fields are trusted. Rendered HTML is accepted only when its URL remains on the selected public origin and its size stays within 512 KiB.
-- The pipeline is not registered by default and is not exposed through HTTP/MCP. It requires injected Search and Fetch adapters; no AI binding or Browser binding is configured in the live Worker.
+## Durable task lifecycle
 
-## Internal task execution
-- Creates a task ID and an in-memory lifecycle event sequence (`accepted`, `started`, `succeeded`, `partial`, `failed`, or `unsupported`).
-- Routes `fetch`, `map`, `crawl`, and `extract` tasks to their matching internal adapters.
-- Reports JavaScript/rendering/interaction tasks as `unsupported` until a reviewed Browser adapter is connected; it does not simulate a browser action.
-- Returns normalized result data, source provenance, timestamps, and warnings.
-- Does not persist tasks, create queues, or accept caller-supplied credentials or arbitrary request headers.
-- Treats fetched page content as untrusted data. The executor never treats page text as executable instructions.
+The shared D1-backed task lifecycle is Production-enabled for REST and MCP. It provides tenant-scoped task records, idempotency, quota reservation, append-only lifecycle events, and task-status reads. Production smoke acceptance exercised the real Workers and D1 path with synthetic tenants and cleaned up the run-scoped data afterward.
 
-Task state is currently ephemeral and exists only in the returned object. Durable task persistence and external API/MCP access are separate future stages.
+This is durable task state, not a general background job engine. Submission still executes within the request lifecycle; Queues, Workflows, resumable crawls, and automatic crash recovery are separate future work.
 
-## Outbound security model
+## Security and egress
 
-ExportFlow uses two complementary controls:
+The application egress policy rejects:
 
-1. **Application Egress Policy:** validates each destination and redirect. It accepts only HTTP(S), rejects IP literals (including alternate IPv4 spellings), credentials, non-default ports, local/reserved hostnames, and ExportFlow-owned origins.
-2. **Cloudflare Workers runtime egress:** outbound requests use the native Workers Fetch API. Cloudflare documents that Worker outbound HTTP is mediated by a local proxy and that workers cannot access hosts outside the permitted network boundary. No separate DNS lookup is used as a substitute for pinning the actual connection.
+- loopback, private, link-local, reserved, and single-label hostnames;
+- IP-literal destinations and alternate IPv4 encodings;
+- embedded URL credentials and non-default ports;
+- ExportFlow-owned hostnames and unsafe redirect destinations;
+- HTTPS-to-HTTP redirect downgrades.
 
-A bounded Preview test used DNS-only records in the full `exportflow.me` zone. The public control (A → `34.223.124.45`) returned HTTP 403 from the remote HTTP service, while records resolving to `127.0.0.1` and `10.0.0.1` returned Cloudflare HTTP 530 / error 1016. This is evidence that the private destinations did not reach an origin in this test, but 1016 is documented as an Origin DNS Error, not a dedicated private-IP-denial code. Record this as **runtime private-destination blocked at resolution stage — strong evidence, not a complete DNS-rebinding proof**.
+Every redirect is followed manually and revalidated before the next request. Upstream response bodies are streamed under a byte ceiling. No cookies, browser sessions, or origin credentials are forwarded. Retrieved page content is untrusted data and is never treated as executable instructions.
 
-The temporary DNS records were deleted after the test. The isolated Preview Worker remains without a public route or custom domain.
+The application policy is paired with Cloudflare Workers' native outbound Fetch network boundary. A unit test or local simulation is not proof of target-runtime SSRF coverage; use the recorded target-runtime acceptance evidence for claims about runtime behavior.
 
-Do not add `cf.resolveOverride` as a generic destination pinning mechanism: it only takes effect when both the request hostname and override hostname are within the same Cloudflare zone. Keep every redirect manual and revalidate the destination before following it.
+## Extraction boundary
 
-The fetch adapter and task executor are still internal Core code. Do not expose them to public callers until authentication, tenant quotas, rate limits, and the egress verification boundaries are complete.
-
-## HTTP fetch limits
-- GET only; HTTP and HTTPS.
-- Default ports only.
-- At most three manually followed redirects.
-- Redirects are revalidated; HTTPS-to-HTTP downgrade is rejected.
-- Maximum text response: 1 MiB.
-- Timeout: 8 seconds.
-- No cookies or origin credentials are forwarded.
-
-## Not connected yet
-Live web search, browser automation, hosted MCP, authentication, persistent tasks, queues, streaming progress, and billing are not yet connected.
+Structured extraction is deterministic and currently limited to supported HTML/JSON sources, metadata, JSON-LD, and declared schema paths. PDF, DOCX, XLSX, OCR, audio/video, and other document parsers require separate implementation and acceptance matrices before being advertised.
 
 ## Development
+
 Requires Node.js 24+.
+
 ```sh
+npm install
 npm test
 npm run check
 npx wrangler dev
 ```
 
-## Runtime
-Cloudflare Workers only. No Cloudflare Pages application or build pipeline is used by this project.
+GitHub Actions runs the repository test suite, syntax checks, site-wide Playwright QA, and Wrangler dry-runs. Playwright/Chromium is installed in the CI runner separately from product dependencies.
+
+## Deployment
+
+The product runtime is deployed on Cloudflare Workers. The official Platform Worker serves `exportflow.me`; the MCP Worker is deployed separately. Production releases are approval-gated and coordinated through the repository's release workflow.
 
 ## Engineering principles
-- Start with direct HTTP and escalate to browser execution only when needed.
-- Keep providers behind ExportFlow-owned adapter contracts.
-- Enforce URL/redirect policy, Cloudflare runtime egress restrictions, resource budgets, authorization, and site policies before enabling outbound execution.
-- Treat fetched page content as untrusted data, not instructions.
-- Return structured results with source provenance, timestamps, warnings, and evidence.
-- Distinguish proposed, implemented, tested, deployed, and live-verified capabilities.
+
+- Inspect the exact repository revision and deployed Worker versions before making runtime claims.
+- Prefer direct public HTTP requests; never imply JavaScript rendering or browser interaction.
+- Keep provider implementations behind versioned ExportFlow-owned contracts.
+- Enforce URL, redirect, origin, tenant, quota, timeout, and byte boundaries before returning data.
+- Distinguish source implementation, unit tests, target-runtime acceptance, API/MCP exposure, Production enablement, and customer readiness.
+- Preserve clear evidence for what was tested, where it ran, and what remains unsupported.

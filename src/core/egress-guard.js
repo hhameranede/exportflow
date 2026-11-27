@@ -16,7 +16,18 @@ export const EGRESS_POLICY = Object.freeze({
     "metadata.azure.internal",
     "instance-data",
     "exportflow.me",
-    "exportflow-platform.hhameranede.workers.dev",
+    "hhameranede.workers.dev",
+    "exportflow-mcp-preview.hhameranede.workers.dev",
+    "exportflow-egress-preview.hhameranede.workers.dev",
+    "exportflow-task-mcp-acceptance-20261124.hhameranede.workers.dev",
+    "exportflow-task-platform-acceptance-20261124.hhameranede.workers.dev",
+    "exportflow-mcp-acceptance-20261122.hhameranede.workers.dev",
+    "exportflow-auth-acceptance-20261122.hhameranede.workers.dev",
+    "exportflow-tenant-acceptance-20261122.hhameranede.workers.dev",
+    "exportflow-auth-lab.hhameranede.workers.dev",
+    "exportflow-cost-router-lab.hhameranede.workers.dev",
+    "exportflow-usage-receipts-preview.hhameranede.workers.dev",
+    "exportflow-browser-lab.hhameranede.workers.dev",
   ]),
   blockedSuffixes: Object.freeze([
     ".localhost",
@@ -36,6 +47,7 @@ export const EGRESS_POLICY = Object.freeze({
     ".corp",
     ".intranet",
     ".exportflow.me",
+    ".hhameranede.workers.dev",
   ]),
 });
 

@@ -46,78 +46,119 @@ jobs:
       if-no-files-found: warn
       retention-days: 3
    - name: Build isolated Auth Lab bundle (dry-run only)
-     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/auth-lab --config cloudflare/auth-lab/wrangler.toml
+     run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/auth-lab" --config cloudflare/auth-lab/wrangler.toml
    - name: Build Platform Worker bundle (dry-run only)
-     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/platform --config wrangler.toml
+     run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/platform" --config wrangler.toml
    - name: Build MCP Worker bundle (dry-run only)
-     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/mcp-preview --config cloudflare/mcp/wrangler.toml
+     run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/mcp-preview" --config cloudflare/mcp/wrangler.toml
    - name: Build tenant Platform Acceptance bundle (dry-run only)
-     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/tenant-platform-acceptance --config cloudflare/acceptance/tenant-platform.wrangler.toml
+     run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/tenant-platform-acceptance" --config cloudflare/acceptance/tenant-platform.wrangler.toml
    - name: Build tenant MCP Acceptance bundle (dry-run only)
-     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/tenant-mcp-acceptance --config cloudflare/acceptance/tenant-mcp.wrangler.toml
+     run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/tenant-mcp-acceptance" --config cloudflare/acceptance/tenant-mcp.wrangler.toml
    - name: Build isolated OAuth Auth Acceptance bundle (dry-run only)
-     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/auth-acceptance --config cloudflare/auth-acceptance/wrangler.toml
+     run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/auth-acceptance" --config cloudflare/auth-acceptance/wrangler.toml
    - name: Build isolated OAuth MCP Acceptance bundle (dry-run only)
-     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/mcp-acceptance --config cloudflare/mcp-acceptance/wrangler.toml
+     run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/mcp-acceptance" --config cloudflare/mcp-acceptance/wrangler.toml
    - name: Build Task Platform Acceptance bundle (dry-run only)
-     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/task-platform-acceptance --config cloudflare/task-acceptance/platform.wrangler.toml
+     run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/task-platform-acceptance" --config cloudflare/task-acceptance/platform.wrangler.toml
    - name: Build Task MCP Acceptance bundle (dry-run only)
-     run: npx --yes wrangler@4 deploy --dry-run --outdir dist/task-mcp-acceptance --config cloudflare/task-acceptance/mcp.wrangler.toml
-   - name: Locate Wrangler build output
+     run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/task-mcp-acceptance" --config cloudflare/task-acceptance/mcp.wrangler.toml
+   - name: Assert and inventory all nine Wrangler bundles
+     shell: bash
      run: |
-      echo "Root dist output:"
-      find dist -maxdepth 4 -type f -printf '%p %s bytes\\n' 2>/dev/null || true
-      echo "Lab config-relative output:"
-      find cloudflare/auth-lab -maxdepth 5 -type f -printf '%p %s bytes\\n' 2>/dev/null || true
-      echo "Wrangler internal output:"
-      find .wrangler -maxdepth 5 -type f -printf '%p %s bytes\\n' 2>/dev/null || true
-   - name: Upload isolated Auth Lab bundle artifact
+      set -euo pipefail
+      for mapping in auth-lab/index.js platform/index.js mcp-preview/index.js tenant-platform-acceptance/tenant-platform.js tenant-mcp-acceptance/tenant-mcp.js auth-acceptance/index.js mcp-acceptance/index.js task-platform-acceptance/platform.js task-mcp-acceptance/mcp.js; do
+       bundle="${mapping%%/*}"
+       entrypoint="${mapping#*/}"
+       output="$GITHUB_WORKSPACE/dist/$bundle/$entrypoint"
+       if [[ ! -s "$output" ]]; then
+        echo "::error::Expected Worker entrypoint is missing: $output"
+        find "$GITHUB_WORKSPACE/dist" -maxdepth 4 -type f -printf "%p %s bytes\n" || true
+        exit 1
+       fi
+       echo "$bundle/$entrypoint: $(stat -c '%s bytes' "$output")"
+      done
+      find "$GITHUB_WORKSPACE/dist" -maxdepth 4 -type f -printf "%p %s bytes\n" | sort
+   - name: Upload all nine Worker bundle artifacts
      uses: actions/upload-artifact@v4
      with:
-      name: exportflow-auth-lab-bundle-${{ github.sha }}
-      path: |
-       dist/
-       cloudflare/auth-lab/dist/
-       .wrangler/
+      name: exportflow-worker-bundles-${{ github.sha }}
+      path: dist/
       if-no-files-found: error
-      retention-days: 1
+      retention-days: 3
       include-hidden-files: true
+
+   # External recursive-resolver observations are diagnostic only. They do not prove
+   # the Cloudflare Worker's actual connection destination or private-IP enforcement.
+   - name: "Diagnostic only: 1u.ms resolver observations (non-gating; not Worker acceptance)"
+     if: github.event_name == 'pull_request' && github.event.pull_request.number == 142
+     continue-on-error: true
+     run: node scripts/acceptance/rbndr-dns-preflight.mjs
 
  deploy-acceptance:
   needs: test
   # Acceptance mutates only dedicated test resources; require an explicit manual opt-in.
   if: >-
-   ${{ github.event_name == 'workflow_dispatch' &&
-       inputs.run_acceptance == true &&
-       github.ref == 'refs/heads/feat/durable-task-lifecycle-v1-20261124' }}
+   ${{ (github.event_name == 'workflow_dispatch' &&
+        inputs.run_acceptance == true &&
+        github.ref == 'refs/heads/feat/p0-request-only-fetch-20261125') ||
+       (github.event_name == 'pull_request' &&
+        github.event.pull_request.number == 142) }}
   runs-on: ubuntu-latest
   env:
    CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
    CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
   steps:
    - uses: actions/checkout@v4
+     with:
+      ref: ${{ github.event.pull_request.head.sha || github.sha }}
+   # One-time user-approved trigger: the commit subject must start with "acceptance: run isolated P0 Stage 1 acceptance".
+   - name: Gate the one-time approved Acceptance run
+     id: acceptance-gate
+     env:
+      EVENT_NAME: ${{ github.event_name }}
+      RUN_ACCEPTANCE: ${{ inputs.run_acceptance }}
+     run: |
+      set -euo pipefail
+      subject="$(git log -1 --format=%s)"
+      if [[ "$EVENT_NAME" == "workflow_dispatch" && "$RUN_ACCEPTANCE" == "true" ]] || [[ "$subject" == "acceptance: run isolated P0 Stage 1 acceptance"* ]]; then
+       echo "run=true" >> "$GITHUB_OUTPUT"
+       echo "The isolated P0 Acceptance run is explicitly enabled for this invocation."
+      else
+       echo "run=false" >> "$GITHUB_OUTPUT"
+       echo "Skipping Acceptance deployment; this PR commit is not the one-time acceptance trigger."
+      fi
    - uses: actions/setup-node@v4
+     if: steps.acceptance-gate.outputs.run == 'true'
      with:
       node-version: 24
-   - run: npm install --no-audit --no-fund
+   - name: Install dependencies for isolated Acceptance
+     if: steps.acceptance-gate.outputs.run == 'true'
+     run: npm install --no-audit --no-fund
    - name: Verify isolated Acceptance deployment credentials
+     if: steps.acceptance-gate.outputs.run == 'true'
      run: |
       if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
        echo "::error::Missing CLOUDFLARE_API_TOKEN (or CF_API_TOKEN) GitHub Actions secret."
        exit 1
       fi
    - name: Apply migration 0005 to the dedicated Acceptance D1 database only
+     if: steps.acceptance-gate.outputs.run == 'true'
      run: npx --yes wrangler@4 d1 execute exportflow-tenant-acceptance-20261122 --remote --file migrations/0005_durable_task_lifecycle.sql --config cloudflare/task-acceptance/platform.wrangler.toml --yes
    - name: Deploy isolated Task Platform Acceptance Worker
+     if: steps.acceptance-gate.outputs.run == 'true'
      run: npx --yes wrangler@4 deploy --config cloudflare/task-acceptance/platform.wrangler.toml
    - name: Deploy isolated Task MCP Acceptance Worker
+     if: steps.acceptance-gate.outputs.run == 'true'
      run: npx --yes wrangler@4 deploy --config cloudflare/task-acceptance/mcp.wrangler.toml
    - name: Seed run-scoped synthetic tenants and API keys
+     if: steps.acceptance-gate.outputs.run == 'true'
      run: node scripts/acceptance/durable-task-runtime.mjs seed
    - name: Run real Cloudflare D1 + Worker durable Task acceptance
+     if: steps.acceptance-gate.outputs.run == 'true'
      run: node scripts/acceptance/durable-task-runtime.mjs smoke
    - name: Clean up run-scoped synthetic Acceptance data
-     if: always()
+     if: always() && steps.acceptance-gate.outputs.run == 'true'
      run: node scripts/acceptance/durable-task-runtime.mjs cleanup
  deploy-production:
   needs: test

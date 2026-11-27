@@ -156,8 +156,6 @@ export const SITE_JS = `(function () {
     var goalInput = document.getElementById("demo-goal");
     var urlInput = document.getElementById("demo-url");
     var opSelect = document.getElementById("demo-operation");
-    var jsCheckbox = document.getElementById("demo-requires-js");
-    var intCheckbox = document.getElementById("demo-requires-interaction");
     var timeoutInput = document.getElementById("demo-timeout");
     var maxBytesInput = document.getElementById("demo-max-bytes");
     var maxRedirectsInput = document.getElementById("demo-max-redirects");
@@ -233,8 +231,6 @@ export const SITE_JS = `(function () {
       var goal = (goalInput.value || "").trim();
       var rawUrl = (urlInput.value || "").trim();
       var operation = opSelect.value;
-      var requiresJs = jsCheckbox.checked;
-      var requiresInt = intCheckbox.checked;
       var timeoutMs = Number(timeoutInput.value);
       var maxBytes = Number(maxBytesInput.value);
       var maxRedirects = Number(maxRedirectsInput.value);
@@ -306,49 +302,6 @@ export const SITE_JS = `(function () {
           payload: {
             previewMode: "illustrative_simulation",
             error: { code: urlCheck.code, message: urlCheck.message }
-          }
-        });
-      }
-
-      if (requiresJs || requiresInt) {
-        stages = ["passed", "passed", "unsupported", "skipped", "passed", "skipped"];
-        return renderResult({
-          stages: stages,
-          httpStatus: 501,
-          adapter: "browser (unconfigured)",
-          state: "unsupported",
-          payload: {
-            previewMode: "illustrative_simulation",
-            id: "preview-task-browser-501",
-            goal: goal,
-            requestedUrl: urlCheck.href,
-            state: "unsupported",
-            execution: {
-              path: "browser",
-              operation: "fetch",
-              adapterId: null,
-              reason: "The task requires page rendering or user-directed interaction."
-            },
-            timestamps: { createdAt: ts0, startedAt: ts1, completedAt: ts2 },
-            usage: { durationMs: 2, requestsAttempted: 0, responseBytes: 0, cost: null },
-            events: [
-              { type: "task.accepted", at: ts0 },
-              { type: "task.started", at: ts1, executionPath: "browser" },
-              { type: "task.unsupported", at: ts2, reason: requiresInt ? "browser_interaction_not_implemented" : "browser_adapter_unavailable" }
-            ],
-            errors: [
-              {
-                code: requiresInt ? "BROWSER_INTERACTION_UNAVAILABLE" : "BROWSER_UNAVAILABLE",
-                message: requiresInt ? "User-directed browser interactions are not connected." : "Browser Run binding is not configured."
-              }
-            ],
-            result: {
-              status: "failed",
-              data: null,
-              sources: [],
-              warnings: ["No headless browser binding is connected; no external navigation occurred."],
-              generatedAt: ts2
-            }
           }
         });
       }
@@ -517,8 +470,6 @@ export const SITE_JS = `(function () {
       goalInput.value = p.goal;
       urlInput.value = p.url;
       opSelect.value = p.operation || "fetch";
-      jsCheckbox.checked = Boolean(p.requiresJavascript);
-      intCheckbox.checked = Boolean(p.requiresInteraction);
       timeoutInput.value = String(p.timeoutMs);
       maxBytesInput.value = String(p.maxBytes);
       maxRedirectsInput.value = String(p.maxRedirects);

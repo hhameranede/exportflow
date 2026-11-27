@@ -48,14 +48,13 @@ const LOCALE_DATA = {
     cards: [
       ["01", "Web Intelligence", "Retrieve public web information through bounded execution paths with egress protection and structured provenance metadata.", "available", "/product/web-intelligence", ["http.fetch.v1", "1 MiB cap", "SSRF Guard"], "web-intelligence"],
       ["02", "Execution Orchestration", "Validate incoming task contracts, route supported requests deterministically, and return consistent normalized envelopes.", "development", "/product/execution-orchestration", ["Task schema", "Deterministic routing"], "execution-orchestration"],
-      ["03", "Developer Platform", "Contract-first entry points, machine-readable capabilities, interactive browser preview, and observable execution diagnostics.", "development", "/product/developer-platform", ["REST contract", "Structured errors"], "developer-platform"],
-      ["04", "Browser Automation", "Isolated DOM rendering path designed for JavaScript-dependent workflows; returns explicit 501 status until configured.", "planned", "/product/browser-automation", ["Isolated runtime", "501 fail-closed"], "browser-automation"],
-      ["05", "Persistent Intelligence", "Durable execution continuity and tenant-scoped history foundations planned alongside controlled operational rollouts.", "planned", "/product/persistent-intelligence", ["Provenance ledger", "Tenant scoping"], "persistent-intelligence"],
+      ["03", "Developer Platform", "Contract-first entry points, machine-readable capabilities, interactive request-policy preview, and observable execution diagnostics.", "development", "/product/developer-platform", ["REST contract", "Structured errors"], "developer-platform"],
+      ["04", "Persistent Intelligence", "Durable execution continuity and tenant-scoped history foundations planned alongside controlled operational rollouts.", "planned", "/product/persistent-intelligence", ["Provenance ledger", "Tenant scoping"], "persistent-intelligence"],
     ],
     stepSpecs: [
       { index: "01", phase: "Task Contract Ingress", summary: "Agent or client submits goal, target public URL, and explicit resource ceilings under strict JSON schema validation.", module: "src/core/task-contract.js", guard: "Strict schema · 32 KiB body cap", icon: "step-ingress" },
       { index: "02", phase: "Auth & SSRF Egress Policy", summary: "Gateway verifies SHA-256 tenant key or OAuth token, applies rate limits and quotas, and rejects local/private/IP destinations.", module: "src/core/egress-guard.js", guard: "Fail-closed SSRF · Non-default ports blocked", icon: "step-policy" },
-      { index: "03", phase: "Deterministic Execution Router", summary: "Router selects the leanest permitted engine (http.fetch.v1 by default) or fails closed with HTTP 501 when browser binding is absent.", module: "src/core/router.js", guard: "No speculative escalation · Explicit 501", icon: "step-router" },
+      { index: "03", phase: "Deterministic Execution Router", summary: "Router selects bounded HTTP request execution for supported tasks; no alternate runtime is configured.", module: "src/core/router.js", guard: "No speculative escalation · Explicit 501", icon: "step-router" },
       { index: "04", phase: "Bounded Adapter Execution", summary: "HTTP Fetch adapter executes a bounded GET stream with manual hop-by-hop redirect revalidation and AbortController deadlines.", module: "src/core/http-fetch.js", guard: "1 MiB stream cap · 8s timeout · 3 hops", icon: "step-engine" },
       { index: "05", phase: "Normalized Envelope & Evidence", summary: "Result envelope packages state, usage metrics, sanitized codes, and source[].evidence entries for downstream agent verification.", module: "src/core/result.js", guard: "No leaked bodies on error · Full provenance", icon: "step-evidence" },
     ],
@@ -72,7 +71,7 @@ const LOCALE_DATA = {
       idLabel: "Routing & Egress Pipeline",
       routeGroupAria: "Simulate execution route",
       svgTitle: "ExportFlow Execution Architecture Diagram",
-      svgDesc: "Data flow from AI Agent through ExportFlow Core to HTTP Fetch (available locally), Search (in development), and Browser (planned), returning verified results with attached provenance.",
+      svgDesc: "Data flow from AI Agent through ExportFlow Core to HTTP Fetch (available locally) and selected Search sources (in development); page JavaScript is never executed, returning verified results with attached provenance.",
       inputRole: "Input",
       agentTitle: "AI Agent",
       agentAria: "AI Agent: Input intent and task constraints",
@@ -86,8 +85,6 @@ const LOCALE_DATA = {
       httpAria: "HTTP Fetch: Available locally",
       searchTitle: "Search",
       searchAria: "Search: In development",
-      browserTitle: "Browser",
-      browserAria: "Browser: Planned",
       outputRole: "Output",
       resultsTitle1: "Verified",
       resultsTitle2: "Results",
@@ -99,16 +96,14 @@ const LOCALE_DATA = {
       mobileOutputMeta: "structured payload · evidence",
       nodes: {
         agent: { id: "agent", title: "AI Agent", role: "Input", status: "Contract emitter", bounds: "JSON <= 32 KiB", detail: "Submits bounded goal, public URL, and explicit resource limits.", connects: ["p-agent-core"] },
-        core: { id: "core", title: "ExportFlow Core", role: "Coordination", status: "Active locally", bounds: "Auth + Egress Guard", detail: "Validates JSON schema, enforces SSRF egress policy, and routes execution.", connects: ["p-agent-core", "p-core-http", "p-core-search", "p-core-browser"] },
+        core: { id: "core", title: "ExportFlow Core", role: "Coordination", status: "Active locally", bounds: "Auth + Egress Guard", detail: "Validates JSON schema, enforces SSRF egress policy, and routes execution.", connects: ["p-agent-core", "p-core-http", "p-core-search"] },
         http: { id: "http", title: "HTTP Fetch", role: "http.fetch.v1", status: "Available locally", bounds: "1 MiB · 8 s · 3 hops", detail: "Direct bounded GET retrieval with per-hop redirect validation and provenance.", connects: ["p-core-http", "p-http-result"] },
         search: { id: "search", title: "Search", role: "web.search.v1", status: "In development", bounds: "Prototype adapter", detail: "Discovery factory with URL revalidation; not yet exposed on live endpoints.", connects: ["p-core-search", "p-search-result"] },
-        browser: { id: "browser", title: "Browser", role: "web.browser.v1", status: "Planned", bounds: "501 unsupported", detail: "Isolated DOM rendering path; returns 501 unsupported until configured.", connects: ["p-core-browser", "p-browser-result"] },
-        result: { id: "result", title: "Verified Results", role: "Output", status: "Normalized envelope", bounds: "Sources + Usage", detail: "Returns structured payload, resolved URL, redirect hops, and timestamps.", connects: ["p-http-result", "p-search-result", "p-browser-result"] },
+        result: { id: "result", title: "Verified Results", role: "Output", status: "Normalized envelope", bounds: "Sources + Usage", detail: "Returns structured payload, resolved URL, redirect hops, and timestamps.", connects: ["p-http-result", "p-search-result"] },
       },
       scenarios: {
         http: { id: "http", title: "HTTP Fetch", status: "Available locally", bounds: "200 OK · 1 MiB cap · 8 s", detail: "Active path: AI Agent -> ExportFlow Core -> http.fetch.v1 -> Verified Results.", connects: ["p-agent-core", "p-core-http", "p-http-result"] },
         search: { id: "search", title: "Search", status: "In development", bounds: "Internal prototype · 501 on API", detail: "Development path: validates query-only tasks and filters unsafe URLs before return.", connects: ["p-agent-core", "p-core-search", "p-search-result"] },
-        browser: { id: "browser", title: "Browser", status: "Planned", bounds: "Unconfigured · 501 BROWSER_UNAVAILABLE", detail: "Planned path: isolated rendering activates only when a Browser binding exists.", connects: ["p-agent-core", "p-core-browser", "p-browser-result"] },
       },
     },
   },
@@ -157,14 +152,13 @@ const LOCALE_DATA = {
     cards: [
       ["01", "ذكاء الويب", "استرجاع محتوى الويب العام عبر مسارات تنفيذ منضبطة مع حماية المخارج وإرفاق بيانات المصدر.", "available", "/product/web-intelligence", ["http.fetch.v1", "حد 1 MiB", "حماية SSRF"], "web-intelligence"],
       ["02", "تنسيق التنفيذ", "التحقق من عقود المهام الواردة، وتوجيه الطلبات المسموح بها بحتمية، وإرجاع مخرجات موحدة.", "development", "/product/execution-orchestration", ["مخطط المهمة", "توجيه حتمي"], "execution-orchestration"],
-      ["03", "منصة المطورين", "نقاط دخول قائمة على العقود، ووصف قدرات قابل للقراءة آلياً، ومعاينة تفاعلية في المتصفح.", "development", "/product/developer-platform", ["عقد REST", "أخطاء مهيكلة"], "developer-platform"],
-      ["04", "أتمتة المتصفح", "مسار تصيير معزول للمواقع المعتمدة على JavaScript؛ يعيد حالة 501 صريحة حتى يتم تهيئته.", "planned", "/product/browser-automation", ["بيئة معزولة", "إغلاق آمن 501"], "browser-automation"],
-      ["05", "الاستمرارية والسياق", "استمرارية المهام وسجلات التنفيذ المعزولة لكل مساحة عمل وفق التوسع المرحلي المنضبط.", "planned", "/product/persistent-intelligence", ["سجل الأدلة", "عزل المساحات"], "persistent-intelligence"],
+      ["03", "منصة المطورين", "نقاط دخول قائمة على العقود، ووصف قدرات قابل للقراءة آلياً، ومعاينة تفاعلية لسياسات الطلب.", "development", "/product/developer-platform", ["عقد REST", "أخطاء مهيكلة"], "developer-platform"],
+      ["04", "الاستمرارية والسياق", "استمرارية المهام وسجلات التنفيذ المعزولة لكل مساحة عمل وفق التوسع المرحلي المنضبط.", "planned", "/product/persistent-intelligence", ["سجل الأدلة", "عزل المساحات"], "persistent-intelligence"],
     ],
     stepSpecs: [
       { index: "01", phase: "استقبال عقد المهمة", summary: "يرسل الوكيل أو العميل الهدف والرابط العام وسقوف الموارد وفق تحقق صارم من مخطط JSON.", module: "src/core/task-contract.js", guard: "مخطط صارم · حد الطلب 32 KiB", icon: "step-ingress" },
       { index: "02", phase: "المصادقة وحارس المخارج SSRF", summary: "تتحقق البوابة من مفتاح API أو رمز OAuth وتطبق حدود الحصص وترفض النطاقات الداخلية وعناوين IP المباشرة.", module: "src/core/egress-guard.js", guard: "حظر SSRF · رفض المنافذ غير القياسية", icon: "step-policy" },
-      { index: "03", phase: "موجّه التنفيذ الحتمي", summary: "يختار الموجّه أخف محرك مسموح (http.fetch.v1 افتراضياً) أو يرفض بـ HTTP 501 إذا لم تتوفر بيئة المتصفح.", module: "src/core/router.js", guard: "لا تصعيد عشوائي · رفض 501 صريح", icon: "step-router" },
+      { index: "03", phase: "موجّه التنفيذ الحتمي", summary: "يختار الموجّه أخف محرك مسموح (http.fetch.v1 افتراضياً) ويطبق سياسة HTTP request-only دون تشغيل JavaScript.", module: "src/core/router.js", guard: "لا تصعيد عشوائي · رفض 501 صريح", icon: "step-router" },
       { index: "04", phase: "تنفيذ المحوّل المحدود", summary: "ينفذ محرك HTTP Fetch طلباً محكوماً مع التحقق من كل قفزة إعادة توجيه ومهلة زمنية صارمة.", module: "src/core/http-fetch.js", guard: "بث 1 MiB · مهلة 8 ثوانٍ · 3 قفزات", icon: "step-engine" },
       { index: "05", phase: "توحيد النتيجة والأدلة", summary: "يعيد غلاف النتيجة الحالة ومقاييس الاستهلاك ورموز الخطأ الآمنة مع مصفوفة الأدلة للتحقق.", module: "src/core/result.js", guard: "لا تسريب للأجسام · توثيق كامل للمصدر", icon: "step-evidence" },
     ],
@@ -181,7 +175,7 @@ const LOCALE_DATA = {
       idLabel: "مسار التوجيه وحماية المخارج",
       routeGroupAria: "محاكاة مسار التنفيذ",
       svgTitle: "مخطط بنية التنفيذ في ExportFlow",
-      svgDesc: "تدفق البيانات من الوكيل الذكي عبر نواة ExportFlow إلى جلب HTTP (متاح محلياً) والبحث (قيد التطوير) والمتصفح (مخطط له) مع إرجاع نتائج موثقة بالأدلة.",
+      svgDesc: "تدفق البيانات من الوكيل الذكي عبر نواة ExportFlow إلى جلب HTTP والبحث مع إرجاع نتائج موثقة بالأدلة.",
       inputRole: "إدخال",
       agentTitle: "الوكيل الذكي",
       agentAria: "الوكيل الذكي: إرسال الهدف وقيود المهمة",
@@ -195,8 +189,6 @@ const LOCALE_DATA = {
       httpAria: "جلب HTTP: متاح محلياً",
       searchTitle: "البحث",
       searchAria: "البحث: قيد التطوير",
-      browserTitle: "المتصفح",
-      browserAria: "المتصفح: مخطط له",
       outputRole: "مخرجات",
       resultsTitle1: "نتائج",
       resultsTitle2: "موثقة",
@@ -208,16 +200,14 @@ const LOCALE_DATA = {
       mobileOutputMeta: "مخرجات مهيكلة · سجل الأدلة",
       nodes: {
         agent: { id: "agent", title: "الوكيل الذكي", role: "إدخال", status: "مرسل العقد", bounds: "JSON <= 32 KiB", detail: "يرسل هدف المهمة والرابط العام وحدود الموارد الصريحة.", connects: ["p-agent-core"] },
-        core: { id: "core", title: "نواة ExportFlow", role: "تنسيق", status: "نشطة محلياً", bounds: "مصادقة + حارس المخارج", detail: "تتحقق من مخطط JSON وتفرض سياسة SSRF وتوجه التنفيذ.", connects: ["p-agent-core", "p-core-http", "p-core-search", "p-core-browser"] },
+        core: { id: "core", title: "نواة ExportFlow", role: "تنسيق", status: "نشطة محلياً", bounds: "مصادقة + حارس المخارج", detail: "تتحقق من مخطط JSON وتفرض سياسة SSRF وتوجه التنفيذ.", connects: ["p-agent-core", "p-core-http", "p-core-search"] },
         http: { id: "http", title: "جلب HTTP", role: "http.fetch.v1", status: "متاح محلياً", bounds: "1 MiB · 8 ثوانٍ · 3 قفزات", detail: "جلب مباشر محدود مع فحص كل إعادة توجيه وإرفاق الأدلة.", connects: ["p-core-http", "p-http-result"] },
         search: { id: "search", title: "البحث", role: "web.search.v1", status: "قيد التطوير", bounds: "نموذج أولي", detail: "مصنع اكتشاف يتحقق من الروابط قبل الإرجاع؛ غير مفعّل عاماً بعد.", connects: ["p-core-search", "p-search-result"] },
-        browser: { id: "browser", title: "المتصفح", role: "web.browser.v1", status: "مخطط له", bounds: "501 غير مدعوم", detail: "مسار تصيير معزول يعيد 501 حتى يتم ربط بيئة المتصفح.", connects: ["p-core-browser", "p-browser-result"] },
-        result: { id: "result", title: "نتائج موثقة", role: "مخرجات", status: "غلاف موحد", bounds: "المصادر + الاستهلاك", detail: "يعيد مخرجات منظمة والرابط النهائي وسجل التحويلات والطوابع الزمنية.", connects: ["p-http-result", "p-search-result", "p-browser-result"] },
+        result: { id: "result", title: "نتائج موثقة", role: "مخرجات", status: "غلاف موحد", bounds: "المصادر + الاستهلاك", detail: "يعيد مخرجات منظمة والرابط النهائي وسجل التحويلات والطوابع الزمنية.", connects: ["p-http-result", "p-search-result"] },
       },
       scenarios: {
         http: { id: "http", title: "جلب HTTP", status: "متاح محلياً", bounds: "200 OK · حد 1 MiB · 8 ثوانٍ", detail: "المسار النشط: الوكيل الذكي <- نواة ExportFlow <- http.fetch.v1 <- نتائج موثقة.", connects: ["p-agent-core", "p-core-http", "p-http-result"] },
         search: { id: "search", title: "البحث", status: "قيد التطوير", bounds: "نموذج داخلي · 501 على API", detail: "مسار قيد التطوير: يتحقق من مهام البحث ويصفي الروابط غير الآمنة.", connects: ["p-agent-core", "p-core-search", "p-search-result"] },
-        browser: { id: "browser", title: "المتصفح", status: "مخطط له", bounds: "غير مهيأ · 501 BROWSER_UNAVAILABLE", detail: "مسار مخطط له: لا يتفعل التصيير المعزول إلا عند توفر ربط متصفح.", connects: ["p-agent-core", "p-core-browser", "p-browser-result"] },
       },
     },
   },
@@ -266,14 +256,13 @@ const LOCALE_DATA = {
     cards: [
       ["01", "Intelligence Web", "Récupérez des ressources publiques via des chemins bornés avec garde-fou SSRF et preuves structurées.", "available", "/product/web-intelligence", ["http.fetch.v1", "Plafond 1 MiB", "Garde SSRF"], "web-intelligence"],
       ["02", "Orchestration", "Validez les contrats de tâches entrants, routez les requêtes de façon déterministe et unifiez les réponses.", "development", "/product/execution-orchestration", ["Schéma de tâche", "Routage déterministe"], "execution-orchestration"],
-      ["03", "Plateforme Développeur", "Points d’entrée orientés contrat, capacités lisibles par machine et simulateur navigateur.", "development", "/product/developer-platform", ["Contrat REST", "Erreurs structurées"], "developer-platform"],
-      ["04", "Automatisation Navigateur", "Rendu DOM isolé pour les flux JavaScript ; renvoie explicitement 501 tant qu’il n’est pas configuré.", "planned", "/product/browser-automation", ["Runtime isolé", "Fermeture sûre 501"], "browser-automation"],
-      ["05", "Intelligence Persistante", "Continuité durable et historique par espace prévus lors des déploiements contrôlés.", "planned", "/product/persistent-intelligence", ["Journal de preuves", "Isolation par espace"], "persistent-intelligence"],
+      ["03", "Plateforme Développeur", "Points d’entrée orientés contrat, capacités lisibles par machine et aperçu des règles de requête.", "development", "/product/developer-platform", ["Contrat REST", "Erreurs structurées"], "developer-platform"],
+      ["04", "Intelligence Persistante", "Continuité durable et historique par espace prévus lors des déploiements contrôlés.", "planned", "/product/persistent-intelligence", ["Journal de preuves", "Isolation par espace"], "persistent-intelligence"],
     ],
     stepSpecs: [
       { index: "01", phase: "Réception du contrat", summary: "L’agent transmet l’objectif, l’URL publique et les limites de ressources selon un schéma JSON strict.", module: "src/core/task-contract.js", guard: "Schéma strict · Plafond 32 KiB", icon: "step-ingress" },
       { index: "02", phase: "Auth et politique SSRF", summary: "La passerelle vérifie la clé SHA-256 ou le jeton OAuth, applique les quotas et bloque les IP privées.", module: "src/core/egress-guard.js", guard: "Blocage SSRF · Ports non standard rejetés", icon: "step-policy" },
-      { index: "03", phase: "Routage déterministe", summary: "Le routeur sélectionne le moteur le plus léger permis (http.fetch.v1) ou échoue avec HTTP 501.", module: "src/core/router.js", guard: "Aucune escalade implicite · 501 explicite", icon: "step-router" },
+      { index: "03", phase: "Routage déterministe", summary: "Le routeur sélectionne le moteur le plus léger permis (http.fetch.v1) et reste sur des requêtes HTTP bornées.", module: "src/core/router.js", guard: "Aucune escalade implicite · 501 explicite", icon: "step-router" },
       { index: "04", phase: "Exécution bornée", summary: "L’adaptateur HTTP Fetch exécute un GET borné avec revalidation de chaque redirection et délai d’expiration.", module: "src/core/http-fetch.js", guard: "Flux 1 MiB · 8s max · 3 sauts", icon: "step-engine" },
       { index: "05", phase: "Enveloppe et preuves", summary: "La réponse normalisée inclut l’état, les métriques et les sources[].evidence pour vérification.", module: "src/core/result.js", guard: "Aucune fuite brute · Traçabilité complète", icon: "step-evidence" },
     ],
@@ -290,7 +279,7 @@ const LOCALE_DATA = {
       idLabel: "Pipeline de routage et sortie",
       routeGroupAria: "Simuler la route d’exécution",
       svgTitle: "Diagramme d’architecture d’exécution ExportFlow",
-      svgDesc: "Flux de l’Agent IA via ExportFlow Core vers HTTP Fetch (local), Search (en développement) et Navigateur (prévu).",
+      svgDesc: "Flux de l’Agent IA via ExportFlow Core vers HTTP Fetch (local) et sources Search sélectionnées (en développement) ; aucun script de page n’est exécuté.",
       inputRole: "Entrée",
       agentTitle: "Agent IA",
       agentAria: "Agent IA : intention et contraintes",
@@ -304,8 +293,6 @@ const LOCALE_DATA = {
       httpAria: "HTTP Fetch : disponible en local",
       searchTitle: "Recherche",
       searchAria: "Recherche : en développement",
-      browserTitle: "Navigateur",
-      browserAria: "Navigateur : prévu",
       outputRole: "Sortie",
       resultsTitle1: "Résultats",
       resultsTitle2: "vérifiés",
@@ -317,16 +304,14 @@ const LOCALE_DATA = {
       mobileOutputMeta: "charge structurée · preuves",
       nodes: {
         agent: { id: "agent", title: "Agent IA", role: "Entrée", status: "Émetteur de contrat", bounds: "JSON <= 32 KiB", detail: "Soumet l’objectif borné, l’URL publique et les limites explicites.", connects: ["p-agent-core"] },
-        core: { id: "core", title: "ExportFlow Core", role: "Coordination", status: "Actif en local", bounds: "Auth + Garde SSRF", detail: "Valide le schéma JSON, applique la politique SSRF et route.", connects: ["p-agent-core", "p-core-http", "p-core-search", "p-core-browser"] },
+        core: { id: "core", title: "ExportFlow Core", role: "Coordination", status: "Actif en local", bounds: "Auth + Garde SSRF", detail: "Valide le schéma JSON, applique la politique SSRF et route.", connects: ["p-agent-core", "p-core-http", "p-core-search"] },
         http: { id: "http", title: "HTTP Fetch", role: "http.fetch.v1", status: "Disponible en local", bounds: "1 MiB · 8 s · 3 sauts", detail: "Récupération GET bornée avec validation des redirections et preuves.", connects: ["p-core-http", "p-http-result"] },
         search: { id: "search", title: "Recherche", role: "web.search.v1", status: "En développement", bounds: "Prototype interne", detail: "Découverte avec revalidation d’URL ; pas encore exposée publiquement.", connects: ["p-core-search", "p-search-result"] },
-        browser: { id: "browser", title: "Navigateur", role: "web.browser.v1", status: "Prévu", bounds: "501 non pris en charge", detail: "Rendu DOM isolé ; renvoie 501 tant qu’il n’est pas configuré.", connects: ["p-core-browser", "p-browser-result"] },
-        result: { id: "result", title: "Résultats vérifiés", role: "Sortie", status: "Enveloppe normalisée", bounds: "Sources + Usage", detail: "Renvoie la charge structurée, l’URL résolue et l’horodatage.", connects: ["p-http-result", "p-search-result", "p-browser-result"] },
+        result: { id: "result", title: "Résultats vérifiés", role: "Sortie", status: "Enveloppe normalisée", bounds: "Sources + Usage", detail: "Renvoie la charge structurée, l’URL résolue et l’horodatage.", connects: ["p-http-result", "p-search-result"] },
       },
       scenarios: {
         http: { id: "http", title: "HTTP Fetch", status: "Disponible en local", bounds: "200 OK · 1 MiB max · 8 s", detail: "Voie active : Agent IA -> ExportFlow Core -> http.fetch.v1 -> Résultats vérifiés.", connects: ["p-agent-core", "p-core-http", "p-http-result"] },
         search: { id: "search", title: "Recherche", status: "En développement", bounds: "Prototype · 501 sur API", detail: "Voie en développement : valide les requêtes et filtre les URL non sûres.", connects: ["p-agent-core", "p-core-search", "p-search-result"] },
-        browser: { id: "browser", title: "Navigateur", status: "Prévu", bounds: "Non configuré · 501 BROWSER_UNAVAILABLE", detail: "Voie prévue : le rendu isolé s’active uniquement avec un binding Browser.", connects: ["p-agent-core", "p-core-browser", "p-browser-result"] },
       },
     },
   },
@@ -379,7 +364,7 @@ LOCALE_DATA.es = makeCompactLocale({
   footerPrivacy: "Privacidad",
   footerCookies: "Cookies",
   footerSecurity: "Seguridad",
-  graph: { kicker: "Arquitectura de ejecución", idLabel: "Pipeline de enrutamiento y salida", agentTitle: "Agente IA", httpTitle: "HTTP Fetch", searchTitle: "Búsqueda", browserTitle: "Navegador", resultsCombined: "Resultados verificados", resultsTitle1: "Resultados", resultsTitle2: "verificados" },
+  graph: { kicker: "Arquitectura de ejecución", idLabel: "Pipeline de enrutamiento y salida", agentTitle: "Agente IA", httpTitle: "HTTP Fetch", searchTitle: "Búsqueda", resultsCombined: "Resultados verificados", resultsTitle1: "Resultados", resultsTitle2: "verificados" },
 });
 
 LOCALE_DATA.de = makeCompactLocale({
@@ -415,7 +400,7 @@ LOCALE_DATA.de = makeCompactLocale({
   footerPrivacy: "Datenschutz",
   footerCookies: "Cookies",
   footerSecurity: "Sicherheit",
-  graph: { kicker: "Ausführungsarchitektur", idLabel: "Routing- & Egress-Pipeline", agentTitle: "KI-Agent", httpTitle: "HTTP Fetch", searchTitle: "Suche", browserTitle: "Browser", resultsCombined: "Geprüfte Ergebnisse", resultsTitle1: "Geprüfte", resultsTitle2: "Ergebnisse" },
+  graph: { kicker: "Ausführungsarchitektur", idLabel: "Routing- & Egress-Pipeline", agentTitle: "KI-Agent", httpTitle: "HTTP Fetch", searchTitle: "Suche", resultsCombined: "Geprüfte Ergebnisse", resultsTitle1: "Geprüfte", resultsTitle2: "Ergebnisse" },
 });
 
 LOCALE_DATA.pt = makeCompactLocale({
@@ -451,7 +436,7 @@ LOCALE_DATA.pt = makeCompactLocale({
   footerPrivacy: "Privacidade",
   footerCookies: "Cookies",
   footerSecurity: "Segurança",
-  graph: { kicker: "Arquitetura de execução", idLabel: "Pipeline de roteamento e saída", agentTitle: "Agente de IA", httpTitle: "HTTP Fetch", searchTitle: "Busca", browserTitle: "Navegador", resultsCombined: "Resultados verificados", resultsTitle1: "Resultados", resultsTitle2: "verificados" },
+  graph: { kicker: "Arquitetura de execução", idLabel: "Pipeline de roteamento e saída", agentTitle: "Agente de IA", httpTitle: "HTTP Fetch", searchTitle: "Busca", resultsCombined: "Resultados verificados", resultsTitle1: "Resultados", resultsTitle2: "verificados" },
 });
 
 LOCALE_DATA.zh = makeCompactLocale({
@@ -487,7 +472,7 @@ LOCALE_DATA.zh = makeCompactLocale({
   footerPrivacy: "隐私政策",
   footerCookies: "Cookie 政策",
   footerSecurity: "安全策略",
-  graph: { kicker: "执行架构", idLabel: "路由与出站防护管道", agentTitle: "AI 智能体", httpTitle: "HTTP 获取", searchTitle: "搜索", browserTitle: "浏览器", resultsCombined: "验证结果", resultsTitle1: "已验证", resultsTitle2: "结果" },
+  graph: { kicker: "执行架构", idLabel: "路由与出站防护管道", agentTitle: "AI 智能体", httpTitle: "HTTP 获取", searchTitle: "搜索", resultsCombined: "验证结果", resultsTitle1: "已验证", resultsTitle2: "结果" },
 });
 
 LOCALE_DATA.ja = makeCompactLocale({
@@ -523,7 +508,7 @@ LOCALE_DATA.ja = makeCompactLocale({
   footerPrivacy: "プライバシー",
   footerCookies: "Cookie ポリシー",
   footerSecurity: "セキュリティ",
-  graph: { kicker: "実行アーキテクチャ", idLabel: "ルーティングと出力パイプライン", agentTitle: "AIエージェント", httpTitle: "HTTP取得", searchTitle: "検索", browserTitle: "ブラウザー", resultsCombined: "検証済み結果", resultsTitle1: "検証済み", resultsTitle2: "結果" },
+  graph: { kicker: "実行アーキテクチャ", idLabel: "ルーティングと出力パイプライン", agentTitle: "AIエージェント", httpTitle: "HTTP取得", searchTitle: "検索", resultsCombined: "検証済み結果", resultsTitle1: "検証済み", resultsTitle2: "結果" },
 });
 
 export function getLocaleData(locale = "en") {

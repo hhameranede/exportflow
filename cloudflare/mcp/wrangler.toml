@@ -1,6 +1,7 @@
 name = "exportflow-mcp-preview"
 main = "./index.js"
 compatibility_date = "2026-11-17"
+compatibility_flags = ["global_fetch_strictly_public"]
 workers_dev = true
 preview_urls = false
 keep_vars = true

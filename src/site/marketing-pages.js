@@ -178,7 +178,7 @@ export function renderUnifiedUseCasesPage({ t, locale, hrefFor, escapeHtml, arro
     "structured-extraction": "uc-extract",
     "deep-research": "uc-research",
     "site-mapping": "uc-map",
-    "browser-escalation": "uc-browser",
+    "request-first-discovery": "uc-search",
   };
   return `${pageHero({
 
@@ -369,7 +369,7 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
       <div class="ef-doc-body">
         <div class="ef-status-banner">
           ${statusBadgeHtml("available", t)}
-          <span>The current mainline release exposes six bounded static-web operations: Fetch, Map, Crawl, Extract, Search, and Research through REST and MCP. Browser rendering and interaction are not part of the customer execution surface. Durable task persistence, idempotency, and status reads are proposed separately in <strong>Draft PR #134</strong>; they are not enabled in Production.</span>
+          <span>The current mainline release exposes six bounded static-web operations: Fetch, Map, Crawl, Extract, Search, and Research through REST and MCP. Execution is request-first over public HTTP(S). The Durable Task lifecycle, idempotency, and status reads are merged and Production-verified.</span>
         </div>
 
         <section id="dev-auth" class="ef-doc-section">
@@ -377,7 +377,7 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
           <p>Task execution in <code>src/core/tenant-task-gateway.js</code> enforces a fail-closed multi-stage gate before any outbound HTTP allocation begins:</p>
           <ul class="ef-spec-list">
             <li><strong>Pre-auth IP rate guard:</strong> Evaluates the connecting client IP before credential hashing.</li>
-            <li><strong>Tenant credential verification:</strong> Accepts D1-backed tenant API keys (<code>Authorization: Bearer ef_live_&lt;keyId&gt;_&lt;secret&gt;</code>, verified via SHA-256 constant-time digest) or verified OAuth 2.0 / MCP tenant access claims. Each operation requires its matching scope: <code>tasks:fetch</code>, <code>tasks:map</code>, <code>tasks:crawl</code>, <code>tasks:extract</code>, <code>tasks:search</code>, or <code>tasks:research</code>. The separate <code>tasks:read</code> scope is part of Draft PR #134.</li>
+            <li><strong>Tenant credential verification:</strong> Accepts D1-backed tenant API keys (<code>Authorization: Bearer ef_live_&lt;keyId&gt;_&lt;secret&gt;</code>, verified via SHA-256 constant-time digest) or verified OAuth 2.0 / MCP tenant access claims. Each operation requires its matching scope: <code>tasks:fetch</code>, <code>tasks:map</code>, <code>tasks:crawl</code>, <code>tasks:extract</code>, <code>tasks:search</code>, or <code>tasks:research</code>. The separate <code>tasks:read</code> scope is included in the Production-verified Durable Task lifecycle.</li>
             <li><strong>Shared Durable Object burst limiter:</strong> <code>TenantBurstRateLimiter</code> serializes burst windows across REST and MCP Worker instances.</li>
             <li><strong>Atomic D1 UTC plan quota:</strong> Reserves quota in <code>tenant_request_usage</code> and emits <code>x-plan-limit</code>, <code>x-plan-remaining</code>, and <code>x-plan-reset</code> headers. Missing D1 or DO bindings fail closed with HTTP <code>503</code>.</li>
           </ul>
@@ -434,7 +434,7 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
 
         <section id="dev-routing" class="ef-doc-section">
           <h2>3. Deterministic Routing</h2>
-          <p><code>chooseExecutionPath()</code> keeps the supported customer execution path on bounded static HTTP operations. Browser rendering and interaction are intentionally excluded from the six-operation release; Playwright is used in CI for site QA, not as a customer Browser Run service.</p>
+          <p><code>chooseExecutionPath()</code> selects bounded HTTP request execution. It does not launch a remote browser or execute page JavaScript; Playwright is reserved for CI website QA and is not a customer execution runtime.</p>
         </section>
 
         <section id="dev-response" class="ef-doc-section">
@@ -450,8 +450,8 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
         </section>
 
         <section id="dev-durable" class="ef-doc-section">
-          <h2>5. Durable Task Lifecycle — Draft PR #134</h2>
-          <p><strong>Draft only · not enabled in Production.</strong> PR #134 adds a tenant-scoped durable task ledger shared by REST and MCP on the existing Request-First execution path. Its D1 migration is source-only and has not been applied.</p>
+          <h2>5. Durable Task Lifecycle — Production Verified</h2>
+          <p><strong>Production verified.</strong> The shared D1-backed task lifecycle is enabled for REST and MCP, with tenant-scoped persistence, idempotency, quota reservation, append-only events, and status reads. The bounded Production smoke workflow exercised synthetic tenant tasks through the real Workers and D1 path and cleaned up its run-scoped data. This is durable task state, not background execution: submissions still run within the request lifecycle.</p>
           <ul class="ef-spec-list">
             <li><strong>Idempotent submission:</strong> Optional REST <code>Idempotency-Key</code> values must contain 8–128 visible ASCII characters. The stored value is a tenant-scoped SHA-256 fingerprint, not the raw key. A same-tenant retry with the same effective request replays the original task without reserving quota again; reusing the key for a different request returns HTTP <code>409 IDEMPOTENCY_KEY_REUSED</code>.</li>
             <li><strong>Task status and results:</strong> Draft REST <code>GET /api/v1/tasks/{taskId}</code> and MCP <code>web_task_status({ taskId })</code> require the separate <code>tasks:read</code> scope. Reads are filtered by both tenant and task ID; another tenant receives the same not-found response as an unknown task.</li>
@@ -460,8 +460,8 @@ export function renderUnifiedDevelopersPage({ t, locale, hrefFor, escapeHtml, ar
             <li><strong>Execution limits:</strong> This version remains synchronous and Request-First. It does not add Queues, Workflows, background execution, resumable work, automatic re-run after a Worker crash, or a public cancel endpoint. Expired execution leases are marked expired rather than resumed.</li>
           </ul>
           <div class="ef-notice ef-notice-warn ef-mt-4" role="note">
-            <p class="ef-notice-title">Acceptance gate still open</p>
-            <p class="ef-notice-body">The D1-shaped SQLite tests are supplementary only. Real Cloudflare Worker + D1 acceptance must still verify migration execution, trigger atomicity, concurrent same-key requests, replay, quota exhaustion, task reads, and tenant isolation. Until that target-runtime gate and a separately approved rollout are complete, PR #134 remains Draft and none of these durable lifecycle features should be described as Production-enabled.</p>
+            <p class="ef-notice-title">Production smoke acceptance passed</p>
+            <p class="ef-notice-body">The real Production Durable Task Smoke workflow passed for REST and MCP using synthetic tenants and run-scoped data, then completed cleanup. See <a href="https://github.com/hhameranede/exportflow/actions/runs/45668027661">Production Durable Task Smoke #4</a>. This verifies the tested lifecycle path only; it does not prove that every web operation or upstream source is universally reliable.</p>
           </div>
         </section>
 
@@ -552,7 +552,7 @@ export function renderUnifiedDemoPage({ locale, hrefFor, escapeHtml, arrowRightI
   return `${pageHero({
 
     title: "Bounded Execution Workbench",
-    description: "Inspect how ExportFlow enforces task contract bounds, SSRF egress rules, deterministic routing, and normalized provenance — completely inside your browser.",
+    description: "Inspect how ExportFlow enforces task contract bounds, SSRF egress rules, deterministic routing, and normalized provenance in the interactive preview.",
     badgeHtml: `<span class="ef-badge ef-badge-dev"><span>Simulation only · 0 external network requests</span></span>`,
 
     actionsHtml: `
@@ -629,17 +629,6 @@ export function renderUnifiedDemoPage({ locale, hrefFor, escapeHtml, arrowRightI
             </div>
           </div>
 
-          <div class="ef-demo-flags">
-            <label class="ef-consent">
-              <input type="checkbox" name="requiresJavascript">
-              <span><code>requiresJavascript</code> — needs headless DOM rendering</span>
-            </label>
-            <label class="ef-consent">
-              <input type="checkbox" name="requiresInteraction">
-              <span><code>requiresInteraction</code> — needs clicks or form actions</span>
-            </label>
-          </div>
-
           <div class="ef-hero-actions">
             <button type="submit" class="ef-btn ef-btn-primary">
               <span>Simulate Bounded Execution</span>
@@ -647,7 +636,7 @@ export function renderUnifiedDemoPage({ locale, hrefFor, escapeHtml, arrowRightI
             </button>
             <button type="button" class="ef-btn ef-btn-secondary" data-demo-reset>Reset</button>
           </div>
-          <p class="ef-form-banner" role="status" data-demo-status>Ready. No live upstream fetch is sent from this browser workbench.</p>
+          <p class="ef-form-banner" role="status" data-demo-status>Ready. The preview is illustrative and sends no live upstream request.</p>
         </form>
 
         <div class="ef-demo-output-col">
@@ -702,7 +691,7 @@ export function renderUnifiedDemoPage({ locale, hrefFor, escapeHtml, arrowRightI
             </div>
 
             <div class="ef-code-foot">
-              <span>Deterministic browser simulation matching src/core/egress-guard.js &amp; task-contract.js</span>
+              <span>Deterministic request-policy simulation matching src/core/egress-guard.js &amp; task-contract.js</span>
               <span>JSON</span>
             </div>
           </div>
@@ -736,7 +725,6 @@ export function renderUnifiedRichRoute(routePath, route, { t, locale, hrefFor, e
       ["/product/web-intelligence", "Web Intelligence", "available", "Bounded HTTP Fetch (http.fetch.v1) plus internal map/crawl/extract modules.", "web-intelligence"],
       ["/product/execution-orchestration", "Execution Orchestration", "development", "Task Contract validation, deterministic routing, and tenant gateway controls.", "execution-orchestration"],
       ["/product/developer-platform", "Developer Platform", "development", "REST endpoints, Better Auth / 2FA, and OAuth 2.0 / MCP preview flows.", "developer-platform"],
-      ["/product/browser-automation", "Browser Automation", "planned", "Isolated rendering escalation path (currently returns 501 BROWSER_UNAVAILABLE).", "browser-automation"],
       ["/product/persistent-intelligence", "Persistent Intelligence", "planned", "Future durable queues, long-running task storage, and resumption.", "persistent-intelligence"],
     ];
     return `${pageHero({
@@ -784,13 +772,7 @@ export function renderUnifiedRichRoute(routePath, route, { t, locale, hrefFor, e
         state: "development",
         modules: "src/index.js · src/core/auth-app.js · src/mcp/preview-worker.js",
         summary: "Exposes /api/v1/health, /api/v1/platform, /api/v1/router-preview, and authenticated POST /api/v1/tasks alongside Better Auth (TOTP 2FA) and OAuth 2.0 / MCP preview authorization.",
-        details: "Local developer commands and interactive browser simulations are available directly without remote credentials.",
-      },
-      "/product/browser-automation": {
-        state: "planned",
-        modules: "src/core/browser-render.js · src/core/router.js",
-        summary: "Escalation path designed for JavaScript-rendered applications and explicitly authorized browser workflows when static HTTP retrieval is insufficient.",
-        details: "Requests specifying requiresJavascript or requiresInteraction fail closed with HTTP 501 (BROWSER_UNAVAILABLE / BROWSER_INTERACTION_UNAVAILABLE) until a vetted Browser binding and security review are attached.",
+        details: "Local request-policy previews are available without remote credentials or outbound network calls.",
       },
       "/product/persistent-intelligence": {
         state: "planned",
@@ -824,7 +806,7 @@ export function renderUnifiedRichRoute(routePath, route, { t, locale, hrefFor, e
           </div>
           <div class="ef-info-card">
             <h3>Interactive Workbench</h3>
-            <p>Test URL egress validation, byte limits, and 501 escalation paths in-browser.</p>
+            <p>Test URL egress validation, byte limits, and contract rejection paths in the local preview.</p>
             <p class="ef-mt-12"><a class="ef-cap-link" href="${hrefFor("/demo", locale)}">Launch preview ${arrowUpRightIcon("ef-icon ef-icon-xs ef-dir-arrow")}</a></p>
           </div>
         </div>
@@ -911,7 +893,7 @@ export function renderUnifiedRichRoute(routePath, route, { t, locale, hrefFor, e
       ["Multi-Tenant D1 Auth & Quotas", "available", "Per-tenant ef_live_* API keys, atomic UTC plan quota windows, and shared TenantBurstRateLimiter Durable Object."],
       ["Better Auth, TOTP 2FA & MCP Preview", "development", "Account portal (/signin, /account), owner MFA step-up, OAuth tenant consent UI, and MCP preview worker."],
       ["Internal Web Intelligence Adapters", "development", "Unit-tested web.map.v1, web.crawl.v1, web.extract.v1, web.search.v1, and web.research.v1 factories."],
-      ["Browser Runtime & Durable Queues", "planned", "Isolated JS rendering binding (currently 501) and persistent async task orchestration."],
+      ["Production Durable Tasks", "available", "D1-backed task persistence, idempotency, quota enforcement, and task-status reads passed Production REST/MCP smoke acceptance."],
     ];
 
     return `${pageHero({

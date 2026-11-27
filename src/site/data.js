@@ -22,7 +22,7 @@ export const CAPABILITIES = Object.freeze([
     maturity: "Local Runtime Verified",
     maturityKey: "local-verified",
     summary:
-      "Bounded direct HTTP(S) retrieval for public text, HTML, JSON, and XML sources without headless browser overhead.",
+      "Bounded direct HTTP(S) retrieval for eligible public text, HTML, JSON, and XML resources.",
     details:
       "Verified in Node.js 22/24 and local Cloudflare Workerd via authenticated POST /api/v1/tasks when D1 tenant auth and quota tables are configured. Enforces SSRF egress checks, manual redirect revalidation, and streamed byte caps. Production rollout is pending.",
     limits: [
@@ -83,25 +83,8 @@ export const CAPABILITIES = Object.freeze([
     ],
   },
   {
-    id: "browser-exec",
-    index: "05",
-    name: "Browser Execution",
-    adapterId: "web.browser.v1 (factory)",
-    maturity: "Concept",
-    maturityKey: "concept",
-    summary:
-      "Escalation path for JavaScript-rendered pages and explicitly authorized interactive sessions when direct HTTP is insufficient.",
-    details:
-      "Router detects requiresJavascript and requiresInteraction signals, and Core contains a render-only factory behind an injected Browser binding. No live browser binding is configured, and user-directed clicks or form interactions remain unimplemented.",
-    limits: [
-      "Always returns 501 unsupported on current endpoints",
-      "Prototype render factory enforces 15s budget and 512 KiB HTML cap",
-      "Requires separate egress and DNS-rebinding review before enabling",
-    ],
-  },
-  {
     id: "orchestration",
-    index: "06",
+    index: "05",
     name: "Gateway, Auth & Quotas",
     adapterId: "tenant-task-gateway / Better Auth",
     maturity: "In Development",
@@ -129,7 +112,7 @@ export const VALUE_PILLARS = Object.freeze([
     number: "02",
     title: "Multiple execution engine types",
     description:
-      "The router selects the lightest suitable path first—direct HTTP retrieval before any heavier rendering engine is considered.",
+      "The router selects bounded public HTTP request execution for supported tasks; it does not launch browser sessions or execute page JavaScript.",
   },
   {
     number: "03",
@@ -177,7 +160,7 @@ export const PLATFORM_LAYERS = Object.freeze([
     responsibility:
       "Schema boundary that validates every incoming payload before quota reservation, routing, or outbound network allocation occurs.",
     howItWorks:
-      "Enforces a 32 KiB JSON body ceiling, fatal UTF-8 decoding, an explicit allowlist of top-level keys (goal, url, operation, requiresJavascript, requiresInteraction, limits), and bounded integer constraints on limits.",
+      "Enforces a 32 KiB JSON body ceiling, fatal UTF-8 decoding, an explicit allowlist of task, URL, operation, and bounded limit fields, and rejects unknown properties before quota reservation or network allocation.",
     controls: "Unknown properties rejected with 400 INVALID_TASK; unenabled operations fail early with 501.",
   },
   {
@@ -199,7 +182,7 @@ export const PLATFORM_LAYERS = Object.freeze([
     responsibility:
       "Evaluates task requirements and selects the lowest-cost, lowest-risk execution path capable of fulfilling the request.",
     howItWorks:
-      "chooseExecutionPath() defaults static retrieval to the http path with escalationAllowed metadata, while flagging requiresJavascript or requiresInteraction tasks for the browser path (which presently halts cleanly with 501 unsupported).",
+      "chooseExecutionPath() selects the bounded HTTP request path for every supported task; there is no alternate execution runtime.",
     controls: "Deterministic pure selection logic; never silently falls back to unconfigured bindings.",
   },
   {
@@ -303,37 +286,6 @@ export const USE_CASES = Object.freeze([
     },
   },
   {
-    id: "browser-execution",
-    title: "Browser-based Execution",
-    maturity: "Concept / Render Prototype Only (Disabled)",
-    maturityKey: "concept",
-    summary:
-      "An agent requires DOM rendering or bounded interaction on a dynamic web application where raw HTTP returns only an empty shell.",
-    problem:
-      "Running unmanaged headless browsers exposes internal networks, consumes unpredictable memory, and mixes navigation with untrusted page scripts.",
-    agentRole:
-      "Marks requiresJavascript or requiresInteraction in the task intent when static retrieval cannot expose required DOM state.",
-    exportflowRole:
-      "Routes the task to the browser path. Currently returns 501 unsupported cleanly rather than simulating fake results; planned execution isolates sessions under strict navigation budgets.",
-    sampleJson: {
-      taskId: "ef_demo_browser_03",
-      state: "unsupported",
-      execution: {
-        path: "browser",
-        operation: "fetch",
-        adapterId: null,
-        reason: "The task requires page rendering or user-directed interaction.",
-      },
-      errors: [
-        {
-          code: "BROWSER_UNAVAILABLE",
-          message: "Browser Run binding is not configured.",
-        },
-      ],
-      usage: { durationMs: 2, requestsAttempted: 0, responseBytes: 0, cost: null },
-    },
-  },
-  {
     id: "long-running-workflows",
     title: "Long-running Workflows",
     maturity: "Concept / Planned Infrastructure",
@@ -355,6 +307,31 @@ export const USE_CASES = Object.freeze([
         { type: "task.succeeded", at: "2026-11-19T12:05:00.340Z" },
       ],
       note: "Current Phase 1 executes ephemerally per request; durable persistence is not yet connected.",
+    },
+  },
+  {
+    id: "request-first-discovery",
+    title: "Request-first Dynamic Content Discovery",
+    maturity: "Planned · HTTP-only",
+    maturityKey: "concept",
+    summary:
+      "An agent finds public data exposed in HTML, embedded JSON, metadata, and documented public API endpoints without running page scripts.",
+    problem:
+      "Dynamic websites may place useful public data in linked endpoints or embedded state while their visible interface is assembled by client-side code.",
+    agentRole:
+      "Inspects retrieved HTML and public resource references, then identifies eligible HTTP endpoints that can be requested directly.",
+    exportflowRole:
+      "Retrieves eligible public resources through bounded HTTP requests, treats JavaScript assets as untrusted data, and reports unsupported when no usable public endpoint exists.",
+    sampleJson: {
+      taskId: "ef_demo_request_discovery_06",
+      state: "planned",
+      execution: { path: "http", operation: "fetch", adapterId: "http.fetch.v1" },
+      result: {
+        status: "partial",
+        data: { discoveredPublicEndpoints: [], scriptExecution: false },
+        sources: [{ url: "https://example.org/app", evidence: [{ type: "http_response", status: 200 }] }],
+        warnings: ["Illustrative only: no browser session or page JavaScript execution is available."],
+      },
     },
   },
   {
@@ -394,8 +371,6 @@ export const DEMO_PRESETS = Object.freeze({
     goal: "Retrieve homepage title, status code, and source evidence",
     url: "https://example.com/",
     operation: "fetch",
-    requiresJavascript: false,
-    requiresInteraction: false,
     timeoutMs: 8000,
     maxBytes: 1048576,
     maxRedirects: 3,
@@ -413,8 +388,6 @@ export const DEMO_PRESETS = Object.freeze({
     goal: "Follow HTTPS redirect safely and record every hop in provenance",
     url: "https://docs.example.org/latest",
     operation: "fetch",
-    requiresJavascript: false,
-    requiresInteraction: false,
     timeoutMs: 5000,
     maxBytes: 262144,
     maxRedirects: 2,
@@ -438,8 +411,6 @@ export const DEMO_PRESETS = Object.freeze({
     goal: "Attempt access to local metadata endpoint to verify egress defense",
     url: "http://127.0.0.1/admin",
     operation: "fetch",
-    requiresJavascript: false,
-    requiresInteraction: false,
     timeoutMs: 8000,
     maxBytes: 1048576,
     maxRedirects: 3,
@@ -450,24 +421,21 @@ export const DEMO_PRESETS = Object.freeze({
     goal: "Fetch resource with tight 100-byte safety limit",
     url: "https://example.com/",
     operation: "fetch",
-    requiresJavascript: false,
-    requiresInteraction: false,
     timeoutMs: 8000,
     maxBytes: 100,
     maxRedirects: 3,
     forceOutcome: "RESPONSE_TOO_LARGE",
   },
-  "browser-unsupported": {
-    id: "browser-unsupported",
-    label: "Browser Escalation (501)",
-    goal: "Render client-side SPA dashboard requiring JS execution",
+  "request-only-unavailable": {
+    id: "request-only-unavailable",
+    label: "JavaScript-only Content (Unsupported)",
+    goal: "Retrieve content that is only exposed after client-side JavaScript runs",
     url: "https://app.example.org/dashboard",
     operation: "fetch",
-    requiresJavascript: true,
-    requiresInteraction: false,
     timeoutMs: 8000,
     maxBytes: 1048576,
     maxRedirects: 3,
+    forceOutcome: "NO_PUBLIC_HTTP_ENDPOINT",
   },
 });
 
@@ -481,7 +449,7 @@ export const DEVELOPER_ERROR_CODES = Object.freeze([
   { code: "PAYLOAD_TOO_LARGE", status: 413, cause: "Task JSON request exceeds 32,768 bytes.", recovery: "Trim goal text or unused fields within 32 KiB." },
   { code: "INVALID_TASK / INVALID_GOAL / INVALID_LIMIT", status: 400, cause: "Unknown keys, invalid goal length, or out-of-range limits.", recovery: "Restrict keys to documented contract and integer limits." },
   { code: "URL_NOT_ALLOWED", status: 400, cause: "Non-HTTP(S), IP literal, embedded credentials, non-default port, or blocked host.", recovery: "Supply a public HTTP(S) DNS domain URL." },
-  { code: "OPERATION_NOT_ENABLED / BROWSER_UNAVAILABLE", status: 501, cause: "Operation other than fetch, or requiresJavascript/requiresInteraction requested.", recovery: "Use operation: \"fetch\" for Phase 1; browser and crawl remain unexposed on the task API." },
+  { code: "OPERATION_NOT_ENABLED", status: 501, cause: "The requested operation is not enabled on the current task endpoint.", recovery: "Use an operation exposed by the current REST/MCP capability contract." },
   { code: "RESPONSE_TOO_LARGE", status: 413, cause: "Upstream content-length or streamed body exceeded maxBytes.", recovery: "Increase limits.maxBytes up to 1,048,576 or target a smaller document." },
   { code: "UPSTREAM_TIMEOUT", status: 504, cause: "Upstream server did not complete within limits.timeoutMs.", recovery: "Retry with backoff or adjust timeoutMs up to 8000." },
   { code: "REDIRECT_NOT_ALLOWED / REDIRECT_DOWNGRADE", status: 502, cause: "Redirect pointed to blocked destination or downgraded HTTPS to HTTP.", recovery: "Inspect target chain; policy intentionally blocks unsafe hops." },
@@ -493,7 +461,7 @@ export const FAQ_ITEMS = Object.freeze([
     category: "Overview",
     question: "What is ExportFlow?",
     answer:
-      "ExportFlow is Agent Execution Infrastructure—a unified execution layer being built to let AI systems delegate bounded external tasks (such as fetching, mapping, structured extraction, and eventually browser execution) and receive normalized results with source evidence.",
+      "ExportFlow is Agent Execution Infrastructure—a unified execution layer for bounded public HTTP requests and structured web operations, returning normalized results with source evidence.",
   },
   {
     id: "diff-from-ai-model",
@@ -514,7 +482,7 @@ export const FAQ_ITEMS = Object.freeze([
     category: "Architecture",
     question: "What is an execution engine?",
     answer:
-      "An execution engine is the underlying runtime or capability that carries out a bounded operation—for example, direct Workers HTTP Fetch for static text/HTML/JSON retrieval, a deterministic parser for schema extraction, or a future headless browser environment for JavaScript-dependent apps.",
+      "An execution engine is the runtime that carries out a bounded operation—for example, direct Workers HTTP Fetch for public resources and deterministic parsers for structured extraction. ExportFlow does not execute page JavaScript or run browser sessions.",
   },
   {
     id: "what-is-adapter",
@@ -550,13 +518,6 @@ export const FAQ_ITEMS = Object.freeze([
     question: "Can developers integrate through an API or MCP?",
     answer:
       "In local and acceptance Workers with D1 and Durable Object bindings, callers can exercise POST /api/v1/tasks (with an ef_live_* tenant key) alongside unauthenticated discovery routes (/api/v1/health, /api/v1/platform, /api/v1/router-preview). An MCP preview Worker with Better Auth OAuth 2.0 consent also exists in the repository for staged verification.",
-  },
-  {
-    id: "hosted-browser",
-    category: "Capabilities",
-    question: "Does ExportFlow require a hosted browser?",
-    answer:
-      "No. ExportFlow starts with direct HTTP retrieval because most read-only web tasks do not need browser overhead. While Core includes a render-only Browser adapter prototype factory, no browser binding is connected today and browser tasks cleanly return 501 unsupported.",
   },
   {
     id: "ssrf-defense",
