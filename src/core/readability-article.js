@@ -1,0 +1,113 @@
+import readabilityPackage from "@mozilla/readability";
+import { DOMParser } from "linkedom/worker";
+import {
+  OPEN_SOURCE_PARSER_LIMITS,
+  OpenSourceParserError,
+  boundedInteger,
+  validateOptionsObject,
+  validatePageUrl,
+  validateTextInput,
+} from "./open-source-parser-common.js";
+
+const Readability = readabilityPackage.Readability;
+
+/**
+ * Parses an already-fetched HTML document into article text and metadata.
+ * This function performs no network requests and never executes page scripts.
+ */
+export function extractReadableArticle(html, options = {}) {
+  validateOptionsObject(options, "HTML parser");
+  const maxBytes = boundedInteger(
+    options.maxBytes,
+    OPEN_SOURCE_PARSER_LIMITS.maxHtmlBytes,
+    OPEN_SOURCE_PARSER_LIMITS.maxHtmlBytes,
+    "maxBytes"
+  );
+  const maxElements = boundedInteger(
+    options.maxElements,
+    OPEN_SOURCE_PARSER_LIMITS.maxArticleElements,
+    OPEN_SOURCE_PARSER_LIMITS.maxArticleElements,
+    "maxElements"
+  );
+  const maxTextCharacters = boundedInteger(
+    options.maxTextCharacters,
+    OPEN_SOURCE_PARSER_LIMITS.maxArticleTextCharacters,
+    OPEN_SOURCE_PARSER_LIMITS.maxArticleTextCharacters,
+    "maxTextCharacters"
+  );
+  const inputBytes = validateTextInput(html, maxBytes, "HTML");
+  const pageUrl = validatePageUrl(options.url);
+
+  let document;
+  try {
+    document = new DOMParser().parseFromString(html, "text/html");
+  } catch {
+    throw new OpenSourceParserError("HTML_PARSE_FAILED", "HTML could not be parsed by the DOM implementation.", 422);
+  }
+  if (!document?.documentElement) {
+    throw new OpenSourceParserError("HTML_PARSE_FAILED", "HTML did not produce a document element.", 422);
+  }
+
+  // LinkeDOM resolves Document.baseURI through the first <base> element.
+  // Supplying the already-validated final URL avoids resolving article links
+  // against an unrelated Worker/global location.
+  const head = document.querySelector("head");
+  if (head) {
+    const base = document.createElement("base");
+    base.setAttribute("href", pageUrl.href);
+    head.insertBefore(base, head.firstChild);
+  }
+  if (!("documentURI" in document)) {
+    Object.defineProperty(document, "documentURI", {
+      configurable: true,
+      value: pageUrl.href,
+    });
+  }
+
+  let parsed;
+  try {
+    parsed = new Readability(document, {
+      maxElemsToParse: maxElements,
+      charThreshold: 200,
+      disableJSONLD: false,
+      debug: false,
+    }).parse();
+  } catch {
+    throw new OpenSourceParserError("READABILITY_FAILED", "Article extraction failed for this document.", 422);
+  }
+
+  if (!parsed) {
+    return {
+      status: "no_article",
+      method: "mozilla-readability",
+      sourceUrl: pageUrl.href,
+      inputBytes,
+      title: document.title || null,
+      textContent: "",
+      length: 0,
+      excerpt: null,
+      byline: null,
+      siteName: null,
+      language: document.documentElement.getAttribute("lang") || null,
+      truncated: false,
+    };
+  }
+
+  const rawText = String(parsed.textContent || "").trim();
+  return {
+    status: "succeeded",
+    method: "mozilla-readability",
+    sourceUrl: pageUrl.href,
+    inputBytes,
+    title: typeof parsed.title === "string" ? parsed.title.slice(0, 500) : null,
+    textContent: rawText.slice(0, maxTextCharacters),
+    length: rawText.length,
+    excerpt: typeof parsed.excerpt === "string" ? parsed.excerpt.slice(0, 1_200) : null,
+    byline: typeof parsed.byline === "string" ? parsed.byline.slice(0, 300) : null,
+    siteName: typeof parsed.siteName === "string" ? parsed.siteName.slice(0, 300) : null,
+    language: typeof parsed.lang === "string"
+      ? parsed.lang.slice(0, 32)
+      : (document.documentElement.getAttribute("lang") || null),
+    truncated: rawText.length > maxTextCharacters,
+  };
+}
