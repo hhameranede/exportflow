@@ -12,7 +12,7 @@ if (!token || !accountTag) {
   process.exit(0);
 }
 
-const query = `query GetWorkersAnalytics($accountTag: String! $datetimeStart: String! $datetimeEnd: String! $scriptName: string) {
+const query = `query GetWorkersAnalytics($accountTag: String!, $datetimeStart: String!, $datetimeEnd: String!, $scriptName: String!) {
   viewer {
     accounts(filter: { accountTag: $accountTag }) {
       workersInvocationsAdaptive(limit: 100, filter: {
