@@ -3,7 +3,7 @@ name: Worker CI
 # Keep one full QA run per PR; never cancel a main release workflow.
 concurrency:
  group: worker-ci-${{ github.event.pull_request.number || github.ref }}
- cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.head_commit.message == 'acceptance: run isolated P0 Stage 2 six-operation acceptance') }}
+ cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/feat/p0-stage2-six-operation-acceptance-20261127') }}
 
 on:
  workflow_dispatch:
@@ -29,18 +29,18 @@ jobs:
    - run: npm test
    - run: npm run check
    - name: Install pinned Playwright and Chromium outside project dependencies
-     if: ${{ !(github.event_name == 'push' && github.event.head_commit.message == 'acceptance: run isolated P0 Stage 2 six-operation acceptance') }}
+     if: github.event_name != 'push' || github.event.head_commit.message != 'acceptance: run isolated P0 Stage 2 six-operation acceptance'
      run: |
       npm install --prefix "$RUNNER_TEMP/ef-browser" --no-save --package-lock=false playwright@1.65.1
       "$RUNNER_TEMP/ef-browser/node_modules/.bin/playwright" install --only-shell chromium
    - name: Run full-site Chromium QA (all routes, locales, icons and mobile widths)
-     if: ${{ !(github.event_name == 'push' && github.event.head_commit.message == 'acceptance: run isolated P0 Stage 2 six-operation acceptance') }}
+     if: github.event_name != 'push' || github.event.head_commit.message != 'acceptance: run isolated P0 Stage 2 six-operation acceptance'
      env:
       PLAYWRIGHT_MODULE: ${{ runner.temp }}/ef-browser/node_modules/playwright/index.mjs
       SITE_SCREENSHOT_DIR: ${{ runner.temp }}/exportflow-site-qa
      run: node scripts/site-browser-qa.mjs
    - name: Upload full-site browser QA report and screenshots
-     if: ${{ always() && !(github.event_name == 'push' && github.event.head_commit.message == 'acceptance: run isolated P0 Stage 2 six-operation acceptance') }}
+     if: always() && (github.event_name != 'push' || github.event.head_commit.message != 'acceptance: run isolated P0 Stage 2 six-operation acceptance')
      uses: actions/upload-artifact@v4
      with:
       name: exportflow-full-site-qa
