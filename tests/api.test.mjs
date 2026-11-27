@@ -155,7 +155,8 @@ test("Acceptance DNS rebinding probes are isolated, authenticated, HEAD-only, an
     const response = await worker.fetch(request, env);
     assert.equal(response.status, 200);
     const diagnostic = await response.json();
-    assert.equal(diagnostic.status, "mixed");
+    assert.equal(diagnostic.status, "inconclusive");
+    assert.match(diagnostic.reason, /do not identify the connected IP/);
     assert.equal(diagnostic.attempts, 12);
     assert.equal(diagnostic.baselinePublicResponses, 1);
     assert.equal(diagnostic.probePublicResponses, 0);
