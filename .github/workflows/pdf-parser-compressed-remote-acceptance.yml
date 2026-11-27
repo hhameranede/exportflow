@@ -17,6 +17,8 @@ jobs:
         github.event.head_commit.message == 'acceptance: run isolated compressed PDF parser Acceptance'
       }}
     runs-on: ubuntu-latest
+    environment:
+      name: exportflow-preview
     timeout-minutes: 20
     env:
       CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
