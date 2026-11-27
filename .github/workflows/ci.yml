@@ -160,12 +160,50 @@ jobs:
    - name: Clean up run-scoped synthetic Acceptance data
      if: always() && steps.acceptance-gate.outputs.run == 'true'
      run: node scripts/acceptance/durable-task-runtime.mjs cleanup
- stage2-acceptance:
+ deploy-stage2-acceptance:
   needs: test
+  # One-shot, explicitly approved deployment to the two dedicated Acceptance Workers only.
   if: >-
    ${{ github.event_name == 'push' &&
         github.ref == 'refs/heads/feat/p0-stage2-six-operation-acceptance-20261127' &&
-        github.event.head_commit.message == 'acceptance: run isolated P0 Stage 2 six-operation acceptance' }}
+        github.event.head_commit.message == 'acceptance: deploy isolated P0 Stage 2 workers and run six-operation acceptance' }}
+  runs-on: ubuntu-latest
+  timeout-minutes: 10
+  env:
+   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+   CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+  steps:
+   - uses: actions/checkout@v4
+     with:
+      ref: ${{ github.sha }}
+   - uses: actions/setup-node@v4
+     with:
+      node-version: 24
+   - name: Install Worker build dependencies
+     run: npm install --no-audit --no-fund
+   - name: Verify isolated Acceptance deployment credentials
+     run: |
+      if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+       echo "::error::Missing CLOUDFLARE_API_TOKEN (or CF_API_TOKEN) GitHub Actions secret."
+       exit 1
+      fi
+   - name: Verify exact Acceptance Worker targets
+     run: |
+      set -euo pipefail
+      grep -Fx 'name = "exportflow-task-platform-acceptance-20261124"' cloudflare/task-acceptance/platform.wrangler.toml
+      grep -Fx 'name = "exportflow-task-mcp-acceptance-20261124"' cloudflare/task-acceptance/mcp.wrangler.toml
+      test ! -e migrations/0006_stage2_acceptance.sql
+   - name: Deploy isolated Task Platform Acceptance Worker only
+     run: npx --yes wrangler@4 deploy --config cloudflare/task-acceptance/platform.wrangler.toml
+   - name: Deploy isolated Task MCP Acceptance Worker only
+     run: npx --yes wrangler@4 deploy --config cloudflare/task-acceptance/mcp.wrangler.toml
+
+ stage2-acceptance:
+  needs: [test, deploy-stage2-acceptance]
+  if: >-
+   ${{ github.event_name == 'push' &&
+        github.ref == 'refs/heads/feat/p0-stage2-six-operation-acceptance-20261127' &&
+        github.event.head_commit.message == 'acceptance: deploy isolated P0 Stage 2 workers and run six-operation acceptance' }}
   runs-on: ubuntu-latest
   timeout-minutes: 20
   env:
