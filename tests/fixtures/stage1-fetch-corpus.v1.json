@@ -1,0 +1,277 @@
+{
+  "version": "1.0.0",
+  "createdAt": "2026-11-27",
+  "purpose": "Representative, bounded Stage 1 request-only Fetch acceptance corpus. Live cases are probes, not passes, until executed by the pinned Cloudflare Acceptance Workers.",
+  "limits": {
+    "maxResponseBytes": 1048576,
+    "maxRedirects": 3,
+    "timeoutMs": 8000
+  },
+  "sources": [
+    {
+      "id": "wpt-url",
+      "repository": "web-platform-tests/wpt",
+      "commit": "6f48032a9675c1d4cd53124d9fb36ccd8d6bd354",
+      "paths": [
+        "url/resources/urltestdata.json",
+        "url/resources/IdnaTestV2.json"
+      ],
+      "license": "BSD-3-Clause",
+      "licenseFile": "LICENSE.md"
+    },
+    {
+      "id": "whatwg-encoding",
+      "repository": "whatwg/encoding",
+      "commit": "7d2e3e08e11f57ba1b080390b490d53648c6f69c",
+      "paths": [
+        "encodings.json"
+      ],
+      "license": "WHATWG Standard source; normative standard linked in corpus documentation"
+    },
+    {
+      "id": "wpt-legacy-encoding",
+      "repository": "web-platform-tests/wpt",
+      "commit": "6f48032a9675c1d4cd53124d9fb36ccd8d6bd354",
+      "paths": [
+        "encoding/legacy-mb-japanese/shift_jis/sjis_chars-shift-jis.html",
+        "encoding/legacy-mb-japanese/shift_jis/sjis_chars-shift-jis.html.headers",
+        "encoding/legacy-mb-japanese/euc-jp/eucjp_chars.html",
+        "encoding/legacy-mb-japanese/euc-jp/eucjp_chars.html.headers",
+        "encoding/legacy-mb-korean/euc-kr/euckr_chars.html",
+        "encoding/legacy-mb-korean/euc-kr/euckr_chars.html.headers"
+      ],
+      "license": "BSD-3-Clause",
+      "licenseFile": "LICENSE.md"
+    }
+  ],
+  "urlParsing": [
+    {
+      "id": "encoded-dot-segment",
+      "input": "http://example.com/foo/%2e",
+      "expectedHref": "http://example.com/foo/"
+    },
+    {
+      "id": "percent-encoded-space",
+      "input": "http://example.com/%20foo",
+      "expectedHref": "http://example.com/%20foo"
+    },
+    {
+      "id": "unicode-path",
+      "input": "http://example.com/你好你好",
+      "expectedHref": "http://example.com/%E4%BD%A0%E5%A5%BD%E4%BD%A0%E5%A5%BD"
+    },
+    {
+      "id": "special-scheme-backslashes",
+      "input": "http://example.com\\\\foo\\\\bar",
+      "expectedHref": "http://example.com//foo//bar"
+    },
+    {
+      "id": "reserved-path-punctuation",
+      "input": "http://example.com/(%28:%3A%29)",
+      "expectedHref": "http://example.com/(%28:%3A%29)"
+    },
+    {
+      "id": "percent-escape-case-preservation",
+      "input": "http://example.com/foo%41%7a",
+      "expectedHref": "http://example.com/foo%41%7a"
+    },
+    {
+      "id": "default-https-port",
+      "input": "https://example.com:443/",
+      "expectedHref": "https://example.com/"
+    },
+    {
+      "id": "unicode-fragment",
+      "input": "http://www.google.com/foo?bar=baz# »",
+      "expectedHref": "http://www.google.com/foo?bar=baz#%20%C2%BB"
+    }
+  ],
+  "idna": [
+    {
+      "id": "german-sharp-s",
+      "inputHost": "faß.de",
+      "expectedAsciiHost": "xn--fa-hia.de"
+    },
+    {
+      "id": "german-umlaut",
+      "inputHost": "Bücher.de",
+      "expectedAsciiHost": "xn--bcher-kva.de"
+    },
+    {
+      "id": "arabic-label",
+      "inputHost": "نامه‌ای.com",
+      "expectedAsciiHost": "xn--mgba3gch31f060k.com"
+    },
+    {
+      "id": "existing-punycode",
+      "inputHost": "xn--fa-hia.de",
+      "expectedAsciiHost": "xn--fa-hia.de"
+    },
+    {
+      "id": "joiner-context-rejected",
+      "inputHost": "a‌b",
+      "expectedAsciiHost": null
+    },
+    {
+      "id": "bidi-rule-rejected",
+      "inputHost": "يa",
+      "expectedAsciiHost": null
+    }
+  ],
+  "legacyCharsetFixtures": [
+    {
+      "id": "shift-jis-japanese",
+      "encoding": "shift_jis",
+      "bytesHex": "8C EA",
+      "expectedText": "語",
+      "codePoint": "U+8A9E",
+      "sourcePath": "encoding/legacy-mb-japanese/shift_jis/sjis_chars-shift-jis.html",
+      "sourceBlob": "d6995d97e503115bf3af50eb935a15afded832b6",
+      "responseHeaderFixture": "Content-Type: text/html; charset=shift-jis"
+    },
+    {
+      "id": "euc-jp-japanese",
+      "encoding": "euc-jp",
+      "bytesHex": "B8 EC",
+      "expectedText": "語",
+      "codePoint": "U+8A9E",
+      "sourcePath": "encoding/legacy-mb-japanese/euc-jp/eucjp_chars.html",
+      "sourceBlob": "365e49d41d5b89439ba4511bda5a1ecaea6f3905",
+      "responseHeaderFixture": "Content-Type: text/html; charset=euc-jp"
+    },
+    {
+      "id": "euc-kr-korean",
+      "encoding": "euc-kr",
+      "bytesHex": "F9 D3",
+      "expectedText": "漢",
+      "codePoint": "U+6F22",
+      "sourcePath": "encoding/legacy-mb-korean/euc-kr/euckr_chars.html",
+      "sourceBlob": "22b48eb69a891c24f4e20a053942ca4b88ced584",
+      "responseHeaderFixture": "Content-Type: text/html; charset=euc-kr"
+    },
+    {
+      "id": "windows-1252-existing-regression",
+      "encoding": "windows-1252",
+      "bytesHex": "63 61 66 E9",
+      "expectedText": "café",
+      "evidence": "Existing ExportFlow unit regression in tests/core.test.mjs; synthetic bytes only, not a live-source acceptance result."
+    }
+  ],
+  "liveFetch": [
+    {
+      "id": "example-domain-html",
+      "class": "static-html",
+      "url": "https://example.com/",
+      "expectedHost": "example.com",
+      "expectedHttpStatus": 200,
+      "expectedBodyContains": "Example Domain",
+      "expectedContentTypePrefix": "text/html"
+    },
+    {
+      "id": "iana-reserved-html",
+      "class": "public-reference-site",
+      "url": "https://www.iana.org/domains/reserved",
+      "expectedHost": "www.iana.org",
+      "expectedHttpStatus": 200,
+      "expectedBodyContains": "IANA-managed Reserved Domains",
+      "expectedContentTypePrefix": "text/html"
+    },
+    {
+      "id": "httpbingo-xml",
+      "class": "xml-response",
+      "url": "https://httpbingo.org/xml",
+      "expectedHost": "httpbingo.org",
+      "expectedHttpStatus": 200,
+      "expectedBodyContains": "slideshow",
+      "expectedContentTypePrefix": "application/xml"
+    },
+    {
+      "id": "httpbingo-gzip",
+      "class": "gzip-compressed-json",
+      "url": "https://httpbingo.org/gzip",
+      "expectedHost": "httpbingo.org",
+      "expectedHttpStatus": 200,
+      "expectedBodyContains": "\"gzipped\": true",
+      "expectedContentTypePrefix": "application/json",
+      "expectedDecodedContent": true
+    },
+    {
+      "id": "httpbingo-deflate",
+      "class": "deflate-compressed-json",
+      "url": "https://httpbingo.org/deflate",
+      "expectedHost": "httpbingo.org",
+      "expectedHttpStatus": 200,
+      "expectedBodyContains": "\"deflated\": true",
+      "expectedContentTypePrefix": "application/json",
+      "expectedDecodedContent": true
+    },
+    {
+      "id": "httpbingo-redirect-chain",
+      "class": "same-origin-redirect",
+      "url": "https://httpbingo.org/redirect/2",
+      "expectedHost": "httpbingo.org",
+      "expectedHttpStatus": 200,
+      "expectedBodyContains": "\"url\"",
+      "expectedContentTypePrefix": "application/json",
+      "expectedFinalPath": "/get",
+      "minimumRedirects": 1
+    },
+    {
+      "id": "httpbingo-http-404",
+      "class": "http-error",
+      "url": "https://httpbingo.org/status/404",
+      "expectedHost": "httpbingo.org",
+      "expectedHttpStatus": 404,
+      "expectedTaskState": "failed",
+      "mcp": false
+    },
+    {
+      "id": "wpt-live-shift-jis",
+      "class": "legacy-charset-shift-jis",
+      "url": "https://wpt.live/encoding/legacy-mb-japanese/shift_jis/sjis_chars-shift-jis.html",
+      "expectedHost": "wpt.live",
+      "expectedHttpStatus": 200,
+      "expectedBodyContains": "語",
+      "expectedContentTypePrefix": "text/html",
+      "expectedCharset": "shift-jis",
+      "expectedDecodedContent": true,
+      "maxObservedBodyBytes": 362041
+    },
+    {
+      "id": "wpt-live-euc-jp",
+      "class": "legacy-charset-euc-jp",
+      "url": "https://wpt.live/encoding/legacy-mb-japanese/euc-jp/eucjp_chars.html",
+      "expectedHost": "wpt.live",
+      "expectedHttpStatus": 200,
+      "expectedBodyContains": "語",
+      "expectedContentTypePrefix": "text/html",
+      "expectedCharset": "euc-jp",
+      "expectedDecodedContent": true,
+      "maxObservedBodyBytes": 696853
+    },
+    {
+      "id": "wpt-live-euc-kr",
+      "class": "legacy-charset-euc-kr",
+      "url": "https://wpt.live/encoding/legacy-mb-korean/euc-kr/euckr_chars.html",
+      "expectedHost": "wpt.live",
+      "expectedHttpStatus": 200,
+      "expectedBodyContains": "漢",
+      "expectedContentTypePrefix": "text/html",
+      "expectedCharset": "euc-kr",
+      "expectedDecodedContent": true,
+      "maxObservedBodyBytes": 852307
+    }
+  ],
+  "negativeCases": [
+    {
+      "id": "direct-loopback",
+      "url": "http://127.0.0.1/",
+      "expectedRejectionCode": "URL_NOT_ALLOWED"
+    },
+    {
+      "id": "redirect-to-loopback",
+      "url": "https://testserver.host/redirect-to?url=http%3A%2F%2F127.0.0.1%2F&status_code=302",
+      "expectedTaskErrorCode": "REDIRECT_NOT_ALLOWED"
+    }
+  ]
+}
