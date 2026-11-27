@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { createSyntheticPdf } from "../tests/fixtures/synthetic-pdf.mjs";
+import { createDeflatedSyntheticPdf, createSyntheticPdf } from "../tests/fixtures/synthetic-pdf.mjs";
 
 const host = "127.0.0.1";
 const port = Number(process.env.PDF_PARSER_SMOKE_PORT || 8791);
@@ -156,6 +156,29 @@ try {
     process.stdout.write("PASS large PDF cancellation regression " + attempt + "/3.\\n");
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
+
+  const expandedCharacters = 4 * 1024 * 1024;
+  const expandedPdf = createDeflatedSyntheticPdf("B".repeat(expandedCharacters));
+  assert.ok(expandedPdf.byteLength < 1_048_576);
+  const expansionStartedAt = performance.now();
+  const expandedResponse = await fetchWithTimeout("/parse", {
+    method: "POST",
+    headers: { "content-type": "application/pdf", authorization },
+    body: expandedPdf,
+  }, 20_000);
+  assert.equal(expandedResponse.status, 200);
+  const expandedResult = await readJsonWithTimeout(expandedResponse, "compressed expansion PDF parse", 20_000);
+  const expansionWallTimeMs = performance.now() - expansionStartedAt;
+  assert.equal(expandedResult.ok, true);
+  assert.equal(expandedResult.totalPages, 1);
+  assert.equal(expandedResult.text.length, 65_536);
+  assert.equal(expandedResult.truncated, true);
+  process.stdout.write(
+    "PASS Workerd FlateDecode expansion: " +
+    expandedPdf.byteLength + " compressed bytes, " +
+    expandedCharacters + " decoded content characters, " +
+    expansionWallTimeMs.toFixed(1) + "ms wall time (not CPU time).\\n",
+  );
 
   const wrongMime = await fetchWithTimeout("/parse", {
     method: "POST",
