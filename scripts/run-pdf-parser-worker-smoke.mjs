@@ -26,8 +26,26 @@ const child = spawn("npx", [
   "cloudflare/pdf-parser-compat/wrangler.toml",
 ], {
   stdio: ["ignore", "pipe", "pipe"],
-  env: { ...process.env, NO_COLOR: "1" },
+  detached: process.platform !== "win32",
+  env: {
+    ...process.env,
+    CI: "true",
+    NO_COLOR: "1",
+    WRANGLER_SEND_METRICS: "false",
+  },
 });
+
+function signalWorkerTree(signal) {
+  if (process.platform !== "win32" && child.pid) {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {
+      // Fall back to signaling the direct child if its process group is unavailable.
+    }
+  }
+  try { child.kill(signal); } catch {}
+}
 
 let output = "";
 child.stdout.setEncoding("utf8").on("data", (chunk) => { output += chunk; });
@@ -35,10 +53,9 @@ child.stderr.setEncoding("utf8").on("data", (chunk) => { output += chunk; });
 
 const watchdogId = setTimeout(() => {
   process.stderr.write("PDF parser smoke exceeded its 90-second overall deadline.\\n" + output);
-  try { child.kill("SIGKILL"); } catch {}
+  signalWorkerTree("SIGKILL");
   process.exit(1);
 }, 90_000);
-watchdogId.unref();
 
 async function readJsonWithTimeout(response, stage, timeoutMs = 15_000) {
   let timeoutId;
@@ -128,13 +145,13 @@ try {
 } finally {
   clearTimeout(watchdogId);
   if (child.exitCode === null && child.signalCode === null) {
-    child.kill("SIGTERM");
-    await new Promise((resolve) => {
-      if (child.exitCode !== null || child.signalCode !== null) return resolve();
-      child.once("exit", resolve);
-      setTimeout(() => {
-        if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
-      }, 4000).unref();
-    });
+    signalWorkerTree("SIGTERM");
+    await Promise.race([
+      new Promise((resolve) => child.once("exit", resolve)),
+      new Promise((resolve) => setTimeout(() => {
+        signalWorkerTree("SIGKILL");
+        resolve();
+      }, 4000)),
+    ]);
   }
 }
