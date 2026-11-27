@@ -29,6 +29,8 @@ jobs:
    - run: npm install --no-audit --no-fund
    - name: Inspect PDF.js bundle locations from the previous diagnostic trace
      run: node scripts/diagnostics/inspect-pdfjs-bundle-stack.mjs
+   - name: Compare PDF.js stream lifecycle paths (diagnostic only)
+     run: node scripts/diagnostics/repro-pdf-stream-lifecycle.mjs
    - name: Run unit tests with PDF parser async rejection stack tracing
      env:
       NODE_OPTIONS: --require=./scripts/diagnostics/trace-unhandled-rejections.cjs
