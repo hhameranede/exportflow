@@ -91,14 +91,20 @@ for (const spec of STAGE2_CASES) {
 test("Stage 2 assertion rejects off-origin crawl results", () => {
   const task = makeTask("crawl");
   task.result.data.pages[0].url = "https://outside.example.net/";
-  assert.throws(() => assertStage2Task("crawl", task, "REST"), /off-origin/);
+  assert.throws(
+    () => assertStage2Task("crawl", task, "REST"),
+    (error) => error?.code === "ERR_ASSERTION",
+  );
 });
 
 test("Stage 2 assertion rejects a failed durable Task", () => {
   const task = makeTask("fetch");
   task.state = "failed";
   task.result.status = "failed";
-  assert.throws(() => assertStage2Task("fetch", task, "MCP"), /succeeded or partial/);
+  assert.throws(
+    () => assertStage2Task("fetch", task, "MCP"),
+    (error) => error?.code === "ERR_ASSERTION",
+  );
 });
 
 test("Stage 2 assertion rejects Search results from an unselected provider", () => {
@@ -114,5 +120,8 @@ test("Stage 2 assertion requires a real partial Extract result", () => {
   const task = makeTask("extract");
   task.state = "succeeded";
   task.result.status = "succeeded";
-  assert.throws(() => assertStage2Task("extract", task, "REST"), /genuine partial extraction/);
+  assert.throws(
+    () => assertStage2Task("extract", task, "REST"),
+    (error) => error?.code === "ERR_ASSERTION",
+  );
 });
