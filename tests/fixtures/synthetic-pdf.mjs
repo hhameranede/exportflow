@@ -1,3 +1,5 @@
+import { deflateSync } from "node:zlib";
+
 function escapePdfText(value) {
   return String(value)
     .replace(/[^\x20-\x7e]/g, "?")
@@ -68,4 +70,57 @@ export function createSyntheticPdf(pages = ["ExportFlow synthetic PDF fixture"])
   output += "trailer\n<< /Size " + (objects.length + 1) + " /Root 1 0 R >>\n";
   output += "startxref\n" + xrefOffset + "\n%%EOF\n";
   return new Uint8Array(Buffer.from(output, "ascii"));
+}
+
+
+/**
+ * Builds a single-page PDF whose FlateDecode content stream expands to the
+ * supplied text. Intended for bounded decompression/streaming regression tests.
+ */
+export function createDeflatedSyntheticPdf(text) {
+  const value = String(text);
+  if (value.length === 0) throw new TypeError("text must not be empty.");
+
+  const lines = [];
+  for (let offset = 0; offset < value.length; offset += 60) {
+    lines.push(value.slice(offset, offset + 60));
+  }
+  const operators = lines.map((line) => "(" + escapePdfText(line) + ") Tj\nT*").join("\n");
+  const content = Buffer.from("BT\n/F1 6 Tf\n72 720 Td\n" + operators + "\nET\n", "ascii");
+  const compressed = deflateSync(content);
+  const streamObject = Buffer.concat([
+    Buffer.from("<< /Length " + compressed.byteLength + " /Filter /FlateDecode >>\nstream\n", "ascii"),
+    compressed,
+    Buffer.from("\nendstream", "ascii"),
+  ]);
+
+  const objects = [
+    Buffer.from("<< /Type /Catalog /Pages 2 0 R >>", "ascii"),
+    Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "ascii"),
+    Buffer.from("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>", "ascii"),
+    streamObject,
+    Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", "ascii"),
+  ];
+
+  const chunks = [Buffer.from("%PDF-1.4\n", "ascii")];
+  const offsets = [0];
+  let cursor = chunks[0].byteLength;
+  for (let index = 0; index < objects.length; index += 1) {
+    const prefix = Buffer.from((index + 1) + " 0 obj\n", "ascii");
+    const suffix = Buffer.from("\nendobj\n", "ascii");
+    offsets.push(cursor);
+    chunks.push(prefix, objects[index], suffix);
+    cursor += prefix.byteLength + objects[index].byteLength + suffix.byteLength;
+  }
+
+  const xrefOffset = cursor;
+  const xref = [
+    "xref\n0 " + (objects.length + 1) + "\n",
+    "0000000000 65535 f \n",
+    ...offsets.slice(1).map((offset) => String(offset).padStart(10, "0") + " 00000 n \n"),
+    "trailer\n<< /Size " + (objects.length + 1) + " /Root 1 0 R >>\n",
+    "startxref\n" + xrefOffset + "\n%%EOF\n",
+  ].join("");
+  chunks.push(Buffer.from(xref, "ascii"));
+  return new Uint8Array(Buffer.concat(chunks));
 }
