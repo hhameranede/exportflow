@@ -240,6 +240,43 @@ test("Acceptance DNS rebinding probe fails closed when the private target return
   }
 });
 
+test("Acceptance DNS rebinding probe rejects redirect responses as a public control", async () => {
+  const calls = [];
+  const sessionId = "worker-test-redirect";
+  const targetHostname = "make-185.199.108.153-rebindfor2mafter1times-127.0.0.1-rr-" + sessionId + ".1u.ms";
+  const worker = createWorker({
+    acceptanceDnsRebindingProbe: true,
+    acceptanceDnsRebindingFetch: async (input) => {
+      calls.push(String(input));
+      return new Response(null, {
+        status: 302,
+        headers: {
+          server: "Apache",
+          location: "https://info.cern.ch/",
+        },
+      });
+    },
+  });
+  const env = makeTestEnv();
+  env.EXPORTFLOW_ACCEPTANCE_RUN = "durable-task-20261124";
+  try {
+    const request = new Request(
+      "https://api.exportflow.local/__acceptance/dns-rebinding-probe?public=185.199.108.153&private=127.0.0.1&session=" + sessionId,
+      { headers: { authorization: "Bearer " + TEST_TOKEN } },
+    );
+    const response = await worker.fetch(request, env);
+    assert.equal(response.status, 200);
+    const diagnostic = await response.json();
+    assert.equal(diagnostic.status, "inconclusive");
+    assert.match(diagnostic.reason, /stable HTTP 200 or 204 without redirects/);
+    assert.equal(diagnostic.baseline.status, 302);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0], "http://" + targetHostname + "/?exportflow_acceptance_control=1");
+  } finally {
+    env.__fixture.close();
+  }
+});
+
 test("Acceptance DNS rebinding probes reject Cloudflare edge baselines and retain bounded DNS diagnostics", async () => {
   const calls = [];
   const sessionId = "worker-test-cloudflare";
