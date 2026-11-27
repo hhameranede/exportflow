@@ -304,20 +304,36 @@ function createDnsRebindingHostname(publicIp, privateIp, suffix) {
 }
 
 async function assertDnsRebindingAlternates(hostname, publicIp, privateIp) {
-  const observations = await collectDnsRebindingObservations({
-    hostname,
-    expectedAddresses: [publicIp, privateIp],
-    resolvers: DNS_REBINDING_RESOLVERS,
-    queryDnsBatches,
-  });
+  let observations;
+  try {
+    observations = await collectDnsRebindingObservations({
+      hostname,
+      expectedAddresses: [publicIp, privateIp],
+      resolvers: DNS_REBINDING_RESOLVERS,
+      queryDnsBatches,
+    });
+  } catch (error) {
+    const diagnostic = String(error?.message || "Resolver observations were incomplete.")
+      .replace(/[\\r\\n\\t]/g, " ")
+      .slice(0, 800);
+    console.warn(
+      "Runner DNS-rebinding observations are inconclusive; this is not Worker-runtime evidence: " +
+      JSON.stringify({ hostname, error: diagnostic }),
+    );
+    return { status: "inconclusive", hostname, error: diagnostic };
+  }
   const inconclusive = observations.filter((observation) => observation.status === "inconclusive");
   if (inconclusive.length > 0) {
     console.warn(
-      "Optional runner DNS diagnostics were inconclusive; the Cloudflare Worker probe remains required: " +
+      "Runner DNS-rebinding observations are incomplete; this is not Worker-runtime evidence: " +
       JSON.stringify({ hostname, observations: inconclusive }),
     );
   }
-  console.log("DNS rebinding preflight: " + JSON.stringify({ hostname, observations }));
+  const status = observations.some((observation) => observation.status === "verified")
+    ? "resolver_transition_observed"
+    : "inconclusive";
+  console.log("Runner DNS diagnostic only: " + JSON.stringify({ hostname, status, observations }));
+  return { status, hostname, observations };
 }
 
 async function runDnsRebindingAcceptance(token) {
