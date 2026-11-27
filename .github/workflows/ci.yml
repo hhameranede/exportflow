@@ -30,6 +30,7 @@ jobs:
    - run: npm test
    - run: npm run check
    - name: Run isolated local Workerd PDF parser smoke (no network, D1, or secrets)
+     timeout-minutes: 3
      run: node scripts/run-pdf-parser-worker-smoke.mjs
    - name: Install pinned Playwright and Chromium outside project dependencies
      run: |
