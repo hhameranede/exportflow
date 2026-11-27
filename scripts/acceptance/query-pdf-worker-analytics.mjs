@@ -21,7 +21,7 @@ const query = `query GetWorkersAnalytics($accountTag: string!, $datetimeStart: s
         datetime_leq: $datetimeEnd
       }) {
         sum { subrequests requests errors }
-        quantiles { cpuTimeP50 cpuTimeP99 }
+        quantiles { cpuTimeP50 cpuTimeP99 memoryUsageBytesP50 memoryUsageBytesP90 memoryUsageBytesP99 memoryUsageBytesP999 }
         dimensions { datetime scriptName status }
       }
     }
@@ -78,10 +78,14 @@ for (let attempt = 1; attempt <= 6; attempt += 1) {
       subrequests: row.sum?.subrequests ?? null,
       cpuTimeP50: row.quantiles?.cpuTimeP50 ?? null,
       cpuTimeP99: row.quantiles?.cpuTimeP99 ?? null,
+      memoryUsageBytesP50: row.quantiles?.memoryUsageBytesP50 ?? null,
+      memoryUsageBytesP90: row.quantiles?.memoryUsageBytesP90 ?? null,
+      memoryUsageBytesP99: row.quantiles?.memoryUsageBytesP99 ?? null,
+      memoryUsageBytesP999: row.quantiles?.memoryUsageBytesP999 ?? null,
     }));
     console.log("Cloudflare Workers CPU analytics (CPU quantiles reported by Cloudflare):");
     console.log(JSON.stringify({ scriptName, datetimeStart, datetimeEnd, samples }, null, 2));
-    console.log("Note: this analytics dataset does not provide per-invocation isolate memory usage.");
+    console.log("Note: memory quantiles are isolate-memory snapshots at invocation time, not exact per-request peak allocations.");
     process.exit(0);
   }
 
