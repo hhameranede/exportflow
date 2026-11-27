@@ -27,7 +27,14 @@ jobs:
      with:
       node-version: 24
    - run: npm install --no-audit --no-fund
-   - run: npm test
+   - name: Inspect PDF.js bundle locations from the previous diagnostic trace
+     run: node scripts/diagnostics/inspect-pdfjs-bundle-stack.mjs
+   - name: Compare PDF.js stream lifecycle paths (diagnostic only)
+     run: node scripts/diagnostics/repro-pdf-stream-lifecycle.mjs
+   - name: Run unit tests with PDF parser async rejection stack tracing
+     env:
+      NODE_OPTIONS: --require=./scripts/diagnostics/trace-unhandled-rejections.cjs
+     run: npm test
    - run: npm run check
    - name: Run isolated local Workerd PDF parser smoke (no network, D1, or secrets)
      timeout-minutes: 3
