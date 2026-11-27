@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { STAGE2_CASES, assertStage2Task } from "../scripts/acceptance/stage2-contract.mjs";
+import { STAGE2_CASES, assertStage2Task, summarizeStage2Failure } from "../scripts/acceptance/stage2-contract.mjs";
 
 const timestamp = "2026-11-27T14:00:00.000Z";
 
@@ -124,4 +124,66 @@ test("Stage 2 assertion requires a real partial Extract result", () => {
     () => assertStage2Task("extract", task, "REST"),
     (error) => error?.code === "ERR_ASSERTION",
   );
+});
+
+test("Stage 2 failure diagnostics expose bounded Research failure evidence without page content or secrets", () => {
+  const task = {
+    id: "stage2_task_0002",
+    state: "failed",
+    execution: { operation: "research" },
+    errors: [{ code: "SEARCH_RATE_LIMITED", message: "Safe task error." }],
+    result: {
+      status: "failed",
+      data: {
+        errorCode: "SEARCH_RATE_LIMITED",
+        query: "PRIVATE_QUERY_SHOULD_NOT_APPEAR",
+        body: "PRIVATE_PAGE_BODY_SHOULD_NOT_APPEAR",
+        selectedUrl: null,
+        attempts: [{
+          url: "https://en.wikipedia.org/w/api.php?token=PRIVATE_TOKEN_SHOULD_NOT_APPEAR",
+          stage: "fetch",
+          status: "failed",
+          reason: "UPSTREAM_FETCH_FAILED",
+          fieldsFound: 0,
+          missingRequired: ["title"],
+        }],
+        missingFields: ["title"],
+        missingRequired: ["title"],
+      },
+      sources: [],
+      warnings: ["The selected public source rate-limited this request. Retry later."],
+    },
+  };
+
+  const summary = summarizeStage2Failure("research", task, "REST");
+  assert.equal(summary.operation, "research");
+  assert.equal(summary.transport, "REST");
+  assert.equal(summary.taskState, "failed");
+  assert.equal(summary.resultStatus, "failed");
+  assert.equal(summary.errorCode, "SEARCH_RATE_LIMITED");
+  assert.deepEqual(summary.attempts, [{
+    host: "en.wikipedia.org",
+    stage: "fetch",
+    status: "failed",
+    reason: "UPSTREAM_FETCH_FAILED",
+    fieldsFound: 0,
+    missingRequired: ["title"],
+  }]);
+  const serialized = JSON.stringify(summary);
+  for (const secret of [
+    "PRIVATE_QUERY_SHOULD_NOT_APPEAR",
+    "PRIVATE_PAGE_BODY_SHOULD_NOT_APPEAR",
+    "PRIVATE_TOKEN_SHOULD_NOT_APPEAR",
+    "token=",
+  ]) {
+    assert.equal(serialized.includes(secret), false);
+  }
+});
+
+test("Stage 2 failure diagnostics handle missing optional Task fields", () => {
+  const summary = summarizeStage2Failure("research", { state: "failed" }, "MCP");
+  assert.equal(summary.taskState, "failed");
+  assert.equal(summary.resultStatus, null);
+  assert.deepEqual(summary.attempts, []);
+  assert.deepEqual(summary.errors, []);
 });
