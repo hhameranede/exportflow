@@ -1,3 +1,4 @@
+# One-shot approval marker commit; no runtime behavior change.
 name: Isolated PDF Parser Compressed Expansion Acceptance
 
 on:
