@@ -26,6 +26,17 @@ function normalizeMime(value) {
   return String(value || "").split(";")[0].trim().toLowerCase();
 }
 
+export function boundPdfText(value) {
+  const normalizedText = String(value || "")
+    .replace(/\u0000/g, "")
+    .replace(/\r\n?/g, "\n")
+    .trim();
+  return Object.freeze({
+    text: normalizedText.slice(0, PDF_PARSE_LIMITS.maxOutputCharacters),
+    truncated: normalizedText.length > PDF_PARSE_LIMITS.maxOutputCharacters,
+  });
+}
+
 export function hasPdfSignature(input) {
   const bytes = toByteArray(input);
   const limit = Math.min(bytes.byteLength - 5, 1023);
@@ -108,12 +119,9 @@ export async function extractPdfText(input, options = {}) {
 
     const extracted = await extractText(document, { mergePages: true });
     const rawText = Array.isArray(extracted.text) ? extracted.text.join("\n\n") : extracted.text;
-    const normalizedText = String(rawText || "")
-      .replace(/\u0000/g, "")
-      .replace(/\r\n?/g, "\n")
-      .trim();
+    const boundedText = boundPdfText(rawText);
 
-    if (!normalizedText) {
+    if (!boundedText.text) {
       throw new PdfParserError(
         "PDF_NO_TEXT_LAYER",
         "No extractable text layer was found. Scanned-PDF OCR is not supported.",
@@ -126,8 +134,8 @@ export async function extractPdfText(input, options = {}) {
       parser: "unpdf",
       parserVersion: "2.2.3",
       totalPages: extracted.totalPages,
-      text: normalizedText.slice(0, PDF_PARSE_LIMITS.maxOutputCharacters),
-      truncated: normalizedText.length > PDF_PARSE_LIMITS.maxOutputCharacters,
+      text: boundedText.text,
+      truncated: boundedText.truncated,
     });
   } catch (error) {
     if (error instanceof PdfParserError) throw error;
