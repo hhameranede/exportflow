@@ -239,17 +239,150 @@ function isPublicRoutableIpv4(value) {
   return true;
 }
 
-async function cancelProbeResponseBody(response) {
+function cancelProbeResponseBody(response) {
   if (!response?.body) return;
   try {
-    await response.body.cancel();
+    const cancellation = response.body.cancel();
+    if (cancellation && typeof cancellation.catch === "function") {
+      void cancellation.catch(() => {});
+    }
   } catch {
-    // HEAD responses normally have no body; cancellation is best-effort.
+    // Match production Fetch: cancellation is best-effort and must never hold the task open.
   }
 }
 
 function createDnsRebindingHostname(publicIp, privateIp, sessionId) {
-  return "make-" + publicIp + "-rebindfor2mafter1times-" + privateIp + "-rr-" + sessionId + ".1u.ms";
+  return "make-" + publicIp + "-rebindfor2mafter2times-" + privateIp + "-rr-" + sessionId + ".1u.ms";
+}
+
+function createDnsResolveFetchHostname(publicIp, privateIp, sessionId) {
+  return "make-" + publicIp + "-rebindfor0times-" + privateIp + "-rr-" + sessionId + ".1u.ms";
+}
+
+async function runAcceptanceDnsResolveFetchProbe(publicIp, privateIp, sessionId, resolve4Impl, fetchImpl = globalThis.fetch) {
+  if (!isPublicRoutableIpv4(publicIp) ||
+      !ACCEPTANCE_DNS_REBINDING_PRIVATE_IPS.has(privateIp) ||
+      typeof sessionId !== "string" ||
+      !/^[a-z0-9-]{8,48}$/.test(sessionId)) {
+    return { status: "invalid_target", publicIp, privateIp, sessionId };
+  }
+  if (typeof resolve4Impl !== "function" || typeof fetchImpl !== "function") {
+    return { status: "unavailable", reason: "Worker DNS resolve4() and native fetch() must both be available." };
+  }
+
+  const hostname = createDnsResolveFetchHostname(publicIp, privateIp, sessionId);
+  const dnsResolveStartedAt = new Date().toISOString();
+  const dnsResolveStartedAtMs = Date.now();
+  let addresses;
+  try {
+    addresses = await resolve4Impl(hostname);
+  } catch (error) {
+    return {
+      status: "dns_error",
+      hostname,
+      sessionId,
+      publicIp,
+      privateIp,
+      dnsResolveStartedAt,
+      dnsResolveElapsedMs: Date.now() - dnsResolveStartedAtMs,
+      reason: safeDiagnosticField(error?.message, 240) || "Worker resolve4() failed.",
+      fetchAttempts: 0,
+    };
+  }
+
+  const dnsResolveElapsedMs = Date.now() - dnsResolveStartedAtMs;
+  const resolve4Addresses = Array.isArray(addresses)
+    ? addresses.filter((address) => typeof address === "string").slice(0, 16)
+    : [];
+
+  // Never call fetch if the DNS-only phase already returned a private or unexpected
+  // address. Such a run cannot isolate the resolver-to-fetch transition.
+  if (resolve4Addresses.length === 0 ||
+      resolve4Addresses.some((address) => address !== publicIp)) {
+    return {
+      status: "inconclusive",
+      hostname,
+      sessionId,
+      publicIp,
+      privateIp,
+      dnsResolveStartedAt,
+      dnsResolveElapsedMs,
+      resolve4Addresses,
+      fetchAttempts: 0,
+      reason: "Worker resolve4() did not return only the public control IP; native fetch was not attempted.",
+    };
+  }
+
+  const fetchStartedAt = new Date().toISOString();
+  const fetchStartedAtMs = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8_000);
+  const requestUrl = "http://" + hostname + "/?exportflow_acceptance_single_fetch=1";
+  const requestInit = {
+    method: "GET",
+    redirect: "manual",
+    cache: "no-store",
+    signal: controller.signal,
+    headers: {
+      accept: "*/*",
+      "user-agent": "ExportFlow-Acceptance/1.0 (+https://exportflow.me)",
+    },
+  };
+
+  try {
+    const response = await fetchImpl(requestUrl, requestInit);
+    const observed = {
+      status: response.status,
+      responseUrl: safeDiagnosticField(response.url, 512),
+      redirected: response.redirected === true,
+      location: safeDiagnosticField(response.headers.get("location"), 512),
+      server: safeDiagnosticField(response.headers.get("server"), 80),
+      contentType: safeDiagnosticField(response.headers.get("content-type"), 120),
+      cfRay: safeDiagnosticField(response.headers.get("cf-ray"), 120),
+      cfErrorType: safeDiagnosticField(response.headers.get("cf-error-type"), 120),
+      cfErrorOrigin: safeDiagnosticField(response.headers.get("cf-error-origin"), 120),
+    };
+    // Any HTTP response remains unverified. Never inspect its body.
+    cancelProbeResponseBody(response);
+    return {
+      status: "http_response",
+      hostname,
+      sessionId,
+      publicIp,
+      privateIp,
+      dnsResolveStartedAt,
+      dnsResolveElapsedMs,
+      resolve4Addresses,
+      fetchStartedAt,
+      fetchElapsedMs: Date.now() - fetchStartedAtMs,
+      fetchAttempts: 1,
+      requestMethod: requestInit.method,
+      responseBodyPolicy: "cancel-before-read",
+      response: observed,
+    };
+  } catch (error) {
+    return {
+      status: "network_error",
+      hostname,
+      sessionId,
+      publicIp,
+      privateIp,
+      dnsResolveStartedAt,
+      dnsResolveElapsedMs,
+      resolve4Addresses,
+      fetchStartedAt,
+      fetchElapsedMs: Date.now() - fetchStartedAtMs,
+      fetchAttempts: 1,
+      requestMethod: requestInit.method,
+      responseBodyPolicy: "cancel-before-read",
+      error: {
+        name: safeDiagnosticField(error?.name, 80) || "Error",
+        message: safeDiagnosticField(error?.message, 240) || "Worker native fetch failed.",
+      },
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fetchImpl = globalThis.fetch, probeIntervalMs = 1_100) {
@@ -261,18 +394,28 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
     return { status: "invalid_target", publicIp, privateIp, sessionId, probes: [] };
   }
 
-  // 1u.ms returns the public IP once, then the private test target while
-  // requests continue within the configured two-minute rebinding window.
+  // With after2times, 1u.ms returns the public IP for the first two authoritative A questions,
+  // then the private target for the 2-minute window. This is distinct from recursive DoH lookups.
   const hostname = createDnsRebindingHostname(publicIp, privateIp, sessionId);
   const requestInit = {
-    method: "HEAD",
+    // Match the production GET lifecycle, but cancel every body before reading bytes.
+    // Cancellation can encourage the runtime to discard a connection; it does not
+    // guarantee a new TCP connection or a fresh DNS resolution.
+    method: "GET",
     redirect: "manual",
     cache: "no-store",
-    headers: { accept: "*/*" },
+    headers: {
+      accept: "*/*",
+      // Identify this controlled request instead of relying on a generic Worker UA.
+      "user-agent": "ExportFlow-Acceptance/1.0 (+https://exportflow.me)",
+    },
   };
 
   const fingerprint = (response) => ({
     status: response.status,
+    responseUrl: safeDiagnosticField(response.url, 512),
+    redirected: response.redirected === true,
+    location: safeDiagnosticField(response.headers.get("location"), 512),
     server: safeDiagnosticField(response.headers.get("server"), 80),
     contentType: safeDiagnosticField(response.headers.get("content-type"), 120),
     contentLength: safeDiagnosticField(response.headers.get("content-length"), 40),
@@ -282,9 +425,15 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
     cfRay: safeDiagnosticField(response.headers.get("cf-ray"), 120),
     cfCacheStatus: safeDiagnosticField(response.headers.get("cf-cache-status"), 80),
     serverTiming: safeDiagnosticField(response.headers.get("server-timing"), 180),
+    via: safeDiagnosticField(response.headers.get("via"), 160),
+    xCache: safeDiagnosticField(response.headers.get("x-cache"), 160),
+    xServedBy: safeDiagnosticField(response.headers.get("x-served-by"), 160),
   });
 
   let baseline;
+  const baselineStartedAt = new Date().toISOString();
+  const baselineStartedAtMs = Date.now();
+  let baselineElapsedMs = null;
   const baselineController = new AbortController();
   const baselineTimeout = setTimeout(() => baselineController.abort(), 8_000);
   try {
@@ -295,11 +444,16 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
       "http://" + hostname + "/?exportflow_acceptance_control=1",
       { ...requestInit, signal: baselineController.signal },
     );
+    baselineElapsedMs = Date.now() - baselineStartedAtMs;
     baseline = fingerprint(response);
-    await cancelProbeResponseBody(response);
+    cancelProbeResponseBody(response);
   } catch (error) {
     return {
       status: "inconclusive",
+      requestMethod: requestInit.method,
+      responseBodyPolicy: "cancel-before-read",
+      baselineStartedAt,
+      baselineElapsedMs: Date.now() - baselineStartedAtMs,
       hostname,
       sessionId,
       publicIp,
@@ -311,25 +465,44 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
     clearTimeout(baselineTimeout);
   }
 
+  const expectedCernControlLocation = "https://" + hostname + ".web.cern.ch/" + hostname;
+  const isKnownCernControlRedirect =
+    baseline.status === 302 &&
+    baseline.contentType?.toLowerCase() === "application/x-perl" &&
+    baseline.location === expectedCernControlLocation;
+  const cloudflareServer = baseline.server?.toLowerCase() === "cloudflare";
+  const baselineProfile = isKnownCernControlRedirect
+    ? "known_cern_control_redirect"
+    : cloudflareServer
+      ? "cloudflare_unmatched"
+      : "origin_response";
+
   if (baseline.status < 200 || baseline.status >= 500 ||
       !baseline.server ||
-      baseline.server.toLowerCase() === "cloudflare") {
+      (cloudflareServer && !isKnownCernControlRedirect)) {
     return {
       status: "inconclusive",
+      requestMethod: requestInit.method,
+      responseBodyPolicy: "cancel-before-read",
+      baselineStartedAt,
+      baselineElapsedMs,
       hostname,
       sessionId,
       publicIp,
       privateIp,
       baseline,
-      reason: baseline.server?.toLowerCase() === "cloudflare"
-        ? "The first public DNS-rebinding response came from the Cloudflare edge, not the direct public control origin."
-        : "The first public DNS-rebinding response must be an HTTP response with a non-empty non-Cloudflare server header.",
+      baselineProfile,
+      reason: cloudflareServer
+        ? "The Cloudflare Server fingerprint did not match the exact known CERN public-control 302 signature."
+        : "The first public DNS-rebinding response must be an HTTP 2xx–4xx response with a non-empty Server header.",
       probes: [],
     };
   }
 
   const probes = [];
   for (let attempt = 0; attempt < 12; attempt += 1) {
+    const startedAt = new Date().toISOString();
+    const startedAtMs = Date.now();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5_000);
     try {
@@ -338,25 +511,32 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
         { ...requestInit, signal: controller.signal },
       );
       const observed = fingerprint(response);
+      const elapsedMs = Date.now() - startedAtMs;
       const matchesPublicControl =
         observed.status === baseline.status &&
         observed.server === baseline.server &&
         observed.contentType === baseline.contentType &&
         observed.contentLength === baseline.contentLength &&
-        observed.etag === baseline.etag;
+        observed.etag === baseline.etag &&
+        observed.location === baseline.location;
+      // Header fingerprints are sufficient; never consume an upstream response body.
+      cancelProbeResponseBody(response);
       probes.push({
         attempt: attempt + 1,
+        startedAt,
+        elapsedMs,
         outcome: matchesPublicControl ? "public_control_match" : "unexpected_http_response",
         ...observed,
       });
-      await cancelProbeResponseBody(response);
     } catch (error) {
       probes.push({
         attempt: attempt + 1,
+        startedAt,
+        elapsedMs: Date.now() - startedAtMs,
         outcome: "network_error",
         error: {
           name: safeDiagnosticField(error?.name, 80) || "Error",
-          message: safeDiagnosticField(error?.message, 240) || "Worker HEAD request failed.",
+          message: safeDiagnosticField(error?.message, 240) || "Worker probe request failed.",
         },
       });
     } finally {
@@ -382,11 +562,16 @@ async function runAcceptanceDnsRebindingProbe(publicIp, privateIp, sessionId, fe
 
   return {
     status,
+    requestMethod: requestInit.method,
+    responseBodyPolicy: "cancel-before-read",
+    baselineStartedAt,
+    baselineElapsedMs,
     hostname,
     sessionId,
     publicIp,
     privateIp,
     baseline,
+    baselineProfile,
     baselinePublicResponses,
     attempts: probes.length,
     publicResponses,
@@ -424,6 +609,33 @@ export function createWorker(options = {}) {
 
         const workspaceResponse = await handleWorkspaceRequest(request, env, options);
         if (workspaceResponse) return workspaceResponse;
+
+        if (options.acceptanceDnsResolveFetchProbe === true &&
+            env?.EXPORTFLOW_ACCEPTANCE_RUN === "durable-task-20261124" &&
+            url.pathname === "/__acceptance/dns-resolve-fetch-probe") {
+          if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405, { allow: "GET" });
+          const auth = await tenantTaskGateway.authenticate(request, env, { requiredScope: "tasks:fetch" });
+          if (!auth.ok) {
+            return json({ error: { code: auth.code, message: auth.message } }, auth.httpStatus);
+          }
+          const publicIp = url.searchParams.get("public");
+          const privateIp = url.searchParams.get("private");
+          const sessionId = url.searchParams.get("session");
+          if (!isPublicRoutableIpv4(publicIp) || !ACCEPTANCE_DNS_REBINDING_PRIVATE_IPS.has(privateIp)) {
+            return json({ error: { code: "INVALID_DNS_REBINDING_TARGET", message: "A public origin IP and one of the fixed private test targets are required." } }, 400);
+          }
+          if (typeof sessionId !== "string" || !/^[a-z0-9-]{8,48}$/.test(sessionId)) {
+            return json({ error: { code: "INVALID_DNS_REBINDING_SESSION", message: "A unique lowercase alphanumeric DNS-rebinding session identifier is required." } }, 400);
+          }
+          const diagnostics = await runAcceptanceDnsResolveFetchProbe(
+            publicIp,
+            privateIp,
+            sessionId,
+            options.acceptanceDnsResolve4,
+            options.acceptanceDnsResolveFetch,
+          );
+          return json(diagnostics, 200, { "cache-control": "no-store" });
+        }
 
         if (options.acceptanceDnsRebindingProbe === true &&
             env?.EXPORTFLOW_ACCEPTANCE_RUN === "durable-task-20261124" &&

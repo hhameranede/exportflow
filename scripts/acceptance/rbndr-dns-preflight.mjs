@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
+import { request as httpRequest } from "node:http";
 import { Resolver } from "node:dns/promises";
-import { collectDnsRebindingObservations } from "./dns-rebinding-preflight.mjs";
+import { assertObservedDnsRebindingTransition, collectDnsRebindingObservations, createStageScopedDnsRebindingSuffix } from "./dns-rebinding-preflight.mjs";
 
 const DNS_RESOLVERS = Object.freeze([
-  { name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
-  { name: "GitHub runner system DNS", system: true, required: false },
+  { id: "google-doh", name: "Google Public DNS DoH", endpoint: "https://dns.google/resolve", required: true },
+  { id: "runner-system", name: "GitHub runner system DNS", system: true, required: false },
 ]);
-const PUBLIC_IP = "185.199.108.153";
+const PUBLIC_IP = "188.184.67.127";
 const PRIVATE_TARGETS = Object.freeze([
   { name: "loopback", ip: "127.0.0.1" },
   { name: "unspecified", ip: "0.0.0.0" },
@@ -18,7 +19,7 @@ const RUN_ID = String(process.env.GITHUB_RUN_ID || process.env.CI_RUN_ID || Date
   .slice(0, 32);
 
 function createHostname(privateIp, suffix) {
-  return "make-" + PUBLIC_IP + "-rebindfor2mafter1times-" + privateIp + "-rr-" + suffix + ".1u.ms";
+  return "make-" + PUBLIC_IP + "-rebindfor2mafter2times-" + privateIp + "-rr-" + suffix + ".1u.ms";
 }
 
 const systemResolver = new Resolver();
@@ -79,21 +80,94 @@ async function queryDnsBatches(resolver, hostname, count) {
   return records;
 }
 
+
+function requestDirectControlOrigin(hostname) {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest({
+      hostname: PUBLIC_IP,
+      port: 80,
+      method: "HEAD",
+      path: "/",
+      headers: { host: hostname, accept: "*/*", connection: "close" },
+    }, (response) => {
+      const headers = response.headers;
+      const fingerprint = {
+        status: Number(response.statusCode || 0),
+        server: typeof headers.server === "string" ? headers.server : "",
+        contentType: typeof headers["content-type"] === "string" ? headers["content-type"] : "",
+        contentLength: typeof headers["content-length"] === "string" ? headers["content-length"] : "",
+      };
+      response.resume();
+      resolve(fingerprint);
+    });
+    request.setTimeout(8_000, () => request.destroy(new Error("Direct control-origin HEAD request timed out.")));
+    request.on("error", reject);
+    request.end();
+  });
+}
+
+async function assertDirectPublicControlOrigin() {
+  const hostname = createHostname(PRIVATE_TARGETS[0].ip, createStageScopedDnsRebindingSuffix({
+    stage: "ci", runId: RUN_ID, targetIndex: 1, resolverId: "control",
+  }));
+  const response = await requestDirectControlOrigin(hostname);
+  assert.ok(response.status >= 200 && response.status < 500,
+    "The direct public control origin must return an HTTP 2xx–4xx response to HEAD: " + JSON.stringify(response));
+  assert.ok(response.server,
+    "The direct public control origin must provide a non-empty Server fingerprint: " + JSON.stringify(response));
+  assert.doesNotMatch(response.server, /cloudflare/i,
+    "The control origin must not be served by Cloudflare Edge: " + JSON.stringify(response));
+  console.log("Direct public control origin verified: " + JSON.stringify({ hostname, publicIp: PUBLIC_IP, response }));
+}
+
+async function assertPublicAnswersBeforeRebind() {
+  const target = PRIVATE_TARGETS[0];
+  const hostname = createHostname(target.ip, createStageScopedDnsRebindingSuffix({
+    stage: "ci", runId: RUN_ID, targetIndex: 1, resolverId: "sequence",
+  }));
+  // A recursive DoH response is not proven to map one-to-one to an authoritative DNS question.
+  // Require a public first response and a later private response within a bounded 12-lookup sample.
+  // The exact authoritative A-question count must come from the 1u.ms authoritative log, not DoH polling.
+  const answers = await queryDnsBatches(DNS_RESOLVERS[0], hostname, 12);
+  const transition = assertObservedDnsRebindingTransition({
+    answers,
+    publicIp: PUBLIC_IP,
+    privateIp: target.ip,
+  });
+  console.log("1u.ms resolver-observed DNS transition verified: " + JSON.stringify({
+    hostname,
+    firstObservedPublicAnswer: transition.firstPublicAnswer.ip,
+    firstObservedPrivateAnswer: transition.firstPrivateAnswer.ip,
+    privateAnswerIndex: transition.privateAnswerIndex,
+    answers,
+  }));
+}
+
+await assertDirectPublicControlOrigin();
+await assertPublicAnswersBeforeRebind();
+
 const verified = [];
 for (const [index, target] of PRIVATE_TARGETS.entries()) {
-  const suffix = ("preflight-" + RUN_ID + "-" + String(index + 1)).slice(0, 48);
-  const hostname = createHostname(target.ip, suffix);
+  const targetIndex = index + 1;
+  const hostname = createHostname(target.ip, createStageScopedDnsRebindingSuffix({
+    stage: "ci", runId: RUN_ID, targetIndex, resolverId: "base",
+  }));
   const observations = await collectDnsRebindingObservations({
     hostname,
+    hostnameForResolver: (resolver) => createHostname(target.ip, createStageScopedDnsRebindingSuffix({
+      stage: "ci", runId: RUN_ID, targetIndex, resolverId: resolver.id,
+    })),
     expectedAddresses: [PUBLIC_IP, target.ip],
     resolvers: DNS_RESOLVERS,
     queryDnsBatches,
   });
-  verified.push({ target: target.name, hostname, observations });
+  verified.push({ target: target.name, observations });
 }
 
 assert.equal(verified.length, PRIVATE_TARGETS.length);
 console.log("1u.ms DNS rebinding preflight passed: " + JSON.stringify({
-  authority: "1u.ms", publicIp: PUBLIC_IP, rebindingWindow: "2m",
-  queriesPerTarget: 12, intervalMs: QUERY_INTERVAL_MS, verified,
+  authority: "1u.ms", publicIp: PUBLIC_IP,
+  authoritativePublicAnswersBeforePrivate: 2, runnerDoHLookupsForTransition: 12,
+  rebindingWindow: "2m", queriesPerResolverAndTarget: 12,
+  intervalMs: QUERY_INTERVAL_MS, verified,
 }));

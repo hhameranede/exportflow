@@ -88,9 +88,18 @@ jobs:
       retention-days: 3
       include-hidden-files: true
 
-   - name: Verify 1u.ms DNS rebinding preflight (PR #142 only; no Cloudflare changes)
-     if: github.event_name == 'pull_request' && github.event.pull_request.number == 142
+   # Verify a public-first then private-later resolver-observed transition; DoH lookups are not authoritative question counts.
+   - name: Verify 1u.ms DNS rebinding preflight (PR #142 and isolated DNS-fix branches only; no Cloudflare changes)
+     if: github.event_name == 'pull_request' && (github.event.pull_request.number == 142 || startsWith(github.event.pull_request.head.ref, 'fix/dns-rebinding-resolver-isolation-'))
      run: node scripts/acceptance/rbndr-dns-preflight.mjs
+
+   - name: Compare 1u.ms control-origin HTTP headers (pinned IP; runner-only; no DNS/private-target probes)
+     if: github.event_name == 'pull_request' && startsWith(github.event.pull_request.head.ref, 'fix/dns-rebinding-resolver-isolation-')
+     env:
+      DNS_REBINDING_PUBLIC_IP: 188.184.67.127
+      DNS_REBINDING_HOSTNAME: make-188.184.67.127-rebindfor2mafter2times-127.0.0.1-rr-ci-http-${{ github.run_id }}-${{ github.run_attempt }}.1u.ms
+      CF_WORKER_ZONE: exportflow.me
+     run: node scripts/acceptance/control-origin-http-comparison.mjs
 
  deploy-acceptance:
   needs: test
@@ -100,7 +109,9 @@ jobs:
         inputs.run_acceptance == true &&
         github.ref == 'refs/heads/feat/p0-request-only-fetch-20261125') ||
        (github.event_name == 'pull_request' &&
-        github.event.pull_request.number == 142) }}
+        (github.event.pull_request.number == 142 ||
+         (github.event.pull_request.number == 143 &&
+          github.event.pull_request.head.ref == 'fix/dns-rebinding-resolver-isolation-20261126'))) }}
   runs-on: ubuntu-latest
   env:
    CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
@@ -109,7 +120,7 @@ jobs:
    - uses: actions/checkout@v4
      with:
       ref: ${{ github.event.pull_request.head.sha || github.sha }}
-   # One-time user-approved trigger: the commit subject must start with "acceptance: run isolated P0 Stage 1 acceptance".
+   # Second explicit user-approved isolated Acceptance run (2026-11-26; dedicated test D1 and Task Workers only): commit subject carries the approval marker.
    - name: Gate the one-time approved Acceptance run
      id: acceptance-gate
      env:
@@ -154,6 +165,14 @@ jobs:
    - name: Run real Cloudflare D1 + Worker durable Task acceptance
      if: steps.acceptance-gate.outputs.run == 'true'
      run: node scripts/acceptance/durable-task-runtime.mjs smoke
+   - name: Upload 1u.ms authoritative DNS diagnostics
+     if: always() && steps.acceptance-gate.outputs.run == 'true'
+     uses: actions/upload-artifact@v4
+     with:
+      name: exportflow-1u-ms-dns-log-${{ github.run_id }}
+      path: ${{ runner.temp }}/exportflow-authoritative-dns/
+      if-no-files-found: warn
+      retention-days: 3
    - name: Clean up run-scoped synthetic Acceptance data
      if: always() && steps.acceptance-gate.outputs.run == 'true'
      run: node scripts/acceptance/durable-task-runtime.mjs cleanup
