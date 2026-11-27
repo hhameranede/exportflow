@@ -187,3 +187,58 @@ export function assertStage2Task(operation, task, transport) {
     sourceCount: sources.length,
   };
 }
+
+function safeString(value, maxLength = 180) {
+  return typeof value === "string" ? value.slice(0, maxLength) : null;
+}
+
+function safeHost(value) {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) ? url.hostname.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeStringList(value, maxItems = 8) {
+  return Array.isArray(value)
+    ? value.slice(0, maxItems).filter((item) => typeof item === "string").map((item) => item.slice(0, 80))
+    : [];
+}
+
+/**
+ * Returns bounded failure metadata for CI diagnostics.
+ * Page bodies, queries, complete URLs, request headers and credentials are excluded.
+ */
+export function summarizeStage2Failure(operation, task, transport) {
+  const data = task?.result?.data && typeof task.result.data === "object" && !Array.isArray(task.result.data)
+    ? task.result.data
+    : {};
+  const attempts = Array.isArray(data.attempts) ? data.attempts.slice(0, 5) : [];
+  const errors = Array.isArray(task?.errors) ? task.errors.slice(0, 4) : [];
+  const warnings = Array.isArray(task?.result?.warnings) ? task.result.warnings.slice(0, 5) : [];
+
+  return {
+    operation: safeString(operation, 32) || "unknown",
+    transport: safeString(transport, 16) || "unknown",
+    taskState: safeString(task?.state, 24),
+    resultStatus: safeString(task?.result?.status, 24),
+    errorCode: safeString(data.errorCode, 64),
+    errors: errors.map((item) => ({ code: safeString(item?.code, 64) })),
+    warnings: warnings.map((item) => safeString(item, 180)).filter(Boolean),
+    selectedHost: safeHost(data.selectedUrl),
+    attempts: attempts.map((item) => ({
+      host: safeHost(item?.url),
+      stage: safeString(item?.stage, 32),
+      status: safeString(item?.status, 24),
+      reason: safeString(item?.reason, 64),
+      fieldsFound: Number.isInteger(item?.fieldsFound) ? item.fieldsFound : null,
+      missingRequired: safeStringList(item?.missingRequired, 8),
+    })),
+    missingFields: safeStringList(data.missingFields, 12),
+    missingRequired: safeStringList(data.missingRequired, 12),
+    sourceCount: Array.isArray(task?.result?.sources) ? task.result.sources.length : 0,
+  };
+}
