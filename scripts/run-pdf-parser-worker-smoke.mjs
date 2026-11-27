@@ -71,7 +71,7 @@ try {
   assert.match(parsed.text, /Cloudflare Workerd PDF smoke/);
   assert.equal("bodyBytes" in parsed, false);
 
-  const wrongMime = await fetch(baseUrl + "/parse", {
+  const wrongMime = await fetchWithTimeout("/parse", {
     method: "POST",
     headers: { "content-type": "text/html" },
     body: validPdf,
@@ -80,7 +80,7 @@ try {
   const wrongMimeBody = await wrongMime.json();
   assert.equal(wrongMimeBody.error.code, "UNSUPPORTED_CONTENT_TYPE");
 
-  const wrongSignature = await fetch(baseUrl + "/parse", {
+  const wrongSignature = await fetchWithTimeout("/parse", {
     method: "POST",
     headers: { "content-type": "application/octet-stream" },
     body: new Uint8Array([0x50, 0x4b, 0x03, 0x04]),
