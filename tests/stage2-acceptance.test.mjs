@@ -144,6 +144,7 @@ test("Stage 2 failure diagnostics expose bounded Research failure evidence witho
           stage: "fetch",
           status: "failed",
           reason: "UPSTREAM_FETCH_FAILED",
+          httpStatus: 403,
           fieldsFound: 0,
           missingRequired: ["title"],
         }],
@@ -166,6 +167,7 @@ test("Stage 2 failure diagnostics expose bounded Research failure evidence witho
     stage: "fetch",
     status: "failed",
     reason: "UPSTREAM_FETCH_FAILED",
+    httpStatus: 403,
     fieldsFound: 0,
     missingRequired: ["title"],
   }]);

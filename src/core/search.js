@@ -1,4 +1,4 @@
-import { fetchPublicResource, validatePublicHttpUrl } from "./http-fetch.js";
+import { fetchPublicResource, validatePublicHttpUrl, HTTP_FETCH_USER_AGENT } from "./http-fetch.js";
 import { normalizeResult } from "./result.js";
 
 export const SEARCH_SOURCES = Object.freeze(["wikipedia", "openalex", "crossref"]);
@@ -115,7 +115,7 @@ export function createSearchAdapter({ fetchResource = fetchPublicResource, now =
       const performFetch = () => fetchResource(endpoint.href, {
         maxBytes: SEARCH_LIMITS.maxResponseBytes, timeoutMs: 8_000, maxRedirects: 1,
         cacheMode: input.cacheMode === "bypass" ? "bypass" : "default",
-        userAgent: "ExportFlow/0.6 (https://exportflow.me; mailto:hhameranede@gmail.com)", signal,
+        userAgent: HTTP_FETCH_USER_AGENT, signal,
         ...(typeof options.fetchImpl === "function" ? { fetchImpl: options.fetchImpl } : {}),
       });
       const response = source === "crossref"

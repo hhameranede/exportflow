@@ -12,6 +12,7 @@ import { registerAdapter, getAdapterCatalog, executeAdapter } from "../src/core/
 import {
   FetchAdapterError,
   HTTP_FETCH_LIMITS,
+  HTTP_FETCH_USER_AGENT,
   fetchPublicResource,
   validatePublicHttpUrl,
 } from "../src/core/http-fetch.js";
@@ -1567,4 +1568,58 @@ test("default research pipeline performs search, static fetch and deterministic 
   assert.equal(task.result.data.rendering, "static-http-only");
   assert.equal(calls.length, 2);
   assert.deepEqual(calls.map((call) => call.cache), ["no-store", "no-store"]);
+});
+
+
+test("fetch sends ExportFlow's descriptive User-Agent when no override is supplied", async () => {
+  let observedUserAgent;
+  await fetchPublicResource("https://example.com/user-agent", {
+    fetchImpl: async (_url, init) => {
+      observedUserAgent = init.headers["user-agent"];
+      return response("ok");
+    },
+  });
+  assert.equal(observedUserAgent, HTTP_FETCH_USER_AGENT);
+  assert.match(observedUserAgent, /^ExportFlow\\/0\\.6 /);
+  assert.ok(observedUserAgent.includes("mailto:hhameranede@gmail.com"));
+});
+
+test("Research retains the upstream HTTP status when a candidate fetch is unsuccessful", async () => {
+  const pipeline = createResearchPipeline({
+    searchAdapter: {
+      execute: async () => normalizeResult({
+        status: "succeeded",
+        data: {
+          results: [{
+            title: "Ada Lovelace",
+            url: "https://en.wikipedia.org/?curid=42",
+          }],
+        },
+        sources: [],
+        warnings: [],
+      }),
+    },
+    runAdapter: async (adapterId) => {
+      assert.equal(adapterId, "http.fetch.v1");
+      return normalizeResult({
+        status: "failed",
+        data: { status: 403, httpStatus: 403 },
+        warnings: ["Upstream returned HTTP 403."],
+      });
+    },
+  });
+  const result = await pipeline.execute({
+    query: "Ada Lovelace",
+    source: "wikipedia",
+    candidateLimit: 1,
+    schema: {
+      type: "object",
+      properties: { title: { type: "string" } },
+      required: ["title"],
+    },
+  });
+  assert.equal(result.status, "failed");
+  assert.equal(result.data.attempts.length, 1);
+  assert.equal(result.data.attempts[0].httpStatus, 403);
+  assert.equal(result.data.attempts[0].reason, "FETCH_NOT_SUCCESSFUL");
 });

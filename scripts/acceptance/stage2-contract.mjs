@@ -234,6 +234,8 @@ export function summarizeStage2Failure(operation, task, transport) {
       stage: safeString(item?.stage, 32),
       status: safeString(item?.status, 24),
       reason: safeString(item?.reason, 64),
+      httpStatus: Number.isInteger(item?.httpStatus) &&
+        item.httpStatus >= 100 && item.httpStatus <= 599 ? item.httpStatus : null,
       fieldsFound: Number.isInteger(item?.fieldsFound) ? item.fieldsFound : null,
       missingRequired: safeStringList(item?.missingRequired, 8),
     })),

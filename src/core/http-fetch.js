@@ -17,6 +17,10 @@ export const HTTP_FETCH_LIMITS = Object.freeze({
   maxRedirects: 3,
 });
 
+// Identify every automated outbound request with a stable product/version and contact.
+export const HTTP_FETCH_USER_AGENT =
+  "ExportFlow/0.6 (https://exportflow.me; mailto:hhameranede@gmail.com)";
+
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 function monotonicNow() {
@@ -305,9 +309,10 @@ export async function fetchPublicResource(input, options = {}) {
           signal: controller.signal,
           headers: {
             accept: "text/html,application/xhtml+xml,application/json,application/xml,text/plain;q=0.9",
-            ...(typeof options.userAgent === "string" && options.userAgent.length <= 200
-              ? { "user-agent": options.userAgent }
-              : {}),
+            "user-agent": typeof options.userAgent === "string" &&
+              options.userAgent.trim().length > 0 && options.userAgent.length <= 200
+              ? options.userAgent
+              : HTTP_FETCH_USER_AGENT,
           },
         });
       } catch {
