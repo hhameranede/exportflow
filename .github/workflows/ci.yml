@@ -82,7 +82,7 @@ jobs:
       done
       find "$GITHUB_WORKSPACE/dist" -maxdepth 4 -type f -printf "%p %s bytes\n" | sort
    - name: Run parser compatibility in local Workers runtime
-     run: node scripts/test-open-source-parsers-worker.mjs
+     run: node scripts/run-open-source-parsers-worker-smoke.mjs
    - name: Upload all ten Worker bundle artifacts
      uses: actions/upload-artifact@v4
      with:
