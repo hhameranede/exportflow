@@ -28,7 +28,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Verify one-shot approval marker and isolated target
+      - name: Verify explicit approval commit marker and isolated target
         shell: bash
         env:
           BASE_SHA: 0730ba827053943ada8655dac5286ff778f08ebb
