@@ -71,6 +71,13 @@ test("rejects PDFs that exceed the page fan-out limit", async () => {
   );
 });
 
+test("truncates extracted text at the configured output ceiling", async () => {
+  const longText = "A".repeat(PDF_PARSE_LIMITS.maxOutputCharacters + 128);
+  const result = await extractPdfText(createSyntheticPdf([longText]));
+  assert.equal(result.text.length, PDF_PARSE_LIMITS.maxOutputCharacters);
+  assert.equal(result.truncated, true);
+});
+
 test("reports a PDF without extractable text instead of claiming OCR support", async () => {
   await assert.rejects(
     extractPdfText(createSyntheticPdf([""])),
