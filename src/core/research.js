@@ -217,7 +217,20 @@ export function createResearchPipeline({
           continue;
         }
         if (!fetched || fetched.status !== "succeeded" || !fetched.data) {
-          attempts.push({ url: target.href, stage: "fetch", status: "failed", reason: "FETCH_NOT_SUCCESSFUL" });
+          const rawHttpStatus = Number.isInteger(fetched?.data?.httpStatus)
+            ? fetched.data.httpStatus
+            : fetched?.data?.status;
+          const httpStatus = Number.isInteger(rawHttpStatus) &&
+            rawHttpStatus >= 100 && rawHttpStatus <= 599
+            ? rawHttpStatus
+            : null;
+          attempts.push({
+            url: target.href,
+            stage: "fetch",
+            status: "failed",
+            reason: "FETCH_NOT_SUCCESSFUL",
+            ...(httpStatus !== null ? { httpStatus } : {}),
+          });
           continue;
         }
 
