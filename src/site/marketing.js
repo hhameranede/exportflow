@@ -646,17 +646,16 @@ function genericBody(route, path, t, locale, oauthDetails = {}) {
     <section class="ef-section">
       <div class="ef-container ef-contact-layout">
         <div>
-          <h2 class="ef-section-title">${isAr ? "اختر قناة التواصل" : "Choose a channel"}</h2>
+          <h2 class="ef-section-title">${isAr ? "اختر نوع الاستفسار" : "Choose an inquiry type"}</h2>
           <div class="ef-channel-list">
             ${channels.map(([a, b]) => `<article class="ef-channel-item">
               <div>
                 <h3>${escapeHtml(a)}</h3>
                 <p>${escapeHtml(b)}</p>
               </div>
-              <span class="ef-badge ef-badge-planned">${isAr ? "قريباً" : "Pending"}</span>
             </article>`).join("")}
           </div>
-          <p class="ef-section-lead ef-mt-20 ef-text-sm">${isAr ? "بريد الدعم · بريد الأعمال · GitHub · LinkedIn — ستُضاف الروابط الرسمية فور توثيقها." : "Support email · Business email · GitHub · LinkedIn · X — official links will be added when confirmed."}</p>
+          <p class="ef-section-lead ef-mt-20 ef-text-sm">${isAr ? "البريد الرسمي للدعم: " : "Official support email: "}<a href="mailto:support@exportflow.me">support@exportflow.me</a></p>
         </div>
 
         <form class="ef-contact-form" data-contact-form novalidate>

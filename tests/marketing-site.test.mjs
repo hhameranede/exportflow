@@ -13,13 +13,18 @@ function getWebsiteResponse(path) {
   return handleWebsiteRequest(request, new URL(request.url));
 }
 
-test("contact form creates a safely encoded email draft instead of claiming local success", () => {
+test("contact form creates a safely encoded email draft instead of claiming local success", async () => {
   assert.doesNotThrow(() => new Function(MARKETING_JS));
-  assert.ok(MARKETING_JS.includes('mailto:hhameranede@gmail.com?subject='));
+  assert.ok(MARKETING_JS.includes('mailto:support@exportflow.me?subject='));
   assert.ok(MARKETING_JS.includes('encodeURIComponent("[ExportFlow] " + subjectVal)'));
   assert.ok(MARKETING_JS.includes('encodeURIComponent(mailtoBody)'));
   assert.ok(MARKETING_JS.includes("window.location.href = mailtoUrl"));
   assert.doesNotMatch(MARKETING_JS, /No external submission endpoint is connected yet/);
+  const contactResponse = getWebsiteResponse("/contact");
+  const contactHtml = await contactResponse.text();
+  assert.match(contactHtml, /mailto:support@exportflow\.me/);
+  assert.match(contactHtml, /support@exportflow\.me/);
+  assert.doesNotMatch(contactHtml, /Support email · Business email · GitHub/);
 });
 
 test("every marketing sitemap route renders one marketing client script and stylesheet", async () => {
