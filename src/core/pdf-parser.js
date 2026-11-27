@@ -58,7 +58,7 @@ export function hasPdfSignature(input) {
 
 function cancelReaderBestEffort(reader) {
   try {
-    const cancellation = reader.cancel();
+    const cancellation = reader.cancel(new Error("PDF text stream cancelled after reaching a configured safety limit."));
     if (cancellation && typeof cancellation.catch === "function") void cancellation.catch(() => {});
   } catch {
     // A stream may already be closed, errored, or locked by the runtime.
