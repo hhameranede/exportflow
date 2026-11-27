@@ -69,6 +69,49 @@ await phase("ExportFlow extractPdfText (large PDF triggers output cap and reader
     " truncated=" + result.truncated + "\n");
 });
 
+await phase("PDF.js reader.cancel() without reason", async () => {
+  const document = await getDocumentProxy(largeBytes.slice(), {
+    isEvalSupported: false, enableXfa: false, useWorkerFetch: false,
+  });
+  let reader;
+  try {
+    const page = await document.getPage(1);
+    reader = page.streamTextContent().getReader();
+    const first = await reader.read();
+    process.stdout.write("[pdf-stream-lifecycle] first chunk done=" + first.done +
+      " items=" + (first.value?.items?.length || 0) + "\\n");
+    try {
+      await reader.cancel();
+      process.stdout.write("[pdf-stream-lifecycle] reader.cancel() without reason resolved\\n");
+    } catch (error) {
+      process.stdout.write("[pdf-stream-lifecycle] reader.cancel() without reason rejected: " +
+        (error?.stack || String(error)) + "\\n");
+    }
+    reader.releaseLock();
+  } finally {
+    await document.loadingTask.destroy();
+  }
+});
+
+await phase("PDF.js reader.cancel(Error) with explicit reason", async () => {
+  const document = await getDocumentProxy(largeBytes.slice(), {
+    isEvalSupported: false, enableXfa: false, useWorkerFetch: false,
+  });
+  let reader;
+  try {
+    const page = await document.getPage(1);
+    reader = page.streamTextContent().getReader();
+    const first = await reader.read();
+    process.stdout.write("[pdf-stream-lifecycle] first chunk done=" + first.done +
+      " items=" + (first.value?.items?.length || 0) + "\\n");
+    await reader.cancel(new Error("bounded PDF output reached"));
+    process.stdout.write("[pdf-stream-lifecycle] reader.cancel(Error) resolved\\n");
+    reader.releaseLock();
+  } finally {
+    await document.loadingTask.destroy();
+  }
+});
+
 await phase("unpdf extractText helper (large PDF without early cancel)", async () => {
   const result = await extractText(largeBytes.slice(), { mergePages: true });
   process.stdout.write("[pdf-stream-lifecycle] chars=" + result.text.length + "\n");
