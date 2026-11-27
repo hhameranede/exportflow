@@ -17,7 +17,7 @@ const longParagraph = [
 test("Readability extracts article text and keeps the validated source URL", () => {
   const html =
     "<!doctype html>" +
-    '<html lang="en"><head><title>Sample page</title>' +
+    '<html lang="en"><head><title>A useful public article</title>' +
     '<meta property="og:site_name" content="Example News"></head><body>' +
     '<nav><a href="/home">Home</a><a href="/about">About</a></nav>' +
     "<main><article><h1>A useful public article</h1>" +
