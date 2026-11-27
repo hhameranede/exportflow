@@ -3,6 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { HTTP_FETCH_LIMITS, validatePublicHttpUrl } from "../src/core/http-fetch.js";
 import {
+  assertRedirectRejectionResponse,
   ACCEPTANCE_WORKER_PINS,
   assertAcceptanceEndpointsArePinned,
   assertExpectedResponseCharset,
@@ -76,6 +77,35 @@ test("redirect-to-loopback fixture uses a source that emits an unfiltered Locati
   assert.equal(source.searchParams.get("url"), "http://127.0.0.1/");
   assert.equal(source.searchParams.get("status_code"), "302");
   assert.equal(target.expectedTaskErrorCode, "REDIRECT_NOT_ALLOWED");
+});
+
+test("redirect rejection accepts HTTP 502 only when the returned Task proves REDIRECT_NOT_ALLOWED", () => {
+  const task = {
+    id: "task-stage1-redirect",
+    state: "failed",
+    errors: [{ code: "REDIRECT_NOT_ALLOWED" }],
+    result: { status: "failed", data: { errorCode: "REDIRECT_NOT_ALLOWED" } },
+    events: [{ type: "task.accepted" }, { type: "task.started" }, { type: "task.failed" }],
+  };
+  assert.equal(
+    assertRedirectRejectionResponse({ response: { status: 502 }, body: task }, {
+      expectedTaskErrorCode: "REDIRECT_NOT_ALLOWED",
+    }),
+    task,
+  );
+  assert.throws(
+    () => assertRedirectRejectionResponse({
+      response: { status: 502 },
+      body: { ...task, errors: [{ code: "UPSTREAM_FETCH_FAILED" }], result: { status: "failed", data: { errorCode: "UPSTREAM_FETCH_FAILED" } } },
+    }, { expectedTaskErrorCode: "REDIRECT_NOT_ALLOWED" }),
+    /did not fail with REDIRECT_NOT_ALLOWED/,
+  );
+  assert.throws(
+    () => assertRedirectRejectionResponse({ response: { status: 502 }, body: { state: "failed" } }, {
+      expectedTaskErrorCode: "REDIRECT_NOT_ALLOWED",
+    }),
+    /did not include a durable Task record/,
+  );
 });
 
 test("the Stage 1 live runner is pinned to dedicated Acceptance Workers only", () => {
