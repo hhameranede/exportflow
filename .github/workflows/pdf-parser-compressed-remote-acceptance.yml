@@ -17,6 +17,7 @@ jobs:
         github.event.head_commit.message == 'acceptance: run isolated compressed PDF parser Acceptance'
       }}
     runs-on: ubuntu-latest
+    # Load scoped credentials from the dedicated preview environment.
     environment:
       name: exportflow-preview
     timeout-minutes: 20
