@@ -10,11 +10,11 @@ It does not reference Production Workers, Production D1, production tenant recor
 
 ## One-shot trigger
 
-The Stage 2 job is enabled only for this branch and only when the exact commit subject is:
+The Stage 2 deployment + Acceptance jobs are enabled only for this branch and only when the exact commit subject is:
 
-`acceptance: run isolated P0 Stage 2 six-operation acceptance`
+`acceptance: deploy isolated P0 Stage 2 workers and run six-operation acceptance`
 
-The trigger commit is intentional and records the user's explicit approval to perform this isolated Acceptance run. The PR-only CI path never starts the Stage 2 job. The Production deployment job is separately restricted to an authorized release commit on `main`.
+The trigger commit is intentional and records the user's explicit approval to deploy only the two dedicated Task Acceptance Workers and then perform the isolated six-operation REST/MCP Acceptance run. The deploy job targets only `cloudflare/task-acceptance/platform.wrangler.toml` and `cloudflare/task-acceptance/mcp.wrangler.toml`. It does not execute SQL migrations, change bindings/secrets/DNS/permissions, or deploy any Production Worker. The PR-only CI path never starts these jobs. The Production deployment job is separately restricted to an authorized release commit on `main`.
 
 ## Runtime scope
 
@@ -22,4 +22,4 @@ The runner creates one run-scoped plan, tenant and short-lived key with only the
 
 The runner verifies durable Task lifecycle, status cross-read between REST and MCP, provenance, bounded Map/Crawl behavior, partial Extract, selected Wikipedia Search, and static HTTP-only Research. Cleanup is run even if smoke assertions fail and deletes only the plan, tenant, key, usage and Tasks bearing this workflow run's identifiers.
 
-No migrations, Worker deployment, configuration update, merge or Production action is part of this run.
+The run uses the existing isolated Acceptance D1 schema and only the two dedicated Acceptance Worker configs; it does not execute D1 SQL migrations. Worker deployment is restricted to those Acceptance configs by the one-shot deploy job. No configuration-setting mutation, secret/binding/DNS/permission change, merge or Production action is part of this run.
