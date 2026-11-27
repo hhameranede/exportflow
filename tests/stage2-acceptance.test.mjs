@@ -187,3 +187,11 @@ test("Stage 2 failure diagnostics handle missing optional Task fields", () => {
   assert.deepEqual(summary.attempts, []);
   assert.deepEqual(summary.errors, []);
 });
+
+test("Stage 2 probes Research first so a Research failure stops before other operation quota is spent", () => {
+  assert.equal(STAGE2_CASES[0].operation, "research");
+  assert.deepEqual(
+    STAGE2_CASES.map((item) => item.operation).sort(),
+    ["crawl", "extract", "fetch", "map", "research", "search"],
+  );
+});
