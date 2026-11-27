@@ -14,7 +14,7 @@ on:
     required: true
     default: false
  push:
-  branches: [main, feat/durable-task-lifecycle-v1-20261124]
+  branches: [main, feat/durable-task-lifecycle-v1-20261124, feat/open-source-parser-eval-20261127]
  pull_request:
 
 jobs:
@@ -167,6 +167,64 @@ jobs:
    - name: Clean up run-scoped synthetic Acceptance data
      if: always() && steps.acceptance-gate.outputs.run == 'true'
      run: node scripts/acceptance/durable-task-runtime.mjs cleanup
+
+ deploy-parser-compat:
+  needs: test
+  # One-time, scope-limited trigger: only a named commit on the parser evaluation branch.
+  if: >-
+   ${{ github.event_name == 'push' &&
+       github.ref == 'refs/heads/feat/open-source-parser-eval-20261127' &&
+       startsWith(github.event.head_commit.message, 'acceptance: deploy parser compatibility Worker') }}
+  runs-on: ubuntu-latest
+  timeout-minutes: 8
+  env:
+   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
+   CLOUDFLARE_ACCOUNT_ID: 435030befbb9df09ab76f69209c05347
+  steps:
+   - uses: actions/checkout@v4
+   - uses: actions/setup-node@v4
+     with:
+      node-version: 24
+   - name: Install Wrangler
+     run: npm install --no-audit --no-fund
+   - name: Verify isolated Worker deployment credentials
+     run: |
+      if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+       echo "::error::Missing CLOUDFLARE_API_TOKEN (or CF_API_TOKEN) GitHub Actions secret."
+       exit 1
+      fi
+   - name: Deploy dedicated parser compatibility Worker only
+     run: npx --yes wrangler@4 deploy --config cloudflare/parser-compat/wrangler.toml
+   - name: Run remote Cloudflare Worker parser acceptance
+     env:
+      PARSER_COMPAT_URL: https://exportflow-parser-compat.hhameranede.workers.dev
+     run: |
+      node --input-type=module <<'NODE'
+      import assert from "node:assert/strict";
+
+      const endpoint = process.env.PARSER_COMPAT_URL + "/health";
+      let result;
+      let lastError;
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        try {
+          const response = await fetch(endpoint, { signal: AbortSignal.timeout(3_000) });
+          if (!response.ok) throw new Error("HTTP " + response.status);
+          result = await response.json();
+          break;
+        } catch (error) {
+          lastError = error;
+          await new Promise((resolve) => setTimeout(resolve, 1_000));
+        }
+      }
+
+      if (!result) throw new Error("Remote parser Worker did not become ready: " + String(lastError));
+      assert.equal(result.status, "ok");
+      assert.equal(result.articleStatus, "succeeded");
+      assert.equal(result.articleHasExpectedText, true);
+      assert.equal(result.csvMethod, "papaparse");
+      assert.equal(result.csvRows, 2);
+      console.log("remote-cloudflare-parser-runtime: PASS (LinkeDOM + Readability + PapaParse)");
+      NODE
  deploy-production:
   needs: test
   if: >-
