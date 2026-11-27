@@ -386,6 +386,36 @@ async function waitForMcpTask(task) {
   return latest;
 }
 
+export function assertRedirectRejectionResponse(result, target) {
+  const task = result?.body;
+  const errorCodes = (task?.errors || [])
+    .map((error) => error?.code)
+    .filter((code) => typeof code === "string");
+  const diagnostic = {
+    transportStatus: result?.response?.status ?? null,
+    taskIdPresent: typeof task?.id === "string",
+    taskState: task?.state || null,
+    taskErrorCodes: errorCodes,
+    resultStatus: task?.result?.status || null,
+    resultErrorCode: task?.result?.data?.errorCode || null,
+    taskEventTypes: (task?.events || []).map((entry) => entry?.type).filter((type) => typeof type === "string"),
+  };
+  assert.equal(
+    result?.response?.status,
+    502,
+    "Redirect-to-loopback must surface the failed Fetch Task as HTTP 502; observed " + JSON.stringify(diagnostic),
+  );
+  assert.ok(typeof task?.id === "string", "Redirect-to-loopback HTTP 502 did not include a durable Task record: " + JSON.stringify(diagnostic));
+  assert.equal(task.state, "failed", "Redirect-to-loopback Task must be failed: " + JSON.stringify(diagnostic));
+  assert.equal(task.result?.status, "failed", "Redirect-to-loopback result must be failed: " + JSON.stringify(diagnostic));
+  assert.ok(
+    errorCodes.includes(target.expectedTaskErrorCode) ||
+      task.result?.data?.errorCode === target.expectedTaskErrorCode,
+    "Redirect-to-loopback did not fail with " + target.expectedTaskErrorCode + "; observed " + JSON.stringify(diagnostic),
+  );
+  return task;
+}
+
 function taskFromRestSubmission(result, label) {
   assert.ok([200, 202].includes(result.response.status), label + " returned HTTP " + result.response.status + ": " + JSON.stringify(result.body.error || result.body).slice(0, 600));
   assert.ok(typeof result.body?.id === "string", label + " did not return a Task record.");
@@ -478,28 +508,13 @@ async function assertDirectPrivateUrlRejected() {
 async function assertPrivateRedirectRejected() {
   const target = CORPUS.negativeCases.find((entry) => entry.id === "redirect-to-loopback");
   const submission = await restPost(target.url, "stage1-" + RUN_ID + "-redirect-loopback");
-  const accepted = taskFromRestSubmission(submission, "Redirect-to-loopback REST");
-  const task = await waitForRestTask(accepted.id);
-  const codes = (task.errors || []).map((error) => error.code).filter((code) => typeof code === "string");
-  const diagnostic = {
-    state: task.state,
-    errorCodes: codes,
-    resultErrorCode: task.result?.data?.errorCode || null,
-    resultStatus: task.result?.status || null,
-    upstreamStatus: task.result?.data?.httpStatus || task.result?.data?.status || null,
-    eventTypes: (task.events || []).map((entry) => entry.type).filter((type) => typeof type === "string"),
-    eventReasons: (task.events || []).map((entry) => entry.reason).filter((reason) => typeof reason === "string"),
-  };
-  assert.equal(task.state, "failed", "Redirect to loopback must fail closed: " + JSON.stringify(diagnostic));
-  assert.ok(
-    codes.includes(target.expectedTaskErrorCode) || task.result?.data?.errorCode === target.expectedTaskErrorCode,
-    "Redirect rejection did not report " + target.expectedTaskErrorCode + "; observed " + JSON.stringify(diagnostic),
-  );
+  const task = assertRedirectRejectionResponse(submission, target);
   return {
     id: target.id,
     rejected: true,
     errorCode: target.expectedTaskErrorCode,
     taskState: task.state,
+    transportHttpStatus: submission.response.status,
   };
 }
 
