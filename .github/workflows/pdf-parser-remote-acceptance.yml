@@ -66,6 +66,8 @@ jobs:
             exit 1
           fi
           echo "Required credential names are available; values are not printed."
+      - name: Install Worker build dependencies
+        run: npm install --no-audit --no-fund
       - name: Deploy candidate source to isolated PDF Acceptance Worker only
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.CF_API_TOKEN }}
