@@ -270,7 +270,7 @@
     },
     {
       "id": "redirect-to-loopback",
-      "url": "https://httpbingo.org/redirect-to?url=http%3A%2F%2F127.0.0.1%2F&status_code=302",
+      "url": "https://testserver.host/redirect-to?url=http%3A%2F%2F127.0.0.1%2F&status_code=302",
       "expectedTaskErrorCode": "REDIRECT_NOT_ALLOWED"
     }
   ]
