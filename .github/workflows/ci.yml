@@ -165,7 +165,7 @@ jobs:
    - name: Clean up run-scoped synthetic Acceptance data
      if: always() && steps.acceptance-gate.outputs.run == 'true'
      run: node scripts/acceptance/durable-task-runtime.mjs cleanup
- deploy-stage2-acceptance:
+ stage2-acceptance:
   needs: test
   if: >-
    ${{ github.event_name == 'workflow_dispatch' &&
