@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 
 const platformConfig = readFileSync(new URL("../wrangler.toml", import.meta.url), "utf8");
 const mcpConfig = readFileSync(new URL("../cloudflare/mcp/wrangler.toml", import.meta.url), "utf8");
+const platformEntrypoint = readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
+const mcpEntrypoint = readFileSync(new URL("../cloudflare/mcp/index.js", import.meta.url), "utf8");
 const tenantPlatformAcceptanceConfig = readFileSync(new URL("../cloudflare/acceptance/tenant-platform.wrangler.toml", import.meta.url), "utf8");
 const tenantMcpAcceptanceConfig = readFileSync(new URL("../cloudflare/acceptance/tenant-mcp.wrangler.toml", import.meta.url), "utf8");
 const taskPlatformAcceptanceConfig = readFileSync(new URL("../cloudflare/task-acceptance/platform.wrangler.toml", import.meta.url), "utf8");
@@ -68,7 +70,7 @@ test("MCP config no longer describes the tenant D1 binding as intentionally abse
 });
 
 
-test("Platform, MCP, and task acceptance Workers force global fetch through the public Internet", () => {
+test("Platform, MCP, and task acceptance Workers route same-zone fetches through the public Cloudflare front door", () => {
   const configurations = [
     ["Platform", platformConfig],
     ["MCP", mcpConfig],
@@ -82,12 +84,50 @@ test("Platform, MCP, and task acceptance Workers force global fetch through the 
     assert.match(
       config,
       /^compatibility_flags\s*=\s*\[[^\]]*["']global_fetch_strictly_public["'][^\]]*\]/m,
-      `${name} must enable global_fetch_strictly_public.`,
+      `${name} must route same-zone global fetches through Cloudflare's public front door.`,
     );
     assert.doesNotMatch(
       config,
       /["']global_fetch_private_origin["']/,
-      `${name} must not opt out of public-only global fetch routing.`,
+      `${name} must not opt out of same-zone public routing.`,
     );
   }
+});
+
+
+test("untrusted URL-fetch Workers do not bind VPC private networks", () => {
+  const configurations = [
+    ["Platform", platformConfig],
+    ["MCP", mcpConfig],
+    ["tenant Platform acceptance", tenantPlatformAcceptanceConfig],
+    ["tenant MCP acceptance", tenantMcpAcceptanceConfig],
+    ["task Platform acceptance", taskPlatformAcceptanceConfig],
+    ["task MCP acceptance", taskMcpAcceptanceConfig],
+  ];
+
+  for (const [name, config] of configurations) {
+    assert.doesNotMatch(
+      config,
+      /^\\s*\\[\\[(?:vpc_networks|vpc_services)\\]\\]\\s*(?:#.*)?$/m,
+      `${name} must not grant the untrusted URL-fetch path a private VPC Network or VPC Service binding.`,
+    );
+  }
+});
+
+test("Production Platform and MCP use the default global Fetch network", () => {
+  assert.match(
+    platformEntrypoint,
+    /export default createWorker\\(\\);/,
+    "Platform must not inject a custom fetch transport into the deployed Worker.",
+  );
+  assert.match(
+    mcpEntrypoint,
+    /export default createExportFlowPreviewWorker\\(/,
+    "MCP must use the standard preview-worker factory.",
+  );
+  assert.doesNotMatch(
+    mcpEntrypoint,
+    /\\bfetchImpl\\b/,
+    "MCP must not inject a custom fetch transport into untrusted URL retrieval.",
+  );
 });
