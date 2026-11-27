@@ -36,12 +36,11 @@ The runner first verifies both checked-in Wrangler configs against the dedicated
 
 It then:
 
-1. Creates a unique plan, tenant and run-scoped API key in `exportflow-tenant-acceptance-20261122`.
-2. Creates a unique plan, tenant and run-scoped API key in the dedicated Acceptance D1 only after the read-only Worker preflight passes.
-3. Exercises the live corpus through both REST and MCP. MCP calls are spaced by at least 2.5 seconds, polling uses bounded backoff, and explicit MCP IP-rate-limit responses receive bounded retries.
-4. Checks HTTP status, task state, body snippets, content type, declared response charset (when expected), final URL, redirect count and source provenance. The three WPT charset targets also list their pinned `.headers` files as evidence for the expected upstream charset.
-5. Verifies a direct loopback URL is rejected before task creation and a public redirect to loopback is rejected before a second Fetch.
-6. Deletes only the run-scoped Tasks, usage, API key, tenant and plan in a `finally` cleanup once seeding has been attempted. If a read-only preflight fails before seeding, no D1 cleanup/write is issued.
+1. Creates a unique plan, tenant and run-scoped API key in the dedicated Acceptance D1 only after the read-only Worker preflight passes.
+2. Exercises the live corpus through both REST and MCP. MCP calls are spaced by at least 2.5 seconds, polling uses bounded backoff, and explicit MCP IP-rate-limit responses receive bounded retries.
+3. Checks HTTP status, task state, body snippets, content type, declared response charset (when expected), final URL, redirect count and source provenance. The three WPT charset targets also list their pinned `.headers` files as evidence for the expected upstream charset.
+4. Verifies a direct loopback URL is rejected before task creation and a public redirect to loopback is rejected before a second Fetch.
+5. Deletes only the run-scoped Tasks, usage, API key, tenant and plan in a `finally` cleanup once seeding has been attempted. If a read-only preflight fails before seeding, no D1 cleanup/write is issued.
 
 The script has fixed Acceptance endpoints. It refuses overridden endpoints and rejects any Production URL or Production D1 identifier. It does not deploy Workers, run migrations, change bindings, secrets, routes, DNS, permissions, or traffic. A successful live run is still Acceptance evidence only; it does not authorize merge or Production release.
 
