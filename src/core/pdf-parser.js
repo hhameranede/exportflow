@@ -1,5 +1,3 @@
-import { extractText, getDocumentProxy } from "unpdf";
-
 export const PDF_PARSE_LIMITS = Object.freeze({
   maxInputBytes: 1_048_576,
   maxPages: 10,
@@ -77,6 +75,15 @@ export async function extractPdfText(input, options = {}) {
 
   let document;
   try {
+    if (typeof globalThis.Iterator !== "function") {
+      throw new PdfParserError(
+        "PDF_RUNTIME_UNSUPPORTED",
+        "PDF extraction requires the Iterator global; use Node.js 24+ or a compatible Cloudflare Workers runtime.",
+        503,
+      );
+    }
+    const { extractText, getDocumentProxy } = await import("unpdf");
+
     // PDF.js takes ownership of its input buffer. Pass a copy so callers retain
     // their bounded Fetch buffer for accounting and downstream provenance.
     document = await getDocumentProxy(bytes.slice(), {
