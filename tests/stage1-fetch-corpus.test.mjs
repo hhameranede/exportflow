@@ -67,6 +67,17 @@ test("corpus contains live non-UTF-8 charset and compression coverage", () => {
   assert.ok(corpus.liveFetch.some((entry) => entry.expectedHttpStatus === 404));
 });
 
+test("redirect-to-loopback fixture uses a source that emits an unfiltered Location header", () => {
+  const target = corpus.negativeCases.find((entry) => entry.id === "redirect-to-loopback");
+  assert.ok(target, "redirect-to-loopback negative fixture must exist");
+  const source = new URL(target.url);
+  assert.equal(source.origin, "https://testserver.host");
+  assert.equal(source.pathname, "/redirect-to");
+  assert.equal(source.searchParams.get("url"), "http://127.0.0.1/");
+  assert.equal(source.searchParams.get("status_code"), "302");
+  assert.equal(target.expectedTaskErrorCode, "REDIRECT_NOT_ALLOWED");
+});
+
 test("the Stage 1 live runner is pinned to dedicated Acceptance Workers only", () => {
   assert.equal(assertAcceptanceEndpointsArePinned(), true);
   assert.equal(assertPinnedAcceptanceConfigs(), true);
