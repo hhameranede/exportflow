@@ -499,8 +499,12 @@ function buildCsvExtracted({ parsed, url, contentType, schema }) {
       : "succeeded");
 
   return {
-    status,
+    status: missingFields.length || parsed.status === "partial" || parsed.truncated
+      ? "partial"
+      : "succeeded",
     data,
+    inputBytes: parsed.inputBytes,
+    delimiter: parsed.delimiter,
     headers: parsed.headers,
     rowCount: parsed.rowCount,
     truncated: parsed.truncated,
@@ -630,6 +634,8 @@ export async function extractStructuredData(input, options = {}) {
         format: "csv",
         parser: parsedCsv.method,
         parserVersion: CSV_PARSER_VERSION,
+        inputBytes: extractedCsv.inputBytes,
+        delimiter: extractedCsv.delimiter,
         headers: extractedCsv.headers,
         rowCount: extractedCsv.rowCount,
         truncated: extractedCsv.truncated,
@@ -730,6 +736,7 @@ export const extractAdapter = Object.freeze({
     maxCsvBytes: CSV_PARSE_LIMITS.maxBytes,
     maxCsvRows: CSV_PARSE_LIMITS.maxRows,
     maxCsvColumns: CSV_PARSE_LIMITS.maxColumns,
+    maxCsvHeaderCharacters: CSV_PARSE_LIMITS.maxHeaderCharacters,
   },
   restrictions: [
     "schema-driven-deterministic-extraction",

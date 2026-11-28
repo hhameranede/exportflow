@@ -68,6 +68,7 @@ test("CSV extraction defaults to schema property names when x-source is omitted"
   );
   assert.equal(result.status, "succeeded");
   assert.deepEqual(result.data.fields.sku, ["001", "002"]);
+  assert.equal(result.data.delimiter, ",");
 });
 
 test("CSV short rows are retained as empty strings and reported as partial", async () => {
@@ -129,5 +130,29 @@ test("CSV extraction refuses non-array/non-string contracts and generic binary c
       { fetchResource: async (requestedUrl) => responseFor(requestedUrl, "SKU\n001", "application/octet-stream") },
     ),
     (error) => error instanceof ExtractionError && error.code === "UNSUPPORTED_CONTENT_TYPE",
+  );
+});
+
+
+test("single-column CSV ignores PapaParse's undetectable-delimiter diagnostic", () => {
+  const parsed = parseCsvText("id\\n001\\n002");
+  assert.equal(parsed.status, "succeeded");
+  assert.deepEqual(parsed.headers, ["id"]);
+  assert.deepEqual(parsed.rows.map((row) => row.id), ["001", "002"]);
+  assert.deepEqual(parsed.errors, []);
+});
+
+test("CSV parser enforces row, column and header-length ceilings", () => {
+  const rows = ["id", ...Array.from({ length: 1_001 }, (_, index) => String(index))].join("\\n");
+  const rowLimited = parseCsvText(rows);
+  assert.equal(rowLimited.rowCount, 1_000);
+  assert.equal(rowLimited.truncated, true);
+
+  const wideHeader = Array.from({ length: 101 }, (_, index) => "c" + index).join(",");
+  assert.throws(() => parseCsvText(wideHeader), (error) => error.code === "CSV_TOO_MANY_COLUMNS");
+
+  assert.throws(
+    () => parseCsvText("x".repeat(257) + "\\nvalue"),
+    (error) => error.code === "CSV_HEADER_TOO_LONG",
   );
 });

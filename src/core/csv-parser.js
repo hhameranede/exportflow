@@ -66,6 +66,9 @@ export function parseCsvText(csv, options = {}) {
   if (headers.some((header) => header.length > CSV_PARSE_LIMITS.maxHeaderCharacters)) {
     throw new CsvParserError("CSV_HEADER_TOO_LONG", "A CSV header exceeds the 256-character limit.", 413);
   }
+  if (headers.some((header) => /[\u0000-\u001f\u007f]/.test(header))) {
+    throw new CsvParserError("CSV_UNSAFE_HEADER", "CSV headers must not contain control characters.");
+  }
   if (parsed.meta?.renamedHeaders && Object.keys(parsed.meta.renamedHeaders).length > 0) {
     throw new CsvParserError("CSV_DUPLICATE_HEADER", "CSV header names must be unique after trimming whitespace.");
   }
@@ -76,7 +79,11 @@ export function parseCsvText(csv, options = {}) {
     throw new CsvParserError("CSV_TOO_MANY_COLUMNS", "CSV exceeds the configured column limit.", 413);
   }
 
-  const parseErrors = Array.isArray(parsed.errors) ? parsed.errors : [];
+  const rawParseErrors = Array.isArray(parsed.errors) ? parsed.errors : [];
+  // PapaParse emits this diagnostic for valid one-column CSV with no delimiter to detect.
+  const parseErrors = headers.length === 1
+    ? rawParseErrors.filter((error) => error.code !== "UndetectableDelimiter")
+    : rawParseErrors;
   if (parseErrors.some((error) => error.code === "TooManyFields")) {
     throw new CsvParserError("CSV_TOO_MANY_COLUMNS", "A CSV row exceeds its header column count.", 413);
   }
@@ -96,6 +103,7 @@ export function parseCsvText(csv, options = {}) {
     method: "papaparse",
     parserVersion: CSV_PARSER_VERSION,
     inputBytes,
+    delimiter: parsed.meta?.delimiter ?? ",",
     headers,
     rows,
     rowCount: rows.length,
