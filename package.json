@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "scripts": {
     "dev": "HOST=0.0.0.0 node src/server.js",
@@ -20,6 +20,7 @@
     "@better-auth/oauth-provider": "1.7.27",
     "papaparse": "5.7.1",
     "@mozilla/readability": "0.6.0",
-    "linkedom": "0.18.15"
+    "linkedom": "0.18.15",
+    "unpdf": "2.2.3"
   }
 }
