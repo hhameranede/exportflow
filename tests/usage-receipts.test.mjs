@@ -43,6 +43,143 @@ test("Fetch usage receipts are immutable, sanitized and observational", async ()
   assert.equal(serialized.includes("safe-body"), false);
 });
 
+test("Extract task usage reports original downloaded bytes for HTML and JSON", async () => {
+  const fixtures = [
+    {
+      url: "https://example.com/article",
+      contentType: "text/html; charset=utf-8",
+      body: "<html><head><title>Measured HTML</title></head><body><p>Public page</p></body></html>",
+      schema: {
+        type: "object",
+        properties: { title: { type: "string", "x-source": "page:title" } },
+        required: ["title"],
+      },
+    },
+    {
+      url: "https://example.com/data.json",
+      contentType: "application/json; charset=utf-8",
+      body: JSON.stringify({ name: "ExportFlow" }),
+      schema: {
+        type: "object",
+        properties: { name: { type: "string", "x-source": "jsonld:name" } },
+        required: ["name"],
+      },
+    },
+  ];
+
+  for (let index = 0; index < fixtures.length; index += 1) {
+    const fixture = fixtures[index];
+    const expectedBytes = new TextEncoder().encode(fixture.body).byteLength;
+    const task = await executeWebTask(
+      {
+        goal: "Measure downloaded bytes for " + fixture.contentType,
+        operation: "extract",
+        url: fixture.url,
+        schema: fixture.schema,
+      },
+      {
+        idFactory: () => "extract-byte-usage-" + index,
+        fetchImpl: async () => new Response(fixture.body, {
+          status: 200,
+          headers: { "content-type": fixture.contentType },
+        }),
+      },
+    );
+
+    assert.equal(task.state, "succeeded");
+    assert.equal(task.result.data.bytes, expectedBytes);
+    assert.equal(task.usage.responseBytes, expectedBytes);
+  }
+});
+
+test("CSV Extract usage reports original bytes for a Windows-1252 response", async () => {
+  const csvBytes = new Uint8Array([0x6e, 0x61, 0x6d, 0x65, 0x0a, 0x63, 0x61, 0x66, 0xe9]);
+  const task = await executeWebTask(
+    {
+      goal: "Measure original CSV download bytes",
+      operation: "extract",
+      url: "https://example.com/legacy.csv",
+      schema: {
+        type: "object",
+        properties: {
+          names: { type: "array", items: { type: "string" }, "x-source": "csv:name" },
+        },
+        required: ["names"],
+      },
+    },
+    {
+      idFactory: () => "csv-original-byte-usage",
+      fetchImpl: async () => new Response(csvBytes, {
+        status: 200,
+        headers: { "content-type": "text/csv; charset=windows-1252" },
+      }),
+    },
+  );
+
+  assert.equal(task.state, "succeeded");
+  assert.equal(task.result.data.inputBytes, csvBytes.byteLength);
+  assert.equal(task.usage.responseBytes, csvBytes.byteLength);
+  assert.deepEqual(task.result.data.fields.names, ["café"]);
+});
+
+test("executeWebTask forwards usage receipts through Extract, Map and Crawl", async () => {
+  const pageHtml = "<html><head><title>Usage receipt page</title></head><body><p>Public page</p></body></html>";
+  const pageBytes = new TextEncoder().encode(pageHtml).byteLength;
+  const schemas = {
+    type: "object",
+    properties: { title: { type: "string", "x-source": "page:title" } },
+    required: ["title"],
+  };
+
+  for (const operation of ["extract", "map", "crawl"]) {
+    const receipts = [];
+    const task = await executeWebTask(
+      {
+        goal: "Verify usage receipt propagation for " + operation,
+        operation,
+        url: "https://example.com/",
+        ...(operation === "extract" ? { schema: schemas } : {}),
+        ...(operation === "map" ? { maxUrls: 1 } : {}),
+        ...(operation === "crawl" ? { maxPages: 1, maxDepth: 0 } : {}),
+      },
+      {
+        idFactory: () => "usage-receipt-" + operation,
+        fetchImpl: async (input) => {
+          const pathname = new URL(String(input)).pathname;
+          if (pathname === "/robots.txt") {
+            return new Response("User-agent: *\\nAllow: /", {
+              status: 200,
+              headers: { "content-type": "text/plain; charset=utf-8" },
+            });
+          }
+          if (pathname === "/sitemap.xml") {
+            return new Response("", {
+              status: 404,
+              headers: { "content-type": "text/plain; charset=utf-8" },
+            });
+          }
+          return new Response(pageHtml, {
+            status: 200,
+            headers: { "content-type": "text/html; charset=utf-8" },
+          });
+        },
+        onUsageReceipt(receipt) { receipts.push(receipt); },
+      },
+    );
+
+    assert.equal(task.state, "succeeded", operation);
+    assert.equal(receipts.length, operation === "extract" ? 1 : 3, operation);
+    assert.ok(receipts.every((receipt) => Object.isFrozen(receipt)), operation);
+    assert.ok(receipts.every((receipt) => receipt.outcome === "response"), operation);
+    assert.ok(receipts.every((receipt) => Number.isInteger(receipt.responseBodyBytesRead)), operation);
+    if (operation === "extract") {
+      assert.equal(receipts[0].responseBodyBytesRead, pageBytes);
+    } else {
+      assert.ok(receipts.some((receipt) => receipt.responseBodyBytesRead === pageBytes), operation);
+    }
+  }
+});
+
 test("executeWebTask forwards Fetch receipts through the internal observer only", async () => {
   const receipts = [];
   const task = await executeWebTask(

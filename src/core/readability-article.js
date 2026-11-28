@@ -11,6 +11,19 @@ import {
 
 const Readability = readabilityPackage.Readability;
 
+function sliceTextWithoutSplittingSurrogatePair(value, maxLength) {
+  let end = Math.min(value.length, maxLength);
+  if (end > 0 && end < value.length) {
+    const lastCodeUnit = value.charCodeAt(end - 1);
+    const nextCodeUnit = value.charCodeAt(end);
+    const splitsSurrogatePair =
+      lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff &&
+      nextCodeUnit >= 0xdc00 && nextCodeUnit <= 0xdfff;
+    if (splitsSurrogatePair) end -= 1;
+  }
+  return value.slice(0, end);
+}
+
 /**
  * Parses an already-fetched HTML document into article text and metadata.
  * This function performs no network requests and never executes page scripts.
@@ -102,7 +115,7 @@ export function extractReadableArticle(html, options = {}) {
     sourceUrl: pageUrl.href,
     inputBytes,
     title: typeof parsed.title === "string" ? parsed.title.slice(0, 500) : null,
-    textContent: rawText.slice(0, maxTextCharacters),
+    textContent: sliceTextWithoutSplittingSurrogatePair(rawText, maxTextCharacters),
     length: rawText.length,
     excerpt: typeof parsed.excerpt === "string" ? parsed.excerpt.slice(0, 1_200) : null,
     byline: typeof parsed.byline === "string" ? parsed.byline.slice(0, 300) : null,

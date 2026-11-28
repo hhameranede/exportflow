@@ -135,6 +135,7 @@ registerAdapter({
     }));
     const mapped = await mapWebsite(input, {
       maxUrls: input.maxUrls, cacheMode: input.cacheMode, fetchResource, signal: options.signal,
+      onUsageReceipt: options.onUsageReceipt,
     });
     return normalizeResult({
       status: mapped.homepage.status >= 200 && mapped.homepage.status < 300 ? "succeeded" : "failed",
@@ -177,7 +178,7 @@ registerAdapter({
     }));
     const crawled = await crawlWebsite(input, {
       maxPages: input.maxPages, maxDepth: input.maxDepth, cacheMode: input.cacheMode,
-      fetchResource, signal: options.signal,
+      fetchResource, signal: options.signal, onUsageReceipt: options.onUsageReceipt,
     });
     return normalizeResult({
       status: crawled.pages.length ? "succeeded" : "failed",

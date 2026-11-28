@@ -625,6 +625,7 @@ export async function extractStructuredData(input, options = {}) {
     responseMode: "extract",
     cacheMode: input.cacheMode ?? options.cacheMode ?? "default",
     ...(options.signal ? { signal: options.signal } : {}),
+    ...(typeof options.onUsageReceipt === "function" ? { onUsageReceipt: options.onUsageReceipt } : {}),
   });
   try {
   if (response.status < 200 || response.status >= 300) {
@@ -746,7 +747,9 @@ export async function extractStructuredData(input, options = {}) {
   if (CSV_MIME_TYPES.has(mime)) {
     let parsedCsv;
     try {
-      parsedCsv = parseCsvText(response.body);
+      parsedCsv = parseCsvText(response.body, Number.isInteger(response.bytes)
+        ? { inputBytes: response.bytes }
+        : {});
     } catch (error) {
       if (error instanceof CsvParserError) {
         throw new ExtractionError(error.code, error.message, error.httpStatus);
@@ -924,6 +927,7 @@ export async function extractStructuredData(input, options = {}) {
     data: {
       url: response.finalUrl || url,
       httpStatus: response.status,
+      bytes: response.bytes,
       cacheStatus: response.cacheStatus ?? null,
       fields: extracted.data,
       fieldEvidence: extracted.fieldEvidence,
