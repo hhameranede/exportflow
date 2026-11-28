@@ -147,7 +147,7 @@ test("executeWebTask forwards usage receipts through Extract, Map and Crawl", as
         fetchImpl: async (input) => {
           const pathname = new URL(String(input)).pathname;
           if (pathname === "/robots.txt") {
-            return new Response("User-agent: *\\nAllow: /", {
+            return new Response("User-agent: *\nAllow: /", {
               status: 200,
               headers: { "content-type": "text/plain; charset=utf-8" },
             });
