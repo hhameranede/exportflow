@@ -170,3 +170,4 @@ test("CSV parser detects semicolon-delimited locale exports without coercing val
   assert.equal(parsed.rows[0].SKU, "0012");
   assert.equal(parsed.rows[0].Description, "Widget");
 });
+
