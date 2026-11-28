@@ -351,6 +351,7 @@ async function createSiteContext(input, options) {
         cacheMode: options.cacheMode ?? "default",
         ...fetchOptions,
         ...(signal ? { signal } : {}),
+        ...(typeof options.onUsageReceipt === "function" ? { onUsageReceipt: options.onUsageReceipt } : {}),
       });
     } catch (error) {
       if (signal?.aborted) {
