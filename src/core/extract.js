@@ -646,6 +646,17 @@ export async function extractStructuredData(input, options = {}) {
 
   const mime = String(response.contentType || "").split(";")[0].trim().toLowerCase();
   if (PDF_MIME_TYPES.has(mime)) {
+    if (
+      mime === "application/octet-stream" &&
+      !(response.bodyBytes instanceof Uint8Array) &&
+      !(response.bodyBytes instanceof ArrayBuffer)
+    ) {
+      throw new ExtractionError(
+        "UNSUPPORTED_CONTENT_TYPE",
+        "Generic binary responses are not accepted as PDFs without a signature-checkable byte body.",
+        415,
+      );
+    }
     let parsedPdf;
     try {
       parsedPdf = await extractPdfText(response.bodyBytes, { contentType: mime });
