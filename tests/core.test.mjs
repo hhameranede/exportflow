@@ -538,6 +538,52 @@ test("fetch rejects binary response types", async () => {
     (error) => error instanceof FetchAdapterError && error.code === "UNSUPPORTED_CONTENT_TYPE",
   );
 });
+test("fetch returns bounded PDF bytes only in explicit Extract response mode", async () => {
+  const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);
+  let requestHeaders;
+  const result = await fetchPublicResource("https://example.com/file.pdf", {
+    responseMode: "extract",
+    maxBytes: bytes.byteLength,
+    fetchImpl: async (_url, init) => {
+      requestHeaders = init.headers;
+      return response(bytes, {
+        headers: {
+          "content-type": "application/pdf",
+          "content-length": String(bytes.byteLength),
+        },
+      });
+    },
+  });
+  assert.deepEqual(result.bodyBytes, bytes);
+  assert.equal(result.bytes, bytes.byteLength);
+  assert.equal(result.body, undefined);
+  assert.match(requestHeaders.accept, /application\\/pdf/);
+});
+
+test("Extract response mode rejects declared and streamed PDF bodies above its byte ceiling", async () => {
+  await assert.rejects(
+    fetchPublicResource("https://example.com/declared.pdf", {
+      responseMode: "extract",
+      maxBytes: 4,
+      fetchImpl: async () => response(new Uint8Array([1, 2, 3, 4, 5]), {
+        headers: { "content-type": "application/pdf", "content-length": "5" },
+      }),
+    }),
+    (error) => error instanceof FetchAdapterError &&
+      error.code === "RESPONSE_TOO_LARGE" && error.httpStatus === 413,
+  );
+  await assert.rejects(
+    fetchPublicResource("https://example.com/streamed.pdf", {
+      responseMode: "extract",
+      maxBytes: 4,
+      fetchImpl: async () => response(new Uint8Array([1, 2, 3, 4, 5]), {
+        headers: { "content-type": "application/pdf" },
+      }),
+    }),
+    (error) => error instanceof FetchAdapterError &&
+      error.code === "RESPONSE_TOO_LARGE" && error.httpStatus === 413,
+  );
+});
 
 test("fetch enforces both declared and streamed response size limits", async () => {
   await assert.rejects(
