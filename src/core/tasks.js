@@ -204,6 +204,19 @@ export async function executeWebTask(input, options = {}) {
   let goal = "";
   let requestedUrl = null;
   let execution = null;
+  let observedResponseBytes = 0;
+  let usageReceiptCount = 0;
+
+  const observeUsageReceipt = (receipt) => {
+    usageReceiptCount += 1;
+    const responseBytes = receipt?.responseBodyBytesRead;
+    if (Number.isSafeInteger(responseBytes) && responseBytes >= 0) {
+      observedResponseBytes = Math.min(Number.MAX_SAFE_INTEGER, observedResponseBytes + responseBytes);
+    }
+    if (typeof options.onUsageReceipt === "function") {
+      try { options.onUsageReceipt(receipt); } catch {}
+    }
+  };
 
   try {
     if (!input || typeof input !== "object" || Array.isArray(input)) {
@@ -373,7 +386,7 @@ export async function executeWebTask(input, options = {}) {
     if (input.cacheMode !== undefined) adapterInput.cacheMode = input.cacheMode;
     const adapterOptions = {};
     if (typeof options.fetchImpl === "function") adapterOptions.fetchImpl = options.fetchImpl;
-    if (typeof options.onUsageReceipt === "function") adapterOptions.onUsageReceipt = options.onUsageReceipt;
+    adapterOptions.onUsageReceipt = observeUsageReceipt;
     adapterOptions.signal = controls.signal;
     const result = Object.keys(adapterOptions).length
       ? await runWithTaskControls((signal) => runAdapter(adapterId, adapterInput, { ...adapterOptions, signal }), controls)
@@ -416,7 +429,13 @@ export async function executeWebTask(input, options = {}) {
       usage: {
         durationMs: computeDurationMs(startedAt, completedAt, Date.now() - startMs),
         requestsAttempted,
-        responseBytes: Number.isInteger(result.data?.bytes) ? result.data.bytes : null,
+        responseBytes: usageReceiptCount > 0
+          ? observedResponseBytes
+          : Number.isInteger(result.data?.bytes)
+            ? result.data.bytes
+            : Number.isInteger(result.data?.inputBytes)
+              ? result.data.inputBytes
+              : null,
         cost: null,
       },
       result,
@@ -442,7 +461,9 @@ export async function executeWebTask(input, options = {}) {
       usage: {
         durationMs: computeDurationMs(startedAt, completedAt, Date.now() - startMs),
         requestsAttempted: startedAt ? null : 0,
-        responseBytes: 0,
+        responseBytes: usageReceiptCount > 0
+          ? observedResponseBytes
+          : Number.isInteger(error?.responseBytes) ? error.responseBytes : 0,
         cost: null,
       },
       result: failureResult(code, requestedUrl),

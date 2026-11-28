@@ -71,7 +71,24 @@ test("Readability reports bounded text truncation and rejects invalid options", 
   assert.throws(() => extractReadableArticle(html, null), parserError("INVALID_OPTIONS"));
 });
 
-test("Readability returns an explicit no-article result with bounded title and language metadata", () => {
+test("Readability truncation never leaves an unmatched high surrogate", () => {
+  const articleText = "A".repeat(199) + "😀" + "B".repeat(120);
+  const html = "<html><head><title>Unicode article</title></head><body><article><p>" +
+    articleText +
+    "</p></article></body></html>";
+  const result = extractReadableArticle(html, {
+    url: "https://example.com/unicode",
+    maxTextCharacters: 200,
+  });
+
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.truncated, true);
+  assert.ok(result.textContent.length <= 200);
+  const lastCodeUnit = result.textContent.charCodeAt(result.textContent.length - 1);
+  assert.equal(lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff, false);
+});
+
+test("Readability returns a no-article result with bounded title and language metadata", () => {
   const title = "T".repeat(600);
   const language = "l".repeat(40);
   const result = extractReadableArticle(
@@ -86,7 +103,7 @@ test("Readability returns an explicit no-article result with bounded title and l
   assert.equal(result.language.length, 32);
 });
 
-test("Readability bounds title and language metadata on successful article extraction", () => {
+test("Readability bounds title and language on successful article extraction", () => {
   const title = "T".repeat(600);
   const language = "l".repeat(40);
   const html = "<html lang='" + language + "'><head><title>" + title + "</title></head>" +
@@ -131,6 +148,26 @@ test("PapaParse rejects data rows with more fields than the header", () => {
   assert.throws(
     () => parseCsvText("name,age\nAda,37,extra"),
     parserError("CSV_TOO_MANY_COLUMNS")
+  );
+});
+
+test("PapaParse preserves original response byte counts for decoded legacy charsets", () => {
+  const decodedCsv = "name\ncafé";
+  const originalBytes = new Uint8Array([0x6e, 0x61, 0x6d, 0x65, 0x0a, 0x63, 0x61, 0x66, 0xe9]);
+
+  assert.equal(new TextEncoder().encode(decodedCsv).byteLength, 10);
+  assert.equal(originalBytes.byteLength, 9);
+
+  const result = parseCsvText(decodedCsv, {
+    maxBytes: originalBytes.byteLength,
+    inputBytes: originalBytes.byteLength,
+  });
+  assert.equal(result.inputBytes, originalBytes.byteLength);
+  assert.equal(result.rows[0].name, "café");
+
+  assert.throws(
+    () => parseCsvText(decodedCsv, { maxBytes: 9, inputBytes: 10 }),
+    parserError("INPUT_TOO_LARGE")
   );
 });
 

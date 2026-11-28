@@ -14,12 +14,20 @@ export const EXTRACTION_LIMITS = Object.freeze({
   maxJsonLdDepth: 12,
 });
 
+function attachResponseBytes(error, responseBytes) {
+  if (error && typeof error === "object" && Number.isInteger(responseBytes) && responseBytes >= 0) {
+    try { error.responseBytes = responseBytes; } catch {}
+  }
+  return error;
+}
+
 export class ExtractionError extends Error {
-  constructor(code, message, httpStatus = 400) {
+  constructor(code, message, httpStatus = 400, responseBytes = null) {
     super(message);
     this.name = "ExtractionError";
     this.code = code;
     this.httpStatus = httpStatus;
+    if (Number.isInteger(responseBytes) && responseBytes >= 0) this.responseBytes = responseBytes;
   }
 }
 
@@ -617,13 +625,16 @@ export async function extractStructuredData(input, options = {}) {
     responseMode: "extract",
     cacheMode: input.cacheMode ?? options.cacheMode ?? "default",
     ...(options.signal ? { signal: options.signal } : {}),
+    ...(typeof options.onUsageReceipt === "function" ? { onUsageReceipt: options.onUsageReceipt } : {}),
   });
+  try {
   if (response.status < 200 || response.status >= 300) {
     return normalizeResult({
       status: "failed",
       data: {
         url: response.finalUrl || url,
         httpStatus: response.status,
+        bytes: response.bytes,
         cacheStatus: response.cacheStatus ?? null,
         fields: {},
         missingFields: schema.fields.map((field) => field.name),
@@ -662,16 +673,21 @@ export async function extractStructuredData(input, options = {}) {
       parsedPdf = await extractPdfText(response.bodyBytes, { contentType: mime });
     } catch (error) {
       if (error instanceof PdfParserError) {
-        throw new ExtractionError(error.code, error.message, error.httpStatus);
+        throw new ExtractionError(error.code, error.message, error.httpStatus, response.bytes);
       }
-      throw error;
+      throw attachResponseBytes(error, response.bytes);
     }
-    const extractedPdf = buildPdfExtracted({
-      parsed: parsedPdf,
-      url: response.finalUrl || url,
-      contentType: response.contentType,
-      schema: input.schema,
-    });
+    let extractedPdf;
+    try {
+      extractedPdf = buildPdfExtracted({
+        parsed: parsedPdf,
+        url: response.finalUrl || url,
+        contentType: response.contentType,
+        schema: input.schema,
+      });
+    } catch (error) {
+      throw attachResponseBytes(error, response.bytes);
+    }
     const pdfSource = {
       url: response.finalUrl || url,
       retrievedAt: response.retrievedAt,
@@ -731,7 +747,9 @@ export async function extractStructuredData(input, options = {}) {
   if (CSV_MIME_TYPES.has(mime)) {
     let parsedCsv;
     try {
-      parsedCsv = parseCsvText(response.body);
+      parsedCsv = parseCsvText(response.body, Number.isInteger(response.bytes)
+        ? { inputBytes: response.bytes }
+        : {});
     } catch (error) {
       if (error instanceof CsvParserError) {
         throw new ExtractionError(error.code, error.message, error.httpStatus);
@@ -909,6 +927,7 @@ export async function extractStructuredData(input, options = {}) {
     data: {
       url: response.finalUrl || url,
       httpStatus: response.status,
+      bytes: response.bytes,
       cacheStatus: response.cacheStatus ?? null,
       fields: extracted.data,
       fieldEvidence: extracted.fieldEvidence,
@@ -920,6 +939,9 @@ export async function extractStructuredData(input, options = {}) {
     sources: [source],
     warnings: resultWarnings,
   });
+  } catch (error) {
+    throw attachResponseBytes(error, response.bytes);
+  }
 }
 
 export const extractAdapter = Object.freeze({
