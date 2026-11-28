@@ -155,11 +155,13 @@ test("REST Extract parses bounded CSV through the shared task execution path", a
     authorizeScope: baseGateway.authorizeScope,
   };
   const csv = 'SKU,Product Notes\n001,"Contains, commas"\n002,"=SUM(1,1)"\n';
+  let fetchAccept = "";
   let fetchCalls = 0;
   const worker = createWorker({
     tenantTaskGateway: gateway,
-    fetchImpl: async () => {
+    fetchImpl: async (_input, init) => {
       fetchCalls += 1;
+      fetchAccept = new Headers(init?.headers).get("accept") || "";
       return new Response(csv, {
         status: 200,
         headers: { "content-type": "text/csv; charset=utf-8" },
@@ -200,6 +202,7 @@ test("REST Extract parses bounded CSV through the shared task execution path", a
     assert.equal(task.result.data.rowCount, 2);
     assert.equal(task.result.data.fieldEvidence[0].sourceType, "csv");
     assert.equal(task.result.data.fieldEvidence[0].path, "SKU");
+    assert.ok(fetchAccept.toLowerCase().split(",").some((mediaType) => mediaType.trim() === "text/csv"));
     assert.equal(fetchCalls, 1);
   } finally {
     fixture.close();

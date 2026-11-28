@@ -304,7 +304,7 @@ export async function fetchPublicResource(input, options = {}) {
           // Deliberately do not set cacheEverything or force a cache TTL.
           signal: controller.signal,
           headers: {
-            accept: "text/html,application/xhtml+xml,application/json,application/xml,text/plain;q=0.9",
+            accept: "text/html,application/xhtml+xml,application/json,application/xml,text/csv,text/plain;q=0.9",
             ...(typeof options.userAgent === "string" && options.userAgent.length <= 200
               ? { "user-agent": options.userAgent }
               : {}),
