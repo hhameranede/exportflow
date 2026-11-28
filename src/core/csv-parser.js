@@ -40,7 +40,12 @@ export function parseCsvText(csv, options = {}) {
   if (typeof csv !== "string" || csv.length === 0) {
     throw new CsvParserError("CSV_HEADER_REQUIRED", "CSV must contain a non-empty header row.");
   }
-  const inputBytes = new TextEncoder().encode(csv).byteLength;
+  const inputBytes = options.inputBytes === undefined
+    ? new TextEncoder().encode(csv).byteLength
+    : options.inputBytes;
+  if (!Number.isSafeInteger(inputBytes) || inputBytes < 0) {
+    throw new CsvParserError("INVALID_CSV_INPUT_BYTES", "inputBytes must be a non-negative safe integer.", 400);
+  }
   if (inputBytes > maxBytes) {
     throw new CsvParserError("CSV_INPUT_TOO_LARGE", "CSV input exceeds the 256 KiB parser limit.", 413);
   }

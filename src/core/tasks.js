@@ -416,7 +416,11 @@ export async function executeWebTask(input, options = {}) {
       usage: {
         durationMs: computeDurationMs(startedAt, completedAt, Date.now() - startMs),
         requestsAttempted,
-        responseBytes: Number.isInteger(result.data?.bytes) ? result.data.bytes : null,
+        responseBytes: Number.isInteger(result.data?.bytes)
+          ? result.data.bytes
+          : Number.isInteger(result.data?.inputBytes)
+            ? result.data.inputBytes
+            : null,
         cost: null,
       },
       result,
@@ -442,7 +446,7 @@ export async function executeWebTask(input, options = {}) {
       usage: {
         durationMs: computeDurationMs(startedAt, completedAt, Date.now() - startMs),
         requestsAttempted: startedAt ? null : 0,
-        responseBytes: 0,
+        responseBytes: Number.isInteger(error?.responseBytes) ? error.responseBytes : 0,
         cost: null,
       },
       result: failureResult(code, requestedUrl),
