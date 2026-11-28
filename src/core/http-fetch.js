@@ -122,7 +122,7 @@ function cancelReader(reader) {
 
 async function readBinaryBody(response, maxBytes, signal, getAbortCode, onBytesRead) {
   const declaredLength = response.headers.get("content-length");
-  if (declaredLength && /^\\d+$/.test(declaredLength) && Number(declaredLength) > maxBytes) {
+  if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxBytes) {
     cancelBody(response);
     throw new FetchAdapterError("RESPONSE_TOO_LARGE", "Upstream response exceeds the configured size limit.", 413);
   }
