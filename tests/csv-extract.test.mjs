@@ -160,3 +160,13 @@ test("CSV parser enforces row, column and header-length ceilings", () => {
     (error) => error.code === "CSV_HEADER_TOO_LONG",
   );
 });
+
+
+test("CSV parser detects semicolon-delimited locale exports without coercing values", () => {
+  const csv = ["SKU;Description", "0012;Widget"].join(String.fromCharCode(10));
+  const parsed = parseCsvText(csv);
+  assert.equal(parsed.delimiter, ";");
+  assert.deepEqual(parsed.headers, ["SKU", "Description"]);
+  assert.equal(parsed.rows[0].SKU, "0012");
+  assert.equal(parsed.rows[0].Description, "Widget");
+});
