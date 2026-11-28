@@ -793,7 +793,7 @@ test("web_extract executes a PDF end-to-end through MCP and the shared Extract t
     const task = body.result.structuredContent;
 
     assert.equal(response.status, 200);
-    assert.equal(body.result.isError, undefined);
+    assert.equal(body.result.isError, undefined, JSON.stringify(task));
     assert.equal(task.state, "succeeded");
     assert.equal(task.execution.adapterId, "web.extract.v1");
     assert.equal(task.result.data.format, "pdf");
