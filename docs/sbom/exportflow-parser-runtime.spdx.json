@@ -5,7 +5,7 @@
   "name": "ExportFlow Parser Runtime Dependency SBOM",
   "documentNamespace": "https://spdx.org/spdxdocs/exportflow-parser-runtime-20261128-pdf-3e2d7b9c",
   "creationInfo": {
-    "created": "2026-11-27T12:23:24.037Z",
+    "created": "2026-11-28T16:44:08.334Z",
     "creators": [
       "Tool: ExportFlow parser runtime SPDX generator"
     ],
