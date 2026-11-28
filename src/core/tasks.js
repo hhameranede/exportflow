@@ -8,7 +8,7 @@ const TASK_ID_PATTERN = /^[a-zA-Z0-9_-]{8,64}$/;
 const MAX_GOAL_LENGTH = 2_000;
 const ALLOWED_TASK_INPUT_KEYS = new Set([
   "goal", "url", "operation", "query", "source", "limit", "candidateLimit",
-  "schema", "maxUrls", "maxPages", "maxDepth", "cacheMode", "limits",
+  "schema", "maxUrls", "maxPages", "maxDepth", "cacheMode", "limits", "includeArticle",
 ]);
 
 function createId() {
@@ -217,6 +217,12 @@ export async function executeWebTask(input, options = {}) {
       throw Object.assign(new TypeError("Unsupported task operation."), { code: "UNSUPPORTED_OPERATION" });
     }
     const queryOperation = operation === "search" || operation === "research";
+    if (input.includeArticle !== undefined && typeof input.includeArticle !== "boolean") {
+      throw Object.assign(new TypeError("includeArticle must be a boolean."), { code: "INVALID_INCLUDE_ARTICLE" });
+    }
+    if (input.includeArticle !== undefined && operation !== "extract") {
+      throw Object.assign(new TypeError("includeArticle is only supported for extract."), { code: "INVALID_TASK" });
+    }
     const url = queryOperation ? null : validatePublicHttpUrl(input.url);
     requestedUrl = url ? url.href : null;
     if (queryOperation && (typeof input.query !== "string" || !input.query.trim() || input.query.length > 1024)) {
@@ -349,7 +355,10 @@ export async function executeWebTask(input, options = {}) {
       if (input.maxPages !== undefined) adapterInput.maxPages = input.maxPages;
       if (input.maxDepth !== undefined) adapterInput.maxDepth = input.maxDepth;
     }
-    if (operation === "extract") adapterInput.schema = input.schema;
+    if (operation === "extract") {
+      adapterInput.schema = input.schema;
+      if (input.includeArticle === true) adapterInput.includeArticle = true;
+    }
     if (input.cacheMode !== undefined) adapterInput.cacheMode = input.cacheMode;
     const adapterOptions = {};
     if (typeof options.fetchImpl === "function") adapterOptions.fetchImpl = options.fetchImpl;

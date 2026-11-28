@@ -114,8 +114,8 @@ const TOOL_DEFINITIONS = Object.freeze([
     description: "Crawls at most three same-origin static pages to depth one, respecting robots.txt and bounded byte limits. Requires tasks:crawl.",
     inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, maxPages: { type: "integer", minimum: 1, maximum: 3 }, maxDepth: { type: "integer", minimum: 0, maximum: 1 }, cacheMode: CACHE_MODE_SCHEMA, idempotencyKey: { type: "string", minLength: 8, maxLength: 128 } }, required: ["url"], additionalProperties: false } },
   { name: "web_extract", title: "Extract structured page data",
-    description: "Extracts explicit fields from public static HTML, JSON, or bounded CSV. Map CSV columns with x-source csv:Column Name and array-of-string fields; values and formula-looking cells remain text. Missing fields are not guessed. Requires tasks:extract.",
-    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, schema: SCHEMA_SCHEMA, cacheMode: CACHE_MODE_SCHEMA, idempotencyKey: { type: "string", minLength: 8, maxLength: 128 } }, required: ["url", "schema"], additionalProperties: false } },
+    description: "Extracts explicit fields from public static HTML, JSON, or bounded CSV. For HTML, set includeArticle: true to add optional Mozilla Readability article text (up to 20,000 characters) with source provenance; JSON and CSV report article text as not applicable. Map CSV columns with x-source csv:Column Name and array-of-string fields; values and formula-looking cells remain text. Missing fields are not guessed. Requires tasks:extract.",
+    inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, schema: SCHEMA_SCHEMA, includeArticle: { type: "boolean", description: "Add up to 20,000 characters of Mozilla Readability article text for HTML responses." }, cacheMode: CACHE_MODE_SCHEMA, idempotencyKey: { type: "string", minLength: 8, maxLength: 128 } }, required: ["url", "schema"], additionalProperties: false } },
   { name: "web_search", title: "Search a selected public dataset",
     description: "Searches one selected no-key source: Wikipedia (encyclopedic), OpenAlex (scholarly works), or Crossref (DOI metadata). Not a whole-web search engine. Requires tasks:search.",
     inputSchema: { type: "object", properties: { query: QUERY_SCHEMA, source: SEARCH_SOURCE_SCHEMA, limit: { type: "integer", minimum: 1, maximum: 10 }, cacheMode: CACHE_MODE_SCHEMA, idempotencyKey: { type: "string", minLength: 8, maxLength: 128 } }, required: ["query", "source"], additionalProperties: false } },
@@ -199,7 +199,7 @@ function validateToolArguments(name, args) {
     web_task_status: ["taskId"],
     web_fetch: ["url", "cacheMode", "idempotencyKey"], web_map: ["url", "maxUrls", "cacheMode", "idempotencyKey"],
     web_crawl: ["url", "maxPages", "maxDepth", "cacheMode", "idempotencyKey"],
-    web_extract: ["url", "schema", "cacheMode", "idempotencyKey"], web_search: ["query", "source", "limit", "cacheMode", "idempotencyKey"],
+    web_extract: ["url", "schema", "includeArticle", "cacheMode", "idempotencyKey"], web_search: ["query", "source", "limit", "cacheMode", "idempotencyKey"],
     web_research: ["query", "source", "schema", "limit", "candidateLimit", "cacheMode", "idempotencyKey"],
   }[name];
   if (!allowed) return "Unknown tool.";
@@ -207,6 +207,7 @@ function validateToolArguments(name, args) {
   if (name === "web_task_status" && (typeof args.taskId !== "string" || !/^[A-Za-z0-9_-]{8,64}$/.test(args.taskId))) return "taskId must be a valid task identifier.";
   if (args.idempotencyKey !== undefined && (typeof args.idempotencyKey !== "string" || !/^[\x21-\x7E]{8,128}$/.test(args.idempotencyKey))) return "idempotencyKey must contain 8 to 128 visible ASCII characters without spaces.";
   if (["web_fetch", "web_map", "web_crawl", "web_extract"].includes(name) && !isValidHttpUrl(args.url)) return "url must be a valid credential-free HTTP(S) URL.";
+  if (name === "web_extract" && args.includeArticle !== undefined && typeof args.includeArticle !== "boolean") return "includeArticle must be a boolean.";
   if (args.cacheMode !== undefined && !["default", "bypass"].includes(args.cacheMode)) return "cacheMode must be default or bypass.";
   if (["web_search", "web_research"].includes(name)) {
     if (typeof args.query !== "string" || !args.query.trim() || args.query.length > 1024) return "query must contain 1 to 1024 characters.";
@@ -348,6 +349,7 @@ export function createExportFlowPreviewWorker({
       if (args.maxDepth !== undefined) input.maxDepth = args.maxDepth;
     }
     if (name === "web_extract" || name === "web_research") input.schema = args.schema;
+    if (name === "web_extract" && args.includeArticle === true) input.includeArticle = true;
     if (name === "web_search" || name === "web_research") {
       input.query = args.query; input.source = args.source;
       if (args.limit !== undefined) input.limit = args.limit;

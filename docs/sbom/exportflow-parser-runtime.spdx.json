@@ -1,0 +1,721 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "ExportFlow Parser Runtime Dependency SBOM",
+  "documentNamespace": "https://spdx.org/spdxdocs/exportflow-parser-runtime-20261127-c7cc30b367fc8094e8a0c1350c1587665754e6d2",
+  "creationInfo": {
+    "created": "2026-11-27T12:23:24.037Z",
+    "creators": [
+      "Tool: ExportFlow parser runtime SPDX generator"
+    ],
+    "licenseListVersion": "3.27"
+  },
+  "documentDescribes": [
+    "SPDXRef-ExportFlow"
+  ],
+  "documentComment": "Scope: ExportFlow runtime dependency closure for parser roots @mozilla/readability, linkedom, papaparse. Includes 22 exact npm packages from package-lock.json (lockfileVersion 3). This is intentionally not a complete application SBOM. Declared license identifiers are package metadata; licenseConcluded is NOASSERTION and does not replace legal/commercial license review.",
+  "packages": [
+    {
+      "name": "ExportFlow",
+      "SPDXID": "SPDXRef-ExportFlow",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "primaryPackagePurpose": "APPLICATION"
+    },
+    {
+      "name": "@mozilla/readability",
+      "SPDXID": "SPDXRef-Pkg-ef1d6b4307782da4",
+      "versionInfo": "0.6.0",
+      "downloadLocation": "https://registry.npmjs.org/@mozilla/readability/-/readability-0.6.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "8ee1b9556878a808afcd301e333bd8f71b3d1d8e6b01caf613823bb624920a8911162ed7219080bbdd999124ec223d4e3dc78289f2f77297ed78fde90d3f7f41"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40mozilla/readability@0.6.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "boolbase",
+      "SPDXID": "SPDXRef-Pkg-0f9cb075b47aa103",
+      "versionInfo": "2.0.0",
+      "downloadLocation": "https://registry.npmjs.org/boolbase/-/boolbase-2.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "ISC",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "0e455a6901f2991869604628f71d68a3b43b07463a28952c8e6ddcf5e4f21436f2e0c1cb053c19e990d605e979ceb6318f55ac6600b9a0ba62cfef77325b9778"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/boolbase@2.0.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "css-select",
+      "SPDXID": "SPDXRef-Pkg-1e37b3fb82458dd0",
+      "versionInfo": "7.0.0",
+      "downloadLocation": "https://registry.npmjs.org/css-select/-/css-select-7.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "BSD-2-Clause",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "b279a31155f2fb52e7c17771858bd3323d5df6d3a1e07c64035626a1ac9505e7b24760b5e0fba6edf7312489b84acc18b29572f3ae9e60dc251fac42dff547e6"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/css-select@7.0.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "css-what",
+      "SPDXID": "SPDXRef-Pkg-98e353f5f3d95d5b",
+      "versionInfo": "8.0.0",
+      "downloadLocation": "https://registry.npmjs.org/css-what/-/css-what-8.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "BSD-2-Clause",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "0c7d01aaadc3369e6d74e45eb8dc8003e12fe18d864b914c6d9a5e4cb3fa0b80838b48799cbd019943c2857c37a3fa9b1cb0d61e5e3db1b36a41563b6cc48377"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/css-what@8.0.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "cssomnom",
+      "SPDXID": "SPDXRef-Pkg-3a5c2315718e00cc",
+      "versionInfo": "0.1.12",
+      "downloadLocation": "https://registry.npmjs.org/cssomnom/-/cssomnom-0.1.12.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "9e5b0b8d1c5137644fa26c37afe7bea03dca4016c46ca2b4fa80540136e875fe4ddfc16538c83fe67a95d0274294dbe956c8c52e2903eb71fa76029381ebae52"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/cssomnom@0.1.12"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "dom-serializer",
+      "SPDXID": "SPDXRef-Pkg-841d6ae3b134d969",
+      "versionInfo": "3.1.1",
+      "downloadLocation": "https://registry.npmjs.org/dom-serializer/-/dom-serializer-3.1.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "e0c11adfcfd07b10686fa805370bbe106756be127538ab8dc1d618dd8dcdc9e58341f9c67836105037c84735aee41e60b2fd37b28d94c5ddbc602eb3aecc772f"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/dom-serializer@3.1.1"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "domelementtype",
+      "SPDXID": "SPDXRef-Pkg-a43740c918d79002",
+      "versionInfo": "3.0.0",
+      "downloadLocation": "https://registry.npmjs.org/domelementtype/-/domelementtype-3.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "BSD-2-Clause",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "ba609089dde329b0e6563c7c8c6696eee532926e031147b2576d613f134ca369d5f79e438544e1c2ac8e203b6b79ea4fdf5865f385fb1b953d65fb16bc80773e"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/domelementtype@3.0.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "domhandler",
+      "SPDXID": "SPDXRef-Pkg-2eb069e5180d0092",
+      "versionInfo": "6.0.1",
+      "downloadLocation": "https://registry.npmjs.org/domhandler/-/domhandler-6.0.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "BSD-2-Clause",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "818cefb4cef666dc503b44f4e3c91de875926db18234e5307277d0d3572a209e17d8860a1451d9e662afad01137055f1b1139b66e94368a9b2fff47b4cfb6c06"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/domhandler@6.0.1"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "domutils",
+      "SPDXID": "SPDXRef-Pkg-c4ef98ffde011033",
+      "versionInfo": "4.0.2",
+      "downloadLocation": "https://registry.npmjs.org/domutils/-/domutils-4.0.2.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "BSD-2-Clause",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "a88e092d12a74b3a85aabee10254b9c500eeb010a3292106e2de3eeda36b21030705cb02d9318486ec8004975892049ec0be7b3cd2d812289b63688f2a12a968"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/domutils@4.0.2"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "entities",
+      "SPDXID": "SPDXRef-Pkg-5d87f7225034b705",
+      "versionInfo": "8.1.0",
+      "downloadLocation": "https://registry.npmjs.org/entities/-/entities-8.1.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "BSD-2-Clause",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "9312fb9ac21f7d2ba1f5a68500c0fbaf1008b9344c00731e06d8075b6c94756c3bdf664d87831e86417681d8efb5d9a29246883fd6c50c324e3e5b2f9bb6afac"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/entities@8.1.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "html-escaper",
+      "SPDXID": "SPDXRef-Pkg-65547f1d1e9ce9af",
+      "versionInfo": "3.0.3",
+      "downloadLocation": "https://registry.npmjs.org/html-escaper/-/html-escaper-3.0.3.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "46e31f7c2f3d04e590a18d16286a48867e605f7888e783ba9d1034c82d76e0d615b738e615604888577c334c7e65d5f43fd4789400e0d6680ff02ecfc46396b9"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/html-escaper@3.0.3"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "htmlparser2",
+      "SPDXID": "SPDXRef-Pkg-576f6cc28bbd618d",
+      "versionInfo": "10.1.0",
+      "downloadLocation": "https://registry.npmjs.org/htmlparser2/-/htmlparser2-10.1.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "55366433d196440b44a6f7a1ecc485e928e3ae935534d5497c5ba9ef14d8dd4a45b66ebb7e8cbd1c35579de2ed155b78a4ccf9919b6035cbc29e23456f586511"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/htmlparser2@10.1.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "dom-serializer",
+      "SPDXID": "SPDXRef-Pkg-2dc9ec7ad5cff76e",
+      "versionInfo": "2.0.0",
+      "downloadLocation": "https://registry.npmjs.org/dom-serializer/-/dom-serializer-2.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "c08900af28aab7f9d5e4440aa90a68dd24e848e57d2740e76c9ab02bb5affd3adcf76cc801867816532ef893c55b50df185b7cd594c21a00c469b7df5de2f226"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/dom-serializer@2.0.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "entities",
+      "SPDXID": "SPDXRef-Pkg-6bf76e89ed74f555",
+      "versionInfo": "4.5.0",
+      "downloadLocation": "https://registry.npmjs.org/entities/-/entities-4.5.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "BSD-2-Clause",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "5748631f87463e1f40a39a74328458e8156ab700a3873eaf2392d3f00279e47fb883dff8bdb1f1d48e787d2d17b9c94b8431c0acf40288c8c3c6368bf1f3f187"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/entities@4.5.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "domelementtype",
+      "SPDXID": "SPDXRef-Pkg-a5bdcc4c72cd3126",
+      "versionInfo": "2.3.0",
+      "downloadLocation": "https://registry.npmjs.org/domelementtype/-/domelementtype-2.3.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "BSD-2-Clause",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "38b113063eb0d0eb1a801c1d5e73dd37472731f17da2937af5ca3eed9adb7cf1ab7693d5341523d36b298ba07537bc0284b4223e7e02487ff326f5f0e7a8261f"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/domelementtype@2.3.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "domhandler",
+      "SPDXID": "SPDXRef-Pkg-08f9617a2ee49493",
+      "versionInfo": "5.0.3",
+      "downloadLocation": "https://registry.npmjs.org/domhandler/-/domhandler-5.0.3.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "BSD-2-Clause",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "720c25bffd621508859d4f7a5d78113a1f314de7adb272620ec4dced36022c577dfbf58d908a8f4f188cffca5277c548ae15c64dfd4dcb5ab586ab95a83241e7"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/domhandler@5.0.3"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "domutils",
+      "SPDXID": "SPDXRef-Pkg-788afbff2dc261e2",
+      "versionInfo": "3.2.2",
+      "downloadLocation": "https://registry.npmjs.org/domutils/-/domutils-3.2.2.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "BSD-2-Clause",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "ea464ac946a3943baa9472955f5c3b832b258fd30f217cc8162cffac6bb7e6e0b5c0c8be90c850c06865e25b7dba70bd55bf4836763d677fd9037f8584048b6b"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/domutils@3.2.2"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "entities",
+      "SPDXID": "SPDXRef-Pkg-ea2219bd93b6a2e9",
+      "versionInfo": "7.0.1",
+      "downloadLocation": "https://registry.npmjs.org/entities/-/entities-7.0.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "BSD-2-Clause",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "4d6ae02ce1544131fdf78614ca5d724f8bb26af6399cd0799ae7dff91b566aa3550802b8d3c6f96679db34050458b4c2a6e9bdc3a6ab4fbd22d57750e1478e3c"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/entities@7.0.1"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "linkedom",
+      "SPDXID": "SPDXRef-Pkg-396dcf9d6a3b6699",
+      "versionInfo": "0.18.15",
+      "downloadLocation": "https://registry.npmjs.org/linkedom/-/linkedom-0.18.15.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "ISC",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "a34c3b783fd2be809aa3ea548ba773a1c08bb8c475d60e13bff7add16d8e533c1699471ec27b52cf297e51afcafb4c8aca6d18fcc6afde7140688e40bf98ef66"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/linkedom@0.18.15"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "nth-check",
+      "SPDXID": "SPDXRef-Pkg-96886f98c73c2b06",
+      "versionInfo": "3.0.1",
+      "downloadLocation": "https://registry.npmjs.org/nth-check/-/nth-check-3.0.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "BSD-2-Clause",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "197d20b1d6c65428274606de19ab9b7e3a415f261158e38255e621d3c6d242f0d9ab1cf99dd5ecd4e4df02dfe1dfa1b5c6f23de1822ca6c234b1516a015f7e45"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/nth-check@3.0.1"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "papaparse",
+      "SPDXID": "SPDXRef-Pkg-1fe2529db39b6def",
+      "versionInfo": "5.7.1",
+      "downloadLocation": "https://registry.npmjs.org/papaparse/-/papaparse-5.7.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "a8e47e5035afe83de13319d658e93466905d0a477e930e5887b69739a352414f00fbbdc40366e15bb122522c7f858d32ba5522e4546fb7b3e9612236543bd8d2"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/papaparse@5.7.1"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "uhyphen",
+      "SPDXID": "SPDXRef-Pkg-2697db75cd7e9576",
+      "versionInfo": "0.2.0",
+      "downloadLocation": "https://registry.npmjs.org/uhyphen/-/uhyphen-0.2.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "ISC",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "ab3de8f421d798924f18176acda6fba8062e5bc91018a344ba81c562b07057a85620c729026c432d7a237077c5afd512d4f7bacd4b301082486cb23ad747eea8"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/uhyphen@0.2.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY"
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-ExportFlow",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-ef1d6b4307782da4"
+    },
+    {
+      "spdxElementId": "SPDXRef-ExportFlow",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-396dcf9d6a3b6699"
+    },
+    {
+      "spdxElementId": "SPDXRef-ExportFlow",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-1fe2529db39b6def"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-396dcf9d6a3b6699",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-1e37b3fb82458dd0"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-1e37b3fb82458dd0",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-0f9cb075b47aa103"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-1e37b3fb82458dd0",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-98e353f5f3d95d5b"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-1e37b3fb82458dd0",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-2eb069e5180d0092"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-2eb069e5180d0092",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-a43740c918d79002"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-1e37b3fb82458dd0",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-c4ef98ffde011033"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-c4ef98ffde011033",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-841d6ae3b134d969"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-841d6ae3b134d969",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-a43740c918d79002"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-841d6ae3b134d969",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-2eb069e5180d0092"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-841d6ae3b134d969",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-5d87f7225034b705"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-c4ef98ffde011033",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-a43740c918d79002"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-c4ef98ffde011033",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-2eb069e5180d0092"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-1e37b3fb82458dd0",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-96886f98c73c2b06"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-96886f98c73c2b06",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-0f9cb075b47aa103"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-396dcf9d6a3b6699",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-3a5c2315718e00cc"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-396dcf9d6a3b6699",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-65547f1d1e9ce9af"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-396dcf9d6a3b6699",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-576f6cc28bbd618d"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-576f6cc28bbd618d",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-a5bdcc4c72cd3126"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-576f6cc28bbd618d",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-08f9617a2ee49493"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-08f9617a2ee49493",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-a5bdcc4c72cd3126"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-576f6cc28bbd618d",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-788afbff2dc261e2"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-788afbff2dc261e2",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-2dc9ec7ad5cff76e"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-2dc9ec7ad5cff76e",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-a5bdcc4c72cd3126"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-2dc9ec7ad5cff76e",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-08f9617a2ee49493"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-2dc9ec7ad5cff76e",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-6bf76e89ed74f555"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-788afbff2dc261e2",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-a5bdcc4c72cd3126"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-788afbff2dc261e2",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-08f9617a2ee49493"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-576f6cc28bbd618d",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-ea2219bd93b6a2e9"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-396dcf9d6a3b6699",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-2697db75cd7e9576"
+    }
+  ]
+}
