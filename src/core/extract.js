@@ -15,11 +15,12 @@ export const EXTRACTION_LIMITS = Object.freeze({
 });
 
 export class ExtractionError extends Error {
-  constructor(code, message, httpStatus = 400) {
+  constructor(code, message, httpStatus = 400, responseBytes = null) {
     super(message);
     this.name = "ExtractionError";
     this.code = code;
     this.httpStatus = httpStatus;
+    if (Number.isInteger(responseBytes) && responseBytes >= 0) this.responseBytes = responseBytes;
   }
 }
 
@@ -662,16 +663,23 @@ export async function extractStructuredData(input, options = {}) {
       parsedPdf = await extractPdfText(response.bodyBytes, { contentType: mime });
     } catch (error) {
       if (error instanceof PdfParserError) {
-        throw new ExtractionError(error.code, error.message, error.httpStatus);
+        throw new ExtractionError(error.code, error.message, error.httpStatus, response.bytes);
       }
+      if (error && typeof error === "object") error.responseBytes = response.bytes;
       throw error;
     }
-    const extractedPdf = buildPdfExtracted({
+    let extractedPdf;
+    try {
+      extractedPdf = buildPdfExtracted({
       parsed: parsedPdf,
       url: response.finalUrl || url,
       contentType: response.contentType,
       schema: input.schema,
-    });
+      });
+    } catch (error) {
+      if (error && typeof error === "object") error.responseBytes = response.bytes;
+      throw error;
+    }
     const pdfSource = {
       url: response.finalUrl || url,
       retrievedAt: response.retrievedAt,
@@ -710,6 +718,7 @@ export async function extractStructuredData(input, options = {}) {
         httpStatus: response.status,
         cacheStatus: response.cacheStatus ?? null,
         format: "pdf",
+        inputBytes: response.bytes,
         parser: parsedPdf.parser,
         parserVersion: parsedPdf.parserVersion,
         inputBytes: response.bytes,
