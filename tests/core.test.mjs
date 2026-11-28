@@ -1785,3 +1785,29 @@ test("task usage preserves downloaded PDF bytes when parsing throws after fetch"
   assert.equal(task.errors[0].code, "PDF_PARSE_FAILED");
   assert.equal(task.usage.responseBytes, 4_096);
 });
+
+
+test("PDF parser failures retain the byte count of the downloaded response", async () => {
+  const malformedPdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);
+  await assert.rejects(
+    extractStructuredData({
+      url: "https://example.com/malformed.pdf",
+      schema: {
+        type: "object",
+        properties: { text: { type: "string", "x-source": "pdf:text" } },
+      },
+    }, {
+      fetchResource: async () => ({
+        status: 200,
+        contentType: "application/pdf",
+        bodyBytes: malformedPdf,
+        bytes: 8_192,
+        finalUrl: "https://example.com/malformed.pdf",
+        retrievedAt: "2026-11-28T14:00:00.000Z",
+      }),
+    }),
+    (error) => error instanceof ExtractionError &&
+      error.code === "PDF_PARSE_FAILED" &&
+      error.responseBytes === 8_192,
+  );
+});
