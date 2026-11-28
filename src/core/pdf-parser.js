@@ -28,13 +28,25 @@ function normalizeMime(value) {
   return String(value || "").split(";")[0].trim().toLowerCase();
 }
 
+function sliceAtCodePointBoundary(value, maxCodeUnits) {
+  const end = Math.max(0, Math.min(value.length, maxCodeUnits));
+  if (end > 0 && end < value.length) {
+    const previous = value.charCodeAt(end - 1);
+    const next = value.charCodeAt(end);
+    if (previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) {
+      return value.slice(0, end - 1);
+    }
+  }
+  return value.slice(0, end);
+}
+
 export function boundPdfText(value) {
   const normalizedText = String(value || "")
     .replace(/\u0000/g, "")
     .replace(/\r\n?/g, "\n")
     .trim();
   return Object.freeze({
-    text: normalizedText.slice(0, PDF_PARSE_LIMITS.maxOutputCharacters),
+    text: sliceAtCodePointBoundary(normalizedText, PDF_PARSE_LIMITS.maxOutputCharacters),
     truncated: normalizedText.length > PDF_PARSE_LIMITS.maxOutputCharacters,
   });
 }
@@ -56,6 +68,26 @@ export function hasPdfSignature(input) {
   return false;
 }
 
+function trimIncompleteTrailingSurrogate(value) {
+  let text = value;
+  while (text.length > 0) {
+    const last = text.charCodeAt(text.length - 1);
+    if (last >= 0xd800 && last <= 0xdbff) {
+      text = text.slice(0, -1);
+      continue;
+    }
+    if (last >= 0xdc00 && last <= 0xdfff) {
+      const previous = text.length > 1 ? text.charCodeAt(text.length - 2) : 0;
+      if (previous < 0xd800 || previous > 0xdbff) {
+        text = text.slice(0, -1);
+        continue;
+      }
+    }
+    break;
+  }
+  return text;
+}
+
 function cancelReaderBestEffort(reader) {
   try {
     const cancellation = reader.cancel();
@@ -63,6 +95,74 @@ function cancelReaderBestEffort(reader) {
   } catch {
     // A stream may already be closed, errored, or locked by the runtime.
   }
+}
+
+/**
+ * Consume one PDF.js text stream without draining it after a parser ceiling.
+ * The owning PDF document is destroyed by extractPdfText() after this helper
+ * returns, which closes the abandoned stream without racing an explicit
+ * reader.cancel() against PDF.js' stream-controller close.
+ */
+export async function consumePdfTextStream(reader, options = {}) {
+  const maxTextItems = options.maxTextItems ?? PDF_PARSE_LIMITS.maxTextItems;
+  const maxOutputCharacters = options.maxOutputCharacters ?? PDF_PARSE_LIMITS.maxOutputCharacters;
+  const getRemainingTimeMs = options.getRemainingTimeMs ?? (() => PDF_PARSE_LIMITS.maxParseTimeMs);
+  const onTimeout = options.onTimeout;
+  if (!Number.isInteger(maxTextItems) || maxTextItems < 0 ||
+      !Number.isInteger(maxOutputCharacters) || maxOutputCharacters < 0 ||
+      typeof getRemainingTimeMs !== "function") {
+    throw new PdfParserError("PDF_INVALID_LIMIT", "PDF stream limits are invalid.", 400);
+  }
+
+  let text = "";
+  let itemCount = 0;
+  let truncated = maxTextItems === 0 || maxOutputCharacters === 0;
+
+  while (!truncated) {
+    const chunk = await withPdfParserTimeout(
+      () => reader.read(),
+      getRemainingTimeMs(),
+      () => {
+        try { onTimeout?.(); } catch {}
+        cancelReaderBestEffort(reader);
+      },
+    );
+    if (chunk.done) break;
+
+    const items = Array.isArray(chunk.value?.items) ? chunk.value.items : [];
+    for (const item of items) {
+      itemCount += 1;
+      if (itemCount > maxTextItems) {
+        truncated = true;
+        break;
+      }
+      if (typeof item?.str === "string" && item.str.length > 0) {
+        const addition = item.str + (item.hasEOL ? "\n" : "");
+        const remaining = maxOutputCharacters - text.length;
+        if (addition.length > remaining) {
+          text += sliceAtCodePointBoundary(addition, remaining);
+          truncated = true;
+          break;
+        }
+        text += addition;
+      }
+      // Stop conservatively at equality: another read is required to know
+      // whether the stream has ended, so reaching the ceiling is reported as
+      // truncated even when the final chunk may contain exactly all content.
+      if (itemCount >= maxTextItems || text.length >= maxOutputCharacters) {
+        truncated = true;
+        break;
+      }
+    }
+    // Do not call reader.read() again once a ceiling is reached.
+    // Document cleanup owns stream shutdown; explicit cancel() can race PDF.js.
+  }
+
+  return {
+    text: truncated ? trimIncompleteTrailingSurrogate(text) : text,
+    itemCount: Math.min(itemCount, maxTextItems),
+    truncated,
+  };
 }
 
 /**
@@ -208,46 +308,15 @@ export async function extractPdfText(input, options = {}) {
       }
 
       const reader = page.streamTextContent().getReader();
-      try {
-        while (true) {
-          const chunk = await withPdfParserTimeout(
-            () => reader.read(),
-            remainingTimeMs(),
-            () => {
-              parseTimedOut = true;
-              cancelReaderBestEffort(reader);
-            },
-          );
-          if (chunk.done) break;
-
-          const items = Array.isArray(chunk.value?.items) ? chunk.value.items : [];
-          for (const item of items) {
-            itemCount += 1;
-            if (itemCount > PDF_PARSE_LIMITS.maxTextItems) {
-              truncated = true;
-              break;
-            }
-            if (typeof item?.str !== "string" || item.str.length === 0) continue;
-
-            const addition = item.str + (item.hasEOL ? "\n" : "");
-            const remaining = PDF_PARSE_LIMITS.maxOutputCharacters - text.length;
-            if (addition.length > remaining) {
-              text += addition.slice(0, remaining);
-              truncated = true;
-              break;
-            }
-            text += addition;
-          }
-          // Once an output/item ceiling is reached, drain this page's stream
-          // without retaining further text. PDF.js' message stream must finish
-          // naturally before the document loading task is destroyed; cancelling
-          // a completed/in-flight text stream can race its controller close.
-        }
-      } finally {
-        // Match PDF.js' own getTextContent() consumption pattern: leave the
-        // exhausted reader alone and let the document task own final cleanup.
-        // Calling releaseLock() here can race late stream-controller closure.
-      }
+      const pageResult = await consumePdfTextStream(reader, {
+        maxTextItems: PDF_PARSE_LIMITS.maxTextItems - itemCount,
+        maxOutputCharacters: PDF_PARSE_LIMITS.maxOutputCharacters - text.length,
+        getRemainingTimeMs: remainingTimeMs,
+        onTimeout: () => { parseTimedOut = true; },
+      });
+      text += pageResult.text;
+      itemCount += pageResult.itemCount;
+      truncated = pageResult.truncated;
 
       if (pageNumber < document.numPages && text.length > 0 && !truncated) {
         const remaining = PDF_PARSE_LIMITS.maxOutputCharacters - text.length;
