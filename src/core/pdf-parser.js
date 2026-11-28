@@ -68,6 +68,26 @@ export function hasPdfSignature(input) {
   return false;
 }
 
+function trimIncompleteTrailingSurrogate(value) {
+  let text = value;
+  while (text.length > 0) {
+    const last = text.charCodeAt(text.length - 1);
+    if (last >= 0xd800 && last <= 0xdbff) {
+      text = text.slice(0, -1);
+      continue;
+    }
+    if (last >= 0xdc00 && last <= 0xdfff) {
+      const previous = text.length > 1 ? text.charCodeAt(text.length - 2) : 0;
+      if (previous < 0xd800 || previous > 0xdbff) {
+        text = text.slice(0, -1);
+        continue;
+      }
+    }
+    break;
+  }
+  return text;
+}
+
 function cancelReaderBestEffort(reader) {
   try {
     const cancellation = reader.cancel();
@@ -138,7 +158,11 @@ export async function consumePdfTextStream(reader, options = {}) {
     // Document cleanup owns stream shutdown; explicit cancel() can race PDF.js.
   }
 
-  return { text, itemCount: Math.min(itemCount, maxTextItems), truncated };
+  return {
+    text: truncated ? trimIncompleteTrailingSurrogate(text) : text,
+    itemCount: Math.min(itemCount, maxTextItems),
+    truncated,
+  };
 }
 
 /**
