@@ -718,7 +718,6 @@ export async function extractStructuredData(input, options = {}) {
         httpStatus: response.status,
         cacheStatus: response.cacheStatus ?? null,
         format: "pdf",
-        inputBytes: response.bytes,
         parser: parsedPdf.parser,
         parserVersion: parsedPdf.parserVersion,
         inputBytes: response.bytes,
