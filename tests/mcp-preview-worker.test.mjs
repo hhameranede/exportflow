@@ -677,7 +677,10 @@ test("web_extract publishes and forwards the optional Readability article switch
   assert.equal(extractTool.inputSchema.properties.includeArticle.type, "boolean");
   assert.match(extractTool.inputSchema.properties.includeArticle.description, /20,000 characters/);
   assert.match(extractTool.description, /Mozilla Readability article text/);
+  assert.match(extractTool.description, /bounded PDF text/);
+  assert.match(extractTool.description, /pdf:text/);
   assert.ok(extractAdapter.capabilities.includes("readability-article-text"));
+  assert.ok(extractAdapter.capabilities.includes("pdf-text"));
 
   const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
     name: "web_extract",
