@@ -626,12 +626,14 @@ export async function extractStructuredData(input, options = {}) {
     cacheMode: input.cacheMode ?? options.cacheMode ?? "default",
     ...(options.signal ? { signal: options.signal } : {}),
   });
+  try {
   if (response.status < 200 || response.status >= 300) {
     return normalizeResult({
       status: "failed",
       data: {
         url: response.finalUrl || url,
         httpStatus: response.status,
+        bytes: response.bytes,
         cacheStatus: response.cacheStatus ?? null,
         fields: {},
         missingFields: schema.fields.map((field) => field.name),
@@ -933,6 +935,9 @@ export async function extractStructuredData(input, options = {}) {
     sources: [source],
     warnings: resultWarnings,
   });
+  } catch (error) {
+    throw attachResponseBytes(error, response.bytes);
+  }
 }
 
 export const extractAdapter = Object.freeze({
