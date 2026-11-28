@@ -1,6 +1,7 @@
 import { fetchPublicResource } from "./http-fetch.js";
 import { normalizeResult } from "./result.js";
 import { CSV_PARSE_LIMITS, CSV_PARSER_VERSION, CsvParserError, parseCsvText } from "./csv-parser.js";
+import { extractPdfText, PDF_PARSE_LIMITS, PdfParserError } from "./pdf-parser.js";
 
 export const EXTRACTION_LIMITS = Object.freeze({
   maxSchemaBytes: 16_384,
@@ -24,6 +25,7 @@ export class ExtractionError extends Error {
 
 const SUPPORTED_TYPES = new Set(["string", "number", "integer", "boolean", "object", "array"]);
 const CSV_MIME_TYPES = new Set(["text/csv"]);
+const PDF_MIME_TYPES = new Set(["application/pdf", "application/octet-stream"]);
 const DEFAULT_SOURCES = Object.freeze({
   title: ["meta:og:title", "meta:twitter:title", "page:title", "jsonld:headline", "jsonld:name"],
   name: ["jsonld:name", "jsonld:headline", "meta:og:site_name", "page:title"],
@@ -50,7 +52,7 @@ function validateSourcePath(source) {
   const colon = source.indexOf(":");
   const prefix = colon > 0 ? source.slice(0, colon).toLowerCase() : "jsonld";
   const path = colon > 0 ? source.slice(colon + 1) : source;
-  if (!["jsonld", "meta", "page", "csv"].includes(prefix) || !path) {
+  if (!["jsonld", "meta", "page", "csv", "pdf"].includes(prefix) || !path) {
     throw new ExtractionError("INVALID_SCHEMA", "x-source must use jsonld:, meta:, page:, or csv:.");
   }
   if (prefix === "csv") {
@@ -61,6 +63,12 @@ function validateSourcePath(source) {
       throw new ExtractionError("INVALID_SCHEMA", "CSV column names must be bounded and safe.");
     }
     return { sourceType: prefix, path: path.trim(), source };
+  }
+  if (prefix === "pdf") {
+    if (path !== "text") {
+      throw new ExtractionError("INVALID_SCHEMA", 'PDF x-source must be exactly "pdf:text".');
+    }
+    return { sourceType: prefix, path, source };
   }
   const segments = path.split(".");
   const segmentPattern = prefix === "meta"
@@ -517,6 +525,59 @@ function buildCsvExtracted({ parsed, url, contentType, schema }) {
   };
 }
 
+function buildPdfExtracted({ parsed, url, contentType, schema }) {
+  const checkedSchema = validateExtractionSchema(schema);
+  const data = {};
+  const fieldEvidence = [];
+  const missingFields = [];
+  const missingRequired = [];
+
+  for (const field of checkedSchema.fields) {
+    const selectedSource = field.sources.find((source) => source.sourceType === "pdf");
+    if (!selectedSource) {
+      missingFields.push(field.name);
+      if (field.required) missingRequired.push(field.name);
+      continue;
+    }
+    if (field.type !== "string") {
+      throw new ExtractionError(
+        "PDF_STRING_FIELD_REQUIRED",
+        "PDF text extraction fields must be declared as strings.",
+        422,
+      );
+    }
+    data[field.name] = parsed.text;
+    fieldEvidence.push({
+      field: field.name,
+      sourceType: "pdf",
+      path: "text",
+      pageCount: parsed.totalPages,
+      characters: parsed.text.length,
+      truncated: parsed.truncated,
+      url,
+      contentType: contentType || null,
+    });
+  }
+
+  const warnings = [];
+  if (missingFields.length) warnings.push("PDF text was not mapped to these fields: " + missingFields.join(", ") + ".");
+  if (missingRequired.length) warnings.push("Required PDF fields are missing: " + missingRequired.join(", ") + ".");
+  if (parsed.truncated) warnings.push("PDF text was truncated at the configured output limit.");
+  const status = Object.keys(data).length === 0
+    ? "failed"
+    : (missingFields.length || missingRequired.length || parsed.truncated ? "partial" : "succeeded");
+
+  return {
+    status,
+    data,
+    fieldEvidence,
+    missingFields,
+    missingRequired,
+    warnings,
+    schemaProperties: checkedSchema.fields.map((field) => field.name),
+  };
+}
+
 function safeCanonical(canonical, baseUrl) {
   try {
     const url = new URL(canonical, baseUrl);
@@ -553,6 +614,7 @@ export async function extractStructuredData(input, options = {}) {
     maxBytes: options.maxBytes ?? 1_048_576,
     timeoutMs: options.timeoutMs ?? 8_000,
     maxRedirects: options.maxRedirects ?? 3,
+    responseMode: "extract",
     cacheMode: input.cacheMode ?? options.cacheMode ?? "default",
     ...(options.signal ? { signal: options.signal } : {}),
   });
@@ -583,6 +645,78 @@ export async function extractStructuredData(input, options = {}) {
   }
 
   const mime = String(response.contentType || "").split(";")[0].trim().toLowerCase();
+  if (PDF_MIME_TYPES.has(mime)) {
+    let parsedPdf;
+    try {
+      parsedPdf = await extractPdfText(response.bodyBytes, { contentType: mime });
+    } catch (error) {
+      if (error instanceof PdfParserError) {
+        throw new ExtractionError(error.code, error.message, error.httpStatus);
+      }
+      throw error;
+    }
+    const extractedPdf = buildPdfExtracted({
+      parsed: parsedPdf,
+      url: response.finalUrl || url,
+      contentType: response.contentType,
+      schema: input.schema,
+    });
+    const pdfSource = {
+      url: response.finalUrl || url,
+      retrievedAt: response.retrievedAt,
+      title: null,
+      evidence: [
+        {
+          type: "http_response",
+          status: response.status,
+          contentType: response.contentType,
+          bytes: response.bytes,
+          cacheStatus: response.cacheStatus ?? null,
+        },
+        {
+          type: "pdf_document",
+          parser: parsedPdf.parser,
+          parserVersion: parsedPdf.parserVersion,
+          totalPages: parsedPdf.totalPages,
+          characters: parsedPdf.text.length,
+          truncated: parsedPdf.truncated,
+        },
+        ...extractedPdf.fieldEvidence.map((item) => ({
+          type: "extracted_field",
+          field: item.field,
+          sourceType: item.sourceType,
+          path: item.path,
+          pageCount: item.pageCount,
+          characters: item.characters,
+          truncated: item.truncated,
+        })),
+      ],
+    };
+    return normalizeResult({
+      status: extractedPdf.status,
+      data: {
+        url: response.finalUrl || url,
+        httpStatus: response.status,
+        cacheStatus: response.cacheStatus ?? null,
+        format: "pdf",
+        parser: parsedPdf.parser,
+        parserVersion: parsedPdf.parserVersion,
+        inputBytes: response.bytes,
+        totalPages: parsedPdf.totalPages,
+        characters: parsedPdf.text.length,
+        truncated: parsedPdf.truncated,
+        fields: extractedPdf.data,
+        fieldEvidence: extractedPdf.fieldEvidence,
+        missingFields: extractedPdf.missingFields,
+        missingRequired: extractedPdf.missingRequired,
+        schemaProperties: extractedPdf.schemaProperties,
+        ...(includeArticle ? { article: { status: "not_applicable", method: "mozilla-readability" } } : {}),
+      },
+      sources: [pdfSource],
+      warnings: extractedPdf.warnings,
+    });
+  }
+
   if (CSV_MIME_TYPES.has(mime)) {
     let parsedCsv;
     try {
@@ -780,7 +914,7 @@ export async function extractStructuredData(input, options = {}) {
 export const extractAdapter = Object.freeze({
   id: "web.extract.v1",
   family: "web",
-  capabilities: ["structured-extraction", "jsonld", "metadata", "csv", "readability-article-text", "field-evidence"],
+  capabilities: ["structured-extraction", "jsonld", "metadata", "csv", "pdf-text", "readability-article-text", "field-evidence"],
   authMode: "none",
   limits: {
     maxSchemaBytes: EXTRACTION_LIMITS.maxSchemaBytes,
@@ -794,7 +928,8 @@ export const extractAdapter = Object.freeze({
   },
   restrictions: [
     "schema-driven-deterministic-extraction",
-    "html-json-and-csv-only",
+    "html-json-csv-and-pdf-text-only",
+    "pdf-text-only-no-ocr",
     "optional-readability-article-text-for-html-only",
     "csv-values-preserved-as-strings",
     "csv-formulas-never-executed",
