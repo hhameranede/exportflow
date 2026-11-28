@@ -8,6 +8,7 @@ import { SearchAdapterError, createSearchAdapter } from "../src/core/search.js";
 import { ResearchPipelineError, createResearchPipeline } from "../src/core/research.js";
 import { EGRESS_POLICY, EgressPolicyError, validateEgressTarget } from "../src/core/egress-guard.js";
 import { normalizeResult } from "../src/core/result.js";
+import { createSyntheticPdf } from "./fixtures/synthetic-pdf.mjs";
 import { registerAdapter, getAdapterCatalog, executeAdapter } from "../src/core/adapters.js";
 import {
   FetchAdapterError,
@@ -1810,4 +1811,45 @@ test("PDF parser failures retain the byte count of the downloaded response", asy
       error.code === "PDF_PARSE_FAILED" &&
       error.responseBytes === 8_192,
   );
+});
+
+
+test("PDF task usage accounts for actual fetched bytes on success and parser failure", async () => {
+  const schema = {
+    type: "object",
+    properties: { text: { type: "string", "x-source": "pdf:text" } },
+    required: ["text"],
+  };
+  const validPdf = createSyntheticPdf(["ExportFlow task usage integration fixture"]);
+  const successful = await executeWebTask(
+    { goal: "Extract a valid PDF and account for bytes", operation: "extract", url: "https://example.com/valid.pdf", schema },
+    {
+      idFactory: () => "task-pdf-actual-success",
+      fetchImpl: async () => new Response(validPdf, {
+        status: 200,
+        headers: { "content-type": "application/pdf" },
+      }),
+    },
+  );
+
+  assert.equal(successful.state, "succeeded");
+  assert.equal(successful.result.data.format, "pdf");
+  assert.equal(successful.result.data.inputBytes, validPdf.byteLength);
+  assert.equal(successful.usage.responseBytes, validPdf.byteLength);
+
+  const malformedPdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);
+  const failed = await executeWebTask(
+    { goal: "Fail parsing a fetched PDF and account for bytes", operation: "extract", url: "https://example.com/malformed.pdf", schema },
+    {
+      idFactory: () => "task-pdf-actual-failure",
+      fetchImpl: async () => new Response(malformedPdf, {
+        status: 200,
+        headers: { "content-type": "application/pdf" },
+      }),
+    },
+  );
+
+  assert.equal(failed.state, "failed");
+  assert.equal(failed.errors[0].code, "PDF_PARSE_FAILED");
+  assert.equal(failed.usage.responseBytes, malformedPdf.byteLength);
 });
