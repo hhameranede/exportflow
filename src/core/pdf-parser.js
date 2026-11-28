@@ -140,17 +140,23 @@ export async function extractPdfText(input, options = {}) {
         503,
       );
     }
-    const { getDocumentProxy } = await import("unpdf");
+    const { getDocumentProxy } = await withPdfParserTimeout(
+      () => import("unpdf"),
+      remainingTimeMs(),
+      () => { parseTimedOut = true; },
+    );
 
     // PDF.js takes ownership of its input buffer. Pass a copy so callers retain
     // their bounded Fetch buffer for accounting and downstream provenance.
-    const loadingPromise = getDocumentProxy(bytes.slice(), {
+    // Defer invocation into a microtask so the deadline is armed before any
+    // synchronous PDF.js setup work begins.
+    const loadingPromise = Promise.resolve().then(() => getDocumentProxy(bytes.slice(), {
       isEvalSupported: false,
       enableXfa: false,
       useSystemFonts: true,
       useWorkerFetch: false,
       maxImageSize: PDF_PARSE_LIMITS.maxImageSize,
-    });
+    }));
 
     // If loading finishes after the deadline, the late proxy still needs cleanup.
     loadingPromise.then((lateDocument) => {
