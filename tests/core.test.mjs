@@ -1748,3 +1748,40 @@ test("task executor passes the explicit article option only to Extract", async (
   );
   assert.equal(invalid.errors[0].code, "INVALID_TASK");
 });
+
+
+test("task usage accounts for PDF inputBytes on successful and failed extraction results", async () => {
+  for (const status of ["succeeded", "failed"]) {
+    const task = await executeWebTask(
+      { goal: "Account for downloaded PDF bytes", operation: "extract", url: "https://example.com/report.pdf" },
+      {
+        idFactory: () => "task-pdf-usage-0001",
+        executeAdapter: async () => ({
+          status,
+          data: { format: "pdf", inputBytes: 8_192 },
+          sources: [],
+          warnings: [],
+        }),
+      },
+    );
+    assert.equal(task.state, status);
+    assert.equal(task.usage.responseBytes, 8_192);
+  }
+});
+
+test("task usage preserves downloaded PDF bytes when parsing throws after fetch", async () => {
+  const parserError = Object.assign(new Error("PDF parser failed"), {
+    code: "PDF_PARSE_FAILED",
+    responseBytes: 4_096,
+  });
+  const task = await executeWebTask(
+    { goal: "Account for failed PDF parsing", operation: "extract", url: "https://example.com/broken.pdf" },
+    {
+      idFactory: () => "task-pdf-failure-01",
+      executeAdapter: async () => { throw parserError; },
+    },
+  );
+  assert.equal(task.state, "failed");
+  assert.equal(task.errors[0].code, "PDF_PARSE_FAILED");
+  assert.equal(task.usage.responseBytes, 4_096);
+});
