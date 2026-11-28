@@ -109,7 +109,7 @@ test("REST task contract accepts bounded CSV column mappings for Extract", () =>
   const request = validateTaskRequest({
     goal: "Extract product catalog columns",
     operation: "extract",
-    url: "https://data.example.test/catalog.csv",
+    url: "https://www.cloudflare.com/catalog.csv",
     schema: {
       type: "object",
       properties: {
