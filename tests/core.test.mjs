@@ -1751,6 +1751,105 @@ test("task executor passes the explicit article option only to Extract", async (
 });
 
 
+test("Extract preserves downloaded bytes for non-2xx PDF responses", async () => {
+  const bodyBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);
+  const result = await extractStructuredData({
+    url: "https://example.com/missing.pdf",
+    schema: {
+      type: "object",
+      properties: { text: { type: "string", "x-source": "pdf:text" } },
+    },
+  }, {
+    fetchResource: async () => ({
+      status: 404,
+      contentType: "application/pdf",
+      bodyBytes,
+      bytes: bodyBytes.byteLength,
+      finalUrl: "https://example.com/missing.pdf",
+      retrievedAt: "2026-11-28T14:00:00.000Z",
+    }),
+  });
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.data.httpStatus, 404);
+  assert.equal(result.data.bytes, bodyBytes.byteLength);
+});
+
+test("CSV parser and schema failures retain downloaded response bytes", async () => {
+  const malformedCsv = 'name\n"unterminated';
+  const malformedBytes = new TextEncoder().encode(malformedCsv);
+  const fetchResource = async () => ({
+    status: 200,
+    contentType: "text/csv; charset=utf-8",
+    body: malformedCsv,
+    bytes: malformedBytes.byteLength,
+    finalUrl: "https://example.com/data.csv",
+    retrievedAt: "2026-11-28T14:00:00.000Z",
+  });
+  const csvArraySchema = {
+    type: "object",
+    properties: { names: { type: "array", items: { type: "string" }, "x-source": "csv:name" } },
+  };
+
+  await assert.rejects(
+    extractStructuredData({ url: "https://example.com/data.csv", schema: csvArraySchema }, { fetchResource }),
+    (error) => error instanceof ExtractionError &&
+      error.code === "CSV_MALFORMED_QUOTES" &&
+      error.responseBytes === malformedBytes.byteLength,
+  );
+
+  const validCsv = "name\\nExportFlow";
+  const validBytes = new TextEncoder().encode(validCsv);
+  await assert.rejects(
+    extractStructuredData({
+      url: "https://example.com/data.csv",
+      schema: {
+        type: "object",
+        properties: { name: { type: "string", "x-source": "csv:name" } },
+      },
+    }, {
+      fetchResource: async () => ({
+        status: 200,
+        contentType: "text/csv; charset=utf-8",
+        body: validCsv,
+        bytes: validBytes.byteLength,
+        finalUrl: "https://example.com/data.csv",
+        retrievedAt: "2026-11-28T14:00:00.000Z",
+      }),
+    }),
+    (error) => error instanceof ExtractionError &&
+      error.code === "CSV_ARRAY_FIELD_REQUIRED" &&
+      error.responseBytes === validBytes.byteLength,
+  );
+});
+
+test("CSV parser failures retain downloaded bytes in task usage", async () => {
+  const malformedCsv = 'name\n"unterminated';
+  const expectedBytes = new TextEncoder().encode(malformedCsv).byteLength;
+  const task = await executeWebTask(
+    {
+      goal: "Account for downloaded CSV bytes after parser failure",
+      operation: "extract",
+      url: "https://example.com/data.csv",
+      schema: {
+        type: "object",
+        properties: { names: { type: "array", items: { type: "string" }, "x-source": "csv:name" } },
+      },
+    },
+    {
+      idFactory: () => "task-csv-failure-0001",
+      fetchImpl: async () => new Response(malformedCsv, {
+        status: 200,
+        headers: { "content-type": "text/csv; charset=utf-8" },
+      }),
+    },
+  );
+
+  assert.equal(task.state, "failed");
+  assert.equal(task.errors[0].code, "CSV_MALFORMED_QUOTES");
+  assert.equal(task.usage.responseBytes, expectedBytes);
+});
+
 test("task usage accounts for PDF inputBytes on successful and failed extraction results", async () => {
   for (const status of ["succeeded", "failed"]) {
     const task = await executeWebTask(
