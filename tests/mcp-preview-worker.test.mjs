@@ -730,6 +730,7 @@ test("web_extract executes a PDF end-to-end through MCP and the shared Extract t
   const readablePdf = createSyntheticPdf(["ExportFlow MCP PDF end-to-end acceptance fixture"]);
   const scannedPdf = createSyntheticPdf([""]);
   let fetchCalls = 0;
+  const usageReceipts = [];
   const identity = {
     tenantId: "tenant_test_001",
     planCode: "test",
@@ -741,6 +742,7 @@ test("web_extract executes a PDF end-to-end through MCP and the shared Extract t
   const worker = createExportFlowPreviewWorker({
     executeWebTask: (input, taskOptions) => executeSharedWebTask(input, {
       ...taskOptions,
+      onUsageReceipt: (receipt) => usageReceipts.push(receipt),
       fetchImpl: async (source, init) => {
         fetchCalls += 1;
         const bytes = new URL(source).pathname === "/scanned.pdf" ? scannedPdf : readablePdf;
@@ -793,7 +795,7 @@ test("web_extract executes a PDF end-to-end through MCP and the shared Extract t
     const task = body.result.structuredContent;
 
     assert.equal(response.status, 200);
-    assert.equal(body.result.isError, undefined, JSON.stringify({ task, fetchCalls }));
+    assert.equal(body.result.isError, undefined, JSON.stringify({ task, fetchCalls, usageReceipts }));
     assert.equal(task.state, "succeeded");
     assert.equal(task.execution.adapterId, "web.extract.v1");
     assert.equal(task.result.data.format, "pdf");
