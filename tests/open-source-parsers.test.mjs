@@ -71,14 +71,32 @@ test("Readability reports bounded text truncation and rejects invalid options", 
   assert.throws(() => extractReadableArticle(html, null), parserError("INVALID_OPTIONS"));
 });
 
-test("Readability returns an explicit no-article result for boilerplate-only markup", () => {
+test("Readability returns an explicit no-article result with bounded title and language metadata", () => {
+  const title = "T".repeat(600);
+  const language = "l".repeat(40);
   const result = extractReadableArticle(
-    "<html><head><title>Navigation</title></head><body><nav><a href='/'>Home</a></nav></body></html>",
+    "<html lang='" + language + "'><head><title>" + title + "</title></head>" +
+    "<body><nav><a href='/'>Home</a></nav></body></html>",
     { url: "https://example.com/navigation" }
   );
   assert.equal(result.status, "no_article");
   assert.equal(result.textContent, "");
   assert.equal(result.sourceUrl, "https://example.com/navigation");
+  assert.equal(result.title.length, 500);
+  assert.equal(result.language.length, 32);
+});
+
+test("Readability bounds title and language metadata on successful article extraction", () => {
+  const title = "T".repeat(600);
+  const language = "l".repeat(40);
+  const html = "<html lang='" + language + "'><head><title>" + title + "</title></head>" +
+    "<body><article><h1>Long article</h1><p>" + longParagraph.repeat(2) +
+    "</p><p>" + longParagraph.repeat(2) + "</p></article></body></html>";
+  const result = extractReadableArticle(html, { url: "https://example.com/long-metadata" });
+
+  assert.equal(result.status, "succeeded");
+  assert.equal(result.title.length, 500);
+  assert.equal(result.language.length, 32);
 });
 
 test("PapaParse rejects reserved headers rather than dropping their values", () => {
