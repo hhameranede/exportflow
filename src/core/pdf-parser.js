@@ -280,10 +280,24 @@ export async function extractPdfText(input, options = {}) {
     if (error instanceof PdfParserError) throw error;
     throw new PdfParserError("PDF_PARSE_FAILED", "PDF content could not be parsed.", 422, { cause: error });
   } finally {
-    try {
-      await document?.loadingTask?.destroy();
-    } catch {
-      // Cleanup must not replace the parser's success or typed failure result.
+    await cleanupPdfDocument(document, remainingTimeMs);
+  }
+}
+
+/**
+ * Best-effort PDF.js cleanup that cannot outlive the parser's shared deadline.
+ * A stalled destroy() must not keep a completed or timed-out extraction pending.
+ */
+export async function cleanupPdfDocument(document, getRemainingTimeMs) {
+  try {
+    const cleanup = document?.loadingTask?.destroy?.();
+    if (cleanup && typeof cleanup.then === "function") {
+      await withPdfParserTimeout(
+        cleanup,
+        Math.max(1, Math.min(PDF_PARSE_LIMITS.maxParseTimeMs, getRemainingTimeMs())),
+      );
     }
+  } catch {
+    // Cleanup must not replace the parser's success or typed failure result.
   }
 }
