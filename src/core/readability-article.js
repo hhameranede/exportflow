@@ -11,6 +11,15 @@ import {
 
 const Readability = readabilityPackage.Readability;
 
+function boundedTitle(value) {
+  return typeof value === "string" ? value.slice(0, 500) || null : null;
+}
+
+function boundedDocumentLanguage(document) {
+  const language = document.documentElement.getAttribute("lang");
+  return typeof language === "string" ? language.slice(0, 32) || null : null;
+}
+
 /**
  * Parses an already-fetched HTML document into article text and metadata.
  * This function performs no network requests and never executes page scripts.
@@ -86,13 +95,13 @@ export function extractReadableArticle(html, options = {}) {
       method: "mozilla-readability",
       sourceUrl: pageUrl.href,
       inputBytes,
-      title: document.title || null,
+      title: boundedTitle(document.title),
       textContent: "",
       length: 0,
       excerpt: null,
       byline: null,
       siteName: null,
-      language: document.documentElement.getAttribute("lang") || null,
+      language: boundedDocumentLanguage(document),
       truncated: false,
     };
   }
@@ -101,7 +110,7 @@ export function extractReadableArticle(html, options = {}) {
     method: "mozilla-readability",
     sourceUrl: pageUrl.href,
     inputBytes,
-    title: typeof parsed.title === "string" ? parsed.title.slice(0, 500) : null,
+    title: boundedTitle(parsed.title),
     textContent: rawText.slice(0, maxTextCharacters),
     length: rawText.length,
     excerpt: typeof parsed.excerpt === "string" ? parsed.excerpt.slice(0, 1_200) : null,
@@ -109,7 +118,7 @@ export function extractReadableArticle(html, options = {}) {
     siteName: typeof parsed.siteName === "string" ? parsed.siteName.slice(0, 300) : null,
     language: typeof parsed.lang === "string"
       ? parsed.lang.slice(0, 32)
-      : (document.documentElement.getAttribute("lang") || null),
+      : boundedDocumentLanguage(document),
     truncated: rawText.length > maxTextCharacters,
   };
 }
