@@ -116,7 +116,7 @@ test("REST Extract reports downloaded PDF bytes when parsing fails after fetch",
       EXPORTFLOW_AUTH_DB: fixture.db,
     });
     const task = await response.json();
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 422);
     assert.equal(task.state, "failed");
     assert.equal(task.errors[0].code, "PDF_PARSE_FAILED");
     assert.equal(task.usage.responseBytes, malformedPdf.byteLength);
