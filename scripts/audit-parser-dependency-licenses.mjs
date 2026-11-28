@@ -5,7 +5,7 @@ const repositoryRoot = process.cwd();
 const outputPath = process.argv[2]
   ? resolve(process.argv[2])
   : resolve(repositoryRoot, "parser-runtime-licenses.json");
-const roots = ["@mozilla/readability", "linkedom", "papaparse"];
+const roots = ["@mozilla/readability", "linkedom", "papaparse", "unpdf"];
 
 function locatePackage(name, fromDirectory) {
   const segments = name.split("/");

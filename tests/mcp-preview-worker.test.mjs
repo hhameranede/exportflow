@@ -5,6 +5,8 @@ import { hashApiKey } from "../src/core/tenant-auth.js";
 import { extractAdapter } from "../src/core/extract.js";
 import { createDurableTenantBurstTestNamespace } from "./helpers/durable-tenant-burst-test-namespace.js";
 import { createDurableTaskD1 } from "./helpers/durable-task-d1.js";
+import { executeWebTask as executeSharedWebTask } from "../src/core/tasks.js";
+import { createSyntheticPdf } from "./fixtures/synthetic-pdf.mjs";
 
 const HOST = "mcp.exportflow.me";
 const URL = "https://" + HOST + "/mcp";
@@ -677,7 +679,10 @@ test("web_extract publishes and forwards the optional Readability article switch
   assert.equal(extractTool.inputSchema.properties.includeArticle.type, "boolean");
   assert.match(extractTool.inputSchema.properties.includeArticle.description, /20,000 characters/);
   assert.match(extractTool.description, /Mozilla Readability article text/);
+  assert.match(extractTool.description, /bounded PDF text/);
+  assert.match(extractTool.description, /pdf:text/);
   assert.ok(extractAdapter.capabilities.includes("readability-article-text"));
+  assert.ok(extractAdapter.capabilities.includes("pdf-text"));
 
   const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
     name: "web_extract",
@@ -712,4 +717,109 @@ test("web_extract rejects a non-boolean article switch before rate limiting or e
   assert.equal(body.result.structuredContent.error, "invalid_arguments");
   assert.equal(calls.limits.length, 0);
   assert.equal(calls.tasks.length, 0);
+});
+
+
+test("web_extract executes a PDF end-to-end through MCP and the shared Extract task path", { skip: typeof globalThis.Iterator !== "function" }, async () => {
+  const fixture = createDurableTaskD1({
+    requestLimit: 10,
+    tenantIds: ["tenant_test_001"],
+    planCode: "test",
+  });
+  fixture.db.sqlite = fixture.sqlite;
+  const readablePdf = createSyntheticPdf(["ExportFlow MCP PDF end-to-end acceptance fixture"]);
+  const scannedPdf = createSyntheticPdf([""]);
+  let fetchCalls = 0;
+  const identity = {
+    tenantId: "tenant_test_001",
+    planCode: "test",
+    policyVersion: "test-v1",
+    quotaPeriod: "daily",
+    requestLimit: 10,
+    scopes: ["tasks:fetch", "tasks:map", "tasks:crawl", "tasks:extract", "tasks:search", "tasks:research", "tasks:read"],
+  };
+  const worker = createExportFlowPreviewWorker({
+    executeWebTask: (input, taskOptions) => executeSharedWebTask(input, {
+      ...taskOptions,
+      fetchImpl: async (source, init) => {
+        fetchCalls += 1;
+        const bytes = new globalThis.URL(source).pathname === "/scanned.pdf" ? scannedPdf : readablePdf;
+        return new Response(bytes, {
+          status: 200,
+          headers: {
+            "content-type": "application/pdf",
+            "content-length": String(bytes.byteLength),
+          },
+        });
+      },
+    }),
+    getAdapterCatalog: () => [{ id: "web.extract.v1", capabilities: ["extract", "pdf"] }],
+    expectedHost: HOST,
+    tenantTaskGateway: {
+      async authenticate(request, _env, { requiredScope } = {}) {
+        if (!request.headers.has("authorization")) {
+          return { ok: false, httpStatus: 401, code: "UNAUTHORIZED", message: "Bearer API key required." };
+        }
+        if (requiredScope !== "tasks:extract") {
+          return { ok: false, httpStatus: 403, code: "INSUFFICIENT_SCOPE", message: "scope denied" };
+        }
+        return { ok: true, identity };
+      },
+    },
+  });
+  const env = {
+    EXPORTFLOW_AUTH_DB: fixture.db,
+    MCP_RATE_LIMITER: { async limit() { return { success: true }; } },
+  };
+  const schema = {
+    type: "object",
+    properties: { content: { type: "string", "x-source": "pdf:text" } },
+    required: ["content"],
+  };
+
+  try {
+    const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
+      name: "web_extract",
+      arguments: {
+        url: "https://example.com/report.pdf",
+        schema,
+        idempotencyKey: "mcp-pdf-success-0001",
+      },
+    }), { headers: {
+      "cf-connecting-ip": "203.0.113.91",
+      authorization: "Bearer " + TENANT_TOKEN,
+    } }), env);
+    const body = await response.json();
+    const task = body.result.structuredContent;
+
+    assert.equal(response.status, 200);
+    assert.equal(body.result.isError, undefined, JSON.stringify({ task, fetchCalls }));
+    assert.equal(task.state, "succeeded");
+    assert.equal(task.execution.adapterId, "web.extract.v1");
+    assert.equal(task.result.data.format, "pdf");
+    assert.match(task.result.data.fields.content, /ExportFlow MCP PDF end-to-end acceptance fixture/);
+    assert.equal(fetchCalls, 1);
+
+    const failedResponse = await worker.fetch(makeRequest(jsonRpc("tools/call", {
+      name: "web_extract",
+      arguments: {
+        url: "https://example.com/scanned.pdf",
+        schema,
+        idempotencyKey: "mcp-pdf-scanned-0001",
+      },
+    }), { headers: {
+      "cf-connecting-ip": "203.0.113.91",
+      authorization: "Bearer " + TENANT_TOKEN,
+    } }), env);
+    const failedBody = await failedResponse.json();
+
+    assert.equal(failedResponse.status, 200);
+    assert.equal(failedBody.result.isError, true);
+    assert.equal(failedBody.result.structuredContent.state, "failed");
+    assert.equal(failedBody.result.structuredContent.errors[0].code, "PDF_NO_TEXT_LAYER");
+    assert.match(failedBody.result.structuredContent.errors[0].message, /OCR is not supported/);
+    assert.equal(fetchCalls, 2);
+  } finally {
+    fixture.close();
+  }
 });

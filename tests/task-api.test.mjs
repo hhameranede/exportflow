@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorker } from "../src/index.js";
 import { createDurableTaskD1 } from "./helpers/durable-task-d1.js";
+import { createSyntheticPdf } from "./fixtures/synthetic-pdf.mjs";
 
 const identityA = Object.freeze({
   tenantId: "tenant_alpha",
@@ -9,7 +10,7 @@ const identityA = Object.freeze({
   policyVersion: "test-v1",
   quotaPeriod: "daily",
   requestLimit: 10,
-  scopes: ["tasks:fetch", "tasks:read"],
+  scopes: ["tasks:fetch", "tasks:read", "tasks:extract"],
 });
 const identityB = Object.freeze({ ...identityA, tenantId: "tenant_beta" });
 
@@ -40,6 +41,57 @@ function postTask(idempotencyKey, url = "https://example.com/") {
     body: JSON.stringify({ goal: "Fetch a public test page", operation: "fetch", url }),
   });
 }
+
+function postExtractTask(idempotencyKey, url = "https://example.com/report.pdf") {
+  return new Request("https://exportflow.me/api/v1/tasks", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer alpha",
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
+    },
+    body: JSON.stringify({
+      goal: "Extract text from a public PDF",
+      operation: "extract",
+      url,
+      schema: {
+        type: "object",
+        properties: { content: { type: "string", "x-source": "pdf:text" } },
+        required: ["content"],
+      },
+    }),
+  });
+}
+
+test("REST Extract runs a bounded PDF through the shared task path", { skip: typeof globalThis.Iterator !== "function" }, async () => {
+  const fixture = createDurableTaskD1({ tenantIds: ["tenant_alpha", "tenant_beta"] });
+  const pdfBytes = createSyntheticPdf(["ExportFlow REST PDF acceptance fixture"]);
+  let fetchInit;
+  const worker = createWorker({
+    tenantTaskGateway: makeGateway(),
+    fetchImpl: async (_url, init) => {
+      fetchInit = init;
+      return new Response(pdfBytes, {
+        status: 200,
+        headers: { "content-type": "application/pdf", "content-length": String(pdfBytes.byteLength) },
+      });
+    },
+  });
+  try {
+    const response = await worker.fetch(postExtractTask("rest-pdf-task-0001"), {
+      EXPORTFLOW_AUTH_DB: fixture.db,
+    });
+    const task = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(task.state, "succeeded");
+    assert.equal(task.execution.adapterId, "web.extract.v1");
+    assert.equal(task.result.data.format, "pdf");
+    assert.match(task.result.data.fields.content, /ExportFlow REST PDF acceptance fixture/);
+    assert.ok(fetchInit.headers.accept.includes("application/pdf"));
+  } finally {
+    fixture.close();
+  }
+});
 
 test("REST task execution is persisted and an idempotent retry returns the original task", async () => {
   const fixture = createDurableTaskD1({ tenantIds: ["tenant_alpha", "tenant_beta"] });
@@ -261,6 +313,53 @@ test("REST Extract can opt into bounded Readability article text without changin
     assert.match(task.result.data.article.textContent, /optional Readability mode/);
     assert.ok(task.result.sources[0].evidence.some((item) => item.type === "article_text"));
     assert.equal(fetchCalls, 1);
+  } finally {
+    fixture.close();
+  }
+});
+
+
+test("REST Extract maps malformed, scanned, and oversized PDF failures to precise HTTP statuses", { skip: typeof globalThis.Iterator !== "function" }, async () => {
+  const fixture = createDurableTaskD1({ tenantIds: ["tenant_alpha", "tenant_beta"] });
+  const scannedPdf = createSyntheticPdf([""]);
+  const invalidPdf = new TextEncoder().encode("not a PDF document");
+  const oversizedPdf = new Uint8Array(1_048_577);
+  oversizedPdf.set([0x25, 0x50, 0x44, 0x46, 0x2d]);
+  const worker = createWorker({
+    tenantTaskGateway: makeGateway(),
+    fetchImpl: async (source) => {
+      const pathname = new URL(source).pathname;
+      const bytes = pathname === "/scanned.pdf"
+        ? scannedPdf
+        : pathname === "/invalid.pdf"
+          ? invalidPdf
+          : pathname === "/oversized.pdf"
+            ? oversizedPdf
+            : null;
+      if (!bytes) throw new Error("Unexpected PDF acceptance-test URL.");
+      return new Response(bytes, {
+        status: 200,
+        headers: {
+          "content-type": "application/pdf",
+          "content-length": String(bytes.byteLength),
+        },
+      });
+    },
+  });
+
+  const cases = [
+    { key: "rest-pdf-scanned-0001", url: "https://example.com/scanned.pdf", status: 422 },
+    { key: "rest-pdf-invalid-0001", url: "https://example.com/invalid.pdf", status: 415 },
+    { key: "rest-pdf-oversized-0001", url: "https://example.com/oversized.pdf", status: 413 },
+  ];
+
+  try {
+    for (const item of cases) {
+      const response = await worker.fetch(postExtractTask(item.key, item.url), {
+        EXPORTFLOW_AUTH_DB: fixture.db,
+      });
+      assert.equal(response.status, item.status, item.url);
+    }
   } finally {
     fixture.close();
   }
