@@ -119,6 +119,28 @@ test("PDF text stream stops reading immediately when the text-item ceiling is re
   assert.equal(cancels, 0, "leave stream shutdown to bounded document cleanup to avoid PDF.js close races");
 });
 
+test("PDF stream truncation removes a high surrogate split across text items", async () => {
+  let reads = 0;
+  const reader = {
+    async read() {
+      reads += 1;
+      return reads === 1
+        ? { done: false, value: { items: [{ str: "A\\uD83D" }, { str: "\\uDE00B" }] } }
+        : { done: true };
+    },
+  };
+
+  const result = await consumePdfTextStream(reader, {
+    maxTextItems: 10,
+    maxOutputCharacters: 2,
+    getRemainingTimeMs: () => 100,
+  });
+
+  assert.equal(result.text, "A");
+  assert.equal(result.truncated, true);
+  assert.equal(reads, 1, "must not read the next item beyond the output ceiling");
+});
+
 test("PDF text stream stops reading immediately when the output-character ceiling is reached", async () => {
   let reads = 0;
   const reader = {
