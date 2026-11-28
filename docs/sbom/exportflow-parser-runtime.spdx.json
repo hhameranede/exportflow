@@ -3,7 +3,7 @@
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
   "name": "ExportFlow Parser Runtime Dependency SBOM",
-  "documentNamespace": "https://spdx.org/spdxdocs/exportflow-parser-runtime-20261127-c7cc30b367fc8094e8a0c1350c1587665754e6d2",
+  "documentNamespace": "https://spdx.org/spdxdocs/exportflow-parser-runtime-20261128-pdf-3e2d7b9c",
   "creationInfo": {
     "created": "2026-11-27T12:23:24.037Z",
     "creators": [
@@ -14,7 +14,7 @@
   "documentDescribes": [
     "SPDXRef-ExportFlow"
   ],
-  "documentComment": "Scope: ExportFlow runtime dependency closure for parser roots @mozilla/readability, linkedom, papaparse. Includes 22 exact npm packages from package-lock.json (lockfileVersion 3). This is intentionally not a complete application SBOM. Declared license identifiers are package metadata; licenseConcluded is NOASSERTION and does not replace legal/commercial license review.",
+  "documentComment": "Scope: ExportFlow parser runtime dependency closure for roots @mozilla/readability, linkedom, papaparse, and unpdf. Includes 23 exact npm packages from package-lock.json (lockfileVersion 3), plus the PDF.js 6.5.438 library bundled by unpdf@2.2.3. This is intentionally not a complete application SBOM. Declared license identifiers are package metadata; licenseConcluded is NOASSERTION and does not replace legal/commercial license review.",
   "packages": [
     {
       "name": "ExportFlow",
@@ -554,6 +554,28 @@
         }
       ],
       "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "unpdf",
+      "SPDXID": "SPDXRef-Pkg-unpdf-2.2.3",
+      "versionInfo": "2.2.3",
+      "downloadLocation": "https://registry.npmjs.org/unpdf/-/unpdf-2.2.3.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2023-PRESENT Johann Schopplich",
+      "primaryPackagePurpose": "LIBRARY"
+    },
+    {
+      "name": "pdfjs-dist (bundled in unpdf)",
+      "SPDXID": "SPDXRef-Pkg-pdfjs-dist-6.5.438-bundled",
+      "versionInfo": "6.5.438",
+      "downloadLocation": "https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-6.5.438.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "NOASSERTION",
+      "primaryPackagePurpose": "LIBRARY"
     }
   ],
   "relationships": [
@@ -716,6 +738,16 @@
       "spdxElementId": "SPDXRef-Pkg-396dcf9d6a3b6699",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Pkg-2697db75cd7e9576"
+    },
+    {
+      "spdxElementId": "SPDXRef-ExportFlow",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-unpdf-2.2.3"
+    },
+    {
+      "spdxElementId": "SPDXRef-Pkg-unpdf-2.2.3",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Pkg-pdfjs-dist-6.5.438-bundled"
     }
   ]
 }
