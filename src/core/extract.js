@@ -780,7 +780,7 @@ export async function extractStructuredData(input, options = {}) {
 export const extractAdapter = Object.freeze({
   id: "web.extract.v1",
   family: "web",
-  capabilities: ["structured-extraction", "jsonld", "metadata", "csv", "field-evidence"],
+  capabilities: ["structured-extraction", "jsonld", "metadata", "csv", "readability-article-text", "field-evidence"],
   authMode: "none",
   limits: {
     maxSchemaBytes: EXTRACTION_LIMITS.maxSchemaBytes,
@@ -795,6 +795,7 @@ export const extractAdapter = Object.freeze({
   restrictions: [
     "schema-driven-deterministic-extraction",
     "html-json-and-csv-only",
+    "optional-readability-article-text-for-html-only",
     "csv-values-preserved-as-strings",
     "csv-formulas-never-executed",
     "no-LLM-inference",

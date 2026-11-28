@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createAuthServiceJwksFetcher, createExportFlowPreviewWorker } from "../src/mcp/preview-worker.js";
 import { hashApiKey } from "../src/core/tenant-auth.js";
+import { extractAdapter } from "../src/core/extract.js";
 import { createDurableTenantBurstTestNamespace } from "./helpers/durable-tenant-burst-test-namespace.js";
 import { createDurableTaskD1 } from "./helpers/durable-task-d1.js";
 
@@ -674,6 +675,9 @@ test("web_extract publishes and forwards the optional Readability article switch
   const tools = (await listed.json()).result.tools;
   const extractTool = tools.find((tool) => tool.name === "web_extract");
   assert.equal(extractTool.inputSchema.properties.includeArticle.type, "boolean");
+  assert.match(extractTool.inputSchema.properties.includeArticle.description, /20,000 characters/);
+  assert.match(extractTool.description, /Mozilla Readability article text/);
+  assert.ok(extractAdapter.capabilities.includes("readability-article-text"));
 
   const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
     name: "web_extract",
