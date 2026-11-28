@@ -419,7 +419,7 @@ PERFORMANCE OF THIS SOFTWARE.
 
 ## Scope and release checks
 
-- All 22 parser-runtime package instances in the scoped SBOM are represented in the inventory above.
+- All 23 npm package instances and the separately bundled PDF.js 6.5.438 library in the scoped SBOM are represented in the inventory above.
 - The four declared license families are permissive licenses. No GPL, AGPL, LGPL, MPL, SSPL or other copyleft license appears in this parser-runtime closure.
 - Apache 2.0 redistribution conditions include providing the license, preserving relevant notices, marking modified files, and passing along any upstream `NOTICE` text if one is part of a distribution.
 - MIT, ISC and BSD-2-Clause notices require preserving their applicable copyright, permission/condition and disclaimer text.
