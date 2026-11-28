@@ -781,7 +781,7 @@ test("web_extract executes a PDF end-to-end through MCP and the shared Extract t
     const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
       name: "web_extract",
       arguments: {
-        url: "https://files.example.test/report.pdf",
+        url: "https://example.com/report.pdf",
         schema,
         idempotencyKey: "mcp-pdf-success-0001",
       },
@@ -803,7 +803,7 @@ test("web_extract executes a PDF end-to-end through MCP and the shared Extract t
     const failedResponse = await worker.fetch(makeRequest(jsonRpc("tools/call", {
       name: "web_extract",
       arguments: {
-        url: "https://files.example.test/scanned.pdf",
+        url: "https://example.com/scanned.pdf",
         schema,
         idempotencyKey: "mcp-pdf-scanned-0001",
       },
