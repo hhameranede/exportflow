@@ -114,7 +114,7 @@ const TOOL_DEFINITIONS = Object.freeze([
     description: "Crawls at most three same-origin static pages to depth one, respecting robots.txt and bounded byte limits. Requires tasks:crawl.",
     inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, maxPages: { type: "integer", minimum: 1, maximum: 3 }, maxDepth: { type: "integer", minimum: 0, maximum: 1 }, cacheMode: CACHE_MODE_SCHEMA, idempotencyKey: { type: "string", minLength: 8, maxLength: 128 } }, required: ["url"], additionalProperties: false } },
   { name: "web_extract", title: "Extract structured page data",
-    description: "Extracts explicit fields from public static HTML or JSON through metadata and JSON-LD. Missing fields are not guessed. Requires tasks:extract.",
+    description: "Extracts explicit fields from public static HTML, JSON, or bounded CSV. Map CSV columns with x-source csv:Column Name and array-of-string fields; values and formula-looking cells remain text. Missing fields are not guessed. Requires tasks:extract.",
     inputSchema: { type: "object", properties: { url: { type: "string", format: "uri", maxLength: MAX_URL_LENGTH }, schema: SCHEMA_SCHEMA, cacheMode: CACHE_MODE_SCHEMA, idempotencyKey: { type: "string", minLength: 8, maxLength: 128 } }, required: ["url", "schema"], additionalProperties: false } },
   { name: "web_search", title: "Search a selected public dataset",
     description: "Searches one selected no-key source: Wikipedia (encyclopedic), OpenAlex (scholarly works), or Crossref (DOI metadata). Not a whole-web search engine. Requires tasks:search.",

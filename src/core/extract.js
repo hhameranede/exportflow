@@ -1,5 +1,6 @@
 import { fetchPublicResource } from "./http-fetch.js";
 import { normalizeResult } from "./result.js";
+import { CSV_PARSE_LIMITS, CSV_PARSER_VERSION, CsvParserError, parseCsvText } from "./csv-parser.js";
 
 export const EXTRACTION_LIMITS = Object.freeze({
   maxSchemaBytes: 16_384,
@@ -22,6 +23,7 @@ export class ExtractionError extends Error {
 }
 
 const SUPPORTED_TYPES = new Set(["string", "number", "integer", "boolean", "object", "array"]);
+const CSV_MIME_TYPES = new Set(["text/csv"]);
 const DEFAULT_SOURCES = Object.freeze({
   title: ["meta:og:title", "meta:twitter:title", "page:title", "jsonld:headline", "jsonld:name"],
   name: ["jsonld:name", "jsonld:headline", "meta:og:site_name", "page:title"],
@@ -48,8 +50,17 @@ function validateSourcePath(source) {
   const colon = source.indexOf(":");
   const prefix = colon > 0 ? source.slice(0, colon).toLowerCase() : "jsonld";
   const path = colon > 0 ? source.slice(colon + 1) : source;
-  if (!["jsonld", "meta", "page"].includes(prefix) || !path) {
-    throw new ExtractionError("INVALID_SCHEMA", "x-source must use jsonld:, meta:, or page:.");
+  if (!["jsonld", "meta", "page", "csv"].includes(prefix) || !path) {
+    throw new ExtractionError("INVALID_SCHEMA", "x-source must use jsonld:, meta:, page:, or csv:.");
+  }
+  if (prefix === "csv") {
+    if (path.trim().length === 0 ||
+        path.length > EXTRACTION_LIMITS.maxSourcePathLength ||
+        /[\u0000-\u001f\u007f]/.test(path) ||
+        ["__proto__", "prototype", "constructor"].includes(path.trim())) {
+      throw new ExtractionError("INVALID_SCHEMA", "CSV column names must be bounded and safe.");
+    }
+    return { sourceType: prefix, path: path.trim(), source };
   }
   const segments = path.split(".");
   const segmentPattern = prefix === "meta"
@@ -118,6 +129,7 @@ export function validateExtractionSchema(schema) {
       type: definition.type,
       itemType: definition.items?.type,
       required: required.includes(name),
+      explicitSources: definition["x-source"] !== undefined,
       sources: sources.map(validateSourcePath),
     });
   }
@@ -427,6 +439,80 @@ function buildExtracted({ metadata, nodes, url, contentType, schema, warnings = 
   };
 }
 
+
+function buildCsvExtracted({ parsed, url, contentType, schema }) {
+  const checkedSchema = validateExtractionSchema(schema);
+  const data = {};
+  const fieldEvidence = [];
+  const missingFields = [];
+  const missingRequired = [];
+  const warnings = parsed.errors.map((error) =>
+    "CSV parser reported " + error.code +
+    (Number.isInteger(error.row) ? " at row index " + error.row : "") + "."
+  );
+  const headerIndexes = new Map(parsed.headers.map((header, index) => [header, index]));
+
+  for (const field of checkedSchema.fields) {
+    const csvSources = field.sources.filter((source) => source.sourceType === "csv");
+    const selectedSource = csvSources.find((source) => headerIndexes.has(source.path));
+    const columnName = selectedSource?.path ?? (!field.explicitSources ? field.name : null);
+    const columnIndex = columnName === null ? undefined : headerIndexes.get(columnName);
+
+    if (!columnName || columnIndex === undefined) {
+      missingFields.push(field.name);
+      if (field.required) missingRequired.push(field.name);
+      continue;
+    }
+    if (field.type !== "array" || (field.itemType !== undefined && field.itemType !== "string")) {
+      throw new ExtractionError(
+        "CSV_ARRAY_FIELD_REQUIRED",
+        "CSV schema fields must be arrays of strings to preserve source values.",
+        422,
+      );
+    }
+
+    const values = parsed.rows.map((row) =>
+      Object.hasOwn(row, columnName) && typeof row[columnName] === "string"
+        ? row[columnName]
+        : ""
+    );
+    data[field.name] = values;
+    fieldEvidence.push({
+      field: field.name,
+      sourceType: "csv",
+      path: columnName,
+      columnIndex,
+      rowCount: values.length,
+      url,
+      contentType: contentType || null,
+    });
+  }
+
+  if (parsed.truncated) warnings.push("CSV row output was truncated at the configured row limit.");
+  if (missingFields.length) warnings.push("Some CSV columns were not found: " + missingFields.join(", ") + ".");
+  if (missingRequired.length) warnings.push("Required CSV columns are missing: " + missingRequired.join(", ") + ".");
+
+  const status = Object.keys(data).length === 0
+    ? "failed"
+    : (missingFields.length || missingRequired.length || parsed.status === "partial" || parsed.truncated
+      ? "partial"
+      : "succeeded");
+
+  return {
+    status,
+    data,
+    headers: parsed.headers,
+    rowCount: parsed.rowCount,
+    truncated: parsed.truncated,
+    parseErrors: parsed.errors,
+    fieldEvidence,
+    missingFields,
+    missingRequired,
+    warnings,
+    schemaProperties: checkedSchema.fields.map((field) => field.name),
+  };
+}
+
 function safeCanonical(canonical, baseUrl) {
   try {
     const url = new URL(canonical, baseUrl);
@@ -489,6 +575,76 @@ export async function extractStructuredData(input, options = {}) {
   }
 
   const mime = String(response.contentType || "").split(";")[0].trim().toLowerCase();
+  if (CSV_MIME_TYPES.has(mime)) {
+    let parsedCsv;
+    try {
+      parsedCsv = parseCsvText(response.body);
+    } catch (error) {
+      if (error instanceof CsvParserError) {
+        throw new ExtractionError(error.code, error.message, error.httpStatus);
+      }
+      throw error;
+    }
+    const extractedCsv = buildCsvExtracted({
+      parsed: parsedCsv,
+      url: response.finalUrl || url,
+      contentType: response.contentType,
+      schema: input.schema,
+    });
+    const csvSource = {
+      url: response.finalUrl || url,
+      retrievedAt: response.retrievedAt,
+      title: null,
+      evidence: [
+        {
+          type: "http_response",
+          status: response.status,
+          contentType: response.contentType,
+          bytes: response.bytes,
+          cacheStatus: response.cacheStatus ?? null,
+        },
+        {
+          type: "csv_table",
+          parser: parsedCsv.method,
+          parserVersion: CSV_PARSER_VERSION,
+          headers: parsedCsv.headers,
+          rowCount: parsedCsv.rowCount,
+          truncated: parsedCsv.truncated,
+        },
+        ...extractedCsv.fieldEvidence.map((item) => ({
+          type: "extracted_field",
+          field: item.field,
+          sourceType: item.sourceType,
+          path: item.path,
+          columnIndex: item.columnIndex,
+          rowCount: item.rowCount,
+        })),
+      ],
+    };
+    return normalizeResult({
+      status: extractedCsv.status,
+      data: {
+        url: response.finalUrl || url,
+        httpStatus: response.status,
+        cacheStatus: response.cacheStatus ?? null,
+        format: "csv",
+        parser: parsedCsv.method,
+        parserVersion: CSV_PARSER_VERSION,
+        headers: extractedCsv.headers,
+        rowCount: extractedCsv.rowCount,
+        truncated: extractedCsv.truncated,
+        parseErrors: extractedCsv.parseErrors,
+        fields: extractedCsv.data,
+        fieldEvidence: extractedCsv.fieldEvidence,
+        missingFields: extractedCsv.missingFields,
+        missingRequired: extractedCsv.missingRequired,
+        schemaProperties: extractedCsv.schemaProperties,
+      },
+      sources: [csvSource],
+      warnings: extractedCsv.warnings,
+    });
+  }
+
   if (!["text/html", "application/xhtml+xml", "application/json", "application/ld+json"].includes(mime) &&
       !mime.endsWith("+json")) {
     throw new ExtractionError("UNSUPPORTED_CONTENT_TYPE", "Structured extraction currently supports HTML and JSON responses.", 415);
@@ -564,17 +720,22 @@ export async function extractStructuredData(input, options = {}) {
 export const extractAdapter = Object.freeze({
   id: "web.extract.v1",
   family: "web",
-  capabilities: ["structured-extraction", "jsonld", "metadata", "field-evidence"],
+  capabilities: ["structured-extraction", "jsonld", "metadata", "csv", "field-evidence"],
   authMode: "none",
   limits: {
     maxSchemaBytes: EXTRACTION_LIMITS.maxSchemaBytes,
     maxProperties: EXTRACTION_LIMITS.maxProperties,
     maxJsonLdBlocks: EXTRACTION_LIMITS.maxJsonLdBlocks,
     maxJsonLdBlockBytes: EXTRACTION_LIMITS.maxJsonLdBlockBytes,
+    maxCsvBytes: CSV_PARSE_LIMITS.maxBytes,
+    maxCsvRows: CSV_PARSE_LIMITS.maxRows,
+    maxCsvColumns: CSV_PARSE_LIMITS.maxColumns,
   },
   restrictions: [
     "schema-driven-deterministic-extraction",
-    "html-and-json-only",
+    "html-json-and-csv-only",
+    "csv-values-preserved-as-strings",
+    "csv-formulas-never-executed",
     "no-LLM-inference",
     "untrusted-source-content",
     "field-level-evidence",
