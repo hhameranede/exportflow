@@ -178,6 +178,8 @@ test("executeWebTask forwards usage receipts through Extract, Map and Crawl", as
     } else {
       assert.ok(receipts.some((receipt) => receipt.responseBodyBytesRead === pageBytes), operation);
     }
+    const observedBytes = receipts.reduce((total, receipt) => total + receipt.responseBodyBytesRead, 0);
+    assert.equal(task.usage.responseBytes, observedBytes, operation);
   }
 });
 
@@ -199,6 +201,7 @@ test("executeWebTask forwards Fetch receipts through the internal observer only"
   assert.equal(receipts.length, 1);
   assert.equal(receipts[0].outcome, "response");
   assert.equal(receipts[0].responseBodyBytesRead, 2);
+  assert.equal(task.usage.responseBytes, 2);
   assert.equal(Object.isFrozen(receipts[0]), true);
 });
 
