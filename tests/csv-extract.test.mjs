@@ -84,7 +84,7 @@ test("CSV extraction fails when none of the requested columns are mapped", async
         },
       },
     },
-    { fetchResource: async (requestedUrl) => responseFor(requestedUrl, "id\\n001\\n002") },
+    { fetchResource: async (requestedUrl) => responseFor(requestedUrl, "id\n001\n002") },
   );
   assert.equal(result.status, "failed");
   assert.deepEqual(result.data.fields, {});
@@ -93,7 +93,7 @@ test("CSV extraction fails when none of the requested columns are mapped", async
 
 test("CSV extraction requires explicit string array items before column lookup", async () => {
   const url = "https://data.example.test/schema-contract.csv";
-  const csv = "Other Column\\n001";
+  const csv = "Other Column\n001";
   const invalidSchemas = [
     { type: "object", properties: { sku: { type: "array", "x-source": "csv:SKU" } } },
     { type: "object", properties: { sku: { type: "array", items: { type: "number" }, "x-source": "csv:SKU" } } },
