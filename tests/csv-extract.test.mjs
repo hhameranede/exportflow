@@ -135,7 +135,7 @@ test("CSV extraction refuses non-array/non-string contracts and generic binary c
 
 
 test("single-column CSV ignores PapaParse's undetectable-delimiter diagnostic", () => {
-  const parsed = parseCsvText("id\\n001\\n002");
+  const parsed = parseCsvText(["id", "001", "002"].join(String.fromCharCode(10)));
   assert.equal(parsed.status, "succeeded");
   assert.deepEqual(parsed.headers, ["id"]);
   assert.deepEqual(parsed.rows.map((row) => row.id), ["001", "002"]);
@@ -143,16 +143,20 @@ test("single-column CSV ignores PapaParse's undetectable-delimiter diagnostic", 
 });
 
 test("CSV parser enforces row, column and header-length ceilings", () => {
-  const rows = ["id", ...Array.from({ length: 1_001 }, (_, index) => String(index))].join("\\n");
+  const rows = ["id", ...Array.from({ length: 1_001 }, (_, index) => String(index))].join(String.fromCharCode(10));
   const rowLimited = parseCsvText(rows);
   assert.equal(rowLimited.rowCount, 1_000);
   assert.equal(rowLimited.truncated, true);
 
   const wideHeader = Array.from({ length: 101 }, (_, index) => "c" + index).join(",");
-  assert.throws(() => parseCsvText(wideHeader), (error) => error.code === "CSV_TOO_MANY_COLUMNS");
+  const wideRow = Array.from({ length: 101 }, (_, index) => String(index)).join(",");
+  assert.throws(
+    () => parseCsvText(wideHeader + String.fromCharCode(10) + wideRow),
+    (error) => error.code === "CSV_TOO_MANY_COLUMNS",
+  );
 
   assert.throws(
-    () => parseCsvText("x".repeat(257) + "\\nvalue"),
+    () => parseCsvText("x".repeat(257) + String.fromCharCode(10) + "value"),
     (error) => error.code === "CSV_HEADER_TOO_LONG",
   );
 });
