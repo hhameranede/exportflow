@@ -1798,7 +1798,7 @@ test("CSV parser and schema failures retain downloaded response bytes", async ()
       error.responseBytes === malformedBytes.byteLength,
   );
 
-  const validCsv = "name\\nExportFlow";
+  const validCsv = "name\nExportFlow";
   const validBytes = new TextEncoder().encode(validCsv);
   await assert.rejects(
     extractStructuredData({
