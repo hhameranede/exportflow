@@ -2,13 +2,15 @@
 
 This notice covers only the pinned parser runtime dependency closure recorded in [`docs/sbom/exportflow-parser-runtime.spdx.json`](./sbom/exportflow-parser-runtime.spdx.json). It is not a complete notice file for every dependency in ExportFlow.
 
-The package names, versions and declared SPDX identifiers below come from the PR's committed `package-lock.json` and scoped SPDX 2.3 SBOM. The upstream license texts were checked against the corresponding projects' published source repositories on 27 November 2026. This is an engineering attribution record, not legal advice; retain these notices with any source or object-code distribution and recheck the exact release artifacts before a commercial release.
+The package names, versions and declared SPDX identifiers below come from the PR's committed `package-lock.json` and scoped SPDX 2.3 SBOM. The upstream license texts were checked against the corresponding projects' published source repositories on 28 November 2026. This is an engineering attribution record, not legal advice; retain these notices with any source or object-code distribution and recheck the exact release artifacts before a commercial release.
 
 ## Package inventory
 
 | Package | Version | Declared license |
 |---|---:|---|
 | `@mozilla/readability` | `0.6.0` | Apache-2.0 |
+| `pdfjs-dist` (bundled in `unpdf`) | `6.5.438` | Apache-2.0 |
+| `unpdf` | `2.2.3` | MIT |
 | `cssomnom` | `0.1.12` | Apache-2.0 |
 | `papaparse` | `5.7.1` | MIT |
 | `htmlparser2` | `10.1.0` | MIT |
@@ -29,7 +31,7 @@ The repository metadata is the canonical source of the corresponding copyright a
 
 ## Apache License 2.0
 
-Applies to: `@mozilla/readability@0.6.0`, `cssomnom@0.1.12`.
+Applies to: `@mozilla/readability@0.6.0`, `cssomnom@0.1.12`, and PDF.js `6.5.438` bundled in `unpdf@2.2.3`.
 
 ```
 Apache License
@@ -422,3 +424,31 @@ PERFORMANCE OF THIS SOFTWARE.
 - Apache 2.0 redistribution conditions include providing the license, preserving relevant notices, marking modified files, and passing along any upstream `NOTICE` text if one is part of a distribution.
 - MIT, ISC and BSD-2-Clause notices require preserving their applicable copyright, permission/condition and disclaimer text.
 - This file documents notices; it does not establish that every unrelated application dependency has been reviewed, nor does it replace counsel's assessment of the intended distribution model.
+
+### unpdf@2.2.3
+
+Source: `unjs/unpdf/LICENSE`.
+
+```
+MIT License
+
+Copyright (c) 2023-PRESENT Johann Schopplich
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
