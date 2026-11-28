@@ -730,6 +730,8 @@ test("web_extract executes a PDF end-to-end through MCP and the shared Extract t
   const readablePdf = createSyntheticPdf(["ExportFlow MCP PDF end-to-end acceptance fixture"]);
   const scannedPdf = createSyntheticPdf([""]);
   let fetchCalls = 0;
+  let fetchError = null;
+  let responseInfo = null;
   const usageReceipts = [];
   const identity = {
     tenantId: "tenant_test_001",
@@ -746,13 +748,28 @@ test("web_extract executes a PDF end-to-end through MCP and the shared Extract t
       fetchImpl: async (source, init) => {
         fetchCalls += 1;
         const bytes = new URL(source).pathname === "/scanned.pdf" ? scannedPdf : readablePdf;
-        return new Response(bytes, {
-          status: 200,
-          headers: {
-            "content-type": "application/pdf",
-            "content-length": String(bytes.byteLength),
-          },
-        });
+        try {
+          const response = new Response(bytes, {
+            status: 200,
+            headers: {
+              "content-type": "application/pdf",
+              "content-length": String(bytes.byteLength),
+            },
+          });
+          responseInfo = {
+            bodyType: response.body?.constructor?.name || null,
+            hasGetReader: typeof response.body?.getReader === "function",
+            status: response.status,
+            contentType: response.headers.get("content-type"),
+          };
+          return response;
+        } catch (error) {
+          fetchError = {
+            name: typeof error?.name === "string" ? error.name.slice(0, 80) : null,
+            code: typeof error?.code === "string" ? error.code.slice(0, 80) : null,
+          };
+          throw error;
+        }
       },
     }),
     getAdapterCatalog: () => [{ id: "web.extract.v1", capabilities: ["extract", "pdf"] }],
@@ -795,7 +812,7 @@ test("web_extract executes a PDF end-to-end through MCP and the shared Extract t
     const task = body.result.structuredContent;
 
     assert.equal(response.status, 200);
-    assert.equal(body.result.isError, undefined, JSON.stringify({ task, fetchCalls, usageReceipts }));
+    assert.equal(body.result.isError, undefined, JSON.stringify({ task, fetchCalls, fetchError, responseInfo, usageReceipts }));
     assert.equal(task.state, "succeeded");
     assert.equal(task.execution.adapterId, "web.extract.v1");
     assert.equal(task.result.data.format, "pdf");
