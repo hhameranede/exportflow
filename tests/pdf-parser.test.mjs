@@ -125,7 +125,7 @@ test("PDF stream truncation removes a high surrogate split across text items", a
     async read() {
       reads += 1;
       return reads === 1
-        ? { done: false, value: { items: [{ str: "A\\uD83D" }, { str: "\\uDE00B" }] } }
+        ? { done: false, value: { items: [{ str: "A" + String.fromCharCode(0xd83d) }, { str: String.fromCharCode(0xde00) + "B" }] } }
         : { done: true };
     },
   };
