@@ -42,7 +42,15 @@ function postTask(idempotencyKey, url = "https://example.com/") {
   });
 }
 
-function postExtractTask(idempotencyKey, url = "https://example.com/report.pdf") {
+function postExtractTask(
+  idempotencyKey,
+  url = "https://example.com/report.pdf",
+  schema = {
+    type: "object",
+    properties: { content: { type: "string", "x-source": "pdf:text" } },
+    required: ["content"],
+  },
+) {
   return new Request("https://exportflow.me/api/v1/tasks", {
     method: "POST",
     headers: {
@@ -51,14 +59,10 @@ function postExtractTask(idempotencyKey, url = "https://example.com/report.pdf")
       "idempotency-key": idempotencyKey,
     },
     body: JSON.stringify({
-      goal: "Extract text from a public PDF",
+      goal: "Extract data from a public resource",
       operation: "extract",
       url,
-      schema: {
-        type: "object",
-        properties: { content: { type: "string", "x-source": "pdf:text" } },
-        required: ["content"],
-      },
+      schema,
     }),
   });
 }
@@ -120,6 +124,69 @@ test("REST Extract reports downloaded PDF bytes when parsing fails after fetch",
     assert.equal(task.state, "failed");
     assert.equal(task.errors[0].code, "PDF_PARSE_FAILED");
     assert.equal(task.usage.responseBytes, malformedPdf.byteLength);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("REST Extract accounts for bytes from a non-2xx PDF response", async () => {
+  const fixture = createDurableTaskD1({ tenantIds: ["tenant_alpha"] });
+  const errorBody = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x34, 0x30, 0x34]);
+  const worker = createWorker({
+    tenantTaskGateway: makeGateway(),
+    fetchImpl: async () => new Response(errorBody, {
+      status: 404,
+      headers: {
+        "content-type": "application/pdf",
+        "content-length": String(errorBody.byteLength),
+      },
+    }),
+  });
+
+  try {
+    const response = await worker.fetch(
+      postExtractTask("rest-pdf-http-fail-0001", "https://example.com/missing.pdf"),
+      { EXPORTFLOW_AUTH_DB: fixture.db },
+    );
+    const task = await response.json();
+    assert.equal(task.state, "failed");
+    assert.equal(task.result.data.httpStatus, 404);
+    assert.equal(task.result.data.bytes, errorBody.byteLength);
+    assert.equal(task.usage.responseBytes, errorBody.byteLength);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("REST Extract reports downloaded CSV bytes when parsing fails", async () => {
+  const fixture = createDurableTaskD1({ tenantIds: ["tenant_alpha"] });
+  const malformedCsv = 'name\n"unterminated';
+  const expectedBytes = new TextEncoder().encode(malformedCsv).byteLength;
+  const schema = {
+    type: "object",
+    properties: { names: { type: "array", items: { type: "string" }, "x-source": "csv:name" } },
+  };
+  const worker = createWorker({
+    tenantTaskGateway: makeGateway(),
+    fetchImpl: async () => new Response(malformedCsv, {
+      status: 200,
+      headers: {
+        "content-type": "text/csv; charset=utf-8",
+        "content-length": String(expectedBytes),
+      },
+    }),
+  });
+
+  try {
+    const response = await worker.fetch(
+      postExtractTask("rest-csv-parse-fail-0001", "https://example.com/data.csv", schema),
+      { EXPORTFLOW_AUTH_DB: fixture.db },
+    );
+    const task = await response.json();
+    assert.equal(response.status, 422);
+    assert.equal(task.state, "failed");
+    assert.equal(task.errors[0].code, "CSV_MALFORMED_QUOTES");
+    assert.equal(task.usage.responseBytes, expectedBytes);
   } finally {
     fixture.close();
   }
