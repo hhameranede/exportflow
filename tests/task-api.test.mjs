@@ -89,7 +89,7 @@ test("REST Extract runs a bounded PDF through the shared task path", { skip: typ
     assert.match(task.result.data.fields.content, /ExportFlow REST PDF acceptance fixture/);
     assert.match(fetchInit.headers.accept, /application\\/pdf/);
   } finally {
-    fixture.cleanup();
+    fixture.close();
   }
 });
 
