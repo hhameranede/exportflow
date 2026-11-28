@@ -14,6 +14,13 @@ export const EXTRACTION_LIMITS = Object.freeze({
   maxJsonLdDepth: 12,
 });
 
+function attachResponseBytes(error, responseBytes) {
+  if (error && typeof error === "object" && Number.isInteger(responseBytes) && responseBytes >= 0) {
+    try { error.responseBytes = responseBytes; } catch {}
+  }
+  return error;
+}
+
 export class ExtractionError extends Error {
   constructor(code, message, httpStatus = 400, responseBytes = null) {
     super(message);
@@ -665,16 +672,15 @@ export async function extractStructuredData(input, options = {}) {
       if (error instanceof PdfParserError) {
         throw new ExtractionError(error.code, error.message, error.httpStatus, response.bytes);
       }
-      if (error && typeof error === "object") error.responseBytes = response.bytes;
-      throw error;
+      throw attachResponseBytes(error, response.bytes);
     }
     let extractedPdf;
     try {
       extractedPdf = buildPdfExtracted({
-      parsed: parsedPdf,
-      url: response.finalUrl || url,
-      contentType: response.contentType,
-      schema: input.schema,
+        parsed: parsedPdf,
+        url: response.finalUrl || url,
+        contentType: response.contentType,
+        schema: input.schema,
       });
     } catch (error) {
       if (error && typeof error === "object") error.responseBytes = response.bytes;
