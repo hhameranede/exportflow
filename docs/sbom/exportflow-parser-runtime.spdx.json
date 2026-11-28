@@ -564,7 +564,13 @@
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
       "copyrightText": "Copyright (c) 2023-PRESENT Johann Schopplich",
-      "primaryPackagePurpose": "LIBRARY"
+      "primaryPackagePurpose": "LIBRARY",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "7c37505b85a1f9f628c385b4fc289df87878aa5d61c37471869c170951eb0f3c0ea5ca6dab0c3941e8e3b2c0a5cfb97fb2b3b54bc39b758b305d06ed83e6e36e"
+        }
+      ]
     },
     {
       "name": "pdfjs-dist (bundled in unpdf)",
