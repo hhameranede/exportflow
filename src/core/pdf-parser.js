@@ -232,21 +232,15 @@ export async function extractPdfText(input, options = {}) {
             }
             text += addition;
           }
-          if (truncated) {
-            cancelReaderBestEffort(reader);
-            break;
-          }
+          // Once an output/item ceiling is reached, drain this page's stream
+          // without retaining further text. PDF.js' message stream must finish
+          // naturally before the document loading task is destroyed; cancelling
+          // a completed/in-flight text stream can race its controller close.
         }
       } finally {
-        try {
-          reader.releaseLock();
-        } catch {
-          // Timeout/cancellation may already have released the reader.
-        }
-        // The document loading task is destroyed in the outer finally after
-        // releasing this reader. Avoid page.cleanup() against an exhausted
-        // PDF.js ReadableStream; some runtimes can emit a late closed-controller
-        // rejection when page and document cleanup race.
+        // Match PDF.js' own getTextContent() consumption pattern: leave the
+        // exhausted reader alone and let the document task own final cleanup.
+        // Calling releaseLock() here can race late stream-controller closure.
       }
 
       if (pageNumber < document.numPages && text.length > 0 && !truncated) {
