@@ -557,7 +557,7 @@ test("fetch returns bounded PDF bytes only in explicit Extract response mode", a
   assert.deepEqual(result.bodyBytes, bytes);
   assert.equal(result.bytes, bytes.byteLength);
   assert.equal(result.body, undefined);
-  assert.match(requestHeaders.accept, /application\\/pdf/);
+  assert.ok(requestHeaders.accept.includes("application/pdf"));
 });
 
 test("Extract response mode rejects declared and streamed PDF bodies above its byte ceiling", async () => {
