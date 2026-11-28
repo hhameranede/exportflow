@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   boundPdfText,
   cleanupPdfDocument,
+  consumePdfTextStream,
   extractPdfText,
   hasPdfSignature,
   PDF_PARSE_LIMITS,
@@ -90,6 +91,54 @@ test("streams large PDF text and stops at the output ceiling", parserTestOptions
 
   assert.equal(result.text.length, PDF_PARSE_LIMITS.maxOutputCharacters);
   assert.equal(result.truncated, true);
+});
+
+test("PDF text stream stops reading immediately when the text-item ceiling is reached", async () => {
+  let reads = 0;
+  let cancels = 0;
+  const reader = {
+    async read() {
+      reads += 1;
+      return reads === 1
+        ? { done: false, value: { items: [{ str: "A" }, { str: "B" }, { str: "C" }] } }
+        : { done: true };
+    },
+    cancel() { cancels += 1; return Promise.resolve(); },
+  };
+
+  const result = await consumePdfTextStream(reader, {
+    maxTextItems: 2,
+    maxOutputCharacters: 100,
+    getRemainingTimeMs: () => 100,
+  });
+
+  assert.equal(result.text, "AB");
+  assert.equal(result.itemCount, 2);
+  assert.equal(result.truncated, true);
+  assert.equal(reads, 1, "must not drain further PDF.js stream chunks after the item ceiling");
+  assert.equal(cancels, 0, "leave stream shutdown to bounded document cleanup to avoid PDF.js close races");
+});
+
+test("PDF text stream stops reading immediately when the output-character ceiling is reached", async () => {
+  let reads = 0;
+  const reader = {
+    async read() {
+      reads += 1;
+      return reads === 1
+        ? { done: false, value: { items: [{ str: "ABCDE" }, { str: "ignored" }] } }
+        : { done: true };
+    },
+  };
+
+  const result = await consumePdfTextStream(reader, {
+    maxTextItems: 100,
+    maxOutputCharacters: 3,
+    getRemainingTimeMs: () => 100,
+  });
+
+  assert.equal(result.text, "ABC");
+  assert.equal(result.truncated, true);
+  assert.equal(reads, 1, "must not drain further PDF.js stream chunks after the output ceiling");
 });
 
 test("PDF parser deadline returns a typed timeout for unresolved work", async () => {
