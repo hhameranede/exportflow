@@ -317,3 +317,50 @@ test("REST Extract can opt into bounded Readability article text without changin
     fixture.close();
   }
 });
+
+
+test("REST Extract maps malformed, scanned, and oversized PDF failures to precise HTTP statuses", { skip: typeof globalThis.Iterator !== "function" }, async () => {
+  const fixture = createDurableTaskD1({ tenantIds: ["tenant_alpha", "tenant_beta"] });
+  const scannedPdf = createSyntheticPdf([""]);
+  const invalidPdf = new TextEncoder().encode("not a PDF document");
+  const oversizedPdf = new Uint8Array(1_048_577);
+  oversizedPdf.set([0x25, 0x50, 0x44, 0x46, 0x2d]);
+  const worker = createWorker({
+    tenantTaskGateway: makeGateway(),
+    fetchImpl: async (source) => {
+      const pathname = new URL(source).pathname;
+      const bytes = pathname === "/scanned.pdf"
+        ? scannedPdf
+        : pathname === "/invalid.pdf"
+          ? invalidPdf
+          : pathname === "/oversized.pdf"
+            ? oversizedPdf
+            : null;
+      if (!bytes) throw new Error("Unexpected PDF acceptance-test URL.");
+      return new Response(bytes, {
+        status: 200,
+        headers: {
+          "content-type": "application/pdf",
+          "content-length": String(bytes.byteLength),
+        },
+      });
+    },
+  });
+
+  const cases = [
+    { key: "rest-pdf-scanned-0001", url: "https://example.com/scanned.pdf", status: 422 },
+    { key: "rest-pdf-invalid-0001", url: "https://example.com/invalid.pdf", status: 415 },
+    { key: "rest-pdf-oversized-0001", url: "https://example.com/oversized.pdf", status: 413 },
+  ];
+
+  try {
+    for (const item of cases) {
+      const response = await worker.fetch(postExtractTask(item.key, item.url), {
+        EXPORTFLOW_AUTH_DB: fixture.db,
+      });
+      assert.equal(response.status, item.status, item.url);
+    }
+  } finally {
+    fixture.close();
+  }
+});
