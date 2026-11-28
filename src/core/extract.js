@@ -53,7 +53,7 @@ function validateSourcePath(source) {
   const prefix = colon > 0 ? source.slice(0, colon).toLowerCase() : "jsonld";
   const path = colon > 0 ? source.slice(colon + 1) : source;
   if (!["jsonld", "meta", "page", "csv", "pdf"].includes(prefix) || !path) {
-    throw new ExtractionError("INVALID_SCHEMA", "x-source must use jsonld:, meta:, page:, or csv:.");
+    throw new ExtractionError("INVALID_SCHEMA", "x-source must use jsonld:, meta:, page:, csv:, or pdf:.");
   }
   if (prefix === "csv") {
     if (path.trim().length === 0 ||
@@ -925,6 +925,10 @@ export const extractAdapter = Object.freeze({
     maxCsvRows: CSV_PARSE_LIMITS.maxRows,
     maxCsvColumns: CSV_PARSE_LIMITS.maxColumns,
     maxCsvHeaderCharacters: CSV_PARSE_LIMITS.maxHeaderCharacters,
+    maxPdfInputBytes: PDF_PARSE_LIMITS.maxInputBytes,
+    maxPdfPages: PDF_PARSE_LIMITS.maxPages,
+    maxPdfOutputCharacters: PDF_PARSE_LIMITS.maxOutputCharacters,
+    maxPdfParseTimeMs: PDF_PARSE_LIMITS.maxParseTimeMs,
   },
   restrictions: [
     "schema-driven-deterministic-extraction",
