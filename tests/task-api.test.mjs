@@ -137,3 +137,75 @@ test("REST rejects an idempotency key reused for another request", async () => {
     fixture.close();
   }
 });
+
+test("REST Extract parses bounded CSV through the shared task execution path", async () => {
+  const fixture = createDurableTaskD1({ tenantIds: ["tenant_alpha"] });
+  const identity = Object.freeze({
+    ...identityA,
+    scopes: Object.freeze([...identityA.scopes, "tasks:extract"]),
+  });
+  const baseGateway = makeGateway();
+  const gateway = {
+    async authenticate(_request, _env, { requiredScope } = {}) {
+      if (requiredScope && !identity.scopes.includes(requiredScope)) {
+        return { ok: false, httpStatus: 403, code: "INSUFFICIENT_SCOPE", message: "scope denied" };
+      }
+      return { ok: true, identity };
+    },
+    authorizeScope: baseGateway.authorizeScope,
+  };
+  const csv = 'SKU,Product Notes\n001,"Contains, commas"\n002,"=SUM(1,1)"\n';
+  let fetchAccept = "";
+  let fetchCalls = 0;
+  const worker = createWorker({
+    tenantTaskGateway: gateway,
+    fetchImpl: async (_input, init) => {
+      fetchCalls += 1;
+      fetchAccept = new Headers(init?.headers).get("accept") || "";
+      return new Response(csv, {
+        status: 200,
+        headers: { "content-type": "text/csv; charset=utf-8" },
+      });
+    },
+  });
+
+  try {
+    const response = await worker.fetch(new Request("https://exportflow.me/api/v1/tasks", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer alpha",
+        "content-type": "application/json",
+        "idempotency-key": "rest-csv-extract-0001",
+      },
+      body: JSON.stringify({
+        goal: "Extract bounded CSV columns",
+        operation: "extract",
+        url: "https://example.com/catalog.csv",
+        schema: {
+          type: "object",
+          properties: {
+            sku: { type: "array", items: { type: "string" }, "x-source": "csv:SKU" },
+            notes: { type: "array", items: { type: "string" }, "x-source": "csv:Product Notes" },
+          },
+          required: ["sku"],
+        },
+      }),
+    }), { EXPORTFLOW_AUTH_DB: fixture.db });
+    const task = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(task.state, "succeeded");
+    assert.equal(task.result.data.format, "csv");
+    assert.deepEqual(task.result.data.fields.sku, ["001", "002"]);
+    assert.deepEqual(task.result.data.fields.notes, ["Contains, commas", "=SUM(1,1)"]);
+    assert.equal(task.result.data.parser, "papaparse");
+    assert.equal(task.result.data.rowCount, 2);
+    assert.equal(task.result.data.fieldEvidence[0].sourceType, "csv");
+    assert.equal(task.result.data.fieldEvidence[0].path, "SKU");
+    assert.ok(fetchAccept.toLowerCase().split(",").some((mediaType) => mediaType.trim() === "text/csv"));
+    assert.equal(fetchCalls, 1);
+  } finally {
+    fixture.close();
+  }
+});
+

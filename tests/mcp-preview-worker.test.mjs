@@ -212,6 +212,44 @@ test("web_fetch delegates to shared task execution and applies weighted rate lim
   assert.equal(env.EXPORTFLOW_AUTH_DB.sqlite.prepare("SELECT requests_used FROM tenant_request_usage WHERE tenant_id = 'tenant_test_001'").get().requests_used, 1);
 });
 
+test("web_extract forwards CSV column mappings through the shared MCP task path", async () => {
+  const { worker, env, calls } = makeWorker({ taskResult: { id: "task_csv_123", state: "succeeded" } });
+  const schema = {
+    type: "object",
+    properties: {
+      sku: { type: "array", items: { type: "string" }, "x-source": "csv:SKU" },
+      notes: { type: "array", items: { type: "string" }, "x-source": "csv:Product Notes" },
+    },
+    required: ["sku"],
+  };
+
+  const listed = await worker.fetch(makeRequest(jsonRpc("tools/list")), env);
+  const tools = (await listed.json()).result.tools;
+  const extractTool = tools.find((tool) => tool.name === "web_extract");
+  assert.match(extractTool.description, /bounded CSV/);
+  assert.equal(extractTool.inputSchema.properties.schema.type, "object");
+
+  const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
+    name: "web_extract",
+    arguments: {
+      url: "https://example.com/catalog.csv",
+      schema,
+    },
+  }), { headers: {
+    "cf-connecting-ip": "203.0.113.43",
+    authorization: "Bearer " + TENANT_TOKEN,
+  } }), env);
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.result.isError, undefined);
+  assert.equal(calls.tasks.length, 1);
+  assert.equal(calls.tasks[0].input.operation, "extract");
+  assert.equal(calls.tasks[0].input.url, "https://example.com/catalog.csv");
+  assert.deepEqual(calls.tasks[0].input.schema, schema);
+  assert.equal(calls.auth[0].requiredScope, "tasks:extract");
+});
+
 test("invalid tool arguments are rejected before rate limiting or task execution", async () => {
   const { worker, env, calls } = makeWorker();
   const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {

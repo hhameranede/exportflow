@@ -4,6 +4,7 @@ import {
   readBoundedJsonBody,
   TaskContractError,
   TASK_REQUEST_LIMITS,
+  validateTaskRequest,
 } from "../src/core/task-contract.js";
 
 function makeRequest(body, headers = {}) {
@@ -101,4 +102,22 @@ test("malformed Content-Length is rejected before reading the request body", asy
       error.code === "INVALID_CONTENT_LENGTH" &&
       error.httpStatus === 400,
   );
+});
+
+
+test("REST task contract accepts bounded CSV column mappings for Extract", () => {
+  const request = validateTaskRequest({
+    goal: "Extract product catalog columns",
+    operation: "extract",
+    url: "https://www.cloudflare.com/catalog.csv",
+    schema: {
+      type: "object",
+      properties: {
+        sku: { type: "array", items: { type: "string" }, "x-source": "csv:SKU" },
+      },
+      required: ["sku"],
+    },
+  });
+  assert.equal(request.operation, "extract");
+  assert.equal(request.schema.properties.sku["x-source"], "csv:SKU");
 });
