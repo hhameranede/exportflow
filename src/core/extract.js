@@ -683,8 +683,7 @@ export async function extractStructuredData(input, options = {}) {
         schema: input.schema,
       });
     } catch (error) {
-      if (error && typeof error === "object") error.responseBytes = response.bytes;
-      throw error;
+      throw attachResponseBytes(error, response.bytes);
     }
     const pdfSource = {
       url: response.finalUrl || url,
