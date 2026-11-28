@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   boundPdfText,
+  cleanupPdfDocument,
   extractPdfText,
   hasPdfSignature,
   PDF_PARSE_LIMITS,
@@ -105,6 +106,23 @@ test("PDF parser deadline preserves successful work", async () => {
     await withPdfParserTimeout(() => Promise.resolve("parsed"), 100),
     "parsed",
   );
+});
+
+test("PDF document cleanup cannot outlive the shared parser deadline", async () => {
+  let destroyCalled = false;
+  const startedAt = Date.now();
+
+  await cleanupPdfDocument({
+    loadingTask: {
+      destroy() {
+        destroyCalled = true;
+        return new Promise(() => {});
+      },
+    },
+  }, () => 10);
+
+  assert.equal(destroyCalled, true);
+  assert.ok(Date.now() - startedAt < 250, "stalled PDF.js cleanup must remain bounded");
 });
 
 test("reports a PDF without extractable text instead of claiming OCR support", parserTestOptions, async () => {
