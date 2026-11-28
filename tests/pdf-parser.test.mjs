@@ -141,6 +141,93 @@ test("PDF text stream stops reading immediately when the output-character ceilin
   assert.equal(reads, 1, "must not drain further PDF.js stream chunks after the output ceiling");
 });
 
+test("PDF text stream stops after a chunk ends exactly at the item ceiling", async () => {
+  let reads = 0;
+  const reader = {
+    async read() {
+      reads += 1;
+      return reads === 1
+        ? { done: false, value: { items: [{ str: "A" }, { str: "B" }] } }
+        : { done: true };
+    },
+  };
+  const result = await consumePdfTextStream(reader, {
+    maxTextItems: 2,
+    maxOutputCharacters: 100,
+    getRemainingTimeMs: () => 100,
+  });
+  assert.equal(result.text, "AB");
+  assert.equal(result.itemCount, 2);
+  assert.equal(result.truncated, true, "exact equality is conservatively treated as truncated");
+  assert.equal(reads, 1, "must not issue another read to discover whether the stream ended");
+});
+
+test("PDF text stream stops after a chunk ends exactly at the output ceiling", async () => {
+  let reads = 0;
+  const reader = {
+    async read() {
+      reads += 1;
+      return reads === 1
+        ? { done: false, value: { items: [{ str: "ABC" }] } }
+        : { done: true };
+    },
+  };
+  const result = await consumePdfTextStream(reader, {
+    maxTextItems: 100,
+    maxOutputCharacters: 3,
+    getRemainingTimeMs: () => 100,
+  });
+  assert.equal(result.text, "ABC");
+  assert.equal(result.truncated, true, "exact equality is conservatively treated as truncated");
+  assert.equal(reads, 1);
+});
+
+test("PDF text stream does not read when either budget is zero", async () => {
+  let reads = 0;
+  const reader = { async read() { reads += 1; return { done: true }; } };
+  const byItems = await consumePdfTextStream(reader, {
+    maxTextItems: 0,
+    maxOutputCharacters: 10,
+    getRemainingTimeMs: () => 100,
+  });
+  const byCharacters = await consumePdfTextStream(reader, {
+    maxTextItems: 10,
+    maxOutputCharacters: 0,
+    getRemainingTimeMs: () => 100,
+  });
+  assert.equal(byItems.truncated, true);
+  assert.equal(byCharacters.truncated, true);
+  assert.equal(reads, 0);
+});
+
+test("PDF stream truncation never leaves a split Unicode surrogate pair", async () => {
+  let reads = 0;
+  const reader = {
+    async read() {
+      reads += 1;
+      return { done: false, value: { items: [{ str: "A😀B" }] } };
+    },
+  };
+  const result = await consumePdfTextStream(reader, {
+    maxTextItems: 10,
+    maxOutputCharacters: 2,
+    getRemainingTimeMs: () => 100,
+  });
+  assert.equal(result.text, "A");
+  assert.equal(result.text.length, 1);
+  assert.equal(result.truncated, true);
+  assert.equal(reads, 1);
+});
+
+test("normalized PDF text truncation preserves complete Unicode code points", () => {
+  const longText = "A".repeat(PDF_PARSE_LIMITS.maxOutputCharacters - 1) + "😀B";
+  const result = boundPdfText(longText);
+  assert.equal(result.text.length, PDF_PARSE_LIMITS.maxOutputCharacters - 1);
+  assert.equal(result.text.endsWith("A"), true);
+  assert.equal(result.truncated, true);
+  assert.equal(/[\\uD800-\\uDBFF]$/.test(result.text), false);
+});
+
 test("PDF parser deadline returns a typed timeout for unresolved work", async () => {
   await assert.rejects(
     withPdfParserTimeout(() => new Promise(() => {}), 1),

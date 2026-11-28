@@ -136,6 +136,23 @@ try {
   assert.match(parsed.text, /Cloudflare Workerd PDF smoke/);
   assert.equal("bodyBytes" in parsed, false);
 
+  process.stdout.write("Sending PDF that reaches the output ceiling...\\n");
+  const largePdf = createSyntheticPdf(["A".repeat(70_000)]);
+  const boundedResponse = await fetchWithTimeout("/parse", {
+    method: "POST",
+    headers: {
+      "content-type": "application/pdf",
+      authorization,
+    },
+    body: largePdf,
+  }, 15_000);
+  assert.equal(boundedResponse.status, 200);
+  const bounded = await readJsonWithTimeout(boundedResponse, "bounded PDF parse");
+  assert.equal(bounded.ok, true);
+  assert.equal(bounded.text.length, 65_536);
+  assert.equal(bounded.truncated, true);
+  process.stdout.write("PASS Workerd extraction returns bounded output after early stream stop.\\n");
+
   const wrongMime = await fetchWithTimeout("/parse", {
     method: "POST",
     headers: {

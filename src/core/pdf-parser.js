@@ -28,13 +28,25 @@ function normalizeMime(value) {
   return String(value || "").split(";")[0].trim().toLowerCase();
 }
 
+function sliceAtCodePointBoundary(value, maxCodeUnits) {
+  const end = Math.max(0, Math.min(value.length, maxCodeUnits));
+  if (end > 0 && end < value.length) {
+    const previous = value.charCodeAt(end - 1);
+    const next = value.charCodeAt(end);
+    if (previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff) {
+      return value.slice(0, end - 1);
+    }
+  }
+  return value.slice(0, end);
+}
+
 export function boundPdfText(value) {
   const normalizedText = String(value || "")
     .replace(/\u0000/g, "")
     .replace(/\r\n?/g, "\n")
     .trim();
   return Object.freeze({
-    text: normalizedText.slice(0, PDF_PARSE_LIMITS.maxOutputCharacters),
+    text: sliceAtCodePointBoundary(normalizedText, PDF_PARSE_LIMITS.maxOutputCharacters),
     truncated: normalizedText.length > PDF_PARSE_LIMITS.maxOutputCharacters,
   });
 }
@@ -104,16 +116,23 @@ export async function consumePdfTextStream(reader, options = {}) {
         truncated = true;
         break;
       }
-      if (typeof item?.str !== "string" || item.str.length === 0) continue;
-
-      const addition = item.str + (item.hasEOL ? "\n" : "");
-      const remaining = maxOutputCharacters - text.length;
-      if (addition.length > remaining) {
-        text += addition.slice(0, remaining);
+      if (typeof item?.str === "string" && item.str.length > 0) {
+        const addition = item.str + (item.hasEOL ? "\n" : "");
+        const remaining = maxOutputCharacters - text.length;
+        if (addition.length > remaining) {
+          text += sliceAtCodePointBoundary(addition, remaining);
+          truncated = true;
+          break;
+        }
+        text += addition;
+      }
+      // Stop conservatively at equality: another read is required to know
+      // whether the stream has ended, so reaching the ceiling is reported as
+      // truncated even when the final chunk may contain exactly all content.
+      if (itemCount >= maxTextItems || text.length >= maxOutputCharacters) {
         truncated = true;
         break;
       }
-      text += addition;
     }
     // Do not call reader.read() again once a ceiling is reached.
     // Document cleanup owns stream shutdown; explicit cancel() can race PDF.js.
