@@ -208,63 +208,60 @@ test("REST Extract parses bounded CSV through the shared task execution path", a
 
 
 test("REST Extract can opt into bounded Readability article text without changing structured fields", async () => {
-+  const fixture = createDurableTaskD1({ tenantIds: ["tenant_alpha"] });
-+  const identity = Object.freeze({
-+    ...identityA,
-+    scopes: Object.freeze([...identityA.scopes, "tasks:extract"]),
-+  });
-+  const baseGateway = makeGateway();
-+  const gateway = {
-+    async authenticate(request, env, { requiredScope } = {}) {
-+      if (requiredScope && !identity.scopes.includes(requiredScope)) {
-+        return { ok: false, httpStatus: 403, code: "INSUFFICIENT_SCOPE", message: "scope denied" };
-+      }
-+      return { ok: true, identity };
-+    },
-+    authorizeScope: baseGateway.authorizeScope,
-+  };
-+  const articleText = "ExportFlow parses article content through the optional Readability mode. ".repeat(35);
-+  let fetchCalls = 0;
-+  const worker = createWorker({
-+    tenantTaskGateway: gateway,
-+    fetchImpl: async () => {
-+      fetchCalls += 1;
-+      return new Response(
-+        "<html lang='en'><head><title>REST article</title></head><body><article><h1>REST article</h1><p>" +
-+        articleText + "</p><p>" + articleText + "</p></article></body></html>",
-+        { status: 200, headers: { "content-type": "text/html; charset=utf-8" } },
-+      );
-+    },
-+  });
-+  try {
-+    const response = await worker.fetch(new Request("https://exportflow.me/api/v1/tasks", {
-+      method: "POST",
-+      headers: {
-+        authorization: "Bearer alpha",
-+        "content-type": "application/json",
-+        "idempotency-key": "rest-extract-article-01",
-+      },
-+      body: JSON.stringify({
-+        goal: "Extract the article and structured title",
-+        operation: "extract",
-+        url: "https://example.com/article",
-+        schema: { type: "object", properties: { title: { type: "string", "x-source": "page:title" } } },
-+        includeArticle: true,
-+      }),
-+    }), { EXPORTFLOW_AUTH_DB: fixture.db });
-+    const task = await response.json();
-+    assert.equal(response.status, 200);
-+    assert.equal(task.state, "succeeded");
-+    assert.equal(task.result.data.fields.title, "REST article");
-+    assert.equal(task.result.data.article.status, "succeeded");
-+    assert.equal(task.result.data.article.method, "mozilla-readability");
-+    assert.match(task.result.data.article.textContent, /optional Readability mode/);
-+    assert.ok(task.result.sources[0].evidence.some((item) => item.type === "article_text"));
-+    assert.equal(fetchCalls, 1);
-+  } finally {
-+    fixture.close();
-+  }
-+});
-+
-+
-+
+  const fixture = createDurableTaskD1({ tenantIds: ["tenant_alpha"] });
+  const identity = Object.freeze({
+    ...identityA,
+    scopes: Object.freeze([...identityA.scopes, "tasks:extract"]),
+  });
+  const baseGateway = makeGateway();
+  const gateway = {
+    async authenticate(request, env, { requiredScope } = {}) {
+      if (requiredScope && !identity.scopes.includes(requiredScope)) {
+        return { ok: false, httpStatus: 403, code: "INSUFFICIENT_SCOPE", message: "scope denied" };
+      }
+      return { ok: true, identity };
+    },
+    authorizeScope: baseGateway.authorizeScope,
+  };
+  const articleText = "ExportFlow parses article content through the optional Readability mode. ".repeat(35);
+  let fetchCalls = 0;
+  const worker = createWorker({
+    tenantTaskGateway: gateway,
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      return new Response(
+        "<html lang='en'><head><title>REST article</title></head><body><article><h1>REST article</h1><p>" +
+        articleText + "</p><p>" + articleText + "</p></article></body></html>",
+        { status: 200, headers: { "content-type": "text/html; charset=utf-8" } },
+      );
+    },
+  });
+  try {
+    const response = await worker.fetch(new Request("https://exportflow.me/api/v1/tasks", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer alpha",
+        "content-type": "application/json",
+        "idempotency-key": "rest-extract-article-01",
+      },
+      body: JSON.stringify({
+        goal: "Extract the article and structured title",
+        operation: "extract",
+        url: "https://example.com/article",
+        schema: { type: "object", properties: { title: { type: "string", "x-source": "page:title" } } },
+        includeArticle: true,
+      }),
+    }), { EXPORTFLOW_AUTH_DB: fixture.db });
+    const task = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(task.state, "succeeded");
+    assert.equal(task.result.data.fields.title, "REST article");
+    assert.equal(task.result.data.article.status, "succeeded");
+    assert.equal(task.result.data.article.method, "mozilla-readability");
+    assert.match(task.result.data.article.textContent, /optional Readability mode/);
+    assert.ok(task.result.sources[0].evidence.some((item) => item.type === "article_text"));
+    assert.equal(fetchCalls, 1);
+  } finally {
+    fixture.close();
+  }
+});
