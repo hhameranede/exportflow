@@ -454,6 +454,15 @@ function buildCsvExtracted({ parsed, url, contentType, schema }) {
 
   for (const field of checkedSchema.fields) {
     const csvSources = field.sources.filter((source) => source.sourceType === "csv");
+    const usesCsvMapping = csvSources.length > 0 || !field.explicitSources;
+    if (usesCsvMapping && (field.type !== "array" || field.itemType !== "string")) {
+      throw new ExtractionError(
+        "CSV_ARRAY_FIELD_REQUIRED",
+        "CSV schema fields must be arrays of strings to preserve source values.",
+        422,
+      );
+    }
+
     const selectedSource = csvSources.find((source) => headerIndexes.has(source.path));
     const columnName = selectedSource?.path ?? (!field.explicitSources ? field.name : null);
     const columnIndex = columnName === null ? undefined : headerIndexes.get(columnName);
@@ -462,13 +471,6 @@ function buildCsvExtracted({ parsed, url, contentType, schema }) {
       missingFields.push(field.name);
       if (field.required) missingRequired.push(field.name);
       continue;
-    }
-    if (field.type !== "array" || (field.itemType !== undefined && field.itemType !== "string")) {
-      throw new ExtractionError(
-        "CSV_ARRAY_FIELD_REQUIRED",
-        "CSV schema fields must be arrays of strings to preserve source values.",
-        422,
-      );
     }
 
     const values = parsed.rows.map((row) =>
@@ -499,9 +501,7 @@ function buildCsvExtracted({ parsed, url, contentType, schema }) {
       : "succeeded");
 
   return {
-    status: missingFields.length || parsed.status === "partial" || parsed.truncated
-      ? "partial"
-      : "succeeded",
+    status,
     data,
     inputBytes: parsed.inputBytes,
     delimiter: parsed.delimiter,

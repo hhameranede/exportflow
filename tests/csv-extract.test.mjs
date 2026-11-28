@@ -63,12 +63,51 @@ test("Extract returns selected CSV columns as string arrays with source provenan
 test("CSV extraction defaults to schema property names when x-source is omitted", async () => {
   const url = "https://data.example.test/items.csv";
   const result = await extractStructuredData(
-    { url, schema: { type: "object", properties: { sku: { type: "array" } } } },
+    { url, schema: { type: "object", properties: { sku: { type: "array", items: { type: "string" } } } } },
     { fetchResource: async (requestedUrl) => responseFor(requestedUrl, "sku\n001\n002") },
   );
   assert.equal(result.status, "succeeded");
   assert.deepEqual(result.data.fields.sku, ["001", "002"]);
   assert.equal(result.data.delimiter, ",");
+});
+
+test("CSV extraction fails when none of the requested columns are mapped", async () => {
+  const url = "https://data.example.test/unmapped-columns.csv";
+  const result = await extractStructuredData(
+    {
+      url,
+      schema: {
+        type: "object",
+        properties: {
+          sku: { type: "array", items: { type: "string" }, "x-source": "csv:Missing SKU" },
+          notes: { type: "array", items: { type: "string" }, "x-source": "csv:Missing Notes" },
+        },
+      },
+    },
+    { fetchResource: async (requestedUrl) => responseFor(requestedUrl, "id\\n001\\n002") },
+  );
+  assert.equal(result.status, "failed");
+  assert.deepEqual(result.data.fields, {});
+  assert.deepEqual(result.data.missingFields, ["sku", "notes"]);
+});
+
+test("CSV extraction requires explicit string array items before column lookup", async () => {
+  const url = "https://data.example.test/schema-contract.csv";
+  const csv = "Other Column\\n001";
+  const invalidSchemas = [
+    { type: "object", properties: { sku: { type: "array", "x-source": "csv:SKU" } } },
+    { type: "object", properties: { sku: { type: "array", items: { type: "number" }, "x-source": "csv:SKU" } } },
+  ];
+
+  for (const invalidSchema of invalidSchemas) {
+    await assert.rejects(
+      extractStructuredData(
+        { url, schema: invalidSchema },
+        { fetchResource: async (requestedUrl) => responseFor(requestedUrl, csv) },
+      ),
+      (error) => error instanceof ExtractionError && error.code === "CSV_ARRAY_FIELD_REQUIRED",
+    );
+  }
 });
 
 test("CSV short rows are retained as empty strings and reported as partial", async () => {
