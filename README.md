@@ -24,7 +24,7 @@ The authenticated REST Task API and MCP surface define six bounded operations:
 | Fetch | Public HTTP(S) GET with response normalization and provenance | 1 MiB body, 8 s upstream timeout, up to 3 redirects |
 | Map | Same-origin discovery from robots.txt, sitemaps, and static page links | Bounded URL count; no JavaScript execution |
 | Crawl | Bounded same-origin static-page crawl | Public MCP contract: up to 3 pages and depth 1 |
-| Extract | Deterministic HTML/JSON metadata, JSON-LD, bounded CSV column extraction, and optional Mozilla Readability article text (`includeArticle: true`) | CSV: 256 KiB input, up to 1,000 rows and 100 columns; article text: up to 20,000 characters |
+| Extract | Deterministic HTML/JSON metadata, JSON-LD, bounded CSV columns, bounded PDF text, and optional Mozilla Readability article text (`includeArticle: true`) | CSV: 256 KiB, 1,000 rows, 100 columns; PDF: 1 MiB, 10 pages, 65,536 characters, 5 seconds; no OCR |
 | Search | Explicitly selected public datasets | Wikipedia, OpenAlex, or Crossref; not general whole-web search |
 | Research | Search → bounded Fetch → deterministic Extract | Up to 3 candidate URLs; static HTTP only |
 
@@ -52,7 +52,7 @@ The application policy is paired with Cloudflare Workers' native outbound Fetch 
 
 ## Extraction boundary
 
-Structured extraction supports static HTML/JSON metadata, JSON-LD, declared schema paths, optional Mozilla Readability article text, and bounded CSV. For HTML, set `includeArticle: true` to add bounded article text and parser provenance without changing structured field values; JSON and CSV responses report article extraction as not applicable. For CSV, declare selected columns as arrays of strings and map them with `x-source: "csv:Column Name"`; values (including leading zeroes and formula-looking text) remain strings and formulas are never executed. CSV is capped at 256 KiB, 1,000 rows, 100 columns, and 256 characters per header. Google Sheets integrations and private Sheets OAuth are permanently out of scope; generic HTTP Fetch is not Google Sheets integration. PDF, DOCX and XLSX require separate parser implementations and acceptance matrices before being advertised.
+Structured extraction supports static HTML/JSON metadata, JSON-LD, declared schema paths, optional Mozilla Readability article text, bounded CSV, and text-layer PDF extraction. For HTML, set `includeArticle: true` to add bounded article text and parser provenance without changing structured field values; JSON and CSV responses report article extraction as not applicable. For CSV, declare selected columns as arrays of strings and map them with `x-source: "csv:Column Name"`; values (including leading zeroes and formula-looking text) remain strings and formulas are never executed. CSV is capped at 256 KiB, 1,000 rows, 100 columns, and 256 characters per header. For PDF, declare a string property with `x-source: "pdf:text"`; the parser accepts only bounded binary PDF responses (1 MiB, 10 pages, 65,536 output characters, 5-second parser deadline), validates the PDF signature, and reports files without a text layer without performing OCR. Google Sheets integrations and private Sheets OAuth are permanently out of scope; generic HTTP Fetch is not Google Sheets integration. DOCX and XLSX require separate parser implementations and acceptance matrices before being advertised.
 
 ## Development
 
