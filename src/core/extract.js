@@ -544,6 +544,10 @@ export async function extractStructuredData(input, options = {}) {
   }
   const url = input.url;
   const schema = validateExtractionSchema(input.schema);
+  if (input.includeArticle !== undefined && typeof input.includeArticle !== "boolean") {
+    throw new ExtractionError("INVALID_INCLUDE_ARTICLE", "includeArticle must be a boolean.");
+  }
+  const includeArticle = input.includeArticle === true;
   const fetchResource = options.fetchResource || fetchPublicResource;
   const response = await fetchResource(url, {
     maxBytes: options.maxBytes ?? 1_048_576,
@@ -645,6 +649,7 @@ export async function extractStructuredData(input, options = {}) {
         missingFields: extractedCsv.missingFields,
         missingRequired: extractedCsv.missingRequired,
         schemaProperties: extractedCsv.schemaProperties,
+        ...(includeArticle ? { article: { status: "not_applicable", method: "mozilla-readability" } } : {}),
       },
       sources: [csvSource],
       warnings: extractedCsv.warnings,
@@ -684,27 +689,75 @@ export async function extractStructuredData(input, options = {}) {
     warnings,
   });
 
+  const resultWarnings = [...extracted.warnings];
+  const sourceEvidence = [
+    {
+      type: "http_response",
+      status: response.status,
+      contentType: response.contentType,
+      bytes: response.bytes,
+      cacheStatus: response.cacheStatus ?? null,
+    },
+    ...extracted.fieldEvidence.map((item) => ({
+      type: "extracted_field",
+      field: item.field,
+      sourceType: item.sourceType,
+      path: item.path,
+      blockIndex: item.blockIndex,
+      nodeIndex: item.nodeIndex,
+    })),
+  ];
+  let article;
+  if (includeArticle) {
+    if (mime === "text/html" || mime === "application/xhtml+xml") {
+      try {
+        const { extractReadableArticle } = await import("./readability-article.js");
+        const parsedArticle = extractReadableArticle(response.body, {
+          url: response.finalUrl || url,
+          maxTextCharacters: 20_000,
+        });
+        article = {
+          status: parsedArticle.status,
+          method: parsedArticle.method,
+          title: parsedArticle.title,
+          textContent: parsedArticle.textContent,
+          length: parsedArticle.length,
+          excerpt: parsedArticle.excerpt,
+          byline: parsedArticle.byline,
+          siteName: parsedArticle.siteName,
+          language: parsedArticle.language,
+          truncated: parsedArticle.truncated,
+        };
+        sourceEvidence.push({
+          type: "article_text",
+          method: parsedArticle.method,
+          status: parsedArticle.status,
+          characters: parsedArticle.textContent.length,
+          truncated: parsedArticle.truncated,
+        });
+        if (parsedArticle.status === "no_article") {
+          resultWarnings.push("No main article text was found in the source HTML.");
+        }
+      } catch (error) {
+        article = {
+          status: "unavailable",
+          method: "mozilla-readability",
+          code: typeof error?.code === "string" && /^[A-Z0-9_]{2,64}$/.test(error.code)
+            ? error.code
+            : "ARTICLE_EXTRACTION_FAILED",
+        };
+        resultWarnings.push("Article text was unavailable; structured field extraction still completed.");
+      }
+    } else {
+      article = { status: "not_applicable", method: "mozilla-readability" };
+    }
+  }
+
   const source = {
     url: response.finalUrl || url,
     retrievedAt: response.retrievedAt,
-    title: null,
-    evidence: [
-      {
-        type: "http_response",
-        status: response.status,
-        contentType: response.contentType,
-        bytes: response.bytes,
-        cacheStatus: response.cacheStatus ?? null,
-      },
-      ...extracted.fieldEvidence.map((item) => ({
-        type: "extracted_field",
-        field: item.field,
-        sourceType: item.sourceType,
-        path: item.path,
-        blockIndex: item.blockIndex,
-        nodeIndex: item.nodeIndex,
-      })),
-    ],
+    title: typeof article?.title === "string" ? article.title : null,
+    evidence: sourceEvidence,
   };
   return normalizeResult({
     status: extracted.status,
@@ -717,9 +770,10 @@ export async function extractStructuredData(input, options = {}) {
       missingFields: extracted.missingFields,
       missingRequired: extracted.missingRequired,
       schemaProperties: extracted.schemaProperties,
+      ...(includeArticle ? { article } : {}),
     },
     sources: [source],
-    warnings: extracted.warnings,
+    warnings: resultWarnings,
   });
 }
 

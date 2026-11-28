@@ -9,7 +9,7 @@ export const TASK_REQUEST_LIMITS = Object.freeze({
 
 const ALLOWED_TOP_LEVEL_KEYS = new Set([
   "goal", "url", "operation", "query", "source", "limit", "candidateLimit",
-  "schema", "maxUrls", "maxPages", "maxDepth", "cacheMode", "limits",
+  "schema", "maxUrls", "maxPages", "maxDepth", "cacheMode", "limits", "includeArticle",
 ]);
 
 const ALLOWED_LIMIT_KEYS = new Set([
@@ -171,6 +171,12 @@ export function validateTaskRequest(payload) {
   const operation = payload.operation === undefined ? "fetch" : payload.operation;
   if (typeof operation !== "string" || !KNOWN_OPERATIONS.has(operation)) throw new TaskContractError("UNSUPPORTED_OPERATION", "Unsupported task operation.", 400);
   const queryOperation = operation === "search" || operation === "research";
+  if (payload.includeArticle !== undefined && typeof payload.includeArticle !== "boolean") {
+    throw new TaskContractError("INVALID_INCLUDE_ARTICLE", "includeArticle must be a boolean.", 400);
+  }
+  if (payload.includeArticle !== undefined && operation !== "extract") {
+    throw new TaskContractError("INVALID_TASK", "includeArticle is only supported for extract.", 400);
+  }
   let url;
   if (!queryOperation) {
     try { url = validatePublicHttpUrl(payload.url).href; }
@@ -225,7 +231,7 @@ export function validateTaskRequest(payload) {
     goal: payload.goal.trim(), operation, ...(url ? { url } : {}),
     ...(queryOperation ? { query: payload.query.trim(), source: payload.source, limit } : {}),
     ...(operation === "research" ? { candidateLimit, schema } : {}),
-    ...(operation === "extract" ? { schema } : {}),
+    ...(operation === "extract" ? { schema, ...(payload.includeArticle === true ? { includeArticle: true } : {}) } : {}),
     ...(maxUrls !== undefined ? { maxUrls } : {}),
     ...(maxPages !== undefined ? { maxPages } : {}),
     ...(maxDepth !== undefined ? { maxDepth } : {}),

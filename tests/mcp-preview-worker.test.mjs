@@ -666,3 +666,46 @@ test("web_research requires its own scope and passes source and schema", async (
   assert.equal(calls.auth[0].requiredScope, "tasks:research");
   assert.deepEqual(calls.limits, [{ key: "203.0.113.48", delta: 5 }]);
 });
+
+
+test("web_extract publishes and forwards the optional Readability article switch", async () => {
++  const { worker, env, calls } = makeWorker({ taskResult: { id: "task_article_123", state: "succeeded" } });
++  const listed = await worker.fetch(makeRequest(jsonRpc("tools/list")), env);
++  const tools = (await listed.json()).result.tools;
++  const extractTool = tools.find((tool) => tool.name === "web_extract");
++  assert.equal(extractTool.inputSchema.properties.includeArticle.type, "boolean");
++
++  const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
++    name: "web_extract",
++    arguments: {
++      url: "https://example.com/article",
++      schema: { type: "object", properties: { title: { type: "string" } } },
++      includeArticle: true,
++    },
++  }), { headers: { authorization: "Bearer " + TENANT_TOKEN } }), env);
++  const body = await response.json();
++  assert.equal(response.status, 200);
++  assert.equal(body.result.isError, undefined);
++  assert.equal(calls.tasks.length, 1);
++  assert.equal(calls.tasks[0].input.operation, "extract");
++  assert.equal(calls.tasks[0].input.includeArticle, true);
++  assert.equal(calls.auth.at(-1).requiredScope, "tasks:extract");
++});
++
++test("web_extract rejects a non-boolean article switch before rate limiting or execution", async () => {
++  const { worker, env, calls } = makeWorker();
++  const response = await worker.fetch(makeRequest(jsonRpc("tools/call", {
++    name: "web_extract",
++    arguments: {
++      url: "https://example.com/article",
++      schema: { type: "object", properties: { title: { type: "string" } } },
++      includeArticle: "yes",
++    },
++  })), env);
++  const body = await response.json();
++  assert.equal(response.status, 200);
++  assert.equal(body.result.isError, true);
++  assert.equal(body.result.structuredContent.error, "invalid_arguments");
++  assert.equal(calls.limits.length, 0);
++  assert.equal(calls.tasks.length, 0);
++});
