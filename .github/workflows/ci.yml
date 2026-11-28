@@ -50,6 +50,9 @@ jobs:
       retention-days: 7
    - run: npm test
    - run: npm run check
+   - name: Run isolated local Workerd PDF parser smoke (no network, D1, or secrets)
+     timeout-minutes: 3
+     run: node scripts/run-pdf-parser-worker-smoke.mjs
    - name: Install pinned Playwright and Chromium outside project dependencies
      run: |
       npm install --prefix "$RUNNER_TEMP/ef-browser" --no-save --package-lock=false playwright@1.65.1
@@ -87,11 +90,13 @@ jobs:
      run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/task-mcp-acceptance" --config cloudflare/task-acceptance/mcp.wrangler.toml
    - name: Build isolated open-source parser compatibility bundle (dry-run only)
      run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/parser-compat" --config cloudflare/parser-compat/wrangler.toml
-   - name: Assert and inventory all ten Wrangler bundles
+   - name: Build PDF parser compatibility bundle (dry-run only)
+     run: npx --yes wrangler@4 deploy --dry-run --outdir "$GITHUB_WORKSPACE/dist/pdf-parser-compat" --config cloudflare/pdf-parser-compat/wrangler.toml
+   - name: Assert and inventory all eleven Wrangler bundles
      shell: bash
      run: |
       set -euo pipefail
-      for mapping in auth-lab/index.js platform/index.js mcp-preview/index.js tenant-platform-acceptance/tenant-platform.js tenant-mcp-acceptance/tenant-mcp.js auth-acceptance/index.js mcp-acceptance/index.js task-platform-acceptance/platform.js task-mcp-acceptance/mcp.js parser-compat/worker.js; do
+      for mapping in auth-lab/index.js platform/index.js mcp-preview/index.js tenant-platform-acceptance/tenant-platform.js tenant-mcp-acceptance/tenant-mcp.js auth-acceptance/index.js mcp-acceptance/index.js task-platform-acceptance/platform.js task-mcp-acceptance/mcp.js parser-compat/worker.js pdf-parser-compat/worker.js; do
        bundle="${mapping%%/*}"
        entrypoint="${mapping#*/}"
        output="$GITHUB_WORKSPACE/dist/$bundle/$entrypoint"
@@ -105,7 +110,7 @@ jobs:
       find "$GITHUB_WORKSPACE/dist" -maxdepth 4 -type f -printf "%p %s bytes\n" | sort
    - name: Run parser compatibility in local Workers runtime
      run: node scripts/run-open-source-parsers-worker-smoke.mjs
-   - name: Upload all ten Worker bundle artifacts
+   - name: Upload all eleven Worker bundle artifacts
      uses: actions/upload-artifact@v4
      with:
       name: exportflow-worker-bundles-${{ github.sha }}
