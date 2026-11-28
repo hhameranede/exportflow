@@ -119,6 +119,60 @@ function cancelReader(reader) {
   cancelBestEffort(() => reader.cancel());
 }
 
+
+async function readBinaryBody(response, maxBytes, signal, getAbortCode, onBytesRead) {
+  const declaredLength = response.headers.get("content-length");
+  if (declaredLength && /^\\d+$/.test(declaredLength) && Number(declaredLength) > maxBytes) {
+    cancelBody(response);
+    throw new FetchAdapterError("RESPONSE_TOO_LARGE", "Upstream response exceeds the configured size limit.", 413);
+  }
+  if (!response.body) return { bodyBytes: new Uint8Array(0), bytes: 0 };
+  const reader = response.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  let chunksRead = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunksRead += 1;
+      if (chunksRead > HTTP_FETCH_LIMITS.maxResponseChunks) {
+        cancelReader(reader);
+        throw new FetchAdapterError("RESPONSE_TOO_LARGE", "Upstream response contains too many chunks.", 413);
+      }
+      totalBytes += value.byteLength;
+      try { onBytesRead?.(totalBytes); } catch {
+        // Usage observation must never change Fetch success or failure behavior.
+      }
+      if (totalBytes > maxBytes) {
+        cancelReader(reader);
+        throw new FetchAdapterError("RESPONSE_TOO_LARGE", "Upstream response exceeds the configured size limit.", 413);
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    cancelReader(reader);
+    if (error instanceof FetchAdapterError) throw error;
+    if (signal?.aborted) {
+      const abortCode = getAbortCode?.();
+      if (abortCode === "TASK_CANCELLED") {
+        throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
+      }
+      throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
+    }
+    throw new FetchAdapterError("UPSTREAM_FETCH_FAILED", "Could not read the upstream response stream.", 502);
+  } finally {
+    reader.releaseLock();
+  }
+  const bodyBytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bodyBytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { bodyBytes, bytes: totalBytes };
+}
+
 async function readTextBody(response, maxBytes, signal, getAbortCode, onBytesRead, decoder) {
   const declaredLength = response.headers.get("content-length");
   if (declaredLength && /^\d+$/.test(declaredLength) && Number(declaredLength) > maxBytes) {
@@ -195,6 +249,10 @@ export async function fetchPublicResource(input, options = {}) {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const onUsageReceipt = options.onUsageReceipt;
   const cacheMode = options.cacheMode ?? "default";
+  const responseMode = options.responseMode ?? "text";
+  if (!["text", "extract"].includes(responseMode)) {
+    throw new FetchAdapterError("INVALID_LIMIT", "Response mode must be text or extract.", 400);
+  }
   if (!["default", "bypass"].includes(cacheMode)) {
     throw new FetchAdapterError("INVALID_LIMIT", "Cache mode must be 'default' or 'bypass'.", 400);
   }
@@ -304,7 +362,9 @@ export async function fetchPublicResource(input, options = {}) {
           // Deliberately do not set cacheEverything or force a cache TTL.
           signal: controller.signal,
           headers: {
-            accept: "text/html,application/xhtml+xml,application/json,application/xml,text/plain;q=0.9",
+            accept: responseMode === "extract"
+              ? "text/html,application/xhtml+xml,application/json,application/xml,text/plain;q=0.9,application/pdf,application/octet-stream;q=0.8"
+              : "text/html,application/xhtml+xml,application/json,application/xml,text/plain;q=0.9",
             ...(typeof options.userAgent === "string" && options.userAgent.length <= 200
               ? { "user-agent": options.userAgent }
               : {}),
@@ -370,9 +430,38 @@ export async function fetchPublicResource(input, options = {}) {
       }
 
       const contentType = response.headers.get("content-type") || "";
-      if (response.body && !isTextContentType(contentType)) {
+      const responseMime = String(contentType).split(";")[0].trim().toLowerCase();
+      const isPdfPayload = responseMode === "extract" &&
+        ["application/pdf", "application/octet-stream"].includes(responseMime);
+      if (response.body && !isTextContentType(contentType) && !isPdfPayload) {
         cancelBody(response);
         throw new FetchAdapterError("UNSUPPORTED_CONTENT_TYPE", "Only text, HTML, JSON, and XML responses are supported.", 415);
+      }
+
+      if (isPdfPayload) {
+        const { bodyBytes, bytes } = await readBinaryBody(
+          response,
+          maxBytes,
+          controller.signal,
+          () => callerCancelled ? "TASK_CANCELLED" : timedOut ? "UPSTREAM_TIMEOUT" : null,
+          (observedBytes) => { responseBodyBytesRead = observedBytes; },
+        );
+        if (callerCancelled) throw new FetchAdapterError("TASK_CANCELLED", "Task was cancelled.", 499);
+        if (timedOut) throw new FetchAdapterError("UPSTREAM_TIMEOUT", "Upstream request timed out.", 504);
+        const retrievedAt = new Date().toISOString();
+        emitReceipt("response");
+        return {
+          ok: response.ok,
+          status: response.status,
+          contentType,
+          cacheStatus: normalizeCacheStatus(response.headers.get("cf-cache-status")),
+          bodyBytes,
+          bytes,
+          originalUrl: initialUrl.href,
+          finalUrl: currentUrl.href,
+          redirects: redirectChain,
+          retrievedAt,
+        };
       }
 
       let decoder;
