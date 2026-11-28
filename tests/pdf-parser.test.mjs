@@ -225,7 +225,8 @@ test("normalized PDF text truncation preserves complete Unicode code points", ()
   assert.equal(result.text.length, PDF_PARSE_LIMITS.maxOutputCharacters - 1);
   assert.equal(result.text.endsWith("A"), true);
   assert.equal(result.truncated, true);
-  assert.equal(/[\\uD800-\\uDBFF]$/.test(result.text), false);
+  const finalCodeUnit = result.text.charCodeAt(result.text.length - 1);
+  assert.equal(finalCodeUnit >= 0xd800 && finalCodeUnit <= 0xdbff, false);
 });
 
 test("PDF parser deadline returns a typed timeout for unresolved work", async () => {
