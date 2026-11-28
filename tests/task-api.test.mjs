@@ -154,7 +154,7 @@ test("REST Extract parses bounded CSV through the shared task execution path", a
     },
     authorizeScope: baseGateway.authorizeScope,
   };
-  const csv = 'SKU,Product Notes\\n001,"Contains, commas"\\n002,"=SUM(1,1)"\\n';
+  const csv = 'SKU,Product Notes\n001,"Contains, commas"\n002,"=SUM(1,1)"\n';
   let fetchCalls = 0;
   const worker = createWorker({
     tenantTaskGateway: gateway,
