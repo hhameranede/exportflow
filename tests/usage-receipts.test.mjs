@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { fetchPublicResource } from "../src/core/http-fetch.js";
 import { executeWebTask } from "../src/core/tasks.js";
+import { createSyntheticPdf } from "./fixtures/synthetic-pdf.mjs";
 
 test("Fetch usage receipts are immutable, sanitized and observational", async () => {
   let receiptCalls = 0;
@@ -199,4 +200,32 @@ test("executeWebTask forwards Fetch receipts through the internal observer only"
   assert.equal(receipts[0].outcome, "response");
   assert.equal(receipts[0].responseBodyBytesRead, 2);
   assert.equal(Object.isFrozen(receipts[0]), true);
+});
+
+
+test("failed PDF Extract usage retains the original downloaded byte count", { skip: typeof globalThis.Iterator !== "function" }, async () => {
+  const pdfBytes = createSyntheticPdf([""]);
+  const task = await executeWebTask(
+    {
+      goal: "Measure downloaded bytes for a PDF without a text layer",
+      operation: "extract",
+      url: "https://example.com/scanned-report.pdf",
+      schema: {
+        type: "object",
+        properties: { content: { type: "string", "x-source": "pdf:text" } },
+        required: ["content"],
+      },
+    },
+    {
+      idFactory: () => "failed-pdf-byte-usage",
+      fetchImpl: async () => new Response(pdfBytes, {
+        status: 200,
+        headers: { "content-type": "application/pdf" },
+      }),
+    },
+  );
+
+  assert.equal(task.state, "failed");
+  assert.equal(task.errors[0].code, "PDF_NO_TEXT_LAYER");
+  assert.equal(task.usage.responseBytes, pdfBytes.byteLength);
 });
