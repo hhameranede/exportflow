@@ -747,8 +747,9 @@ test("web_extract executes a PDF end-to-end through MCP and the shared Extract t
       onUsageReceipt: (receipt) => usageReceipts.push(receipt),
       fetchImpl: async (source, init) => {
         fetchCalls += 1;
-        const bytes = new URL(source).pathname === "/scanned.pdf" ? scannedPdf : readablePdf;
         try {
+          const sourceUrl = new URL(source);
+          const bytes = sourceUrl.pathname === "/scanned.pdf" ? scannedPdf : readablePdf;
           const response = new Response(bytes, {
             status: 200,
             headers: {
@@ -757,6 +758,8 @@ test("web_extract executes a PDF end-to-end through MCP and the shared Extract t
             },
           });
           responseInfo = {
+            sourceType: typeof source,
+            sourceProtocol: sourceUrl.protocol,
             bodyType: response.body?.constructor?.name || null,
             hasGetReader: typeof response.body?.getReader === "function",
             status: response.status,
