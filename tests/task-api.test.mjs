@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorker } from "../src/index.js";
 import { createDurableTaskD1 } from "./helpers/durable-task-d1.js";
+import { createSyntheticPdf } from "./fixtures/synthetic-pdf.mjs";
 
 const identityA = Object.freeze({
   tenantId: "tenant_alpha",
@@ -9,7 +10,7 @@ const identityA = Object.freeze({
   policyVersion: "test-v1",
   quotaPeriod: "daily",
   requestLimit: 10,
-  scopes: ["tasks:fetch", "tasks:read"],
+  scopes: ["tasks:fetch", "tasks:read", "tasks:extract"],
 });
 const identityB = Object.freeze({ ...identityA, tenantId: "tenant_beta" });
 
@@ -40,6 +41,57 @@ function postTask(idempotencyKey, url = "https://example.com/") {
     body: JSON.stringify({ goal: "Fetch a public test page", operation: "fetch", url }),
   });
 }
+
+function postExtractTask(idempotencyKey, url = "https://example.com/report.pdf") {
+  return new Request("https://exportflow.me/api/v1/tasks", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer alpha",
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
+    },
+    body: JSON.stringify({
+      goal: "Extract text from a public PDF",
+      operation: "extract",
+      url,
+      schema: {
+        type: "object",
+        properties: { content: { type: "string", "x-source": "pdf:text" } },
+        required: ["content"],
+      },
+    }),
+  });
+}
+
+test("REST Extract runs a bounded PDF through the shared task path", { skip: typeof globalThis.Iterator !== "function" }, async () => {
+  const fixture = createDurableTaskD1({ tenantIds: ["tenant_alpha", "tenant_beta"] });
+  const pdfBytes = createSyntheticPdf(["ExportFlow REST PDF acceptance fixture"]);
+  let fetchInit;
+  const worker = createWorker({
+    tenantTaskGateway: makeGateway(),
+    fetchImpl: async (_url, init) => {
+      fetchInit = init;
+      return new Response(pdfBytes, {
+        status: 200,
+        headers: { "content-type": "application/pdf", "content-length": String(pdfBytes.byteLength) },
+      });
+    },
+  });
+  try {
+    const response = await worker.fetch(postExtractTask("rest-pdf-task-0001"), {
+      EXPORTFLOW_AUTH_DB: fixture.db,
+    });
+    const task = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(task.state, "succeeded");
+    assert.equal(task.execution.adapterId, "web.extract.v1");
+    assert.equal(task.result.data.format, "pdf");
+    assert.match(task.result.data.fields.content, /ExportFlow REST PDF acceptance fixture/);
+    assert.match(fetchInit.headers.accept, /application\\/pdf/);
+  } finally {
+    fixture.cleanup();
+  }
+});
 
 test("REST task execution is persisted and an idempotent retry returns the original task", async () => {
   const fixture = createDurableTaskD1({ tenantIds: ["tenant_alpha", "tenant_beta"] });
