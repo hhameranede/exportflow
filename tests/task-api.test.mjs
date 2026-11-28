@@ -86,8 +86,40 @@ test("REST Extract runs a bounded PDF through the shared task path", { skip: typ
     assert.equal(task.state, "succeeded");
     assert.equal(task.execution.adapterId, "web.extract.v1");
     assert.equal(task.result.data.format, "pdf");
+    assert.equal(task.result.data.inputBytes, pdfBytes.byteLength);
+    assert.equal(task.usage.responseBytes, pdfBytes.byteLength);
     assert.match(task.result.data.fields.content, /ExportFlow REST PDF acceptance fixture/);
     assert.ok(fetchInit.headers.accept.includes("application/pdf"));
+  } finally {
+    fixture.close();
+  }
+});
+
+
+
+test("REST Extract reports downloaded PDF bytes when parsing fails after fetch", async () => {
+  const fixture = createDurableTaskD1({ tenantIds: ["tenant_alpha"] });
+  const malformedPdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);
+  const worker = createWorker({
+    tenantTaskGateway: makeGateway(),
+    fetchImpl: async () => new Response(malformedPdf, {
+      status: 200,
+      headers: {
+        "content-type": "application/pdf",
+        "content-length": String(malformedPdf.byteLength),
+      },
+    }),
+  });
+
+  try {
+    const response = await worker.fetch(postExtractTask("rest-pdf-fail-0001"), {
+      EXPORTFLOW_AUTH_DB: fixture.db,
+    });
+    const task = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(task.state, "failed");
+    assert.equal(task.errors[0].code, "PDF_PARSE_FAILED");
+    assert.equal(task.usage.responseBytes, malformedPdf.byteLength);
   } finally {
     fixture.close();
   }
