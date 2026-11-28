@@ -730,9 +730,6 @@ test("web_extract executes a PDF end-to-end through MCP and the shared Extract t
   const readablePdf = createSyntheticPdf(["ExportFlow MCP PDF end-to-end acceptance fixture"]);
   const scannedPdf = createSyntheticPdf([""]);
   let fetchCalls = 0;
-  let fetchError = null;
-  let responseInfo = null;
-  const usageReceipts = [];
   const identity = {
     tenantId: "tenant_test_001",
     planCode: "test",
@@ -744,35 +741,16 @@ test("web_extract executes a PDF end-to-end through MCP and the shared Extract t
   const worker = createExportFlowPreviewWorker({
     executeWebTask: (input, taskOptions) => executeSharedWebTask(input, {
       ...taskOptions,
-      onUsageReceipt: (receipt) => usageReceipts.push(receipt),
       fetchImpl: async (source, init) => {
         fetchCalls += 1;
-        try {
-          const sourceUrl = new URL(source);
-          const bytes = sourceUrl.pathname === "/scanned.pdf" ? scannedPdf : readablePdf;
-          const response = new Response(bytes, {
-            status: 200,
-            headers: {
-              "content-type": "application/pdf",
-              "content-length": String(bytes.byteLength),
-            },
-          });
-          responseInfo = {
-            sourceType: typeof source,
-            sourceProtocol: sourceUrl.protocol,
-            bodyType: response.body?.constructor?.name || null,
-            hasGetReader: typeof response.body?.getReader === "function",
-            status: response.status,
-            contentType: response.headers.get("content-type"),
-          };
-          return response;
-        } catch (error) {
-          fetchError = {
-            name: typeof error?.name === "string" ? error.name.slice(0, 80) : null,
-            code: typeof error?.code === "string" ? error.code.slice(0, 80) : null,
-          };
-          throw error;
-        }
+        const bytes = new globalThis.URL(source).pathname === "/scanned.pdf" ? scannedPdf : readablePdf;
+        return new Response(bytes, {
+          status: 200,
+          headers: {
+            "content-type": "application/pdf",
+            "content-length": String(bytes.byteLength),
+          },
+        });
       },
     }),
     getAdapterCatalog: () => [{ id: "web.extract.v1", capabilities: ["extract", "pdf"] }],
@@ -815,7 +793,7 @@ test("web_extract executes a PDF end-to-end through MCP and the shared Extract t
     const task = body.result.structuredContent;
 
     assert.equal(response.status, 200);
-    assert.equal(body.result.isError, undefined, JSON.stringify({ task, fetchCalls, fetchError, responseInfo, usageReceipts }));
+    assert.equal(body.result.isError, undefined, JSON.stringify({ task, fetchCalls }));
     assert.equal(task.state, "succeeded");
     assert.equal(task.execution.adapterId, "web.extract.v1");
     assert.equal(task.result.data.format, "pdf");
